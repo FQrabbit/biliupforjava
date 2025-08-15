@@ -15,14 +15,14 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # 正确方式创建文件（不需要 bash）
-RUN touch /ROOT.jar
+RUN touch /ROOT.war
 
 # 添加你的 JAR 文件（这句应该在前面，不是创建空文件）
-ADD ROOT.jar /ROOT.jar
+ADD ROOT.war /ROOT.war
 
 EXPOSE 80
 
 ENV JAVA_OPTS=""
 
 #ENTRYPOINT java -XX:+UseZGC -Duser.timezone=Asia/Shanghai -Djava.security.egd=file:/dev/./urandom -jar /ROOT.war
-ENTRYPOINT ["/bin/sh", "-c", "java $JAVA_OPTS -XX:+UseZGC -Duser.timezone=Asia/Shanghai --add-opens java.base/jdk.internal.loader=ALL-UNNAMED -Djava.security.egd=file:/dev/./urandom -jar /ROOT.jar"]
+ENTRYPOINT ["/bin/sh", "-c", "java $JAVA_OPTS -XX:+UseZGC -Duser.timezone=Asia/Shanghai --add-opens java.base/jdk.internal.loader=ALL-UNNAMED -Djava.security.egd=file:/dev/./urandom -jar /ROOT.war"]
