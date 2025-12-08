@@ -1,10 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="../css/element-ui.css" rel="stylesheet">
+    <link href="../css/index.css" rel="stylesheet">
+    <script src="../js/jquery-3.3.1.min.js"></script>
+    <script src="../js/vue.min.js"></script>
+    <script src="../js/element-ui.js"></script>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+</head>
+<body>
 <div class="container" id="userTable">
-    <el-button @click="getLoginImage();dialogLoginVisible = true" type="primary">登录</el-button>
-    <el-table
-            v-loading="loading"
-            :data="tableData"
-            height="calc(100vh - 150px )"
-            style="width: 100%">
+    <div class="action-bar" style="justify-content: space-between;">
+        <el-button @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-mobile-phone" type="primary">登录</el-button>
+        <el-radio-group v-model="viewMode" size="small">
+            <el-radio-button label="card"><i class="el-icon-menu"></i> 卡片</el-radio-button>
+            <el-radio-button label="table"><i class="el-icon-s-grid"></i> 表格</el-radio-button>
+        </el-radio-group>
+    </div>
+
+    <transition name="fade-transform" mode="out-in">
+    <div v-if="viewMode === 'card'" class="data-card-grid" key="card">
+        <div class="data-card" v-for="item in tableData" :key="item.id">
+            <div class="card-header">
+                <span class="card-title">{{ item.uname || '未命名用户' }}</span>
+                <el-tag size="mini" type="info">{{ item.uid }}</el-tag>
+            </div>
+            <div class="card-body">
+                <div class="card-status-row">
+                    <span class="status-chip success" v-if="item.login">已登录</span>
+                    <span class="status-chip danger" v-else>未登录</span>
+                    <span class="status-chip success" v-if="item.enable">弹幕:开</span>
+                    <span class="status-chip danger" v-else>弹幕:关</span>
+                </div>
+                <div class="card-meta">
+                    <span class="meta-chip">{{ item.updateTime }}</span>
+                </div>
+            </div>
+            <div class="card-footer" style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                <el-button size="mini" icon="el-icon-edit" @click="handleEdit(0, item)">编辑</el-button>
+                <el-popconfirm @confirm="deleteUser(item.id)" title="确定删除吗？" confirm-button-text="删除" cancel-button-text="保留" confirm-button-type="danger" style="margin-left: 10px;">
+                    <el-button slot="reference" size="mini" type="danger" icon="el-icon-delete">删除</el-button>
+                </el-popconfirm>
+            </div>
+        </div>
+    </div>
+
+    <div v-else class="table-scroll" key="table">
+        <el-table
+                v-loading="loading"
+                :data="tableData"
+                height="calc(100vh - 150px )"
+                style="width: 100%">
         <el-table-column
                 label="用户id"
                 prop="uid"
@@ -20,8 +73,8 @@
                 prop="login"
                 width="120">
             <template slot-scope="scope">
-                <el-button circle class="el-icon-check" type="success" v-if="scope.row.login"></el-button>
-                <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.login"></el-button>
+                <span class="status-chip success" v-if="scope.row.login">已登录</span>
+                <span class="status-chip danger" v-else>未登录</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -29,8 +82,8 @@
                 prop="enable"
                 width="120">
             <template slot-scope="scope">
-                <el-button circle class="el-icon-check" type="success" v-if="scope.row.enable"></el-button>
-                <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.enable"></el-button>
+                <span class="status-chip success" v-if="scope.row.enable">允许</span>
+                <span class="status-chip danger" v-else>关闭</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -39,7 +92,7 @@
                 width="220">
         </el-table-column>
         <el-table-column label="操作"
-                         width="180">
+                 width="180">
             <template slot-scope="scope">
                 <el-button
                         @click="handleEdit(scope.$index, scope.row)" size="mini"
@@ -47,40 +100,31 @@
                 </el-button>
                 <el-popconfirm
                         @confirm="deleteUser(scope.row.id)"
-                        title="确定删除吗？">
+                        title="确定删除吗？" confirm-button-text="删除" cancel-button-text="保留" confirm-button-type="danger">
                     <el-button slot="reference" size="mini"
                                type="danger">删除
                     </el-button>
                 </el-popconfirm>
             </template>
         </el-table-column>
-    </el-table>
+        </el-table>
+    </div>
+    </transition>
 
-    <el-dialog :visible.sync="dialogLoginVisible" @close="try{loginReturnAjax.abort();}catch(e){}" title="登录">
-        <div class="dialog-footer" slot="footer">
-
-            <el-row class="row-bg" justify="center" type="flex">
-                <el-col :span="10">
-                    <span>登录成功请自行刷新二维码(有效期五分钟)</span>
-                </el-col>
-            </el-row>
-
-            <el-row class="row-bg" justify="center" type="flex">
-                <el-col :span="6">
-                    <el-image
-                            :src="'data:image/png;base64,' + image" fit="fill"
-                            justify="center"
-                            style="width: 250px; height: 250px"></el-image>
-                </el-col>
-                <el-col :span="3"></el-col>
-            </el-row>
-
+    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="isMobile" @close="try{loginReturnAjax.abort();}catch(e){}" title="登录" center>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="margin-bottom: 10px;">登录成功请自行刷新二维码(有效期五分钟)</div>
+            <el-image
+                    :src="'data:image/png;base64,' + image" fit="fill"
+                    style="width: 250px; height: 250px"></el-image>
+        </div>
+        <div slot="footer" class="dialog-footer">
             <el-button @click="getLoginImage();initTable();" type="primary">刷新</el-button>
             <el-button @click="dialogLoginVisible = false;initTable();loginReturnAjax.abort();">关闭</el-button>
         </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="dialogFormVisible" title="用户信息">
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="用户信息">
         <el-form :model="user">
             <el-form-item :label-width="formLabelWidth" label="是否启用弹幕发送">
                 <el-select placeholder="请选择" v-model="user.enable">
@@ -90,8 +134,8 @@
             </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
-            <el-button @click="dialogFormVisible = false">取 消</el-button>
-            <el-button @click="updateUser()" type="primary">确 定</el-button>
+            <el-button @click="dialogFormVisible = false">放 弃</el-button>
+            <el-button @click="updateUser()" type="primary">保 存</el-button>
         </div>
     </el-dialog>
 </div>
@@ -106,9 +150,19 @@
             user: {},
             image: '',
             loginReturnAjax: {},
-            loading: false
+            loading: false,
+            isMobile: window.innerWidth <= 768,
+            viewMode: 'card'
+        },
+        watch: {
+            viewMode: function (val) {
+                localStorage.setItem('user-view-mode', val);
+            }
         },
         methods: {
+            handleResize: function () {
+                this.isMobile = window.innerWidth <= 768;
+            },
             initTable: function () {
                 let _this = this;
                 _this.loading = true;
@@ -155,7 +209,7 @@
                 });
             },
             handleEdit: function (index, row) {
-                this.user = row;
+                this.user = JSON.parse(JSON.stringify(row));
                 this.dialogFormVisible = true;
             },
             updateUser: function () {
@@ -191,6 +245,17 @@
         },
         created: function created() {
             this.initTable();
+            this.handleResize();
+            window.addEventListener('resize', this.handleResize);
+            var cached = localStorage.getItem('user-view-mode');
+            if (cached === 'table' || cached === 'card') {
+                this.viewMode = cached;
+            }
+        },
+        beforeDestroy: function () {
+            window.removeEventListener('resize', this.handleResize);
         }
     });
 </script>
+</body>
+</html>

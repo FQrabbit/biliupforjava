@@ -3,172 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="录播姬上传插件 - 自动化直播录制上传解决方案">
+    <meta name="theme-color" content="#5b6cff">
     <title>录播姬上传插件</title>
+    <link href="css/element-ui.css" rel="stylesheet">
     <link href="css/index.css" rel="stylesheet">
     <script src="js/jquery-3.3.1.min.js"></script>
     <script src="js/vue.min.js"></script>
+    <script src="js/element-ui.js"></script>
     <script src="js/index.js"></script>
-    <style type="text/css">
-        #app li a:hover {
-            color: black;
-            background: #93A5C6;
-        }
-
-        #app li a {
-            color: white;
-        }
-
-        pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-    </style>
 </head>
+<body>
 <div id="app">
-    <template>
-        <el-tabs @tab-click="handleClick" v-model="activeName">
-            <el-tab-pane label="直播间" name="room"></el-tab-pane>
-            <el-tab-pane label="bilibili用户" name="user"></el-tab-pane>
-            <el-tab-pane label="录制历史" name="history"></el-tab-pane>
-        </el-tabs>
-    </template>
+    <div class="theme-toggle" @click="toggleTheme" title="切换主题">
+        <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+    </div>
+    <el-tabs @tab-click="handleClick" v-model="activeName" type="card">
+        <el-tab-pane label="🏠 更新日志" name="home"></el-tab-pane>
+        <el-tab-pane label="🎬 直播间" name="room"></el-tab-pane>
+        <el-tab-pane label="👤 bilibili用户" name="user"></el-tab-pane>
+        <el-tab-pane label="📋 录制历史" name="history"></el-tab-pane>
+    </el-tabs>
     <div id="p">
-
-        更新时间：2025-09-15 18:00 <br>
-        版本：1.4.1 <br>
-        更新内容：修复高能片段弹幕太少导致生成错误，逻辑微调。<br>
-        ------------------------------- <br>
-        更新时间：2025-08-15 10:00 <br>
-        版本：1.4.0 <br>
-        更新内容：新增高能片段自动剪辑投稿功能。<br>
-        ------------------------------- <br>
-        更新时间：2025-07-17 19:00 <br>
-        版本：1.3.3 <br>
-        更新内容：修复转载稿件缺少转载源无法投稿问题。<br>
-        ------------------------------- <br>
-        更新时间：2025-07-17 18:00 <br>
-        版本：1.3.2 <br>
-        更新内容：移除客户端接口，修复封面上传失败问题。<br>
-        ------------------------------- <br>
-        更新时间：2025-04-27 11:00 <br>
-        版本：1.3.1 <br>
-        更新内容：修复需要验证码也认为投稿成功的情况。<br>
-        ------------------------------- <br>
-        更新时间：2025-02-23 15:00 <br>
-        版本：1.3.0 <br>
-        更新内容：支持仅自己可见，支持加入合集,需要重新创建数据库文件<br>
-        ------------------------------- <br>
-        更新时间：2024-11-26 20:00 <br>
-        版本：1.2.8 <br>
-        更新内容：修复web投稿接口因为风控无法投稿的问题<br>
-        ------------------------------- <br>
-        更新时间：2024-11-21 17:00 <br>
-        版本：1.2.7 <br>
-        更新内容：修复视频aid太长导致重新提高失败的问题<br>
-        ------------------------------- <br>
-        更新时间：2024-10-31 17:00 <br>
-        版本：1.2.6 <br>
-        更新内容：修复一级账号无法分p投稿的问题<br>
-        ------------------------------- <br>
-        更新时间：2024-10-30 14:00 <br>
-        版本：1.2.5 <br>
-        更新内容：修复配置文件过大无法导入的问题<br>
-        ------------------------------- <br>
-        更新时间：2024-10-25 20:00 <br>
-        版本：1.2.4 <br>
-        更新内容：投稿描述模板支持${@uid}<br>
-        ------------------------------- <br>
-        更新时间：2024-09-05 12:00 <br>
-        版本：1.2.3 <br>
-        更新内容：更新上传线路<br>
-        ------------------------------- <br>
-        更新时间：2024-07-23 12:00 <br>
-        版本：1.2.2 <br>
-        更新内容：修复blrec弹幕金额异常问题，投稿分p变量添加fileName<br>
-        ------------------------------- <br>
-        更新时间：2024-05-17 19:00 <br>
-        版本：1.2.1 <br>
-        更新内容：修复直播间标题存在}时无法正常投稿的问题<br>
-        ------------------------------- <br>
-        更新时间：2024-01-29 15:00 <br>
-        版本：1.2.0 <br>
-        更新内容：修复.cover.png直播封面无法使用的问题 <br>
-        ------------------------------- <br>
-        更新时间：2024-01-08 10:00 <br>
-        版本：1.1.9 <br>
-        更新内容：修复同一场直播错误切分成多次投稿的问题 <br>
-        ------------------------------- <br>
-        更新时间：2024-01-07 12:00 <br>
-        版本：1.1.8 <br>
-        更新内容：修复录制结束后并没有成功结束录制状态的问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-12-27 10:00 <br>
-        版本：1.1.7 <br>
-        更新内容：修复workPath不支持输入\符号需要更换为/的问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-12-25 10:00 <br>
-        版本：1.1.6 <br>
-        更新内容：使用undertow替换tomcat <br>
-        ------------------------------- <br>
-        更新时间：2023-12-12 10:00 <br>
-        版本：1.1.5 <br>
-        更新内容：修复可能发生的分p标题时间错误问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-12-07 15:00 <br>
-        版本：1.1.4 <br>
-        更新内容：转码失败支持检测时间戳跳变原因 <br>
-        ------------------------------- <br>
-        更新时间：2023-11-27 14:00 <br>
-        版本：1.1.3 <br>
-        更新内容：增加blrec开启封装后文件丢失重新上传功能 <br>
-        ------------------------------- <br>
-        更新时间：2023-11-27 14:00 <br>
-        版本：1.1.2 <br>
-        更新内容：修复刚刚创建的录制历史不存在结束时间的问题,blrec后处理的文件类型更新到数据库 <br>
-        ------------------------------- <br>
-        更新时间：2023-11-27 09:00 <br>
-        版本：1.1.1 <br>
-        更新内容：修复可能发生的多次间隔十分钟以上的直播合并到同一个历史里的问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-11-08 18:00 <br>
-        版本：1.1.0 <br>
-        更新内容：修复标题模板变量为空时空指针报错问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-11-05 12:00 <br>
-        版本：1.0.9 <br>
-        更新内容：优化登录流程 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-26 12:00 <br>
-        版本：1.0.8 <br>
-        更新内容：修复blrec封面无法正常使用的问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-21 14:00 <br>
-        版本：1.0.7 <br>
-        更新内容：修复分p标题title变量错误的问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-20 19:00 <br>
-        版本：1.0.6 <br>
-        更新内容：修复工作目录设置路径里/\的问题 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-20 18:00 <br>
-        版本：1.0.5 <br>
-        更新内容：对于找不到视频文件进行日志提示和处理优化 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-19 18:00 <br>
-        版本：1.0.4 <br>
-        更新内容：分p参数支持title变量 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-09 09:00 <br>
-        版本：1.0.3 <br>
-        更新内容：修复blrec没有文件大小和时间的问题。 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-08 21:00 <br>
-        版本：1.0.2 <br>
-        更新内容：修复可能会自动创建两个相同房间的问题。 <br>
-        ------------------------------- <br>
-        更新时间：2023-10-07 17:00 <br>
-        版本：1.0.1 <br>
-        更新内容：支持blrec,简单支持，测试版本。 <br>
+        <transition name="fade-transform" mode="out-in">
+            <div v-if="activeName === 'home'" class="version-container" key="home">
+                <div v-for="(version, idx) in sortedVersions" :key="version.version + '-' + version.time" class="version-item">
+                    <div class="version-header">
+                        <div class="version-time">{{ version.time }}</div>
+                        <span class="version-number">v{{ version.version }}</span>
+                    </div>
+                    <div class="version-content">{{ version.content }}</div>
+                </div>
+            </div>
+            <iframe v-else :src="tabSrc" class="tab-frame" frameborder="0" :key="activeName"></iframe>
+        </transition>
     </div>
 </div>
 </body>
@@ -176,24 +45,157 @@
     let answer = new Vue({
         el: '#app',
         data: {
-            activeName: 'room',
+            activeName: 'home',
+            theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+            versions: [
+                { time: '2025-12-08', version: '1.4.1-beta1', content: '主页美化。' },
+                { time: '2025-09-15', version: '1.4.1', content: '修复高能片段弹幕太少导致生成错误，逻辑微调。' },
+                { time: '2025-08-15', version: '1.4.0', content: '新增高能片段自动剪辑投稿功能。' },
+                { time: '2025-07-17', version: '1.3.3', content: '修复转载稿件缺少转载源无法投稿问题。' },
+                { time: '2025-07-17', version: '1.3.2', content: '移除客户端接口，修复封面上传失败问题。' },
+                { time: '2025-04-27', version: '1.3.1', content: '修复需要验证码也认为投稿成功的情况。' },
+                { time: '2025-02-23', version: '1.3.0', content: '支持仅自己可见，支持加入合集，需要重新创建数据库文件。' },
+                { time: '2024-11-26', version: '1.2.8', content: '修复web投稿接口因为风控无法投稿的问题。' },
+                { time: '2024-11-21', version: '1.2.7', content: '修复视频aid太长导致重新提交失败的问题。' },
+                { time: '2024-10-31', version: '1.2.6', content: '修复一级账号无法分p投稿的问题。' },
+                { time: '2024-10-30', version: '1.2.5', content: '修复配置文件过大无法导入的问题。' },
+                { time: '2024-10-25', version: '1.2.4', content: '投稿描述模板支持${@uid}。' },
+                { time: '2024-09-05', version: '1.2.3', content: '更新上传线路。' },
+                { time: '2024-07-23', version: '1.2.2', content: '修复blrec弹幕金额异常问题，投稿分p变量添加fileName。' },
+                { time: '2024-05-17', version: '1.2.1', content: '修复直播间标题存在}时无法正常投稿的问题。' },
+                { time: '2024-01-29', version: '1.2.0', content: '修复.cover.png直播封面无法使用的问题。' },
+                { time: '2024-01-08', version: '1.1.9', content: '修复同一场直播错误切分成多次投稿的问题。' },
+                { time: '2024-01-07', version: '1.1.8', content: '修复录制结束后并没有成功结束录制状态的问题。' },
+                { time: '2023-12-27', version: '1.1.7', content: '修复workPath不支持输入\\\\符号需要更换为/的问题。' },
+                { time: '2023-12-25', version: '1.1.6', content: '使用undertow替换tomcat。' },
+                { time: '2023-12-12', version: '1.1.5', content: '修复可能发生的分p标题时间错误问题。' },
+                { time: '2023-12-07', version: '1.1.4', content: '转码失败支持检测时间戳跳变原因。' },
+                { time: '2023-11-27', version: '1.1.3', content: '增加blrec开启封装后文件丢失重新上传功能。' },
+                { time: '2023-11-27', version: '1.1.2', content: '修复刚刚创建的录制历史不存在结束时间的问题，blrec后处理的文件类型更新到数据库。' },
+                { time: '2023-11-27', version: '1.1.1', content: '修复可能发生的多次间隔十分钟以上的直播合并到同一个历史里的问题。' },
+                { time: '2023-11-08', version: '1.1.0', content: '修复标题模板变量为空时空指针报错问题。' },
+                { time: '2023-11-05', version: '1.0.9', content: '优化登录流程。' },
+                { time: '2023-10-26', version: '1.0.8', content: '修复blrec封面无法正常使用的问题。' },
+                { time: '2023-10-21', version: '1.0.7', content: '修复分p标题title变量错误的问题。' },
+                { time: '2023-10-20', version: '1.0.6', content: '修复工作目录设置路径里/\\\\的问题。' },
+                { time: '2023-10-20', version: '1.0.5', content: '对于找不到视频文件进行日志提示和处理优化。' },
+                { time: '2023-10-19', version: '1.0.4', content: '分p参数支持title变量。' },
+                { time: '2023-10-09', version: '1.0.3', content: '修复blrec没有文件大小和时间的问题。' },
+                { time: '2023-10-08', version: '1.0.2', content: '修复可能会自动创建两个相同房间的问题。' },
+                { time: '2023-10-07', version: '1.0.1', content: '支持blrec，简单支持，测试版本。' }
+            ]
         },
-        methods: {
-            handleClick: function (tab, event) {
+        computed: {
+            sortedVersions: function () {
+                return this.versions.slice().sort(function (a, b) {
+                    return new Date(b.time) - new Date(a.time);
+                });
+            },
+            tabSrc: function () {
                 switch (this.activeName) {
                     case 'room':
-                        $('#p').html("");
-                        $('#p').load('html/room.html');
-                        break;
+                        return 'html/room.html';
                     case 'user':
-                        $('#p').html("");
-                        $('#p').load('html/user.html');
-                        break;
+                        return 'html/user.html';
                     case 'history':
-                        $('#p').html("");
-                        $('#p').load('html/history.html');
-                        break;
+                        return 'html/history.html';
+                    default:
+                        return '';
                 }
+            }
+        },
+        mounted: function() {
+            this.applyTheme(this.theme);
+            if (this.activeName !== 'home') {
+                this.handleClick();
+            }
+            var self = this;
+            setTimeout(function() {
+                self.enableTabDrag();
+            }, 100);
+        },
+        methods: {
+            toggleTheme: function() {
+                this.theme = this.theme === 'dark' ? 'light' : 'dark';
+                this.applyTheme(this.theme);
+            },
+            applyTheme: function(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+                var iframe = document.querySelector('iframe');
+                if (iframe && iframe.contentDocument) {
+                    iframe.contentDocument.documentElement.setAttribute('data-theme', theme);
+                }
+            },
+            enableTabDrag: function () {
+                var navWrap = document.querySelector('.el-tabs__nav-wrap');
+                var navScroll = document.querySelector('.el-tabs__nav-scroll') || navWrap;
+                var container = navScroll || navWrap;
+                
+                if (!container) {
+                    console.warn('Tab scroll container not found');
+                    return;
+                }
+                
+                container.style.overflowX = 'auto';
+                container.style.overflowY = 'hidden';
+                container.style.overscrollBehavior = 'contain';
+                
+                var isDown = false;
+                var startX = 0;
+                var scrollLeft = 0;
+                
+                container.addEventListener('mousedown', function(e) {
+                    if (e.target.closest('.el-tabs__item') || e.target.closest('.el-tabs__nav-next') || e.target.closest('.el-tabs__nav-prev')) {
+                        return;
+                    }
+                    isDown = true;
+                    startX = e.pageX - container.getBoundingClientRect().left;
+                    scrollLeft = container.scrollLeft;
+                    container.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, true);
+                
+                document.addEventListener('mousemove', function(e) {
+                    if (!isDown) return;
+                    e.preventDefault();
+                    var x = e.pageX - container.getBoundingClientRect().left;
+                    var walk = startX - x;
+                    container.scrollLeft = scrollLeft + walk;
+                }, true);
+                
+                document.addEventListener('mouseup', function() {
+                    isDown = false;
+                    container.style.cursor = 'grab';
+                }, true);
+                
+                container.addEventListener('mouseleave', function() {
+                    isDown = false;
+                    container.style.cursor = 'grab';
+                });
+                
+                var touchStartX = 0;
+                var touchScrollLeft = 0;
+                
+                container.addEventListener('touchstart', function(e) {
+                    if (e.target.closest('.el-tabs__item')) return;
+                    touchStartX = e.touches[0].pageX;
+                    touchScrollLeft = container.scrollLeft;
+                }, false);
+                
+                container.addEventListener('touchmove', function(e) {
+                    if (touchStartX === 0) return;
+                    var x = e.touches[0].pageX;
+                    var walk = touchStartX - x;
+                    container.scrollLeft = touchScrollLeft + walk;
+                }, false);
+                
+                container.addEventListener('touchend', function() {
+                    touchStartX = 0;
+                }, false);
+            },
+            handleClick: function () {
             }
         }
     });

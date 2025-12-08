@@ -1,69 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="../css/element-ui.css" rel="stylesheet">
+    <link href="../css/index.css" rel="stylesheet">
+    <script src="../js/jquery-3.3.1.min.js"></script>
+    <script src="../js/vue.min.js"></script>
+    <script src="../js/element-ui.js"></script>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+</head>
+<body>
 <div class="container" id="historyTable">
-    <el-form :inline="true" :model="form" label-position="left" label-width="90px" ref="form">
-        <el-form-item label="房间号" label-width="60px">
-            <el-input
-                    clearable
-                    placeholder="请输入房间号"
-                    v-model="form.roomId">
-            </el-input>
-        </el-form-item>
-        <el-form-item label="bvId" label-width="50px">
-            <el-input
-                    clearable
-                    v-model="form.bvId">
-            </el-input>
-        </el-form-item>
-        <el-form-item label="是否上传">
-            <el-select @change="initTable" clearable placeholder="请选择" v-model="form.upload">
-                <el-option label="全部" value=""></el-option>
-                <el-option label="是" value="true"></el-option>
-                <el-option label="否" value="false"></el-option>
-            </el-select>
-        </el-form-item>
-        <el-form-item label="是否录制中">
-            <el-select @change="initTable" clearable placeholder="请选择" v-model="form.recording">
-                <el-option label="全部" value=""></el-option>
-                <el-option label="是" value="true"></el-option>
-                <el-option label="否" value="false"></el-option>
-            </el-select>
-        </el-form-item>
-        <el-form-item label="是否已发布">
-            <el-select @change="initTable" clearable placeholder="请选择" v-model="form.publish">
-                <el-option label="全部" value=""></el-option>
-                <el-option label="是" value="true"></el-option>
-                <el-option label="否" value="false"></el-option>
-            </el-select>
-        </el-form-item>
-        <el-form-item label="是否审核通过">
-            <el-select @change="initTable" clearable placeholder="请选择" v-model="form.code">
-                <el-option label="全部" value=""></el-option>
-                <el-option label="是" value="0"></el-option>
-                <el-option label="否" value="-2"></el-option>
-            </el-select>
-        </el-form-item>
-        <el-form-item label="结束时间">
-            <el-date-picker
-                    placeholder="开始时间"
-                    type="datetime"
-                    value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
-                    v-model="form.from">
-            </el-date-picker>
-            <el-date-picker
-                    placeholder="结束时间"
-                    type="datetime"
-                    value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
-                    v-model="form.to">
-            </el-date-picker>
-        </el-form-item>
-        <el-form-item>
-            <el-button @click="initTable" type="primary">查询</el-button>
-        </el-form-item>
-    </el-form>
-    <el-table
-            v-loading="loading"
-            :data="tableData"
-            height="calc(100vh - 230px )"
-            style="width: 100%">
+    <div style="margin-bottom: 10px;">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+            <el-radio-group v-model="viewMode" size="mini">
+                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
+                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
+            </el-radio-group>
+        </div>
+        <el-collapse v-model="activeNames">
+            <el-collapse-item title="筛选条件" name="1">
+                <el-form :model="form" label-position="right" label-width="100px" ref="form">
+                    <el-row :gutter="20">
+                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                            <el-form-item label="房间号">
+                                <el-input clearable placeholder="请输入房间号" v-model="form.roomId"></el-input>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                            <el-form-item label="bvId">
+                                <el-input clearable v-model="form.bvId"></el-input>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                            <el-form-item label="是否上传">
+                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.upload" style="width: 100%">
+                                    <el-option label="全部" value=""></el-option>
+                                    <el-option label="是" value="true"></el-option>
+                                    <el-option label="否" value="false"></el-option>
+                                </el-select>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                            <el-form-item label="是否录制中">
+                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.recording" style="width: 100%">
+                                    <el-option label="全部" value=""></el-option>
+                                    <el-option label="是" value="true"></el-option>
+                                    <el-option label="否" value="false"></el-option>
+                                </el-select>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                            <el-form-item label="是否已发布">
+                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.publish" style="width: 100%">
+                                    <el-option label="全部" value=""></el-option>
+                                    <el-option label="是" value="true"></el-option>
+                                    <el-option label="否" value="false"></el-option>
+                                </el-select>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                            <el-form-item label="是否审核通过">
+                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.code" style="width: 100%">
+                                    <el-option label="全部" value=""></el-option>
+                                    <el-option label="是" value="0"></el-option>
+                                    <el-option label="否" value="-2"></el-option>
+                                </el-select>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="24" :md="16" :lg="12">
+                            <el-form-item label="结束时间">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <el-date-picker
+                                            placeholder="开始时间"
+                                            type="datetime"
+                                            value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
+                                            v-model="form.from"
+                                            style="flex: 1; width: 100%">
+                                    </el-date-picker>
+                                    <span style="margin: 0 10px; color: var(--text-disabled);">-</span>
+                                    <el-date-picker
+                                            placeholder="结束时间"
+                                            type="datetime"
+                                            value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
+                                            v-model="form.to"
+                                            style="flex: 1; width: 100%">
+                                    </el-date-picker>
+                                </div>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="24" :md="24" :lg="24" style="text-align: right;">
+                            <el-form-item>
+                                <el-button @click="initTable" type="primary">查询</el-button>
+                            </el-form-item>
+                        </el-col>
+                    </el-row>
+                </el-form>
+            </el-collapse-item>
+        </el-collapse>
+    </div>
+
+    <transition :name="transitionName" mode="out-in">
+    <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current">
+        <div class="data-card" :class="{ 'is-audit-failed': item.upload && item.code != 0 }" v-for="item in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="flex: 1; min-width: 0; margin-right: 10px; overflow: hidden;">
+                    <div class="card-title" style="margin-bottom: 8px; word-break: break-all; line-height: 1.4; font-weight: bold; font-size: 16px;">{{ item.title || '无标题' }}</div>
+                    <div v-if="item.bvId" style="margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">BV: {{ item.bvId }}</div>
+                    <div class="card-status-row" style="margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 5px; width: 100%;">
+                        <span class="status-chip success" v-if="item.upload">已上传</span>
+                        <span class="status-chip danger" v-else>未上传</span>
+                        <span class="status-chip warn" v-if="item.recording">录制中</span>
+                        <span class="status-chip" :class="item.recording ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
+                    </div>
+                    <div class="card-meta">
+                        <span class="meta-chip">{{ item.startTime }}</span>
+                    </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0;">
+                    <el-tag size="mini" type="info">{{ item.roomName }}</el-tag>
+                    <el-tag size="mini" :type="getFileSizeColorType(item.fileSize)">{{ formatFileSize(item.fileSize) }}</el-tag>
+                    <div style="font-size: 12px; color: var(--text-disabled); white-space: nowrap;">
+                        分P: {{ item.partCount }} / 已传: {{ item.uploadPartCount }}
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-disabled); white-space: nowrap;">
+                        弹幕: {{ item.msgCount }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-else class="table-scroll" key="table">
+        <el-table
+                v-loading="loading"
+                :data="tableData"
+                height="calc(100vh - 230px )"
+                style="width: 100%">
         <el-table-column
                 label="id"
                 prop="id"
@@ -130,8 +210,8 @@
                 prop="recording"
                 width="100">
             <template slot-scope="scope">
-                <el-button circle class="el-icon-check" type="success" v-if="scope.row.recording"></el-button>
-                <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.recording"></el-button>
+                <span class="status-chip success" v-if="scope.row.recording">录制中</span>
+                <span class="status-chip danger" v-else>未录制</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -139,8 +219,8 @@
                 prop="upload"
                 width="100">
             <template slot-scope="scope">
-                <el-button circle class="el-icon-check" type="success" v-if="scope.row.upload"></el-button>
-                <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.upload"></el-button>
+                <span class="status-chip success" v-if="scope.row.upload">已上传</span>
+                <span class="status-chip danger" v-else>未上传</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -148,8 +228,8 @@
                 prop="publish"
                 width="100">
             <template slot-scope="scope">
-                <el-button circle class="el-icon-check" type="success" v-if="scope.row.publish"></el-button>
-                <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.publish"></el-button>
+                <span class="status-chip success" v-if="scope.row.publish">已发布</span>
+                <span class="status-chip danger" v-else>未发布</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -157,8 +237,8 @@
                 prop="code"
                 width="100">
             <template slot-scope="scope">
-                <el-button circle class="el-icon-check" type="success" v-if="scope.row.code == 0"></el-button>
-                <el-button circle class="el-icon-close" type="danger" v-if="scope.row.code != 0"></el-button>
+                <span class="status-chip success" v-if="scope.row.code == 0">通过</span>
+                <span class="status-chip warn" v-else>未通过</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -172,23 +252,20 @@
                 width="170">
         </el-table-column>
         <el-table-column label="操作"
-                         width="250">
+                 width="250">
             <template slot-scope="scope">
                 <el-button
                         @click="handleEdit(scope.$index, scope.row)" size="mini"
                         type="primary">编辑
                 </el-button>
-                <el-popconfirm
-                        @confirm="rePublish(scope.row.id)"
-                        title="确定重新上传转码失败部分吗？">
-                    <el-tooltip class="item" content="会重新上传转码失败的分p" effect="dark"
-                                placement="top" slot="reference">
-                        <el-button
-                                size="mini"
-                                type="danger">转码失败修复
-                        </el-button>
-                    </el-tooltip>
-                </el-popconfirm>
+                <el-tooltip class="item" content="会重新上传转码失败的分p" effect="dark"
+                            placement="top">
+                    <el-button
+                            @click="rePublish(scope.row.id)"
+                            size="mini"
+                            type="danger">转码失败修复
+                    </el-button>
+                </el-tooltip>
                 <el-button
                         @click="highEnergyCutPublish(scope.row.id)" size="mini"
                         type="primary">发布高能片段
@@ -199,96 +276,184 @@
                         trigger="click">
                     <el-row type="flex" justify="space-around">
                         <el-col :span="6">
-                            <el-popconfirm
-                                    @confirm="updatePartStatus(scope.row.id)"
-                                    title="确定结束分p录制状态吗？">
-                                <el-tooltip slot="reference" class="item" effect="dark"
-                                            content="把分p状态全部重置为录制结束，因为未录制结束无法上传无法投稿"
-                                            placement="top">
-                                    <el-button size="mini"
-                                               type="danger">结束分p录制状态
-                                    </el-button>
-                                </el-tooltip>
-                            </el-popconfirm>
+                            <el-tooltip class="item" effect="dark"
+                                        content="把分p状态全部重置为录制结束，因为未录制结束无法上传无法投稿"
+                                        placement="top">
+                                <el-button size="mini"
+                                           @click="updatePartStatus(scope.row.id)"
+                                           type="danger">结束分p录制状态
+                                </el-button>
+                            </el-tooltip>
                         </el-col>
                         <el-col :span="6">
-                            <el-popconfirm
-                                    @confirm="touchPublish(scope.row.id)"
-                                    title="确定触发发布事件吗？">
-                                <el-tooltip slot="reference" class="item" effect="dark"
-                                            content="会上传未上传完成的分p然后发布，如果状态为已发布则无效"
-                                            placement="top">
-                                    <el-button size="mini"
-                                               type="danger">触发发布事件
-                                    </el-button>
-                                </el-tooltip>
-                            </el-popconfirm>
+                            <el-tooltip class="item" effect="dark"
+                                        content="会上传未上传完成的分p然后发布，如果状态为已发布则无效"
+                                        placement="top">
+                                <el-button size="mini"
+                                           @click="touchPublish(scope.row.id)"
+                                           type="danger">触发发布事件
+                                </el-button>
+                            </el-tooltip>
                         </el-col>
                     </el-row>
                     <el-row justify="space-around" type="flex">
                         <el-col :span="6">
-
-                            <el-popconfirm
-                                    @confirm="updatePublishStatus(scope.row.id)"
-                                    title="确定重置为未上传发布吗？">
-                                <el-tooltip class="item"
-                                            content="把状态修改为未发布,分p全部未上传状态,重置后点击触发发布事件会重新投稿"
-                                            effect="dark"
-                                            placement="top"
-                                            slot="reference">
-                                    <el-button size="mini"
-                                               type="danger">重置为未上传发布
-                                    </el-button>
-                                </el-tooltip>
-                            </el-popconfirm>
-                        </el-col>
-                        <el-col :span="5">
-                            <el-popconfirm
-                                    @confirm="reloadHistoryMsg(scope.row.id)"
-                                    title="确定重新加载弹幕吗？">
-                                <el-tooltip class="item" content="会重新按设置的弹幕规则加载弹幕，并且把弹幕都重置从未发送" effect="dark"
-                                            placement="top" slot="reference">
-                                    <el-button size="mini"
-                                               type="danger">重新加载弹幕
-                                    </el-button>
-                                </el-tooltip>
-                            </el-popconfirm>
-                        </el-col>
-                        <el-col :span="5">
-                            <el-popconfirm
-                                    @confirm="deleteHistoryMsg(scope.row.id)"
-                                    title="确定删除弹幕吗？">
-                                <el-button slot="reference" size="mini"
-                                           type="danger">删除弹幕
+                            <el-tooltip class="item"
+                                        content="把状态修改为未发布,分p全部未上传状态,重置后点击触发发布事件会重新投稿"
+                                        effect="dark"
+                                        placement="top">
+                                <el-button size="mini"
+                                           @click="updatePublishStatus(scope.row.id)"
+                                           type="danger">重置为未上传发布
                                 </el-button>
-                            </el-popconfirm>
+                            </el-tooltip>
+                        </el-col>
+                        <el-col :span="5">
+                            <el-tooltip class="item" content="会重新按设置的弹幕规则加载弹幕，并且把弹幕都重置从未发送" effect="dark"
+                                        placement="top">
+                                <el-button size="mini"
+                                           @click="reloadHistoryMsg(scope.row.id)"
+                                           type="danger">重新加载弹幕
+                                </el-button>
+                            </el-tooltip>
+                        </el-col>
+                        <el-col :span="5">
+                            <el-button size="mini"
+                                       @click="deleteHistoryMsg(scope.row.id)"
+                                       type="danger">删除弹幕
+                            </el-button>
                         </el-col>
                     </el-row>
                     <el-button slot="reference" size="mini" type="primary">更多</el-button>
                 </el-popover>
-                <el-popconfirm
-                        @confirm="deleteHistory(scope.row.id)"
-                        title="确定删除吗？会同时删除录制文件">
-                    <el-button slot="reference" size="mini"
-                               type="danger">删除
-                    </el-button>
-                </el-popconfirm>
+                <el-button size="mini"
+                           @click="deleteHistory(scope.row.id)"
+                           type="danger">删除
+                </el-button>
             </template>
         </el-table-column>
-    </el-table>
+        </el-table>
+    </div>
+    </transition>
     <template>
-        <div class="block">
+        <div class="block" style="text-align: center; margin-top: 20px; padding-bottom: 20px;">
+            <div v-if="isMobile && showSwipeHint && viewMode === 'card'" class="swipe-hint" @click="closeSwipeHint">
+                <i class="el-icon-back swipe-icon"></i>
+                <span>左右滑动可切换页码</span>
+                <i class="el-icon-right swipe-icon"></i>
+                <i class="el-icon-close" style="margin-left: 8px; cursor: pointer;" @click.stop="closeSwipeHint"></i>
+            </div>
             <el-pagination
                     @size-change="handleSizeChange"
                     @current-change="handleCurrentChange"
+                    :current-page.sync="form.current"
                     :page-sizes="[5, 10, 25, 50, 100]"
-                    :page-size=5
-                    layout="total, sizes, prev, pager, next, jumper"
-                    :total=total>
+                    :page-size="form.pageSize || 10"
+                    :layout="isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
+                    :pager-count="isMobile ? 5 : 7"
+                    :total="total">
             </el-pagination>
         </div>
     </template>
-    <el-dialog :visible.sync="editDialogFormVisible" title="用户信息">
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body>
+        <div class="detail-content" v-if="currentDetail.id">
+            <div class="detail-group">
+                <div class="detail-row full">
+                    <label>标题</label>
+                    <span style="font-weight: bold; font-size: 15px;">{{ currentDetail.title }}</span>
+                </div>
+                <div class="detail-row">
+                    <label>主播</label>
+                    <el-tag size="small" type="info" effect="plain">{{ currentDetail.roomName }}</el-tag>
+                </div>
+                <div class="detail-row">
+                    <label>BV号</label>
+                    <el-link type="primary" :href="'https://www.bilibili.com/video/' + currentDetail.bvId" target="_blank" v-if="currentDetail.bvId" :underline="false">{{ currentDetail.bvId }} <i class="el-icon-view el-icon--right"></i></el-link>
+                    <span v-else style="color: var(--text-disabled);">未生成</span>
+                </div>
+                <div class="detail-row">
+                    <label>开始时间</label>
+                    <span>{{ currentDetail.startTime }}</span>
+                </div>
+                <div class="detail-row">
+                    <label>结束时间</label>
+                    <span>{{ currentDetail.endTime }}</span>
+                </div>
+            </div>
+
+            <el-divider content-position="left">数据统计</el-divider>
+            <div class="detail-group">
+                <div class="detail-row">
+                    <label>文件大小</label>
+                    <el-tag size="small" :type="getFileSizeColorType(currentDetail.fileSize)" effect="light">{{ formatFileSize(currentDetail.fileSize) }}</el-tag>
+                </div>
+                <div class="detail-row">
+                    <label>总时长</label>
+                    <span style="color: var(--warning-color); font-weight: 500;"><i class="el-icon-time"></i> {{ formatDuration(currentDetail.partDuration) }}</span>
+                </div>
+                <div class="detail-row">
+                    <label>分P数量</label>
+                    <span>
+                        <span style="font-weight: bold; font-size: 16px;">{{ currentDetail.partCount }}</span>
+                        <span style="font-size: 12px; color: var(--text-disabled);"> (录:{{currentDetail.recordPartCount}} / 传:{{currentDetail.uploadPartCount}})</span>
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <label>弹幕数量</label>
+                    <span>
+                        <span style="font-weight: bold; font-size: 16px;">{{ currentDetail.msgCount }}</span>
+                        <span style="font-size: 12px; color: var(--success-color);"> (成功:{{currentDetail.successMsgCount}})</span>
+                    </span>
+                </div>
+            </div>
+
+            <el-divider content-position="left">状态</el-divider>
+            <div class="detail-group">
+                <div class="detail-row">
+                    <label>上传状态</label>
+                    <el-tag size="mini" :type="currentDetail.upload ? 'success' : 'danger'" effect="dark">{{ currentDetail.upload ? '已上传' : '未上传' }}</el-tag>
+                </div>
+                <div class="detail-row">
+                    <label>发布状态</label>
+                    <el-tag size="mini" :type="currentDetail.publish ? 'success' : 'danger'" effect="dark">{{ currentDetail.publish ? '已发布' : '未发布' }}</el-tag>
+                </div>
+                <div class="detail-row">
+                    <label>录制状态</label>
+                    <el-tag size="mini" :type="currentDetail.recording ? 'success' : 'info'" effect="dark">{{ currentDetail.recording ? '录制中' : '未录制' }}</el-tag>
+                </div>
+                <div class="detail-row">
+                    <label>审核状态</label>
+                    <el-tag size="mini" :type="currentDetail.code == 0 ? 'success' : 'warning'" effect="dark">{{ currentDetail.code == 0 ? '通过' : '未通过' }}</el-tag>
+                </div>
+            </div>
+            
+            <el-divider content-position="left">操作</el-divider>
+            
+            <div class="detail-actions" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+                <el-button @click="handleEdit(0, currentDetail)" size="small" type="primary" plain>编辑</el-button>
+                
+                <el-button @click="rePublish(currentDetail.id)" size="small" type="danger" plain>转码失败修复</el-button>
+                
+                <el-button @click="highEnergyCutPublish(currentDetail.id)" size="small" type="primary" plain>发布高能片段</el-button>
+                
+                <el-button @click="updatePartStatus(currentDetail.id)" size="small" type="danger" plain>结束分p录制状态</el-button>
+                
+                <el-button @click="touchPublish(currentDetail.id)" size="small" type="danger" plain>触发发布事件</el-button>
+                
+                <el-button @click="updatePublishStatus(currentDetail.id)" size="small" type="danger" plain>重置为未上传发布</el-button>
+                
+                <el-button @click="reloadHistoryMsg(currentDetail.id)" size="small" type="danger" plain>重新加载弹幕</el-button>
+                
+                <el-button @click="deleteHistoryMsg(currentDetail.id)" size="small" type="danger" plain>删除弹幕</el-button>
+                
+                <el-button @click="deleteHistory(currentDetail.id)" size="small" type="danger" plain>删除</el-button>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="detailDialogVisible = false">关 闭</el-button>
+        </div>
+    </el-dialog>
+    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="用户信息">
         <el-form :model="history">
             <el-form-item label="是否上传" label-width="80px">
                 <el-select placeholder="请选择" v-model="history.upload">
@@ -304,8 +469,8 @@
             </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
-            <el-button @click="editDialogFormVisible = false">取 消</el-button>
-            <el-button @click="updateHistory()" type="primary">确 定</el-button>
+            <el-button @click="editDialogFormVisible = false">放 弃</el-button>
+            <el-button @click="updateHistory()" type="primary">保 存</el-button>
         </div>
     </el-dialog>
 
@@ -337,11 +502,72 @@
             form: {},
             history:{},
             uploadEditPartId:null,
-            loading: false
+            loading: false,
+            detailDialogVisible: false,
+            currentDetail: {},
+            isMobile: window.innerWidth <= 768,
+            activeNames: window.innerWidth > 768 ? ['1'] : [],
+            viewMode: 'card',
+            touchStartX: 0,
+            touchEndX: 0,
+            transitionName: 'fade-transform',
+            showSwipeHint: false
+        },
+        watch: {
+            viewMode: function (val) {
+                localStorage.setItem('history-view-mode', val);
+            }
+        },
+        mounted() {
+            this.$el.addEventListener('touchstart', this.handleTouchStart, {passive: true});
+            this.$el.addEventListener('touchend', this.handleTouchEnd, {passive: true});
+            
+            if (this.isMobile && !localStorage.getItem('hasShownSwipeHint')) {
+                this.showSwipeHint = true;
+            }
+        },
+        beforeDestroy() {
+            this.$el.removeEventListener('touchstart', this.handleTouchStart);
+            this.$el.removeEventListener('touchend', this.handleTouchEnd);
+            window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            closeSwipeHint() {
+                this.showSwipeHint = false;
+                localStorage.setItem('hasShownSwipeHint', 'true');
+            },
+            handleTouchStart(e) {
+                this.touchStartX = e.changedTouches[0].screenX;
+            },
+            handleTouchEnd(e) {
+                this.touchEndX = e.changedTouches[0].screenX;
+                this.handleSwipe();
+            },
+            handleSwipe() {
+                if (this.viewMode === 'table') return;
+                if (Math.abs(this.touchEndX - this.touchStartX) > 50) {
+                    if (this.touchEndX < this.touchStartX) {
+                        if (this.form.current * this.form.pageSize < this.total) {
+                            this.transitionName = 'slide-left';
+                            this.handleCurrentChange(this.form.current + 1);
+                        }
+                    } else {
+                        if (this.form.current > 1) {
+                            this.transitionName = 'slide-right';
+                            this.handleCurrentChange(this.form.current - 1);
+                        }
+                    }
+                }
+            },
+            showDetail: function(item) {
+                this.currentDetail = item;
+                this.detailDialogVisible = true;
+            },
+            handleResize: function () {
+                this.isMobile = window.innerWidth <= 768;
+            },
             handleEdit: function (index, row) {
-                this.history = row;
+                this.history = JSON.parse(JSON.stringify(row));
                 this.editDialogFormVisible = true;
             },
             uploadEdit: function (index, row) {
@@ -365,6 +591,13 @@
                 this.initTable();
             },
             handleCurrentChange(val) {
+                if (val > this.form.current) {
+                    this.transitionName = 'slide-left';
+                } else if (val < this.form.current) {
+                    this.transitionName = 'slide-right';
+                } else {
+                    this.transitionName = 'fade-transform';
+                }
                 this.form.current=val;
                 this.initTable();
             },
@@ -421,67 +654,91 @@
             },
             updatePartStatus: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/updatePartStatus/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('确定结束分p录制状态吗？', '提示', {
+                    confirmButtonText: '结束',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/updatePartStatus/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
             },
             updatePublishStatus: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/updatePublishStatus/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('确定重置为未上传发布吗？', '提示', {
+                    confirmButtonText: '重置',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/updatePublishStatus/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
             },
             touchPublish: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/touchPublish/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('确定触发发布事件吗？', '提示', {
+                    confirmButtonText: '发布',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/touchPublish/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
             },
             rePublish: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/rePublish/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('确定重新上传转码失败部分吗？', '提示', {
+                    confirmButtonText: '上传',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/rePublish/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
             },
             highEnergyCutPublish: function (id) {
                 let _this = this;
@@ -501,55 +758,106 @@
             },
             deleteHistory: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/delete/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('确定删除吗？会同时删除录制文件', '提示', {
+                    confirmButtonText: '删除',
+                    cancelButtonText: '保留',
+                    confirmButtonClass: 'el-button--danger',
+                    cancelButtonClass: 'el-button--success',
+                    type: 'warning'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/delete/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
             },
             deleteHistoryMsg: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/deleteMsg/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('确定删除弹幕吗？', '提示', {
+                    confirmButtonText: '删除',
+                    cancelButtonText: '保留',
+                    confirmButtonClass: 'el-button--danger',
+                    cancelButtonClass: 'el-button--success',
+                    type: 'warning'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/deleteMsg/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
             },
             reloadHistoryMsg: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/reloadMsg/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('确定重新加载弹幕吗？', '提示', {
+                    confirmButtonText: '重新加载',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/reloadMsg/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
+            },
+            formatFileSize: function (size) {
+                return (size / 1024 / 1024 / 1024).toFixed(2) + 'GB';
+            },
+            getFileSizeColorType: function (size) {
+                const gb = size / 1024 / 1024 / 1024;
+                if (gb <= 8) return 'success';
+                if (gb <= 30) return 'warning';
+                return 'danger';
+            },
+            formatDuration: function (seconds) {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                return h + '小时' + m + '分钟';
             },
         },
         created: function created() {
+            if (!this.form.pageSize) {
+                this.$set(this.form, 'pageSize', 10);
+            }
+            if (!this.form.current) {
+                this.$set(this.form, 'current', 1);
+            }
             this.initTable();
+            this.handleResize();
+            window.addEventListener('resize', this.handleResize);
+            var cached = localStorage.getItem('history-view-mode');
+            if (cached === 'table' || cached === 'card') {
+                this.viewMode = cached;
+            }
+        },
+        beforeDestroy: function () {
+            // Handled in beforeDestroy hook above
         }
     });
 </script>
@@ -563,4 +871,47 @@
     }
 
     }
+
+    .detail-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .detail-row {
+        width: calc(50% - 5px);
+        display: flex;
+        align-items: flex-start;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    .detail-row.full {
+        width: 100%;
+    }
+    .detail-row label {
+        color: var(--text-secondary);
+        width: 80px;
+        flex-shrink: 0;
+        text-align: right;
+        margin-right: 10px;
+    }
+    .detail-row span {
+        color: var(--text-primary);
+        flex: 1;
+        word-break: break-all;
+    }
+    .detail-row .el-tag {
+        flex: none;
+    }
+    @media (max-width: 768px) {
+        .detail-row {
+            width: 100%;
+        }
+        .detail-row label {
+            text-align: left;
+            width: 70px;
+        }
+    }
 </style>
+</body>
+</html>
