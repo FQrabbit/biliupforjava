@@ -24,7 +24,9 @@
         <el-tab-pane label="🎬 直播间" name="room"></el-tab-pane>
         <el-tab-pane label="👤 bilibili用户" name="user"></el-tab-pane>
         <el-tab-pane label="📋 录制历史" name="history"></el-tab-pane>
-        <el-tab-pane label="🖥️ 日志控制台" name="log"></el-tab-pane>
+        <el-tab-pane name="log">
+            <span slot="label" :class="{ 'alert-flashing': hasAlerts }">🖥️ 日志控制台</span>
+        </el-tab-pane>
     </el-tabs>
     <div id="p">
         <transition name="fade-transform" mode="out-in">
@@ -48,6 +50,7 @@
         data: {
             activeName: 'home',
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+            hasAlerts: false,
             versions: [
                 { time: '2025-12-09', version: '1.4.1-beta3', content: '主页美化。' },
                 { time: '2025-09-15', version: '1.4.1', content: '修复高能片段弹幕太少导致生成错误，逻辑微调。' },
@@ -116,8 +119,18 @@
             setTimeout(function() {
                 self.enableTabDrag();
             }, 100);
+            this.checkAlerts();
+            setInterval(this.checkAlerts, 30000);
         },
         methods: {
+            checkAlerts: function() {
+                fetch('/log/alerts')
+                    .then(res => res.json())
+                    .then(data => {
+                        this.hasAlerts = data && data.length > 0;
+                    })
+                    .catch(e => console.error(e));
+            },
             toggleTheme: function() {
                 this.theme = this.theme === 'dark' ? 'light' : 'dark';
                 this.applyTheme(this.theme);

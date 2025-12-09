@@ -34,6 +34,11 @@ public class LogController {
         return logAnalyzeService.getAlerts();
     }
 
+    @org.springframework.web.bind.annotation.DeleteMapping("/alerts")
+    public void clearAlerts() {
+        logAnalyzeService.clearAlerts();
+    }
+
     @GetMapping("/history")
     public List<String> getHistoryLogs(@RequestParam(defaultValue = "2000") int lines) {
         // Handle variable resolution if needed, but @Value usually handles it if properties are set.

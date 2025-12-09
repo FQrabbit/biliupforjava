@@ -41,6 +41,19 @@
         .level-ERROR { color: #f44747; }
         .level-DEBUG { color: #9cdcfe; }
         
+        .log-line.nowrap { white-space: pre; overflow-x: hidden; word-break: normal; }
+        .log-line.selection-mode { cursor: pointer; }
+        .log-line.selected { background-color: #3a3d41; border-left: 3px solid #007acc; padding-left: 7px; }
+        
+        /* Syntax Highlighting */
+        .log-url { color: #569cd6; text-decoration: underline; }
+        .log-path { color: #9cdcfe; text-decoration: underline; }
+        .log-number { color: #b5cea8; }
+        .log-date { color: #6a9955; }
+        .log-string { color: #ce9178; }
+        .log-bracket { color: #4ec9b0; }
+        .log-brace { color: #da70d6; }
+
         @media (max-width: 768px) {
             .toolbar-row { gap: 5px; }
             .el-button--small, .el-button--small.is-round { padding: 9px 15px; }
@@ -72,6 +85,8 @@
             </el-col>
 
             <el-col :xs="24" :sm="24" :md="8" :lg="12" style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+                <el-switch v-model="selectionMode" active-text="多选模式" @change="handleSelectionModeChange"></el-switch>
+                <el-switch v-model="autoWrap" active-text="自动换行"></el-switch>
                 <el-switch v-model="autoScroll" active-text="自动滚动"></el-switch>
                 <el-switch v-model="realtime" active-text="实时推送" @change="toggleRealtime"></el-switch>
                 <span style="font-size: 12px; color: #888; margin-left: 5px;" class="hidden-xs-only">{{ statusText }}</span>
@@ -80,11 +95,14 @@
     </div>
 
     <div class="log-console" ref="console">
-        <div v-for="(log, index) in filteredLogs" :key="index" class="log-line">
+        <div v-for="(log, index) in filteredLogs" :key="index" 
+             class="log-line" 
+             :class="{ 'nowrap': !autoWrap, 'selection-mode': selectionMode, 'selected': isSelected(log) }"
+             @click="handleLogClick(log)">
             <span class="log-time">{{ log.timestamp }}</span>
             <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
             <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
-            <span class="log-message">{{ log.message }}</span>
+            <span class="log-message" v-html="formatLogMessage(log.message)"></span>
         </div>
     </div>
 
@@ -119,8 +137,11 @@
         data: {
             logs: [],
             visibleLevels: ['INFO', 'WARN', 'ERROR'],
+            autoWrap: true,
             autoScroll: true,
             realtime: true,
+            selectionMode: false,
+            selectedLogs: new Set(),
             loadingHistory: false,
             ws: null,
             statusText: '未连接',
@@ -276,8 +297,16 @@
                     .catch(e => console.error(e));
             },
             clearAlerts() {
-                this.alerts = [];
-                this.showAlerts = false;
+                fetch('/log/alerts', { method: 'DELETE' })
+                    .then(() => {
+                        this.alerts = [];
+                        this.showAlerts = false;
+                        this.$message.success('已清除所有异常记录');
+                    })
+                    .catch(e => {
+                        console.error(e);
+                        this.$message.error('清除失败');
+                    });
             },
             formatDate(dateStr) {
                 return new Date(dateStr).toLocaleString();
@@ -286,6 +315,94 @@
                 if (type === 'RISK_CONTROL') return 'danger';
                 if (type === 'AUTH_FAILED') return 'danger';
                 return 'warning';
+            },
+            handleSelectionModeChange(val) {
+                if (!val) {
+                    this.selectedLogs = new Set();
+                }
+            },
+            isSelected(log) {
+                return this.selectionMode && this.selectedLogs.has(log);
+            },
+            handleLogClick(log) {
+                if (!this.selectionMode) return;
+                
+                if (this.selectedLogs.has(log)) {
+                    this.selectedLogs.delete(log);
+                    // Force update for Set reactivity
+                    this.selectedLogs = new Set(this.selectedLogs);
+                } else {
+                    this.selectedLogs.add(log);
+                    this.selectedLogs = new Set(this.selectedLogs);
+                }
+                
+                this.copySelectedLogs();
+            },
+            copySelectedLogs() {
+                if (this.selectedLogs.size === 0) return;
+
+                // Filter logs to maintain order
+                const selectedContent = this.logs
+                    .filter(log => this.selectedLogs.has(log))
+                    .map(log => {
+                        let line = `${log.timestamp} ${log.level}`;
+                        if (log.thread) line += ` [${log.thread}]`;
+                        line += ` ${log.message}`;
+                        return line;
+                    })
+                    .join('\n');
+
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(selectedContent).then(() => {
+                        this.$message.success({
+                            message: `已复制 ${this.selectedLogs.size} 条日志到剪贴板`,
+                            duration: 1500
+                        });
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                        this.$message.error('复制失败');
+                    });
+                } else {
+                    // Fallback
+                    const textArea = document.createElement("textarea");
+                    textArea.value = selectedContent;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        this.$message.success({
+                            message: `已复制 ${this.selectedLogs.size} 条日志到剪贴板`,
+                            duration: 1500
+                        });
+                    } catch (err) {
+                        console.error('Fallback copy failed', err);
+                        this.$message.error('复制失败');
+                    }
+                    document.body.removeChild(textArea);
+                }
+            },
+            formatLogMessage(message) {
+                if (!message) return '';
+                // Escape HTML
+                let text = message.replace(/&/g, "&amp;")
+                                .replace(/</g, "&lt;")
+                                .replace(/>/g, "&gt;")
+                                .replace(/"/g, "&quot;")
+                                .replace(/'/g, "&#039;");
+
+                // Regex for syntax highlighting
+                // Groups: 1:Entity, 2:URL, 3:Date, 4:Path, 5:Brackets, 6:Numbers
+                const regex = /(&[a-zA-Z]+;|&#\d+;|&#x[0-9a-fA-F]+;)|(https?:\/\/[^\s"']+)|(\d{4}-\d{2}-\d{2}(?:T|\s)\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)|([a-zA-Z]:\\[^\s"']+|(?:\/[\w\-.][\w\-.\/]+))|([\{\}\[\]])|(\d+)/g;
+
+                return text.replace(regex, (match, entity, url, date, path, bracket, number) => {
+                    if (entity) return match;
+                    if (url) return `<span class="log-url">${url}</span>`;
+                    if (date) return `<span class="log-date">${date}</span>`;
+                    if (path) return `<span class="log-path">${path}</span>`;
+                    if (bracket) return `<span class="log-bracket">${bracket}</span>`;
+                    if (number) return `<span class="log-number">${number}</span>`;
+                    return match;
+                });
             }
         }
     });
