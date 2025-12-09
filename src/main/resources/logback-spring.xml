@@ -21,10 +21,9 @@
     </appender>
 
     <appender name="WEBSOCKET" class="top.sshh.bililiverecoder.config.WebSocketLogAppender">
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>DEBUG</level>
-        </filter>
     </appender>
+
+    <logger name="top.sshh.bililiverecoder" level="DEBUG"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE" />

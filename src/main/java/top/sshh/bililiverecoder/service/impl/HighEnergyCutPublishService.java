@@ -327,7 +327,7 @@ public class HighEnergyCutPublishService {
                     }
                     LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
                     uploadBean = uploadRequest.getPojo();
-                    log.error("preUploadBean==>{}\nuploadBean==>{}", JSON.toJSONString(preUploadBean), JSON.toJSONString(uploadBean));
+                    log.debug("preUploadBean==>{}\nuploadBean==>{}", JSON.toJSONString(preUploadBean), JSON.toJSONString(uploadBean));
                 }
             } while (preUploadBean.getOK() == 0);
         } catch (Exception e) {

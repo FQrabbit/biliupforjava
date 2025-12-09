@@ -49,7 +49,7 @@ bili:
 logging:
   level:
     org.springframework.web.servlet.DispatcherServlet: WARN
-    top.sshh.bililiverecoder.job: DEBUG
+    top.sshh.bililiverecoder: DEBUG
   file:
     path: ${record.work-path}/log/
   logback:

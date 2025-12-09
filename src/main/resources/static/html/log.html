@@ -77,10 +77,18 @@
             
             <el-col :xs="24" :sm="12" :md="8" :lg="6">
                 <el-select v-model="visibleLevels" multiple collapse-tags placeholder="日志等级" size="small" style="width: 100%;">
-                    <el-option label="INFO" value="INFO"></el-option>
-                    <el-option label="WARN" value="WARN"></el-option>
-                    <el-option label="ERROR" value="ERROR"></el-option>
-                    <el-option label="DEBUG" value="DEBUG"></el-option>
+                    <el-option label="INFO" value="INFO">
+                        <span style="color: #4caf50; font-weight: bold;">INFO</span>
+                    </el-option>
+                    <el-option label="WARN" value="WARN">
+                        <span style="color: #e6a23c; font-weight: bold;">WARN</span>
+                    </el-option>
+                    <el-option label="ERROR" value="ERROR">
+                        <span style="color: #f56c6c; font-weight: bold;">ERROR</span>
+                    </el-option>
+                    <el-option label="DEBUG" value="DEBUG">
+                        <span style="color: #409eff; font-weight: bold;">DEBUG</span>
+                    </el-option>
                 </el-select>
             </el-col>
 

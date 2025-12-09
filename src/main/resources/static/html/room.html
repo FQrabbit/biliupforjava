@@ -204,7 +204,17 @@
     </div>
     </transition>
 
-    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="房间信息" :before-close="handleClose" :close-on-click-modal="false">
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" :before-close="handleClose" :close-on-click-modal="false">
+        <div slot="title">
+            <span class="el-dialog__title">房间信息</span>
+            <div style="position: absolute; right: 50px; top: 0; height: 54px; display: flex; align-items: center;">
+                <el-tooltip :content="allExpanded ? '全部收起' : '全部展开'" placement="bottom">
+                    <el-button type="text" @click="toggleAllSections" style="padding: 10px;">
+                        <img src="/img/icon.svg" style="width: 20px; height: 20px;" :style="{transform: allExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s'}">
+                    </el-button>
+                </el-tooltip>
+            </div>
+        </div>
         <el-form :model="room">
             <div class="section-group">
                 <div class="section-header" @click="section.basic = !section.basic">基础设置<i :class="section.basic ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
@@ -391,9 +401,15 @@
                 </el-collapse-transition>
             </div>
         </el-form>
-        <div class="drawer-footer" slot="footer">
-            <el-button @click="cancelEdit" type="danger">放 弃</el-button>
-            <el-button @click="updateRoom()" type="success">保 存</el-button>
+        <div class="drawer-footer" slot="footer" style="display: flex; justify-content: space-between;">
+            <div>
+                <el-button @click="copyConfig" type="info" icon="el-icon-document-copy" size="small">复制配置</el-button>
+                <el-button @click="pasteConfig" type="warning" icon="el-icon-document-add" size="small">粘贴配置</el-button>
+            </div>
+            <div>
+                <el-button @click="cancelEdit" type="danger">放 弃</el-button>
+                <el-button @click="updateRoom()" type="success">保 存</el-button>
+            </div>
         </div>
     </el-dialog>
 
@@ -2144,13 +2160,14 @@
             isMobile: window.innerWidth <= 768,
             viewMode: 'card',
             section: {
-                basic: true,
+                basic: false,
                 upload: false,
                 control: false,
                 delete: false,
                 notify: false,
                 uploadUser: false
             },
+            allExpanded: false,
             partitionDialogVisible: false,
             currentPartitionLevel: 0,
             currentPartitionParent: null,
@@ -2189,6 +2206,105 @@
                     type: 'warning'
                 });
                 this.dialogFormVisible = false;
+            },
+            copyConfig() {
+                // 复制当前房间配置到剪贴板（排除id和roomId等唯一标识）
+                const config = JSON.parse(JSON.stringify(this.room));
+                // 移除不应复制的字段
+                delete config.id;
+                delete config.roomId;
+                delete config.uname;
+                delete config.title;
+                delete config.streaming;
+                delete config.recording;
+                delete config.startTime;
+                delete config.coverUrl; // 封面通常不复制
+                
+                const configStr = JSON.stringify(config);
+                
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(configStr).then(() => {
+                        this.$message.success('配置已复制到剪贴板');
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                        this.$message.error('复制失败');
+                    });
+                } else {
+                    // Fallback
+                    const textArea = document.createElement("textarea");
+                    textArea.value = configStr;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        this.$message.success('配置已复制到剪贴板');
+                    } catch (err) {
+                        console.error('Fallback copy failed', err);
+                        this.$message.error('复制失败');
+                    }
+                    document.body.removeChild(textArea);
+                }
+            },
+            pasteConfig() {
+                if (navigator.clipboard) {
+                    navigator.clipboard.readText().then(text => {
+                        this.applyPastedConfig(text);
+                    }).catch(err => {
+                        console.error('Failed to read clipboard: ', err);
+                        // 尝试使用 prompt 获取
+                        this.$prompt('请粘贴配置内容', '粘贴配置', {
+                            confirmButtonText: '确定',
+                            cancelButtonText: '取消',
+                            inputType: 'textarea'
+                        }).then(({ value }) => {
+                            this.applyPastedConfig(value);
+                        }).catch(() => {});
+                    });
+                } else {
+                     this.$prompt('请粘贴配置内容', '粘贴配置', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        inputType: 'textarea'
+                    }).then(({ value }) => {
+                        this.applyPastedConfig(value);
+                    }).catch(() => {});
+                }
+            },
+            applyPastedConfig(text) {
+                try {
+                    const config = JSON.parse(text);
+                    // 验证是否是有效的配置对象 (简单验证)
+                    if (typeof config !== 'object') {
+                        throw new Error('Invalid config format');
+                    }
+                    
+                    // 保留当前房间的唯一标识
+                    const currentId = this.room.id;
+                    const currentRoomId = this.room.roomId;
+                    const currentUname = this.room.uname;
+                    
+                    // 合并配置
+                    this.room = { ...this.room, ...config };
+                    
+                    // 恢复唯一标识
+                    this.room.id = currentId;
+                    this.room.roomId = currentRoomId;
+                    this.room.uname = currentUname;
+                    
+                    // 强制更新视图
+                    this.room = JSON.parse(JSON.stringify(this.room));
+                    
+                    this.$message.success('配置已粘贴并应用');
+                } catch (e) {
+                    console.error(e);
+                    this.$message.error('粘贴失败：无效的配置内容');
+                }
+            },
+            toggleAllSections() {
+                this.allExpanded = !this.allExpanded;
+                for (let key in this.section) {
+                    this.section[key] = this.allExpanded;
+                }
             },
             getTypeName: function (id) {
                 for (let i = 0; i < this.typeList.length; i++) {
@@ -2578,6 +2694,7 @@
     .el-dialog__body {
         overflow-y: auto;
         flex: 1;
+        position: relative;
     }
 
     .el-dialog__footer {
