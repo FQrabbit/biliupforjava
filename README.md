@@ -21,6 +21,37 @@
 
 **适用于：NAS、服务器直播监控、录制及自动投稿，适配Windows 和 linux**
 
+## 工作原理图
+
+很多用户不理解本项目与录播姬的关系，请看下图：
+
+```mermaid
+graph TD
+    subgraph Env ["你的环境"]
+        direction TB
+        Recorder["录播姬 / blrec"]
+        Plugin["biliupforjava (本项目)"]
+        Disk[("共享存储 (硬盘/映射卷)")]
+        
+        Recorder -- "1. 录制视频写入" --> Disk
+        Recorder -- "2. 发送 Webhook 通知" --> Plugin
+        Plugin -- "3. 根据通知读取文件" --> Disk
+    end
+    
+    Live["B站直播间"] -- "直播流" --> Recorder
+    Plugin -- "4. 上传视频" --> Bilibili["B站投稿服务器"]
+
+    style Disk fill:#f96,stroke:#333,stroke-width:4px
+    style Plugin fill:#69f,stroke:#333,stroke-width:2px
+    style Recorder fill:#6f9,stroke:#333,stroke-width:2px
+```
+
+**核心重点**：
+1. **录播姬**负责下载直播流并保存为文件。
+2. **录播姬**通过 Webhook (HTTP请求) 告诉**本项目**：“嘿，我录完了一个文件，路径是 `/rec/xxx.flv`”。
+3. **本项目**收到通知后，去读取该文件并上传。
+4. **关键点**：**录播姬**和**本项目**必须能访问到**同一个文件路径**。如果你使用 Docker，这意味着两个容器必须映射**同一个宿主机目录**到容器内的**同一个路径** (或者通过配置路径映射解决)。
+
 # 录播投稿使用流程
 
 群号：697605055 <a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=kBA4u6rVFe_n2XjyYGx94CgTh3-KWM5T&jump_from=webapi&authKey=nhTa8F4D31bovL/ZwEfX5Qt148AyzJKCD4cC0+6ew/Y8bJfcf6aJKxtqXPUjQpwx"><img border="0" src="//pub.idqqimg.com/wpa/images/group.png" alt="录播姬投稿插件交流群" title="录播姬投稿插件交流群"></a>
