@@ -1,10 +1,13 @@
 package top.sshh.bililiverecoder.controller;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import top.sshh.bililiverecoder.entity.LogAlert;
+import top.sshh.bililiverecoder.service.LogAnalyzeService;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -17,11 +20,19 @@ import java.util.List;
 @RequestMapping("/log")
 public class LogController {
 
+    @Autowired
+    private LogAnalyzeService logAnalyzeService;
+
     @Value("${logging.file.path:${record.work-path}/log/}")
     private String logPath;
 
     @Value("${logging.file.name:spring.log}")
     private String logName;
+
+    @GetMapping("/alerts")
+    public List<LogAlert> getAlerts() {
+        return logAnalyzeService.getAlerts();
+    }
 
     @GetMapping("/history")
     public List<String> getHistoryLogs(@RequestParam(defaultValue = "2000") int lines) {

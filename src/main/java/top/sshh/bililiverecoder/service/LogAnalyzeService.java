@@ -1,0 +1,62 @@
+package top.sshh.bililiverecoder.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import top.sshh.bililiverecoder.entity.LogAlert;
+
+import javax.annotation.PostConstruct;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Service
+@Slf4j
+public class LogAnalyzeService {
+
+    private static LogAnalyzeService instance;
+    private final List<LogAlert> alerts = new CopyOnWriteArrayList<>();
+    private static final int MAX_ALERTS = 100;
+
+    @PostConstruct
+    public void init() {
+        instance = this;
+    }
+
+    public static LogAnalyzeService getInstance() {
+        return instance;
+    }
+
+    public void processLog(String message, String level) {
+        if (message == null) return;
+
+        String type = null;
+        if (message.contains("[RISK_CONTROL]") || message.contains("412")) {
+            type = "RISK_CONTROL";
+        } else if (message.contains("[AUTH_FAILED]") || message.contains("登录失败")) {
+            type = "AUTH_FAILED";
+        } else if (message.contains("验证码")) {
+            type = "CAPTCHA_REQUIRED";
+        } else if (message.contains("Exception") || message.contains("Error")) {
+        }
+
+        if (type != null) {
+            addAlert(new LogAlert(type, message, level));
+        }
+    }
+
+    private void addAlert(LogAlert alert) {
+        if (alerts.size() >= MAX_ALERTS) {
+            alerts.remove(0);
+        }
+        alerts.add(alert);
+    }
+
+    public List<LogAlert> getAlerts() {
+        return new ArrayList<>(alerts);
+    }
+    
+    public void clearAlerts() {
+        alerts.clear();
+    }
+}

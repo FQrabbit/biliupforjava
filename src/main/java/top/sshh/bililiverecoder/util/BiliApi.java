@@ -34,10 +34,68 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BiliApi {
 
-
-    // TODO 修改为从properties中读取
+    // TODO: 从配置文件读取
     private static String appKey = "4409e2ce8ffd12b8";
     private static String appSecret = "59b43e04ad6965f34319062b478f83dd";
+
+    public static void setAppKey(String key) {
+        appKey = key;
+    }
+
+    public static void setAppSecret(String secret) {
+        appSecret = secret;
+    }
+
+    private static final String USER_AGENT = "Mozilla/5.0 BiliDroid/7.81.0 (bbcallen@gmail.com) os/android model/KB2000 mobi_app/android build/7810300 channel/master innerVer/7810310 osVer/13 network/2";
+    private static String BUVID;
+    private static String DEVICE_ID;
+
+    static {
+        java.util.Properties props = new java.util.Properties();
+        java.io.File file = new java.io.File("device.properties");
+        try {
+            if (file.exists()) {
+                try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+                    props.load(in);
+                }
+            }
+
+            BUVID = props.getProperty("buvid");
+            DEVICE_ID = props.getProperty("deviceId");
+
+            boolean save = false;
+            if (StringUtils.isBlank(BUVID)) {
+                BUVID = "XX" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
+                props.setProperty("buvid", BUVID);
+                save = true;
+            }
+            if (StringUtils.isBlank(DEVICE_ID)) {
+                DEVICE_ID = UUID.randomUUID().toString().replace("-", "");
+                props.setProperty("deviceId", DEVICE_ID);
+                save = true;
+            }
+
+            if (save) {
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) {
+                    props.store(out, "Bilibili Device IDs");
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to load/save device IDs", e);
+            if (StringUtils.isBlank(BUVID)) BUVID = "XX" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
+            if (StringUtils.isBlank(DEVICE_ID)) DEVICE_ID = UUID.randomUUID().toString().replace("-", "");
+        }
+    }
+
+    private static Map<String, String> getCommonHeaders() {
+        Map<String, String> headers = new HashMap<>();
+        long currentSecond = Instant.now().getEpochSecond();
+        headers.put("Display-ID", BUVID + "-" + currentSecond);
+        headers.put("Buvid", BUVID);
+        headers.put("User-Agent", USER_AGENT);
+        headers.put("Device-ID", DEVICE_ID);
+        return headers;
+    }
 
 
     public static String getLoginKey() {
@@ -50,12 +108,7 @@ public class BiliApi {
         params.put("platform", "android");
         params.put("ts", "" + System.currentTimeMillis() / 1000);
         params.put("sign", sign(params, appSecret));
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
         params.forEach(uriBuilder::queryParam);
         return HttpClientUtil.post(url, headers, params, true);
@@ -113,12 +166,7 @@ public class BiliApi {
         params.put("profile", profile);
         params.put("mid", user.getUid().toString());
 
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
         params.forEach(uriBuilder::queryParam);
         return HttpClientUtil.get(uriBuilder.toUriString(), headers);
@@ -137,12 +185,7 @@ public class BiliApi {
         // params.put("sign", sign(params, appSecret));
         params.putAll(param);
 
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
 
         headers.put("cookie", user.getCookies());
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
@@ -183,12 +226,7 @@ public class BiliApi {
     public static String editPublish(BiliBiliUser user, VideoEditUploadDto data) {
         WebCookie cookie = Cookie.parse(user.getCookies());
         String url = "https://member.bilibili.com/x/vu/web/edit?t=" + System.currentTimeMillis() + "&csrf=" + cookie.getCsrf();
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         data.setCsrf(cookie.getCsrf());
         headers.put("cookie", cookie.getCookie());
         String body = JSON.toJSONString(data);
@@ -261,12 +299,7 @@ public class BiliApi {
         params.put("platform", "android");
         params.put("ts", "" + System.currentTimeMillis() / 1000);
         params.put("sign", sign(params, appSecret));
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         headers.put("cookie", user.getCookies());
         headers.put("x-bili-aurora-eid", "UlMFQVcABlAH");
         headers.put("x-bili-aurora-zone", "sh001");
@@ -317,12 +350,7 @@ public class BiliApi {
         String url = "https://api.bilibili.com/x/web-interface/view";
         Map<String, String> params = new TreeMap<>();
         params.put("bvid", bvid);
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         if(user != null){
             WebCookie cookie = Cookie.parse(user.getCookies());
             BiliResponseDto<BillBuvId> buvId = getBuvId();
@@ -340,12 +368,7 @@ public class BiliApi {
         params.put("topic_grey", "1");
         params.put("bvid", bvid);
         params.put("t", String.valueOf(System.currentTimeMillis()));
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         WebCookie cookie = Cookie.parse(user.getCookies());
         headers.put("cookie", cookie.getCookie());
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
@@ -375,12 +398,7 @@ public class BiliApi {
         params.put("progress", msg.getSendTime().toString());
         params.put("mode", String.valueOf(msg.getMode()));
         params.put("rnd", String.valueOf(System.currentTimeMillis() * 1000000));
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         headers.put("cookie", user.getCookies());
         headers.put("x-bili-aurora-eid", "UlMFQVcABlAH");
         headers.put("x-bili-aurora-zone", "sh001");
@@ -408,12 +426,7 @@ public class BiliApi {
             params.put("parent", reply.getParent());
         }
         params.put("plat", "2");
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         headers.put("cookie", user.getCookies());
         headers.put("x-bili-aurora-eid", "UlMFQVcABlAH");
         headers.put("x-bili-aurora-zone", "sh001");
@@ -437,12 +450,7 @@ public class BiliApi {
         params.put("oid", reply.getOid());
         params.put("rpid", reply.getRpid());
         params.put("action", reply.getAction());
-        Map<String, String> headers = new HashMap<>();
-        long currentSecond = Instant.now().getEpochSecond();
-        headers.put("Display-ID", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5-" + currentSecond);
-        headers.put("Buvid", "XXD9E43D7A1EBB6669597650E3EE417D9E7F5");
-        headers.put("User-Agent", "Mozilla/5.0 BiliDroid/5.37.0 (bbcallen@gmail.com)");
-        headers.put("Device-ID", "aBRoDWAVeRhsA3FDewMzS3lLMwM");
+        Map<String, String> headers = getCommonHeaders();
         headers.put("cookie", user.getCookies());
         headers.put("x-bili-aurora-eid", "UlMFQVcABlAH");
         headers.put("x-bili-aurora-zone", "sh001");
@@ -608,7 +616,7 @@ public class BiliApi {
     }
 
     public static void main(String[] args) {
-        System.out.println(generateQRUrlTV());
+        log.info("QR URL: {}", generateQRUrlTV());
     }
 
 

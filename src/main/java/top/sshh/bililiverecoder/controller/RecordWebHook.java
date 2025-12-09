@@ -45,7 +45,15 @@ public class RecordWebHook {
             }
         }
         synchronized (lock.intern()) {
-            log.info("收到录播姬的推送信息==> {}", JSON.toJSONString(recordEvent));
+            if (recordEvent.getEventData() != null) {
+                log.info("[WEBHOOK] 收到录播姬推送 | Type: {} | RoomId: {} | Title: {}", 
+                        recordEvent.getEventType(), 
+                        recordEvent.getEventData().getRoomId(), 
+                        recordEvent.getEventData().getTitle());
+                log.debug("[WEBHOOK_DEBUG] Full Payload: {}", JSON.toJSONString(recordEvent));
+            } else {
+                log.info("收到录播姬的推送信息(旧版/未知格式)==> {}", JSON.toJSONString(recordEvent));
+            }
             recordEventFactory.processing(recordEvent);
         }
     }

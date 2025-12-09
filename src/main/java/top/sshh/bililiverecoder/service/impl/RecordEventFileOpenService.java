@@ -48,12 +48,12 @@ public class RecordEventFileOpenService implements RecordEventService {
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         String relativePath = eventData.getRelativePath();
-        log.info("分p开始录制事件==>{}", relativePath);
+        log.info("[FILE_OPEN] 分P开始录制 | File: {}", relativePath);
         String sessionId = eventData.getSessionId();
         try {
             Thread.sleep(5000L);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Thread sleep interrupted", e);
         }
         String roomId = eventData.getRoomId();
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
@@ -61,7 +61,7 @@ public class RecordEventFileOpenService implements RecordEventService {
             synchronized (roomId.intern()) {
                 room = roomRepository.findByRoomId(eventData.getRoomId());
                 if (room == null) {
-                    log.error("录制异常，录制历史没有创建，录制房间也没有创建！！！可能webhook请求顺序错误");
+                    log.error("[RECORD_ERROR] 录制异常：房间未创建，可能 WebHook 顺序错误 | RoomId: {}", eventData.getRoomId());
                     room = new RecordRoom();
                     room.setRoomId(eventData.getRoomId());
                     room.setCreateTime(LocalDateTime.now());
@@ -86,13 +86,13 @@ public class RecordEventFileOpenService implements RecordEventService {
         if (historyOptional.isPresent()) {
             history = historyOptional.get();
             if (!eventData.getRoomId().equals(history.getRoomId())) {
-                log.error("发生错误:room保存的录制历史不是该主播的录制历史！！！！history==>{}", JSON.toJSONString(history));
+                log.error("[RECORD_ERROR] 历史记录归属错误 | RoomId: {} | History: {}", eventData.getRoomId(), JSON.toJSONString(history));
                 history = null;
             }
         }
         //异常情况判断
         if (history == null || (!"blrec".equals(eventData.getSessionId()) && !eventData.getSessionId().equals(history.getSessionId()) && history.getEndTime().isBefore(LocalDateTime.now().minusMinutes(10L)))) {
-            log.error("录制异常，录制历史没有创建，可能webhook请求顺序错误");
+            log.error("[RECORD_ERROR] 录制异常：历史记录未创建，可能 WebHook 顺序错误");
 
             history = new RecordHistory();
             history.setEventId(event.getEventId());
@@ -111,7 +111,7 @@ public class RecordEventFileOpenService implements RecordEventService {
         int partCount = historyPartRepository.countByHistoryId(history.getId());
 
         if(partCount>99){
-            log.error("录制异常，该录制历史part数量已达到100，强制分次投稿");
+            log.warn("[RECORD_WARN] 分P数量达到上限(100)，强制分次投稿 | HistoryId: {}", history.getId());
             //更新唯一键,更新录制状态
             history.setEventId(history.getEventId()+1);
             history.setSessionId(history.getSessionId()+1);
@@ -137,7 +137,7 @@ public class RecordEventFileOpenService implements RecordEventService {
         // 正常逻辑
         boolean existsPart = historyPartRepository.existsByFilePath(filePath);
         if(existsPart){
-            log.error("eventId 查询分p已存在，filePath==>{}", filePath);
+            log.warn("[RECORD_WARN] 分P已存在，跳过 | FilePath: {}", filePath);
             return;
         }
         RecordHistoryPart part = new RecordHistoryPart();
@@ -154,7 +154,8 @@ public class RecordEventFileOpenService implements RecordEventService {
         part.setStartTime(LocalDateTime.now());
         part.setEndTime(LocalDateTime.now());
         part = historyPartRepository.save(part);
-        log.info("分p开始录制事件,成功保存数据库==>{}", JSON.toJSONString(part));
+        log.info("[FILE_OPEN] 分P已保存至数据库 | PartId: {} | Title: {}", part.getId(), part.getTitle());
+        log.debug("[FILE_OPEN_DEBUG] Part Details: {}", JSON.toJSONString(part));
         history.setTitle(eventData.getTitle());
         history.setSessionId(eventData.getSessionId());
         history.setRecording(eventData.isRecording());

@@ -89,7 +89,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Override
     public void asyncUpload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
-        log.info("partId={},异步上传任务开始==>{}", part.getId(), part.getFilePath());
+        log.info("[UPLOAD_START] 异步上传任务开始 | PartId: {} | File: {}", part.getId(), part.getFilePath());
         this.upload(part);
     }
 

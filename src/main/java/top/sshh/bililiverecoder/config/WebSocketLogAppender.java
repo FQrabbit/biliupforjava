@@ -2,6 +2,8 @@ package top.sshh.bililiverecoder.config;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.UnsynchronizedAppenderBase;
+import top.sshh.bililiverecoder.service.LogAnalyzeService;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -21,6 +23,8 @@ public class WebSocketLogAppender extends UnsynchronizedAppenderBase<ILoggingEve
              json.append("\"logger\": \"").append(event.getLoggerName()).append("\",");
              
              String msg = event.getFormattedMessage();
+             String rawMsg = msg; // Keep raw message for analysis
+
              if(msg != null) {
                  msg = msg.replace("\\", "\\\\")
                           .replace("\"", "\\\"")
@@ -33,6 +37,12 @@ public class WebSocketLogAppender extends UnsynchronizedAppenderBase<ILoggingEve
              json.append("}");
              
              LogWebSocketHandler.sendLog(json.toString());
+
+             // Analyze for Alerts
+             LogAnalyzeService service = LogAnalyzeService.getInstance();
+             if (service != null) {
+                 service.processLog(rawMsg, event.getLevel().toString());
+             }
         } catch (Exception e) {
             // ignore
         }

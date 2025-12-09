@@ -30,14 +30,13 @@ public class RefreshTokenJob {
         for (BiliBiliUser user : all) {
             LocalDateTime updateTime = user.getUpdateTime();
             if(updateTime.isAfter(now)){
-                log.error("刷新token，距离上次更新不超过一小时，跳过==>{}", user.getUname());
+                log.info("刷新token，距离上次更新不超过一小时，跳过==>{}", user.getUname());
                 continue;
             }
             try {
                 userService.refreshToken(user);
             }catch (Exception e){
-                log.error("刷新token失败==>{}", JSON.toJSONString(user));
-                e.printStackTrace();
+                log.error("刷新token失败==>{}", JSON.toJSONString(user), e);
             }
         }
     }

@@ -44,20 +44,62 @@
 <body>
 <div id="app">
     <div class="toolbar">
-        <el-button size="small" type="primary" @click="loadHistory" :loading="loadingHistory">加载历史日志</el-button>
-        <el-button size="small" type="danger" @click="clearLogs">清空</el-button>
+        <el-button-group>
+            <el-button size="small" type="primary" @click="loadHistory" :loading="loadingHistory">加载历史</el-button>
+            <el-button size="small" type="danger" @click="clearLogs">清空</el-button>
+        </el-button-group>
+        
+        <el-divider direction="vertical"></el-divider>
+        
+        <el-checkbox-group v-model="visibleLevels" size="small">
+            <el-checkbox label="INFO">INFO</el-checkbox>
+            <el-checkbox label="WARN">WARN</el-checkbox>
+            <el-checkbox label="ERROR">ERROR</el-checkbox>
+            <el-checkbox label="DEBUG">DEBUG</el-checkbox>
+        </el-checkbox-group>
+    
+        <el-divider direction="vertical"></el-divider>
+    
         <el-switch v-model="autoScroll" active-text="自动滚动"></el-switch>
         <el-switch v-model="realtime" active-text="实时推送" @change="toggleRealtime"></el-switch>
-        <span style="margin-left: auto; font-size: 12px; color: #888;">{{ statusText }}</span>
+        
+        <el-button size="small" type="warning" icon="el-icon-warning" v-if="alerts.length > 0" @click="showAlerts = true" style="margin-left: auto;">
+            异常提醒 ({{ alerts.length }})
+        </el-button>
+        <span v-else style="margin-left: auto; font-size: 12px; color: #888;">{{ statusText }}</span>
     </div>
+
     <div class="log-console" ref="console">
-        <div v-for="(log, index) in logs" :key="index" class="log-line">
+        <div v-for="(log, index) in filteredLogs" :key="index" class="log-line">
             <span class="log-time">{{ log.timestamp }}</span>
             <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
             <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
             <span class="log-message">{{ log.message }}</span>
         </div>
     </div>
+
+    <el-dialog title="系统异常提醒" :visible.sync="showAlerts" width="70%">
+        <el-alert
+            title="这些异常是在您离线期间或最近发生的，请检查。"
+            type="warning"
+            :closable="false"
+            style="margin-bottom: 10px;">
+        </el-alert>
+        <el-table :data="alerts" stripe style="width: 100%" height="400">
+            <el-table-column prop="timestamp" label="时间" width="180">
+                <template slot-scope="scope">{{ formatDate(scope.row.timestamp) }}</template>
+            </el-table-column>
+            <el-table-column prop="type" label="类型" width="150">
+                <template slot-scope="scope">
+                    <el-tag :type="getAlertType(scope.row.type)">{{ scope.row.type }}</el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column prop="message" label="详情"></el-table-column>
+        </el-table>
+        <span slot="footer" class="dialog-footer">
+            <el-button @click="showAlerts = false">关 闭</el-button>
+        </span>
+    </el-dialog>
 </div>
 
 <script>
@@ -65,15 +107,25 @@
         el: '#app',
         data: {
             logs: [],
+            visibleLevels: ['INFO', 'WARN', 'ERROR'],
             autoScroll: true,
             realtime: true,
             loadingHistory: false,
             ws: null,
             statusText: '未连接',
-            maxLogs: 2000
+            maxLogs: 2000,
+            alerts: [],
+            showAlerts: false
+        },
+        computed: {
+            filteredLogs() {
+                return this.logs.filter(log => this.visibleLevels.includes(log.level));
+            }
         },
         mounted() {
             this.connectWs();
+            this.fetchAlerts();
+            setInterval(this.fetchAlerts, 30000);
         },
         beforeDestroy() {
             if (this.ws) this.ws.close();
@@ -98,26 +150,18 @@
                         this.addLog({
                             timestamp: new Date().toLocaleTimeString(),
                             level: 'INFO',
-                            thread: '',
                             message: event.data
                         });
                     }
                 };
                 
                 this.ws.onclose = () => {
-                    this.statusText = '连接已断开';
-                    if (this.realtime) {
-                        setTimeout(() => this.connectWs(), 3000);
-                    }
-                };
-                
-                this.ws.onerror = (err) => {
-                    this.statusText = '连接错误';
-                    console.error('WS Error', err);
+                    this.statusText = '连接断开';
+                    if (this.realtime) setTimeout(this.connectWs, 3000);
                 };
             },
-            toggleRealtime(val) {
-                if (val) {
+            toggleRealtime() {
+                if (this.realtime) {
                     this.connectWs();
                 } else {
                     if (this.ws) this.ws.close();
@@ -136,56 +180,69 @@
                     });
                 }
             },
-            clearLogs() {
-                this.logs = [];
-            },
             loadHistory() {
                 this.loadingHistory = true;
-                this.clearLogs();
-                
                 fetch('/log/history?lines=2000')
                     .then(res => res.json())
-                    .then(data => {
-                        data.forEach(line => {
-                            const parsed = this.parseLogLine(line);
-                            this.logs.push(parsed);
+                    .then(lines => {
+                        // 格式: 2023-01-01 12:00:00.000 | INFO  | thread | logger | message
+                        const parsedLogs = lines.map(line => {
+                            const parts = line.split('|');
+                            if (parts.length >= 5) {
+                                return {
+                                    timestamp: parts[0].trim(),
+                                    level: parts[1].trim(),
+                                    thread: parts[2].trim(),
+                                    logger: parts[3].trim(),
+                                    message: parts.slice(4).join('|').trim()
+                                };
+                            } else {
+                                return {
+                                    timestamp: '',
+                                    level: 'INFO',
+                                    message: line
+                                };
+                            }
                         });
-                        
+                        this.logs = parsedLogs;
+                        this.loadingHistory = false;
                         this.$nextTick(() => {
                             const container = this.$refs.console;
                             if (container) container.scrollTop = container.scrollHeight;
                         });
                     })
                     .catch(err => {
-                        this.$message.error('加载历史日志失败');
                         console.error(err);
-                    })
-                    .finally(() => {
                         this.loadingHistory = false;
+                        this.$message.error('加载历史日志失败');
                     });
             },
-            parseLogLine(line) {
-                // Regex to match Spring Boot default log format
-                // 2023-10-20 15:30:00.123  INFO 18632 --- [nio-8080-exec-1] t.s.b.controller.RoomController      : some message
-                const regex = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+(\w+)\s+.*?\s+---\s+\[(.*?)\]\s+(.*?)\s+:\s+(.*)$/;
-                const match = line.match(regex);
-                
-                if (match) {
-                    return {
-                        timestamp: match[1],
-                        level: match[2],
-                        thread: match[3],
-                        logger: match[4],
-                        message: match[5]
-                    };
-                }
-                
-                return {
-                    timestamp: '',
-                    level: 'INFO',
-                    thread: '',
-                    message: line
-                };
+            clearLogs() {
+                this.logs = [];
+            },
+            fetchAlerts() {
+                fetch('/log/alerts')
+                    .then(res => res.json())
+                    .then(data => {
+                        this.alerts = data;
+                        if (this.alerts.length > 0 && !this.showAlerts) {
+                            this.$notify({
+                                title: '系统异常提醒',
+                                message: `发现 ${this.alerts.length} 条异常记录，请点击查看。`,
+                                type: 'warning',
+                                position: 'bottom-right'
+                            });
+                        }
+                    })
+                    .catch(e => console.error(e));
+            },
+            formatDate(dateStr) {
+                return new Date(dateStr).toLocaleString();
+            },
+            getAlertType(type) {
+                if (type === 'RISK_CONTROL') return 'danger';
+                if (type === 'AUTH_FAILED') return 'danger';
+                return 'warning';
             }
         }
     });

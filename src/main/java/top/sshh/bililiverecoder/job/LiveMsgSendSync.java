@@ -69,7 +69,7 @@ public class LiveMsgSendSync {
 
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
     public void sndMsgProcess() {
-        log.info("发送弹幕定时任务开始");
+        log.debug("发送弹幕定时任务开始");
         long startTime = System.currentTimeMillis();
         List<RecordHistory> historyList = historyRepository.findByPublishIsTrueAndCode(0);
         if (CollectionUtils.isEmpty(historyList)) {
