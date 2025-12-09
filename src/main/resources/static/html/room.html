@@ -14,6 +14,18 @@
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
+    <style>
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+        #roomTable {
+            height: 100%;
+            overflow-y: auto;
+            box-sizing: border-box;
+            padding: 16px;
+        }
+    </style>
 </head>
 <body>
 <div id="roomTable">
@@ -35,7 +47,7 @@
 
     <transition name="fade-transform" mode="out-in">
     <div v-if="viewMode === 'card'" class="data-card-grid" key="card">
-        <div class="data-card" :class="{ 'is-streaming': item.streaming }" v-for="(item, index) in pagedTableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
+        <div class="data-card" :class="{ 'is-streaming': item.streaming }" v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1; min-width: 0; margin-right: 10px;">
                     <div class="card-title" style="font-weight: bold; font-size: 16px; margin-bottom: 5px; word-break: break-all;">{{ item.uname }}</div>
@@ -74,7 +86,7 @@
     </div>
 
     <div v-else key="table">
-        <el-table :data="pagedTableData" border style="width: 100%">
+        <el-table :data="tableData" border style="width: 100%">
             <el-table-column type="expand">
                 <template slot-scope="props">
                     <el-form class="demo-table-expand" inline label-position="left">
@@ -117,9 +129,9 @@
                     </el-form>
                 </template>
             </el-table-column>
-            <el-table-column label="直播间" prop="roomId" width="140"></el-table-column>
-            <el-table-column label="主播" prop="uname" width="100"></el-table-column>
-            <el-table-column label="标题" prop="title" width="180"></el-table-column>
+            <el-table-column label="直播间" prop="roomId" min-width="120"></el-table-column>
+            <el-table-column label="主播" prop="uname" min-width="100"></el-table-column>
+            <el-table-column label="标题" prop="title" min-width="150"></el-table-column>
             <el-table-column id="copyright" label="是否自制" prop="copyright" width="120">
                 <template slot-scope="scope">
                     <el-button circle class="el-icon-check" type="success" v-if="scope.row.copyright==1"></el-button>
@@ -173,28 +185,24 @@
                     </div>
                 </template>
             </el-table-column>
-            <el-table-column label="操作" width="250">
+            <el-table-column label="操作" width="140" fixed="right">
                 <template slot-scope="scope">
-                    <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" type="primary">编辑</el-button>
-                    <el-button @click="handleEeditLiveMsg(scope.$index, scope.row)" size="mini" type="primary">弹幕规则</el-button>
-                    <el-button size="mini" type="danger" @click="deleteRoom(scope.row.id)">删除</el-button>
+                    <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
+                    <el-dropdown trigger="click" size="mini">
+                        <el-button size="mini" type="text">
+                            更多<i class="el-icon-arrow-down el-icon--right"></i>
+                        </el-button>
+                        <el-dropdown-menu slot="dropdown">
+                            <el-dropdown-item @click.native="handleEeditLiveMsg(scope.$index, scope.row)">弹幕规则</el-dropdown-item>
+                            <el-dropdown-item divided></el-dropdown-item>
+                            <el-dropdown-item @click.native="deleteRoom(scope.row.id)" style="color: #F56C6C;">删除</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
                 </template>
             </el-table-column>
         </el-table>
     </div>
     </transition>
-
-    <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-        <el-pagination
-                @size-change="handleSizeChange"
-                @current-change="handleCurrentChange"
-                :current-page="currentPage"
-                :page-sizes="[5, 10, 25, 50, 100]"
-                :page-size="pageSize"
-                layout="total, sizes, prev, pager, next, jumper"
-                :total="tableData.length">
-        </el-pagination>
-    </div>
 
     <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="房间信息" :before-close="handleClose" :close-on-click-modal="false">
         <el-form :model="room">
@@ -2148,28 +2156,11 @@
             currentPartitionParent: null,
             partitionTransitionName: 'slide-left',
             detailDialogVisible: false,
-            currentDetail: {},
-            currentPage: 1,
-            pageSize: 25,
-            userChangedPageSize: false
+            currentDetail: {}
         },
         computed: {
-            pagedTableData: function() {
-                const start = (this.currentPage - 1) * this.pageSize;
-                const end = start + this.pageSize;
-                return this.tableData.slice(start, end);
-            }
         },
         methods: {
-            handleSizeChange(val) {
-                this.pageSize = val;
-                this.userChangedPageSize = true;
-                this.currentPage = 1;
-            },
-            handleCurrentChange(val) {
-                this.currentPage = val;
-                window.scrollTo(0, 0);
-            },
             showDetail(item) {
                 this.currentDetail = item;
                 this.detailDialogVisible = true;
@@ -2214,9 +2205,6 @@
             },
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;
-                if (!this.userChangedPageSize) {
-                    this.pageSize = this.isMobile ? 5 : 25;
-                }
             },
             resolveUser: function (id) {
                 var u = this.users.find(function(item){ return item.id === id;});
@@ -2481,7 +2469,6 @@
             }
         },
         created: function created() {
-            this.pageSize = window.innerWidth < 768 ? 5 : 25;
             let _this = this;
             $.ajax({
                 url: '/biliUser/list',

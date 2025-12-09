@@ -14,6 +14,17 @@
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
+    <style>
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+        #historyTable {
+            height: 100%;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+    </style>
 </head>
 <body>
 <div class="container" id="historyTable">
@@ -251,85 +262,30 @@
                 prop="endTime"
                 width="170">
         </el-table-column>
-        <el-table-column label="操作"
-                 width="250">
+        <el-table-column label="操作" width="140" fixed="right">
             <template slot-scope="scope">
                 <el-button
                         @click="handleEdit(scope.$index, scope.row)" size="mini"
-                        type="primary">编辑
+                        type="text">编辑
                 </el-button>
-                <el-tooltip class="item" content="会重新上传转码失败的分p" effect="dark"
-                            placement="top">
-                    <el-button
-                            @click="rePublish(scope.row.id)"
-                            size="mini"
-                            type="danger">转码失败修复
+                <el-dropdown trigger="click" size="mini">
+                    <el-button size="mini" type="text">
+                        更多<i class="el-icon-arrow-down el-icon--right"></i>
                     </el-button>
-                </el-tooltip>
-                <el-button
-                        @click="highEnergyCutPublish(scope.row.id)" size="mini"
-                        type="primary">发布高能片段
-                </el-button>
-                <el-popover
-                        placement="right"
-                        width="400"
-                        trigger="click">
-                    <el-row type="flex" justify="space-around">
-                        <el-col :span="6">
-                            <el-tooltip class="item" effect="dark"
-                                        content="把分p状态全部重置为录制结束，因为未录制结束无法上传无法投稿"
-                                        placement="top">
-                                <el-button size="mini"
-                                           @click="updatePartStatus(scope.row.id)"
-                                           type="danger">结束分p录制状态
-                                </el-button>
-                            </el-tooltip>
-                        </el-col>
-                        <el-col :span="6">
-                            <el-tooltip class="item" effect="dark"
-                                        content="会上传未上传完成的分p然后发布，如果状态为已发布则无效"
-                                        placement="top">
-                                <el-button size="mini"
-                                           @click="touchPublish(scope.row.id)"
-                                           type="danger">触发发布事件
-                                </el-button>
-                            </el-tooltip>
-                        </el-col>
-                    </el-row>
-                    <el-row justify="space-around" type="flex">
-                        <el-col :span="6">
-                            <el-tooltip class="item"
-                                        content="把状态修改为未发布,分p全部未上传状态,重置后点击触发发布事件会重新投稿"
-                                        effect="dark"
-                                        placement="top">
-                                <el-button size="mini"
-                                           @click="updatePublishStatus(scope.row.id)"
-                                           type="danger">重置为未上传发布
-                                </el-button>
-                            </el-tooltip>
-                        </el-col>
-                        <el-col :span="5">
-                            <el-tooltip class="item" content="会重新按设置的弹幕规则加载弹幕，并且把弹幕都重置从未发送" effect="dark"
-                                        placement="top">
-                                <el-button size="mini"
-                                           @click="reloadHistoryMsg(scope.row.id)"
-                                           type="danger">重新加载弹幕
-                                </el-button>
-                            </el-tooltip>
-                        </el-col>
-                        <el-col :span="5">
-                            <el-button size="mini"
-                                       @click="deleteHistoryMsg(scope.row.id)"
-                                       type="danger">删除弹幕
-                            </el-button>
-                        </el-col>
-                    </el-row>
-                    <el-button slot="reference" size="mini" type="primary">更多</el-button>
-                </el-popover>
-                <el-button size="mini"
-                           @click="deleteHistory(scope.row.id)"
-                           type="danger">删除
-                </el-button>
+                    <el-dropdown-menu slot="dropdown">
+                        <el-dropdown-item @click.native="rePublish(scope.row.id)">转码失败修复</el-dropdown-item>
+                        <el-dropdown-item @click.native="highEnergyCutPublish(scope.row.id)">发布高能片段</el-dropdown-item>
+                        <el-dropdown-item divided></el-dropdown-item>
+                        <el-dropdown-item @click.native="updatePartStatus(scope.row.id)">结束分p录制状态</el-dropdown-item>
+                        <el-dropdown-item @click.native="touchPublish(scope.row.id)">触发发布事件</el-dropdown-item>
+                        <el-dropdown-item @click.native="updatePublishStatus(scope.row.id)">重置为未上传发布</el-dropdown-item>
+                        <el-dropdown-item divided></el-dropdown-item>
+                        <el-dropdown-item @click.native="reloadHistoryMsg(scope.row.id)">重新加载弹幕</el-dropdown-item>
+                        <el-dropdown-item @click.native="deleteHistoryMsg(scope.row.id)">删除弹幕</el-dropdown-item>
+                        <el-dropdown-item divided></el-dropdown-item>
+                        <el-dropdown-item @click.native="deleteHistory(scope.row.id)" style="color: #F56C6C;">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                </el-dropdown>
             </template>
         </el-table-column>
         </el-table>
@@ -506,7 +462,7 @@
             detailDialogVisible: false,
             currentDetail: {},
             isMobile: window.innerWidth <= 768,
-            activeNames: window.innerWidth > 768 ? ['1'] : [],
+            activeNames: [],
             viewMode: 'card',
             touchStartX: 0,
             touchEndX: 0,
@@ -567,7 +523,14 @@
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;
                 if (!this.userChangedPageSize) {
-                    const newSize = this.isMobile ? 5 : 25;
+                    let availableHeight = window.innerHeight - 350;
+                    let estimatedRowHeight = 50;
+                    let calculatedSize = Math.floor(availableHeight / estimatedRowHeight);
+                    
+                    if (calculatedSize < 5) calculatedSize = 5;
+                    if (calculatedSize > 50) calculatedSize = 50;
+
+                    const newSize = this.isMobile ? 5 : calculatedSize;
                     if (this.form.pageSize !== newSize) {
                         this.$set(this.form, 'pageSize', newSize);
                         this.initTable();
@@ -852,7 +815,12 @@
         },
         created: function created() {
             if (!this.form.pageSize) {
-                this.$set(this.form, 'pageSize', window.innerWidth < 768 ? 5 : 25);
+                let availableHeight = window.innerHeight - 350;
+                let estimatedRowHeight = 50;
+                let calculatedSize = Math.floor(availableHeight / estimatedRowHeight);
+                if (calculatedSize < 5) calculatedSize = 5;
+                if (calculatedSize > 50) calculatedSize = 50;
+                this.$set(this.form, 'pageSize', window.innerWidth < 768 ? 5 : calculatedSize);
             }
             if (!this.form.current) {
                 this.$set(this.form, 'current', 1);
