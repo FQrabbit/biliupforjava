@@ -373,7 +373,7 @@ public class HighEnergyCutPublishService {
                                 break;
                             }
                             int count = upCount.incrementAndGet();
-                            log.info("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
+                            log.debug("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
                                     filePath, count, chunkNum);
                             break;
                         } catch (Exception e) {

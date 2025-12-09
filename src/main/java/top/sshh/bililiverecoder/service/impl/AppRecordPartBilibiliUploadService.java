@@ -199,7 +199,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                                     throw new RuntimeException("上传返回异常");
                                                 }
                                                 int count = upCount.incrementAndGet();
-                                                log.info("{}==>[{}] 上传视频part {} 进度{}/{}, resp={}", Thread.currentThread().getName(), room.getTitle(),
+                                                log.debug("{}==>[{}] 上传视频part {} 进度{}/{}, resp={}", Thread.currentThread().getName(), room.getTitle(),
                                                         filePath, count, chunkNum, s);
                                                 break;
                                             } catch (Exception e) {
