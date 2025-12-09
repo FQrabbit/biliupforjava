@@ -31,7 +31,8 @@ public class LogAnalyzeService {
         if (message == null) return;
 
         String type = null;
-        if (message.contains("[RISK_CONTROL]") || message.contains("412")) {
+        // 增加空格或特定前缀判断，避免匹配到端口号 (如 44122)
+        if (message.contains("[RISK_CONTROL]") || message.contains(" 412 ") || message.contains("code: 412")) {
             type = "RISK_CONTROL";
         } else if (message.contains("[AUTH_FAILED]") || message.contains("登录失败")) {
             type = "AUTH_FAILED";

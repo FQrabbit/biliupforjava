@@ -30,7 +30,7 @@ public class RefreshTokenJob {
         for (BiliBiliUser user : all) {
             LocalDateTime updateTime = user.getUpdateTime();
             if(updateTime.isAfter(now)){
-                log.info("刷新token，距离上次更新不超过一小时，跳过==>{}", user.getUname());
+                log.debug("刷新token，距离上次更新不超过一小时，跳过==>{}", user.getUname());
                 continue;
             }
             try {

@@ -47,6 +47,9 @@ bili:
   app-secret: 59b43e04ad6965f34319062b478f83dd
 
 logging:
+  level:
+    org.springframework.web.servlet.DispatcherServlet: WARN
+    top.sshh.bililiverecoder.job: DEBUG
   file:
     path: ${record.work-path}/log/
   logback:
