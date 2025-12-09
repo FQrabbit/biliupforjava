@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日志控制台</title>
+    <link href="../css/element-ui.css" rel="stylesheet">
+    <link href="../css/index.css" rel="stylesheet">
+    <script src="../js/jquery-3.3.1.min.js"></script>
+    <script src="../js/vue.min.js"></script>
+    <script src="../js/element-ui.js"></script>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        #app { height: 100%; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; }
+        .toolbar { margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+        .log-console { 
+            flex: 1; 
+            background-color: #1e1e1e; 
+            color: #d4d4d4; 
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
+            padding: 10px; 
+            overflow-y: auto; 
+            border-radius: 4px; 
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .log-line { white-space: pre-wrap; word-break: break-all; margin-bottom: 2px; }
+        .log-line:hover { background-color: #2a2d2e; }
+        .log-time { color: #569cd6; margin-right: 8px; }
+        .log-level { font-weight: bold; margin-right: 8px; }
+        .log-thread { color: #4ec9b0; margin-right: 8px; }
+        .level-INFO { color: #4caf50; }
+        .level-WARN { color: #ce9178; }
+        .level-ERROR { color: #f44747; }
+        .level-DEBUG { color: #9cdcfe; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="toolbar">
+        <el-button size="small" type="primary" @click="loadHistory" :loading="loadingHistory">加载历史日志</el-button>
+        <el-button size="small" type="danger" @click="clearLogs">清空</el-button>
+        <el-switch v-model="autoScroll" active-text="自动滚动"></el-switch>
+        <el-switch v-model="realtime" active-text="实时推送" @change="toggleRealtime"></el-switch>
+        <span style="margin-left: auto; font-size: 12px; color: #888;">{{ statusText }}</span>
+    </div>
+    <div class="log-console" ref="console">
+        <div v-for="(log, index) in logs" :key="index" class="log-line">
+            <span class="log-time">{{ log.timestamp }}</span>
+            <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
+            <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
+            <span class="log-message">{{ log.message }}</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            logs: [],
+            autoScroll: true,
+            realtime: true,
+            loadingHistory: false,
+            ws: null,
+            statusText: '未连接',
+            maxLogs: 2000
+        },
+        mounted() {
+            this.connectWs();
+        },
+        beforeDestroy() {
+            if (this.ws) this.ws.close();
+        },
+        methods: {
+            connectWs() {
+                if (!this.realtime) return;
+                
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host;
+                this.ws = new WebSocket(`${protocol}//${host}/ws/log`);
+                
+                this.ws.onopen = () => {
+                    this.statusText = '实时连接已建立';
+                };
+                
+                this.ws.onmessage = (event) => {
+                    try {
+                        const log = JSON.parse(event.data);
+                        this.addLog(log);
+                    } catch (e) {
+                        this.addLog({
+                            timestamp: new Date().toLocaleTimeString(),
+                            level: 'INFO',
+                            thread: '',
+                            message: event.data
+                        });
+                    }
+                };
+                
+                this.ws.onclose = () => {
+                    this.statusText = '连接已断开';
+                    if (this.realtime) {
+                        setTimeout(() => this.connectWs(), 3000);
+                    }
+                };
+                
+                this.ws.onerror = (err) => {
+                    this.statusText = '连接错误';
+                    console.error('WS Error', err);
+                };
+            },
+            toggleRealtime(val) {
+                if (val) {
+                    this.connectWs();
+                } else {
+                    if (this.ws) this.ws.close();
+                    this.statusText = '已暂停';
+                }
+            },
+            addLog(log) {
+                this.logs.push(log);
+                if (this.logs.length > this.maxLogs) {
+                    this.logs.shift();
+                }
+                if (this.autoScroll) {
+                    this.$nextTick(() => {
+                        const container = this.$refs.console;
+                        if (container) container.scrollTop = container.scrollHeight;
+                    });
+                }
+            },
+            clearLogs() {
+                this.logs = [];
+            },
+            loadHistory() {
+                this.loadingHistory = true;
+                this.clearLogs();
+                
+                fetch('/log/history?lines=2000')
+                    .then(res => res.json())
+                    .then(data => {
+                        data.forEach(line => {
+                            const parsed = this.parseLogLine(line);
+                            this.logs.push(parsed);
+                        });
+                        
+                        this.$nextTick(() => {
+                            const container = this.$refs.console;
+                            if (container) container.scrollTop = container.scrollHeight;
+                        });
+                    })
+                    .catch(err => {
+                        this.$message.error('加载历史日志失败');
+                        console.error(err);
+                    })
+                    .finally(() => {
+                        this.loadingHistory = false;
+                    });
+            },
+            parseLogLine(line) {
+                // Regex to match Spring Boot default log format
+                // 2023-10-20 15:30:00.123  INFO 18632 --- [nio-8080-exec-1] t.s.b.controller.RoomController      : some message
+                const regex = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+(\w+)\s+.*?\s+---\s+\[(.*?)\]\s+(.*?)\s+:\s+(.*)$/;
+                const match = line.match(regex);
+                
+                if (match) {
+                    return {
+                        timestamp: match[1],
+                        level: match[2],
+                        thread: match[3],
+                        logger: match[4],
+                        message: match[5]
+                    };
+                }
+                
+                return {
+                    timestamp: '',
+                    level: 'INFO',
+                    thread: '',
+                    message: line
+                };
+            }
+        }
+    });
+</script>
+</body>
+</html>
