@@ -35,7 +35,7 @@
 
     <transition name="fade-transform" mode="out-in">
     <div v-if="viewMode === 'card'" class="data-card-grid" key="card">
-        <div class="data-card" :class="{ 'is-streaming': item.streaming }" v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
+        <div class="data-card" :class="{ 'is-streaming': item.streaming }" v-for="(item, index) in pagedTableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1; min-width: 0; margin-right: 10px;">
                     <div class="card-title" style="font-weight: bold; font-size: 16px; margin-bottom: 5px; word-break: break-all;">{{ item.uname }}</div>
@@ -74,7 +74,7 @@
     </div>
 
     <div v-else key="table">
-        <el-table :data="tableData" border style="width: 100%">
+        <el-table :data="pagedTableData" border style="width: 100%">
             <el-table-column type="expand">
                 <template slot-scope="props">
                     <el-form class="demo-table-expand" inline label-position="left">
@@ -183,6 +183,18 @@
         </el-table>
     </div>
     </transition>
+
+    <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="currentPage"
+                :page-sizes="[5, 10, 25, 50, 100]"
+                :page-size="pageSize"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="tableData.length">
+        </el-pagination>
+    </div>
 
     <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="房间信息" :before-close="handleClose" :close-on-click-modal="false">
         <el-form :model="room">
@@ -2136,9 +2148,28 @@
             currentPartitionParent: null,
             partitionTransitionName: 'slide-left',
             detailDialogVisible: false,
-            currentDetail: {}
+            currentDetail: {},
+            currentPage: 1,
+            pageSize: 25,
+            userChangedPageSize: false
+        },
+        computed: {
+            pagedTableData: function() {
+                const start = (this.currentPage - 1) * this.pageSize;
+                const end = start + this.pageSize;
+                return this.tableData.slice(start, end);
+            }
         },
         methods: {
+            handleSizeChange(val) {
+                this.pageSize = val;
+                this.userChangedPageSize = true;
+                this.currentPage = 1;
+            },
+            handleCurrentChange(val) {
+                this.currentPage = val;
+                window.scrollTo(0, 0);
+            },
             showDetail(item) {
                 this.currentDetail = item;
                 this.detailDialogVisible = true;
@@ -2183,6 +2214,9 @@
             },
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;
+                if (!this.userChangedPageSize) {
+                    this.pageSize = this.isMobile ? 5 : 25;
+                }
             },
             resolveUser: function (id) {
                 var u = this.users.find(function(item){ return item.id === id;});
@@ -2447,6 +2481,7 @@
             }
         },
         created: function created() {
+            this.pageSize = window.innerWidth < 768 ? 5 : 25;
             let _this = this;
             $.ajax({
                 url: '/biliUser/list',

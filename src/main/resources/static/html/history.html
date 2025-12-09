@@ -511,7 +511,8 @@
             touchStartX: 0,
             touchEndX: 0,
             transitionName: 'fade-transform',
-            showSwipeHint: false
+            showSwipeHint: false,
+            userChangedPageSize: false
         },
         watch: {
             viewMode: function (val) {
@@ -565,6 +566,13 @@
             },
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;
+                if (!this.userChangedPageSize) {
+                    const newSize = this.isMobile ? 5 : 25;
+                    if (this.form.pageSize !== newSize) {
+                        this.$set(this.form, 'pageSize', newSize);
+                        this.initTable();
+                    }
+                }
             },
             handleEdit: function (index, row) {
                 this.history = JSON.parse(JSON.stringify(row));
@@ -588,6 +596,7 @@
             },
             handleSizeChange(val) {
                 this.form.pageSize=val;
+                this.userChangedPageSize = true;
                 this.initTable();
             },
             handleCurrentChange(val) {
@@ -843,7 +852,7 @@
         },
         created: function created() {
             if (!this.form.pageSize) {
-                this.$set(this.form, 'pageSize', 10);
+                this.$set(this.form, 'pageSize', window.innerWidth < 768 ? 5 : 25);
             }
             if (!this.form.current) {
                 this.$set(this.form, 'current', 1);
@@ -857,7 +866,6 @@
             }
         },
         beforeDestroy: function () {
-            // Handled in beforeDestroy hook above
         }
     });
 </script>
