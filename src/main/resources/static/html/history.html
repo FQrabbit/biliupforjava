@@ -126,8 +126,8 @@
                     <div class="card-title" style="margin-bottom: 8px; word-break: break-all; line-height: 1.4; font-weight: bold; font-size: 16px;">{{ item.title || '无标题' }}</div>
                     <div v-if="item.bvId" style="margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">BV: {{ item.bvId }}</div>
                     <div class="card-status-row" style="margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 5px; width: 100%;">
-                        <span class="status-chip success" v-if="item.upload">已上传</span>
-                        <span class="status-chip danger" v-else>未上传</span>
+                        <span class="status-chip success" v-if="item.upload">上传:是</span>
+                        <span class="status-chip danger" v-else>上传:否</span>
                         <span class="status-chip warn" v-if="item.recording">录制中</span>
                         <span class="status-chip" :class="item.recording ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
                     </div>
@@ -231,8 +231,8 @@
                 prop="upload"
                 width="100">
             <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.upload">已上传</span>
-                <span class="status-chip danger" v-else>未上传</span>
+                <span class="status-chip success" v-if="scope.row.upload">是</span>
+                <span class="status-chip danger" v-else>否</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -304,7 +304,7 @@
                     @size-change="handleSizeChange"
                     @current-change="handleCurrentChange"
                     :current-page.sync="form.current"
-                    :page-sizes="[5, 10, 25, 50, 100]"
+                    :page-sizes="pageSizes"
                     :page-size="form.pageSize || 10"
                     :layout="isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
                     :pager-count="isMobile ? 5 : 7"
@@ -469,7 +469,8 @@
             touchEndX: 0,
             transitionName: 'fade-transform',
             showSwipeHint: false,
-            userChangedPageSize: false
+            userChangedPageSize: false,
+            pageSizes: [5, 10, 25, 50, 100]
         },
         watch: {
             viewMode: function (val) {
@@ -532,6 +533,12 @@
                     if (calculatedSize > 50) calculatedSize = 50;
 
                     const newSize = this.isMobile ? 5 : calculatedSize;
+                    
+                    if (!this.pageSizes.includes(newSize)) {
+                        this.pageSizes.push(newSize);
+                        this.pageSizes.sort((a, b) => a - b);
+                    }
+
                     if (this.form.pageSize !== newSize) {
                         this.$set(this.form, 'pageSize', newSize);
                         this.initTable();
@@ -821,7 +828,13 @@
                 let calculatedSize = Math.floor(availableHeight / estimatedRowHeight);
                 if (calculatedSize < 5) calculatedSize = 5;
                 if (calculatedSize > 50) calculatedSize = 50;
-                this.$set(this.form, 'pageSize', window.innerWidth < 768 ? 5 : calculatedSize);
+                const newSize = window.innerWidth < 768 ? 5 : calculatedSize;
+                this.$set(this.form, 'pageSize', newSize);
+
+                if (!this.pageSizes.includes(newSize)) {
+                    this.pageSizes.push(newSize);
+                    this.pageSizes.sort((a, b) => a - b);
+                }
             }
             if (!this.form.current) {
                 this.$set(this.form, 'current', 1);

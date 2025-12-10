@@ -153,13 +153,13 @@ public class RecordBiliPublishService {
                     File file = new File(filePath);
                     if (file.exists()) {
                         synchronized (filePath.intern()) {
-                            log.error("视频重新发布流程获取part上传锁成功，即将再次检查是否已上传完成");
+                            log.info("视频重新发布流程获取part上传锁成功，即将再次检查是否已上传完成");
                             //再次检查是否上传完成
                             Optional<RecordHistoryPart> partOptional = partRepository.findById(uploadPart.getId());
                             if (partOptional.isPresent()) {
                                 RecordHistoryPart part = partOptional.get();
                                 if (!part.isUpload()) {
-                                    log.error("视频发布流程获取part上传锁成功，检查到未上传完成");
+                                    log.info("视频发布流程获取part上传锁成功，检查到未上传完成");
                                     uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
                                 }
                             }
@@ -368,12 +368,12 @@ public class RecordBiliPublishService {
                             return false;
                         }
                         if (uploadPart.getFileSize() < 1024 * 1024 * room.getFileSizeLimit()) {
-                            log.error("文件大小小于设置的忽略大小，自动删除。");
+                            log.info("文件大小小于设置的忽略大小，自动删除。");
                             partRepository.delete(uploadPart);
                             continue;
                         }
                         if (uploadPart.getDuration() < room.getDurationLimit()) {
-                            log.error("文件时长小于设置的忽略时间，自动删除。");
+                            log.info("文件时长小于设置的忽略时间，自动删除。");
                             partRepository.delete(uploadPart);
                             continue;
                         }
@@ -385,20 +385,20 @@ public class RecordBiliPublishService {
                     log.info("partId={},{} ===>正在上传 ，等待上传完成在发布,即将等待获取锁", uploadPart.getId(), filePath);
                     synchronized (filePath) {
                         TaskUtil.partUploadTask.remove(uploadPart.getId());
-                        log.error("视频发布流程获取part上传锁成功，即将再次检查是否已上传完成");
+                        log.info("视频发布流程获取part上传锁成功，即将再次检查是否已上传完成");
                         //再次检查是否上传完成
                         Optional<RecordHistoryPart> partOptional = partRepository.findById(uploadPart.getId());
                         if (partOptional.isPresent()) {
                             RecordHistoryPart part = partOptional.get();
                             if (!part.isUpload()) {
-                                log.error("视频发布流程获取part上传锁成功，检查到未上传完成");
+                                log.info("视频发布流程获取part上传锁成功，检查到未上传完成");
                                 uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
                             }
                         }
 
                     }
                 } else {
-                    log.error("视频发布流程,检查到未上传完成,开始上传！");
+                    log.info("视频发布流程,检查到未上传完成,开始上传！");
                     uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
                 }
 
@@ -612,7 +612,7 @@ public class RecordBiliPublishService {
                                     File file = new File(filePath);
                                     boolean delete = file.delete();
                                     if (delete) {
-                                        log.error("{}=>文件删除成功！！！", filePath);
+                                        log.info("{}=>文件删除成功！！！", filePath);
                                     } else {
                                         log.error("{}=>文件删除失败！！！", filePath);
                                     }
@@ -637,7 +637,7 @@ public class RecordBiliPublishService {
                                             try {
                                                 Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                                         StandardCopyOption.REPLACE_EXISTING);
-                                                log.error("{}=>文件移动成功！！！", file.getName());
+                                                log.info("{}=>文件移动成功！！！", file.getName());
                                             } catch (Exception e) {
                                                 log.error("{}=>文件移动失败！！！", file.getName());
                                             }

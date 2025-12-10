@@ -297,7 +297,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 break;
                                             } catch (Exception e) {
                                                 tryCount.incrementAndGet();
-                                                log.info("{}==>[{}] 上传视频part {}, index {}, size {}, start {}, end {}, exception={}", Thread.currentThread().getName(), room.getTitle(),
+                                                log.warn("{}==>[{}] 上传视频part {}, index {}, size {}, start {}, end {}, exception={}", Thread.currentThread().getName(), room.getTitle(),
                                                         filePath, finalI, chunkSize, finalI * chunkSize, (finalI + 1) * chunkSize, ExceptionUtils.getStackTrace(e));
                                                 try {
                                                     //                                                log.info("上传失败等待十秒==>{}", uploadFile.getName());

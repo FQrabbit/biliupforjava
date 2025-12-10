@@ -2247,28 +2247,15 @@
                 }
             },
             pasteConfig() {
-                if (navigator.clipboard) {
+                if (navigator.clipboard && navigator.clipboard.readText) {
                     navigator.clipboard.readText().then(text => {
                         this.applyPastedConfig(text);
                     }).catch(err => {
                         console.error('Failed to read clipboard: ', err);
-                        // 尝试使用 prompt 获取
-                        this.$prompt('请粘贴配置内容', '粘贴配置', {
-                            confirmButtonText: '确定',
-                            cancelButtonText: '取消',
-                            inputType: 'textarea'
-                        }).then(({ value }) => {
-                            this.applyPastedConfig(value);
-                        }).catch(() => {});
+                        this.$message.error('读取剪贴板失败，请检查浏览器权限或使用HTTPS');
                     });
                 } else {
-                     this.$prompt('请粘贴配置内容', '粘贴配置', {
-                        confirmButtonText: '确定',
-                        cancelButtonText: '取消',
-                        inputType: 'textarea'
-                    }).then(({ value }) => {
-                        this.applyPastedConfig(value);
-                    }).catch(() => {});
+                    this.$message.error('当前浏览器不支持自动读取剪贴板');
                 }
             },
             applyPastedConfig(text) {

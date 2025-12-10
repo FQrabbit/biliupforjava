@@ -30,15 +30,19 @@ public class LogAnalyzeService {
     public void processLog(String message, String level) {
         if (message == null) return;
 
+        // 忽略登录失败的异常
+        if (message.contains("[AUTH_FAILED]") || message.contains("登录失败")) {
+            return;
+        }
+
         String type = null;
         // 增加空格或特定前缀判断，避免匹配到端口号 (如 44122)
         if (message.contains("[RISK_CONTROL]") || message.contains(" 412 ") || message.contains("code: 412")) {
             type = "RISK_CONTROL";
-        } else if (message.contains("[AUTH_FAILED]") || message.contains("登录失败")) {
-            type = "AUTH_FAILED";
         } else if (message.contains("验证码")) {
             type = "CAPTCHA_REQUIRED";
-        } else if (message.contains("Exception") || message.contains("Error")) {
+        } else if ("WARN".equalsIgnoreCase(level)) {
+            type = "WARN";
         }
 
         if (type != null) {
