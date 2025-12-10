@@ -124,8 +124,8 @@
              :class="{ 
                 'is-processing': item.upload && (item.code == -1 || item.code == -9 || item.code == -30),
                 'is-failed': item.upload && (item.code == -2 || item.code == -4 || item.code == -100),
-                'is-success': item.upload && item.code == 0,
-                'is-audit-failed': item.upload && item.code != 0 && item.code != -1 && item.code != -9 && item.code != -30 && item.code != -2 && item.code != -4 && item.code != -100
+                'is-success': item.upload && (item.code == 0 || item.code == -50),
+                'is-audit-failed': item.upload && item.code != 0 && item.code != -50 && item.code != -1 && item.code != -9 && item.code != -30 && item.code != -2 && item.code != -4 && item.code != -100
              }" 
              v-for="item in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -257,6 +257,7 @@
                 width="100">
             <template slot-scope="scope">
                 <span class="status-chip success" v-if="scope.row.code == 0">通过</span>
+                <span class="status-chip success" v-else-if="scope.row.code == -50">仅自己可见</span>
                 <span class="status-chip warn" v-else-if="scope.row.code == -1">审核中</span>
                 <span class="status-chip danger" v-else-if="scope.row.code == -2">被退回</span>
                 <span class="status-chip danger" v-else-if="scope.row.code == -4">被锁定</span>
@@ -394,7 +395,16 @@
                 </div>
                 <div class="detail-row">
                     <label>审核状态</label>
-                    <el-tag size="mini" :type="currentDetail.code == 0 ? 'success' : 'warning'" effect="dark">{{ currentDetail.code == 0 ? '通过' : '未通过' }}</el-tag>
+                    <el-tag size="mini" type="success" effect="dark" v-if="currentDetail.code == 0">通过</el-tag>
+                    <el-tag size="mini" type="success" effect="dark" v-else-if="currentDetail.code == -50">仅自己可见</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -1">审核中</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -2">被退回</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -4">被锁定</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -9">转码中</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -30">已提交</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -40">定时发布</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -100">已删除</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else>未通过({{currentDetail.code}})</el-tag>
                 </div>
             </div>
             

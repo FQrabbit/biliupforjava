@@ -76,7 +76,9 @@ public class videoSyncJob {
             next.setCoverUrl(videoInfoResponseData.getPic());
             next = historyRepository.save(next);
 
-            if(videoInfoResponseData.getState() != 0){
+            // 0: 开放浏览, -50: 仅自己可见
+            // 这两种状态都视为"发布成功"，可以进行后续的弹幕解析
+            if(videoInfoResponseData.getState() != 0 && videoInfoResponseData.getState() != -50){
                 continue;
             }
             
