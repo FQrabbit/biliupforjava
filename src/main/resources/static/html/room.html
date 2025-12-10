@@ -608,11 +608,31 @@
             <el-button @click="wxDialogVisible = false" type="primary">关 闭</el-button>
         </div>
     </el-dialog>
+
+    <el-dialog :visible.sync="manualPasteDialogVisible" :fullscreen="isMobile" title="手动粘贴配置" append-to-body>
+        <div style="margin-bottom: 15px;">
+            <p>由于浏览器安全限制，无法自动读取剪贴板。</p>
+            <p>请手动将配置内容粘贴到下方的文本框中，然后点击“应用”。</p>
+            <el-link type="primary" @click="showPasteHelp" style="margin-top: 5px;">为什么无法自动粘贴？</el-link>
+        </div>
+        <el-input
+            type="textarea"
+            :rows="10"
+            placeholder="在此处粘贴配置内容..."
+            v-model="manualPasteContent">
+        </el-input>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="manualPasteDialogVisible = false">取 消</el-button>
+            <el-button type="primary" @click="handleManualPaste">应 用</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script>
     new Vue({
         el: '#roomTable',
         data: {
+            manualPasteDialogVisible: false,
+            manualPasteContent: '',
             loading: false,
             seasonsList: [],
             typeList: [
@@ -2257,11 +2277,55 @@
                         this.applyPastedConfig(text);
                     }).catch(err => {
                         console.error('Failed to read clipboard: ', err);
-                        this.$message.error('读取剪贴板失败，请检查浏览器权限或使用HTTPS');
+                        // 读取失败时，尝试打开手动粘贴对话框
+                        this.manualPasteContent = '';
+                        this.manualPasteDialogVisible = true;
                     });
                 } else {
-                    this.$message.error('当前浏览器不支持自动读取剪贴板');
+                    // 不支持自动读取时，打开手动粘贴对话框
+                    this.manualPasteContent = '';
+                    this.manualPasteDialogVisible = true;
                 }
+            },
+            handleManualPaste() {
+                if (!this.manualPasteContent) {
+                    this.$message.warning('请先粘贴配置内容');
+                    return;
+                }
+                this.applyPastedConfig(this.manualPasteContent);
+                this.manualPasteDialogVisible = false;
+            },
+            showPasteHelp() {
+                 const flagUrl = 'chrome://flags/#unsafely-treat-insecure-origin-as-secure';
+                 const currentOrigin = window.location.origin;
+                 this.$alert(`
+                    <div style="text-align: left;">
+                        <p>浏览器的安全策略限制了剪贴板访问。</p>
+                        <p><b>原因：</b>当前使用的是非安全连接 (HTTP) 且非本地访问 (localhost)。</p>
+                        <p><b>解决方案：</b></p>
+                        <ol style="padding-left: 20px; margin: 5px 0;">
+                            <li>使用 HTTPS 访问</li>
+                            <li>使用 localhost 访问</li>
+                            <li>修改浏览器 flag 允许不安全源</li>
+                        </ol>
+                        <div style="margin-top: 10px; padding: 10px; background-color: #f0f9eb; border-radius: 4px;">
+                            <div style="font-weight: bold; margin-bottom: 5px;">如何修改 Flag (方案3):</div>
+                            <div style="font-size: 12px; color: #606266; margin-bottom: 5px;">请复制下方地址到浏览器地址栏打开 (无法直接跳转):</div>
+                            <div style="background: #fff; padding: 5px; border: 1px solid #dcdfe6; border-radius: 3px; color: #409EFF; word-break: break-all; font-family: monospace; user-select: all;">
+                                ${flagUrl}
+                            </div>
+                            <div style="font-size: 12px; margin-top: 5px; line-height: 1.5;">
+                                1. 将 <b>Insecure origins treated as secure</b> 设置为 <b>Enabled</b><br>
+                                2. 在下方输入框填入: <span style="color: #F56C6C; font-weight: bold;">${currentOrigin}</span><br>
+                                3. 点击右下角 <b>重启</b> 重启浏览器
+                            </div>
+                        </div>
+                    </div>
+                 `, '无法自动粘贴', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '知道了',
+                    width: '600px'
+                });
             },
             applyPastedConfig(text) {
                 try {
