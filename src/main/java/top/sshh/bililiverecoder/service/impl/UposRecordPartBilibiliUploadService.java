@@ -198,6 +198,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 do {
                                     preUploadBean = preuploadRequest.getPojo();
                                     if (preUploadBean == null || preUploadBean.getOK() == 0) {
+                                            log.warn("PreUpload failed. Bean: {}", JSON.toJSONString(preUploadBean));
                                             if (preUploadBean != null && preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) {
                                                 String voucher = (String) preUploadBean.getDetail().get("v_voucher");
                                                 log.warn("投稿需要验证码，请前往Web端手动完成验证: {} \n验证地址: http://localhost:{}/html/captcha.html", uploadFile.getName(), serverPort);
