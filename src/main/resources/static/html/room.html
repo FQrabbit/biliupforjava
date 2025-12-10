@@ -48,7 +48,12 @@
 
     <transition name="fade-transform" mode="out-in">
     <div v-if="viewMode === 'card'" class="data-card-grid" key="card">
-        <div class="data-card" :class="{ 'is-streaming': item.streaming }" v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
+        <div class="data-card" 
+             :class="{ 
+                'is-success': item.recording, 
+                'is-processing': item.streaming && !item.recording 
+             }" 
+             v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1; min-width: 0; margin-right: 10px;">
                     <div class="card-title" style="font-weight: bold; font-size: 16px; margin-bottom: 5px; word-break: break-all;">{{ item.uname }}</div>

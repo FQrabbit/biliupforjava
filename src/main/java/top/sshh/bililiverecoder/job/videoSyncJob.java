@@ -52,33 +52,34 @@ public class videoSyncJob {
     @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void syncVideo() {
         //查询出所有需要同步的录播记录
-        for (RecordHistory next : historyRepository.findByBvIdNotNullAndPublishIsTrueAndCodeLessThan(0)) {
+        for (RecordHistory next : historyRepository.findSyncList()) {
             RecordRoom room = roomRepository.findByRoomId(next.getRoomId());
             if (room == null) {
                 log.error("同步视频状态，未找到房间{}，请删除该录制历史 {}", next.getRoomId(), next);
                 continue;
             }
             BiliBiliUser user = null;
-            if(room.getIsOnlySelf() == 1){
-                user = userRepository.findById(room.getUploadUserId()).get();
+            if(room.getUploadUserId() != null){
+                user = userRepository.findById(room.getUploadUserId()).orElse(null);
             }
             BiliVideoInfoResponse videoInfoResponse = BiliApi.getVideoInfo(user,next.getBvId());
             int code = videoInfoResponse.getCode();
-            if(code == 62002 || code == -400 || code == -404){
-                next = historyRepository.save(next);
-            }
             if(code != 0){
+                log.warn("获取视频信息失败 code:{} msg:{}", code, videoInfoResponse.getMessage());
                 continue;
             }
             BiliVideoInfoResponse.BiliVideoInfo videoInfoResponseData = videoInfoResponse.getData();
-            if(videoInfoResponseData.getState() != 0){
-                continue;
-            }
-            next.setCode(code);
+            // 更新状态
+            next.setCode(videoInfoResponseData.getState());
             next.setAvId(videoInfoResponseData.getAid());
             next.setBvId(videoInfoResponseData.getBvid());
             next.setCoverUrl(videoInfoResponseData.getPic());
             next = historyRepository.save(next);
+
+            if(videoInfoResponseData.getState() != 0){
+                continue;
+            }
+            
             RecordRoom recordRoom = room;
             List<BiliVideoInfoResponse.BiliVideoInfoPart> pages = videoInfoResponseData.getPages();
             for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {

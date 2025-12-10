@@ -120,7 +120,14 @@
 
     <transition :name="transitionName" mode="out-in">
     <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current">
-        <div class="data-card" :class="{ 'is-audit-failed': item.upload && item.code != 0 }" v-for="item in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
+        <div class="data-card" 
+             :class="{ 
+                'is-processing': item.upload && (item.code == -1 || item.code == -9 || item.code == -30),
+                'is-failed': item.upload && (item.code == -2 || item.code == -4 || item.code == -100),
+                'is-success': item.upload && item.code == 0,
+                'is-audit-failed': item.upload && item.code != 0 && item.code != -1 && item.code != -9 && item.code != -30 && item.code != -2 && item.code != -4 && item.code != -100
+             }" 
+             v-for="item in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1; min-width: 0; margin-right: 10px; overflow: hidden;">
                     <div class="card-title" style="margin-bottom: 8px; word-break: break-all; line-height: 1.4; font-weight: bold; font-size: 16px;">{{ item.title || '无标题' }}</div>
@@ -250,7 +257,14 @@
                 width="100">
             <template slot-scope="scope">
                 <span class="status-chip success" v-if="scope.row.code == 0">通过</span>
-                <span class="status-chip warn" v-else>未通过</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -1">审核中</span>
+                <span class="status-chip danger" v-else-if="scope.row.code == -2">被退回</span>
+                <span class="status-chip danger" v-else-if="scope.row.code == -4">被锁定</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -9">转码中</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -30">已提交</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -40">定时发布</span>
+                <span class="status-chip danger" v-else-if="scope.row.code == -100">已删除</span>
+                <span class="status-chip danger" v-else>未通过({{scope.row.code}})</span>
             </template>
         </el-table-column>
         <el-table-column

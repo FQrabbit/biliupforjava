@@ -362,6 +362,17 @@ public class BiliApi {
         return JSON.parseObject(response, BiliVideoInfoResponse.class);
     }
 
+    public static BiliLiveRoomInfoResponse getLiveRoomInfo(String roomId) {
+        String url = "https://api.live.bilibili.com/room/v1/Room/get_info";
+        Map<String, String> params = new TreeMap<>();
+        params.put("room_id", roomId);
+        Map<String, String> headers = getCommonHeaders();
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
+        params.forEach(uriBuilder::queryParam);
+        String response = HttpClientUtil.get(uriBuilder.toUriString(), headers);
+        return JSON.parseObject(response, BiliLiveRoomInfoResponse.class);
+    }
+
     public static BiliVideoPartInfoResponse getVideoPartInfo(BiliBiliUser user, String bvid) {
         String url = "https://member.bilibili.com/x/vupre/web/archive/view";
         Map<String, String> params = new TreeMap<>();
