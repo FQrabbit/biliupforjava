@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Bilibili Upload Captcha</title>
+    <script src="../js/vue.min.js"></script>
+    <script src="../js/jquery-3.3.1.min.js"></script>
+    <script src="../js/element-ui.js"></script>
+    <link rel="stylesheet" href="../css/element-ui.css">
+    <script src="https://static.geetest.com/static/js/gt.0.4.9.js"></script>
+</head>
+<body>
+<div id="app">
+    <el-card class="box-card" style="width: 600px; margin: 100px auto;">
+        <div slot="header" class="clearfix">
+            <span>Bilibili 投稿验证码</span>
+        </div>
+        <div v-if="loading">
+            正在检查验证码状态...
+        </div>
+        <div v-else-if="!required">
+            <el-result icon="success" title="无需验证" subTitle="当前没有等待验证的上传任务"></el-result>
+        </div>
+        <div v-else>
+            <el-alert
+                    title="检测到上传任务需要验证码"
+                    type="warning"
+                    :description="'文件名: ' + filename"
+                    show-icon>
+            </el-alert>
+
+            <!-- 新增：显示详细调试信息，方便用户判断验证类型 -->
+            <el-collapse style="margin-top: 10px;">
+                <el-collapse-item title="查看 B站返回的详细要求 (Debug Info)" name="1">
+                    <div style="background-color: #f5f7fa; padding: 10px; border-radius: 4px;">
+                        <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word;">{{ JSON.stringify(extra, null, 2) }}</pre>
+                    </div>
+                    <div style="margin-top: 5px; color: #909399; font-size: 12px;">
+                        * 如果这里显示需要手机验证或其他非滑块验证，请在浏览器完成验证后，点击下方的“已在网页完成验证”按钮。
+                    </div>
+                </el-collapse-item>
+            </el-collapse>
+
+            <div style="margin-top: 20px;">
+                <div id="captcha-box"></div>
+            </div>
+            <div v-if="captchaSuccess" style="margin-top: 20px; text-align: center;">
+                <el-button type="primary" @click="submitCaptcha" :loading="submitting">提交验证结果</el-button>
+            </div>
+
+            <el-divider content-position="center">或者手动处理</el-divider>
+            
+            <el-form label-width="80px">
+                <el-alert title="如果上方验证码无法加载，或者遇到手机号验证等情况：" type="info" :closable="false" style="margin-bottom: 10px;">
+                    <template slot="title">
+                        <div>1. 如果是滑块验证：请抓包获取 validate 等参数填入下方 JSON 框。</div>
+                        <div style="margin-top: 5px;">2. 如果是手机/实名验证：请在浏览器完成后，直接点击“已在网页完成验证”。</div>
+                    </template>
+                </el-alert>
+                
+                <el-form-item label="结果JSON">
+                    <el-input type="textarea" v-model="manualJson" placeholder='例如: {"validate": "...", "seccode": "..."}' rows="3"></el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-button @click="submitManual" type="success" :loading="submitting">提交手动结果</el-button>
+                    <el-button @click="submitRetry" type="warning" :loading="submitting">已在网页完成验证，直接重试</el-button>
+                </el-form-item>
+            </el-form>
+        </div>
+    </el-card>
+</div>
+
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            loading: true,
+            required: false,
+            voucher: '',
+            filename: '',
+            extra: {},
+            captchaObj: null,
+            captchaResult: null,
+            captchaSuccess: false,
+            submitting: false,
+            timer: null,
+            manualJson: ''
+        },
+        mounted() {
+            this.checkStatus();
+            this.timer = setInterval(this.checkStatus, 5000);
+        },
+        beforeDestroy() {
+            if (this.timer) clearInterval(this.timer);
+        },
+        methods: {
+            checkStatus() {
+                if (this.required && !this.captchaSuccess && !this.manualJson) return; // 如果正在验证中且未手动输入，不要刷新状态
+                
+                $.get('/captcha/status', (res) => {
+                    this.loading = false;
+                    if (res.required) {
+                        if (this.voucher !== res.voucher) {
+                            this.required = true;
+                            this.voucher = res.voucher;
+                            this.filename = res.filename;
+                            this.extra = res.extra || {};
+                            this.initCaptcha();
+                        }
+                    } else {
+                        this.required = false;
+                        this.voucher = '';
+                        this.filename = '';
+                        this.captchaSuccess = false;
+                        this.captchaResult = null;
+                        this.manualJson = '';
+                        if (this.captchaObj) {
+                            // 清理旧的验证码实例
+                            $('#captcha-box').empty();
+                            this.captchaObj = null;
+                        }
+                    }
+                });
+            },
+            initCaptcha() {
+                
+                console.log("Extra info:", this.extra);
+                
+                
+                let gt = this.extra.gt || (this.extra.geetest ? this.extra.geetest.gt : null);
+                let challenge = this.extra.challenge || (this.extra.geetest ? this.extra.geetest.challenge : null);
+                
+                if (gt && challenge) {
+                    initGeetest({
+                        gt: gt,
+                        challenge: challenge,
+                        offline: false,
+                        new_captcha: true,
+                        product: 'popup',
+                        width: '100%'
+                    }, (captchaObj) => {
+                        this.captchaObj = captchaObj;
+                        captchaObj.appendTo('#captcha-box');
+                        captchaObj.onSuccess(() => {
+                            this.captchaResult = captchaObj.getValidate();
+                            this.captchaSuccess = true;
+                        });
+                    });
+                } else {
+                    // 如果没有 gt/challenge，可能是 v4 或者其他方式
+                    // 暂时显示错误信息
+                    $('#captcha-box').html('<p style="color:red">无法自动初始化验证码(缺少gt/challenge)，请尝试下方手动输入。</p>');
+                }
+            },
+            submitCaptcha() {
+                if (!this.captchaResult) return;
+                this.doSubmit(this.captchaResult);
+            },
+            submitManual() {
+                if (!this.manualJson) {
+                    this.$message.warning('请输入JSON内容');
+                    return;
+                }
+                try {
+                    let result = JSON.parse(this.manualJson);
+                    this.doSubmit(result);
+                } catch (e) {
+                    this.$message.error('JSON格式错误');
+                }
+            },
+            submitRetry() {
+                this.$confirm('确认已在浏览器完成验证？程序将尝试重新发起上传请求。', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    this.doSubmit({});
+                });
+            },
+            doSubmit(data) {
+                this.submitting = true;
+                $.ajax({
+                    url: '/captcha/submit',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(data),
+                    success: (res) => {
+                        this.$message.success('提交成功，上传将继续');
+                        this.submitting = false;
+                        this.required = false; // 暂时隐藏，等待下一次轮询确认
+                        this.captchaSuccess = false;
+                        this.manualJson = '';
+                    },
+                    error: (err) => {
+                        this.$message.error('提交失败');
+                        this.submitting = false;
+                    }
+                });
+            }
+        }
+    });
+</script>
+</body>
+</html>

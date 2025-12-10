@@ -34,6 +34,7 @@ import top.sshh.bililiverecoder.util.bili.upload.pojo.LineUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean;
 import top.sshh.bililiverecoder.util.bili.user.UserMy;
 import top.sshh.bililiverecoder.util.bili.user.UserMyRootBean;
+import top.sshh.bililiverecoder.service.CaptchaService;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -49,6 +50,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 @Service("uposRecordPartBilibiliUploadService")
 public class UposRecordPartBilibiliUploadService implements RecordPartUploadService {
+
+    @Autowired
+    private CaptchaService captchaService;
+
+    @Value("${server.port:8080}")
+    private String serverPort;
 
     public static final String OS = "upos";
 
@@ -191,11 +198,21 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 do {
                                     preUploadBean = preuploadRequest.getPojo();
                                     if (preUploadBean == null || preUploadBean.getOK() == 0) {
-                                        try {
-                                            log.info("上传限流等待十秒==>{}", uploadFile.getName());
-                                            Thread.sleep(10000L);
-                                        } catch (InterruptedException e) {
-                                            e.printStackTrace();
+                                            if (preUploadBean != null && preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) {
+                                                String voucher = (String) preUploadBean.getDetail().get("v_voucher");
+                                                log.warn("投稿需要验证码，请前往Web端手动完成验证: {} \n验证地址: http://localhost:{}/html/captcha.html", uploadFile.getName(), serverPort);
+                                                captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
+                                                Map<String, String> result = captchaService.waitForCaptcha();
+                                                if (result != null) {
+                                                preParams.putAll(result);
+                                            }
+                                        } else {
+                                            log.warn("上传限流等待十秒==>{}", uploadFile.getName());
+                                            try {
+                                                Thread.sleep(10000L);
+                                            } catch (InterruptedException e) {
+                                                e.printStackTrace();
+                                            }
                                         }
                                     } else {
                                         // 同步更新

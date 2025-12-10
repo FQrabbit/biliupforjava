@@ -30,6 +30,7 @@ import top.sshh.bililiverecoder.util.bili.upload.PreUploadRequest;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.CompleteUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.LineUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean;
+import top.sshh.bililiverecoder.service.CaptchaService;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -50,6 +51,12 @@ import java.util.stream.Stream;
 @Component
 public class HighEnergyCutPublishService {
 
+    @Autowired
+    private CaptchaService captchaService;
+
+    @Value("${server.port:8080}")
+    private String serverPort;
+
     public static final Map<Long, String> taskRunningMsg = new ConcurrentHashMap<>();
     private static final String WX_MSG_FORMAT = """
             结果: %s
@@ -58,7 +65,8 @@ public class HighEnergyCutPublishService {
             时间: %s
             原因: %s
             """;
-    @Value("${record.wx-push-token}")
+
+    @Value("${record.work-path}")
     private String wxToken;
     @Autowired
     private BiliUserRepository biliUserRepository;
@@ -306,11 +314,21 @@ public class HighEnergyCutPublishService {
             do {
                 preUploadBean = preuploadRequest.getPojo();
                 if (preUploadBean == null || preUploadBean.getOK() == 0) {
-                    try {
-                        log.info("上传限流等待十秒==>{}", uploadFile.getName());
-                        Thread.sleep(10000L);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                    if (preUploadBean != null && preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) {
+                        String voucher = (String) preUploadBean.getDetail().get("v_voucher");
+                        log.warn("投稿需要验证码，请前往Web端手动完成验证: {} \n验证地址: http://localhost:{}/html/captcha.html", uploadFile.getName(), serverPort);
+                        captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
+                        Map<String, String> result = captchaService.waitForCaptcha();
+                        if (result != null) {
+                            preParams.putAll(result);
+                        }
+                    } else {
+                        log.warn("上传限流等待十秒==>{}", uploadFile.getName());
+                        try {
+                            Thread.sleep(10000L);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
                 } else {
                     // 同步更新
