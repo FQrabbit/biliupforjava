@@ -93,6 +93,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
 
+    private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public void asyncUpload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
@@ -182,6 +184,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                             }
                             // 登录验证结束
+                            synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
                             Map<String, String> preParams = new HashMap<>();
                             preParams.put("r", uploadEnums.getOs());
                             preParams.put("profile", uploadEnums.getProfile());
@@ -210,6 +213,13 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 Map<String, String> result = captchaService.waitForCaptcha();
                                                 if (result != null) {
                                                     preParams.putAll(result);
+                                                } else {
+                                                    log.warn("验证码等待超时，将休眠10分钟后重试: {}", uploadFile.getName());
+                                                    try {
+                                                        Thread.sleep(600000L);
+                                                    } catch (InterruptedException e) {
+                                                        e.printStackTrace();
+                                                    }
                                                 }
                                             } else {
                                             log.warn("上传限流等待十秒==>{}", uploadFile.getName());
@@ -462,6 +472,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     WxPusher.send(message);
                                 }
                             }
+                        }
                         }
                     } else {
                         log.info("分片上传事件，文件不需要上传 ==>{}", JSON.toJSONString(part));

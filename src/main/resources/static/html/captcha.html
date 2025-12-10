@@ -149,7 +149,14 @@
                 } else {
                     // 如果没有 gt/challenge，可能是 v4 或者其他方式
                     // 暂时显示错误信息
-                    $('#captcha-box').html('<p style="color:red">无法自动初始化验证码(缺少gt/challenge)，请尝试下方手动输入。</p>');
+                    $('#captcha-box').html(`
+                        <div style="text-align: center; padding: 20px; background-color: #fdf6ec; color: #e6a23c; border-radius: 4px;">
+                            <i class="el-icon-warning-outline" style="font-size: 24px; margin-bottom: 10px;"></i>
+                            <p style="margin: 0; font-weight: bold;">未检测到自动验证参数 (gt/challenge)</p>
+                            <p style="margin: 10px 0 0 0; font-size: 14px;">这通常意味着需要手机验证、实名认证，或者需要在B站网页端手动处理。</p>
+                            <p style="margin: 5px 0 0 0; font-size: 14px;">建议操作：请在浏览器登录B站创作中心，尝试上传任意视频触发并完成验证，然后点击下方的 <span style="font-weight: bold;">“已在网页完成验证，直接重试”</span>。</p>
+                        </div>
+                    `);
                 }
             },
             submitCaptcha() {
