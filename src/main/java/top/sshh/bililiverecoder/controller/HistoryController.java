@@ -69,37 +69,8 @@ public class HistoryController {
         criteriaQuery.select(root);
         //Predicate 过滤条件 构建where字句可能的各种条件
         //这里用List存放多种查询条件,实现动态查询
-        List<Predicate> predicatesList = new ArrayList<>();
-        if (StringUtils.isNotBlank(request.getRoomId())) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("roomId"), request.getRoomId())));
-        }
-        if (StringUtils.isNotBlank(request.getBvId())) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.like(root.get("bvId"), "%" + request.getBvId() + "%")));
-        }
-        if (StringUtils.isNotBlank(request.getTitle())) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.like(root.get("title"), "%" + request.getTitle() + "%")));
-        }
+        List<Predicate> predicatesList = getPredicates(criteriaBuilder, root, request);
 
-        if (request.getRecording() != null) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("recording"), request.getRecording())));
-        }
-        if (request.getUpload() != null) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("upload"), request.getUpload())));
-        }
-        if (request.getPublish() != null) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), request.getPublish())));
-        }
-        if (request.getCode() != -1) {
-            if(request.getCode() == 0){
-                predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("code"), 0)));
-            }else if(request.getCode() == -2){
-                predicatesList.add(criteriaBuilder.and(criteriaBuilder.notEqual(root.get("code"), 0)));
-            }
-        }
-
-        if (request.getFrom() != null && request.getTo() != null) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.between(root.get("endTime"), request.getFrom(), request.getTo())));
-        }
         //where()拼接查询条件
         if (predicatesList.size() > 0) {
             criteriaQuery.where(predicatesList.toArray(new Predicate[predicatesList.size()]));
@@ -107,8 +78,15 @@ public class HistoryController {
         criteriaQuery.orderBy(criteriaBuilder.desc(root.get("endTime")));
         
         // 先创建查询获取总数
-        TypedQuery<RecordHistory> countQuery = entityManager.createQuery(criteriaQuery);
-        int total = countQuery.getResultList().size();
+        CriteriaQuery<Long> countCriteriaQuery = criteriaBuilder.createQuery(Long.class);
+        Root<RecordHistory> countRoot = countCriteriaQuery.from(RecordHistory.class);
+        countCriteriaQuery.select(criteriaBuilder.count(countRoot));
+        List<Predicate> countPredicatesList = getPredicates(criteriaBuilder, countRoot, request);
+        if (countPredicatesList.size() > 0) {
+            countCriteriaQuery.where(countPredicatesList.toArray(new Predicate[countPredicatesList.size()]));
+        }
+        TypedQuery<Long> countQuery = entityManager.createQuery(countCriteriaQuery);
+        int total = countQuery.getSingleResult().intValue();
         
         // 重新创建查询对象用于分页查询
         TypedQuery<RecordHistory> typedQuery = entityManager.createQuery(criteriaQuery);
@@ -399,5 +377,42 @@ public class HistoryController {
             result.put("msg", "录制历史不存在");
             return result;
         }
+    }
+
+
+     // 动态查询条件（复用于列表查询和总数统计）
+    private List<Predicate> getPredicates(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root, RecordHistoryDTO request) {
+        List<Predicate> predicatesList = new ArrayList<>();
+        if (StringUtils.isNotBlank(request.getRoomId())) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("roomId"), request.getRoomId())));
+        }
+        if (StringUtils.isNotBlank(request.getBvId())) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.like(root.get("bvId"), "%" + request.getBvId() + "%")));
+        }
+        if (StringUtils.isNotBlank(request.getTitle())) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.like(root.get("title"), "%" + request.getTitle() + "%")));
+        }
+
+        if (request.getRecording() != null) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("recording"), request.getRecording())));
+        }
+        if (request.getUpload() != null) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("upload"), request.getUpload())));
+        }
+        if (request.getPublish() != null) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), request.getPublish())));
+        }
+        if (request.getCode() != -1) {
+            if (request.getCode() == 0) {
+                predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("code"), 0)));
+            } else if (request.getCode() == -2) {
+                predicatesList.add(criteriaBuilder.and(criteriaBuilder.notEqual(root.get("code"), 0)));
+            }
+        }
+
+        if (request.getFrom() != null && request.getTo() != null) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.between(root.get("endTime"), request.getFrom(), request.getTo())));
+        }
+        return predicatesList;
     }
 }
