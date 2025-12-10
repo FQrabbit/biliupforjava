@@ -46,7 +46,7 @@ public class BiliApi {
         appSecret = secret;
     }
 
-    private static final String USER_AGENT = "Mozilla/5.0 BiliDroid/7.81.0 (bbcallen@gmail.com) os/android model/KB2000 mobi_app/android build/7810300 channel/master innerVer/7810310 osVer/13 network/2";
+    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     private static String BUVID;
     private static String DEVICE_ID;
 
@@ -238,7 +238,7 @@ public class BiliApi {
         String url = "https://member.bilibili.com/x/vu/web/cover/up?t=" + System.currentTimeMillis() + "&csrf=" + cookie.getCsrf();
 
         Map<String, String> headers = new HashMap<>();
-        headers.put("User-Agent", "");
+        headers.put("User-Agent", USER_AGENT);
         headers.put("Content-Type", "application/x-www-form-urlencoded");
         BiliResponseDto<BillBuvId> buvId = getBuvId();
         headers.put("cookie", cookie.getCookie() + "buvid3=" + buvId.getData().getB3() + ";buvid4=" + buvId.getData().getB4());
@@ -329,7 +329,7 @@ public class BiliApi {
         params.put("episodes", Collections.singletonList(episodes));
         Map<String, String> headers = new HashMap<>();
         headers.put("referer", "https://member.bilibili.com/platform/upload/video/frame?page_from=creative_home_top_upload");
-        headers.put("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
+        headers.put("user-agent", USER_AGENT);
         BiliResponseDto<BillBuvId> buvId = getBuvId();
         headers.put("cookie", cookie.getCookie() + "buvid3=" + buvId.getData().getB3() + ";buvid4=" + buvId.getData().getB4());
         return HttpClientUtil.postJson(url, headers, params, true);
@@ -340,7 +340,7 @@ public class BiliApi {
         String url = "https://member.bilibili.com/x2/creative/web/seasons?pn=1&ps=50";
         Map<String, String> headers = new HashMap<>();
         headers.put("referer", "https://member.bilibili.com/platform/upload/video/frame?page_from=creative_home_top_upload");
-        headers.put("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
+        headers.put("user-agent", USER_AGENT);
         BiliResponseDto<BillBuvId> buvId = getBuvId();
         headers.put("cookie", cookie.getCookie() + "buvid3=" + buvId.getData().getB3() + ";buvid4=" + buvId.getData().getB4());
         return HttpClientUtil.get(url, headers);
@@ -532,7 +532,7 @@ public class BiliApi {
         String url = "https://api.bilibili.com/x/frontend/finger/spi";
         Map<String, String> additionalHeaders = new HashMap<>();
         additionalHeaders.put("referer", "https://live.bilibili.com/");
-        additionalHeaders.put("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
+        additionalHeaders.put("user-agent", USER_AGENT);
         String res = HttpClientUtil.get(url, additionalHeaders);
         BiliResponseDto<BillBuvId> resp = JSON.parseObject(res, new TypeReference<BiliResponseDto<BillBuvId>>() {
         });
@@ -558,7 +558,7 @@ public class BiliApi {
         String url = "https://account.bilibili.com/api/member/getCardByMid?mid=" + uid;
         Map<String, String> additionalHeaders = new HashMap<>();
         additionalHeaders.put("referer", "https://account.bilibili.com/api/member/getCardByMid?mid=" + uid);
-        additionalHeaders.put("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
+        additionalHeaders.put("user-agent", USER_AGENT);
         String res = HttpClientUtil.get(url, additionalHeaders);
         try {
             return JSON.parseObject(res, new TypeReference<BiliUserCardResponseDto>() {
