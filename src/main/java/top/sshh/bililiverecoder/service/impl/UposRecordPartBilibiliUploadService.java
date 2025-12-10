@@ -185,6 +185,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             Map<String, String> preParams = new HashMap<>();
                             preParams.put("r", uploadEnums.getOs());
                             preParams.put("profile", uploadEnums.getProfile());
+                            preParams.put("ssl", "0");
+                            preParams.put("version", "2.14.0.0");
+                            preParams.put("build", "2140000");
+                            preParams.put("webVersion", "2.14.0");
                             preParams.put("name", uploadFile.getName());
                             preParams.put("size", String.valueOf(uploadFile.length()));
                             long fileSize = uploadFile.length();
@@ -199,15 +203,15 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     preUploadBean = preuploadRequest.getPojo();
                                     if (preUploadBean == null || preUploadBean.getOK() == 0) {
                                             log.warn("PreUpload failed. Bean: {}", JSON.toJSONString(preUploadBean));
-                                            if (preUploadBean != null && preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) {
-                                                String voucher = (String) preUploadBean.getDetail().get("v_voucher");
-                                                log.warn("投稿需要验证码，请前往Web端手动完成验证: {} \n验证地址: http://localhost:{}/html/captcha.html", uploadFile.getName(), serverPort);
+                                            if (preUploadBean != null && ((preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) || preUploadBean.getCode() == 406)) {
+                                                String voucher = (preUploadBean.getDetail() != null) ? (String) preUploadBean.getDetail().get("v_voucher") : "MANUAL_INTERVENTION";
+                                                log.warn("投稿受阻(Code:{})，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", preUploadBean.getCode(), uploadFile.getName(), serverPort);
                                                 captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
                                                 Map<String, String> result = captchaService.waitForCaptcha();
                                                 if (result != null) {
-                                                preParams.putAll(result);
-                                            }
-                                        } else {
+                                                    preParams.putAll(result);
+                                                }
+                                            } else {
                                             log.warn("上传限流等待十秒==>{}", uploadFile.getName());
                                             try {
                                                 Thread.sleep(10000L);
