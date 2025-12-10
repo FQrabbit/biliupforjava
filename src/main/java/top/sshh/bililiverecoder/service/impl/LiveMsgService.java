@@ -141,7 +141,7 @@ public class LiveMsgService {
                     msg.setFontsize(64);
                     msg.setColor(16776960);
                     StringBuilder builder = new StringBuilder();
-                    builder.append(userName).append("发送了").append(price).append("元留言：").append(text);
+                    builder.append("SC [").append(price).append("] ").append(userName).append(": ").append(text);
                     if (builder.length() > 100) {
                         text = builder.substring(0, 99);
                     } else {
@@ -169,7 +169,7 @@ public class LiveMsgService {
                     msg.setPool(1);
                     msg.setColor(16776960);
                     StringBuilder builder = new StringBuilder();
-                    builder.append(userName).append("开通了");
+                    builder.append("⚓").append(userName).append(": 开通了");
                     if (Integer.parseInt(count) > 1) {
                         builder.append(count).append("个月");
                     }
