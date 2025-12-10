@@ -175,10 +175,10 @@ public class LiveMsgService {
                     }
                     if ("1".equals(level)) {
                         msg.setFontsize(64);
-                        builder.append("19998/月的总督");
+                        builder.append("总督");
                     } else if ("2".equals(level)) {
                         msg.setFontsize(64);
-                        builder.append("1998/月的提督");
+                        builder.append("提督");
                     } else if ("3".equals(level)) {
                         msg.setFontsize(64);
                         builder.append("舰长");
