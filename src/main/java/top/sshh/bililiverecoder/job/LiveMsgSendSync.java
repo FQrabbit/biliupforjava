@@ -71,7 +71,7 @@ public class LiveMsgSendSync {
     public void sndMsgProcess() {
         log.debug("发送弹幕定时任务开始");
         long startTime = System.currentTimeMillis();
-        List<RecordHistory> historyList = historyRepository.findByPublishIsTrueAndCode(0);
+        List<RecordHistory> historyList = historyRepository.findByPublishIsTrueAndCodeIn(Arrays.asList(0, -50));
         if (CollectionUtils.isEmpty(historyList)) {
             return;
         }
