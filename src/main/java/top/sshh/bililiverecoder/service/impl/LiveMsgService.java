@@ -51,22 +51,31 @@ public class LiveMsgService {
     RecordHistoryPartRepository partRepository;
 
     public int sendMsg(BiliBiliUser user, LiveMsg liveMsg) {
-        BiliDmResponse response = BiliApi.sendVideoDm(user, liveMsg);
-        int code = response.getCode();
-        if (code != 0) {
-            log.error("{}发送弹幕错误，code==>{}", user.getUname(), code);
-            if (code == 36701 || code == 36702 || code == 36714) {
-                liveMsgRepository.delete(liveMsg);
+        try {
+            BiliDmResponse response = BiliApi.sendVideoDm(user, liveMsg);
+            if (response == null) {
+                log.error("{}发送弹幕失败，响应为空", user.getUname());
+                return -1;
             }
-            if(code == 36704){
-                String bvid = liveMsg.getBvid();
-                this.syncVideoState(bvid);
-                return code;
+            int code = response.getCode();
+            if (code != 0) {
+                log.error("{}发送弹幕错误，code==>{} msg==>{}", user.getUname(), code, response.getMessage());
+                if (code == 36701 || code == 36702 || code == 36714) {
+                    liveMsgRepository.delete(liveMsg);
+                }
+                if(code == 36704){
+                    String bvid = liveMsg.getBvid();
+                    this.syncVideoState(bvid);
+                    return code;
+                }
             }
+            liveMsg.setCode(code);
+            liveMsgRepository.save(liveMsg);
+            return code;
+        } catch (Exception e) {
+            log.error("{}发送弹幕异常: {}", user.getUname(), e.getMessage());
+            return -2;
         }
-        liveMsg.setCode(code);
-        liveMsgRepository.save(liveMsg);
-        return code;
     }
 
     public static boolean checkUtf8Size(String testStr) {

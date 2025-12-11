@@ -44,7 +44,7 @@ public class DeletePartFileJob {
                 File file = new File(part.getFilePath());
                 boolean delete = file.delete();
                 if (delete) {
-                    log.error("定时删除文件任务，主播名称{}，{}=>文件删除成功！！！", room.getUname(), part.getFilePath());
+                    log.info("定时删除文件任务，主播名称{}，{}=>文件删除成功！！！", room.getUname(), part.getFilePath());
                 } else {
                     log.error("定时删除文件任务，主播名称{}，{}=>文件删除失败！！！", room.getUname(), part.getFilePath());
                 }
@@ -84,7 +84,7 @@ public class DeletePartFileJob {
                             try {
                                 Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                         StandardCopyOption.REPLACE_EXISTING);
-                                log.error("{}=>文件移动成功！！！", file.getName());
+                                log.info("{}=>文件移动成功！！！", file.getName());
                             } catch (Exception e) {
                                 log.error("{}=>文件移动失败！！！", file.getName());
                             }

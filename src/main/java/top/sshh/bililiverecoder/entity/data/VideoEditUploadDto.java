@@ -30,5 +30,13 @@ public class VideoEditUploadDto {
     private String dynamic = "";
     private List<DescV2Dto> dynamic_v2 = null;
     private String csrf;
+    private Integer is_only_self = 0;
     private List<SingleVideoDto> videos = new ArrayList<>();
+
+    @Data
+    @lombok.AllArgsConstructor
+    public static class DescDto {
+        public final String desc;
+        public final List<DescV2Dto> descV2Dtos;
+    }
 }

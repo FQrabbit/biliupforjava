@@ -376,7 +376,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     if (room.getDeleteType() == 1) {
                                         boolean delete = uploadFile.delete();
                                         if (delete) {
-                                            log.error("{}=>文件删除成功！！！", filePath);
+                                            log.info("{}=>文件删除成功！！！", filePath);
                                         } else {
                                             log.error("{}=>文件删除失败！！！", filePath);
                                         }
@@ -401,7 +401,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 try {
                                                     Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                                             StandardCopyOption.REPLACE_EXISTING);
-                                                    log.error("{}=>文件移动成功！！！", file.getName());
+                                                    log.info("{}=>文件移动成功！！！", file.getName());
                                                 } catch (Exception e) {
                                                     log.error("{}=>文件移动失败！！！", file.getName());
                                                 }

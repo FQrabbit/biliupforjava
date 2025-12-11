@@ -13,10 +13,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import top.sshh.bililiverecoder.entity.*;
-import top.sshh.bililiverecoder.entity.data.BiliReply;
-import top.sshh.bililiverecoder.entity.data.BiliReplyResponse;
+import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
+import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
 
 import java.text.DateFormat;
@@ -102,6 +102,52 @@ public class LiveMsgSendSync {
                         }
                     }
                 }
+
+                boolean isPrivateFlow = false;
+                try {
+                    if (user != null) {
+                        BiliVideoInfoResponse videoInfo = BiliApi.getVideoInfo(user, history.getBvId());
+                        if (videoInfo != null && videoInfo.getData() != null && videoInfo.getData().getState() == -50) {
+                            isPrivateFlow = true;
+                            log.info("检测到视频{}为仅自己可见，开始执行私有视频评论流程", history.getBvId());
+
+                            VideoEditUploadDto editDto = new VideoEditUploadDto();
+                            editDto.setAid(Long.parseLong(history.getAvId()));
+                            editDto.setTitle(history.getTitle());
+                            editDto.setTag(room.getTags());
+                            editDto.setTid(room.getTid());
+                            editDto.setCopyright(room.getCopyright());
+                            
+                            Map<String, Object> map = new HashMap<>();
+                            map.put("${uname}", room.getUname());
+                            map.put("${title}", history.getTitle());
+                            map.put("${roomId}", room.getRoomId());
+                            map.put("date", LocalDateTime.now());
+                            VideoEditUploadDto.DescDto descDto = generateDesc(room.getDesc(), map);
+                            editDto.setDesc(descDto.getDesc());
+                            editDto.setDesc_v2(descDto.getDescV2Dtos());
+
+                            List<SingleVideoDto> videos = new ArrayList<>();
+                            for (RecordHistoryPart p : parts) {
+                                SingleVideoDto v = new SingleVideoDto();
+                                v.setCid(p.getCid());
+                                v.setTitle(p.getTitle());
+                                v.setFilename(p.getFileName());
+                                v.setDesc("");
+                                videos.add(v);
+                            }
+                            editDto.setVideos(videos);
+
+                            editDto.setIs_only_self(0);
+                            String editRes = BiliApi.editPublish(user, editDto);
+                            log.info("切换视频{}为公开状态结果: {}", history.getBvId(), editRes);
+                            Thread.sleep(5000);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("检查视频状态或切换公开失败 标题:{} bvid:{}", history.getTitle(), history.getBvId(), e);
+                }
+
                 List<BiliReply> replies = new ArrayList<>();
                 StringBuilder context = new StringBuilder();
                 context.append("SC和上舰列表\n");
@@ -153,7 +199,7 @@ public class LiveMsgSendSync {
                                 reply.setAction("1");
                                 BiliReplyResponse response = BiliApi.topVideoReply(user, reply);
                                 if (response.getCode() != 0) {
-                                    log.error("av{}评论置顶失败：{}", reply.getOid(), JSON.toJSONString(response));
+                                    log.error("av{} 标题:{} 评论置顶失败：{}", reply.getOid(), history.getTitle(), JSON.toJSONString(response));
                                 }
                                 if (response.getCode() == 404) {
                                     //等待一段时间，否则无法置顶
@@ -181,7 +227,7 @@ public class LiveMsgSendSync {
                         Thread.sleep(5000L);
                     }
                 } catch (Exception e) {
-                    log.error("发送sc评论失败：{}", JSON.toJSONString(replies), e);
+                    log.error("发送sc评论失败 标题:{} bvid:{} 内容:{}", history.getTitle(), history.getBvId(), JSON.toJSONString(replies), e);
                     try {
                         if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("视频评论")) {
                             Message message = new Message();
@@ -196,6 +242,44 @@ public class LiveMsgSendSync {
                     } catch (Exception ignored) {
 
                     }
+                }
+
+                if (isPrivateFlow) {
+                    try {
+                        VideoEditUploadDto editDto = new VideoEditUploadDto();
+                        editDto.setAid(Long.parseLong(history.getAvId()));
+                        editDto.setTitle(history.getTitle());
+                        editDto.setTag(room.getTags());
+                        editDto.setTid(room.getTid());
+                        editDto.setCopyright(room.getCopyright());
+                        
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("${uname}", room.getUname());
+                        map.put("${title}", history.getTitle());
+                        map.put("${roomId}", room.getRoomId());
+                        map.put("date", LocalDateTime.now());
+                        VideoEditUploadDto.DescDto descDto = generateDesc(room.getDesc(), map);
+                        editDto.setDesc(descDto.getDesc());
+                        editDto.setDesc_v2(descDto.getDescV2Dtos());
+
+                        List<SingleVideoDto> videos = new ArrayList<>();
+                        for (RecordHistoryPart p : parts) {
+                            SingleVideoDto v = new SingleVideoDto();
+                            v.setCid(p.getCid());
+                            v.setTitle(p.getTitle());
+                            v.setFilename(p.getFileName());
+                            v.setDesc("");
+                            videos.add(v);
+                        }
+                        editDto.setVideos(videos);
+
+                        editDto.setIs_only_self(1);
+                        String editRes = BiliApi.editPublish(user, editDto);
+                        log.info("切换视频{}回仅自己可见状态结果: {}", history.getBvId(), editRes);
+                    } catch (Exception e) {
+                        log.error("切换视频回仅自己可见失败 标题:{} bvid:{}", history.getTitle(), history.getBvId(), e);
+                    }
+                    continue;
                 }
             }
             partList.addAll(parts);
@@ -296,7 +380,21 @@ public class LiveMsgSendSync {
             allUser.stream().parallel().forEach(user -> {
                 while (msgQueue.size() > 0) {
                     if (System.currentTimeMillis() - startTime > 2 * 3600 * 1000) {
-                        log.error("弹幕发送超时，重新启动");
+                        LiveMsg peekMsg = msgQueue.peek();
+                        if (peekMsg != null) {
+                            String title = "";
+                            try {
+                                Optional<RecordHistoryPart> partOpt = partRepository.findById(peekMsg.getPartId());
+                                if (partOpt.isPresent()) {
+                                    title = partOpt.get().getTitle();
+                                }
+                            } catch (Exception e) {
+                                // ignore
+                            }
+                            log.warn("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。涉及稿件 BVID: {} 标题: {}", peekMsg.getBvid(), title);
+                        } else {
+                            log.warn("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。");
+                        }
                         return;
                     }
                     LiveMsg msg = null;
@@ -355,5 +453,57 @@ public class LiveMsgSendSync {
             lock.unlock();
         }
 
+    }
+
+    private VideoEditUploadDto.DescDto generateDesc(String template, Map<String, Object> map) {
+        List<DescV2Dto> resultList = new ArrayList<>();
+        StringBuilder desc = new StringBuilder();
+        List<String> stringList = RecordBiliPublishService.splitTemplateByUid(template);
+        for (String s : stringList) {
+            if (s.startsWith("${@")) {
+                long uid = Long.parseLong(s.substring(3, s.length() - 1));
+                try {
+                    BiliApi.BiliUserCardResponseDto userCard = BiliApi.getUserCard(uid);
+                    if (userCard != null && userCard.getCode() == 0) {
+                        //必须带个空格，否则报错简介过长
+                        desc.append("@").append(userCard.getCard().getName() + " ");
+                        DescV2Dto descV2Dto = new DescV2Dto();
+                        descV2Dto.setBiz_id(String.valueOf(uid));
+                        descV2Dto.setRaw_text(userCard.getCard().getName());
+                        descV2Dto.setType(2);
+                        resultList.add(descV2Dto);
+                    }
+
+                } catch (Exception e) {
+                    log.error("@用户模板失败：{}", uid, e);
+                }
+            } else {
+                s = s.replace("${uname}", map.get("${uname}") != null ? map.get("${uname}").toString() : "")
+                        .replace("${title}", map.get("${title}") != null ? map.get("${title}").toString() : "")
+                        .replace("${index}", map.get("${index}") != null ? map.get("${index}").toString() : "")
+                        .replace("${areaName}", map.get("${areaName}") != null ? map.get("${areaName}").toString() : "")
+                        .replace("${roomId}", map.get("${roomId}") != null ? map.get("${roomId}").toString() : "");
+                if (s.contains("${")) {
+                    try {
+                        LocalDateTime localDateTime = (LocalDateTime)map.get("date");
+                        String substring = s.substring(s.indexOf("${"));
+                        String date = substring.substring(0, substring.indexOf("}") + 1);
+                        String format = localDateTime.format(DateTimeFormatter.ofPattern(date.substring(2, date.length() - 1)));
+                        s = s.replace(date, format);
+                    } catch (Exception e) {
+                        log.error("时间格式模板失败：{}", template);
+                    }
+                }
+                s = s.replace(",,", ",");
+
+                DescV2Dto descV2Dto = new DescV2Dto();
+                descV2Dto.setRaw_text(s);
+                descV2Dto.setType(1);
+                resultList.add(descV2Dto);
+                desc.append(s);
+            }
+
+        }
+        return new VideoEditUploadDto.DescDto(desc.toString(), resultList);
     }
 }

@@ -580,14 +580,14 @@ public class RecordBiliPublishService {
                             message.setUid(wxuid);
                             WxPusher.send(message);
                         }
+                        for (RecordHistoryPart part : uploadParts) {
+                            //解析弹幕入库
+                            List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
+                            msgRepository.deleteAll(liveMsgs);
+                            liveMsgService.processing(part);
+                        }
                         //处理高能剪辑事件
                         if (room.isHighEnergyCut()) {
-                            for (RecordHistoryPart part : uploadParts) {
-                                //解析弹幕入库
-                                List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
-                                msgRepository.deleteAll(liveMsgs);
-                                liveMsgService.processing(part);
-                            }
                             highEnergyCutPublishService.process(history);
                         }
 

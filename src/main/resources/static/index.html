@@ -53,6 +53,8 @@
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2025-12-11', version: '1.4.1-beta4.1', content: '支持“仅自己可见”稿件视为发布成功并自动执行后续操作（发评论/弹幕/文件处理）；优化评论区SC和上舰信息格式；优化历史记录查询性能。' },
+                { time: '2025-12-11', version: '1.4.1-beta4', content: '新增视频投稿状态同步（支持审核中、转码中等状态识别）；新增直播间状态主动查询兜底机制；优化界面卡片颜色指示；修复被退回稿件导致无限查询等问题。' },
                 { time: '2025-12-09', version: '1.4.1-beta3-alpha10', content: '新增日志功能，方便直接网页直接看错误信息。' },
                 { time: '2025-12-09', version: '1.4.1-beta3', content: '主页美化。' },
                 { time: '2025-09-15', version: '1.4.1', content: '修复高能片段弹幕太少导致生成错误，逻辑微调。' },

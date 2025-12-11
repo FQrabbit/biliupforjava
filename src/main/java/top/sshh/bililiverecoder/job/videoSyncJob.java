@@ -65,7 +65,23 @@ public class videoSyncJob {
             BiliVideoInfoResponse videoInfoResponse = BiliApi.getVideoInfo(user,next.getBvId());
             int code = videoInfoResponse.getCode();
             if(code != 0){
-                log.warn("获取视频信息失败 code:{} msg:{}", code, videoInfoResponse.getMessage());
+                log.warn("获取视频信息失败 标题:{} bvid:{} code:{} msg:{}", next.getTitle(), next.getBvId(), code, videoInfoResponse.getMessage());
+                if (code == -404) {
+                    if (user != null) {
+                        // 尝试使用 Member API 二次确认
+                        var partInfo = BiliApi.getVideoPartInfo(user, next.getBvId());
+                        if (partInfo.getCode() == -404) {
+                            // Member API 也返回 404，确认删除
+                            next.setCode(code);
+                            historyRepository.save(next);
+                            log.info("视频已确认删除 (Member API 404), 更新状态为 -404");
+                        } else {
+                            log.warn("Member API 返回 code {}, 暂不标记为删除", partInfo.getCode());
+                        }
+                    } else {
+                        log.warn("未配置上传用户，无法确认 404 是否为权限问题，跳过状态更新");
+                    }
+                }
                 continue;
             }
             BiliVideoInfoResponse.BiliVideoInfo videoInfoResponseData = videoInfoResponse.getData();
