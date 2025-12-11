@@ -123,7 +123,7 @@ public class LiveMsgSendSync {
                             map.put("${title}", history.getTitle());
                             map.put("${roomId}", room.getRoomId());
                             map.put("date", LocalDateTime.now());
-                            VideoEditUploadDto.DescDto descDto = generateDesc(room.getDesc(), map);
+                            VideoEditUploadDto.DescDto descDto = generateDesc(room.getDescTemplate(), map);
                             editDto.setDesc(descDto.getDesc());
                             editDto.setDesc_v2(descDto.getDescV2Dtos());
 
@@ -258,7 +258,7 @@ public class LiveMsgSendSync {
                         map.put("${title}", history.getTitle());
                         map.put("${roomId}", room.getRoomId());
                         map.put("date", LocalDateTime.now());
-                        VideoEditUploadDto.DescDto descDto = generateDesc(room.getDesc(), map);
+                        VideoEditUploadDto.DescDto descDto = generateDesc(room.getDescTemplate(), map);
                         editDto.setDesc(descDto.getDesc());
                         editDto.setDesc_v2(descDto.getDescV2Dtos());
 
