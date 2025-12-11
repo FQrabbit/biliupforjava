@@ -172,8 +172,9 @@ public class LiveMsgSendSync {
                     reply.setMessage(context.toString());
                     replies.add(reply);
                 }
-                try {
-                    String replId = null;
+                if (!replies.isEmpty()) {
+                    try {
+                        String replId = null;
                     for (int i = 0; i < replies.size(); i++) {
                         BiliReply reply = replies.get(i);
                         reply.setRoot(replId);
@@ -235,6 +236,7 @@ public class LiveMsgSendSync {
                     } catch (Exception ignored) {
 
                     }
+                }
                 } else {
                     log.info("没有需要发送的评论数据(0条) 标题:{} bvid:{}", history.getTitle(), history.getBvId());
                     // 即使没有评论，也稍微等待一下，避免操作过快
