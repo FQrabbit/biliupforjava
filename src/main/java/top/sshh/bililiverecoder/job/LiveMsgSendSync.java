@@ -111,41 +111,34 @@ public class LiveMsgSendSync {
                             isPrivateFlow = true;
                             log.info("检测到视频{}为仅自己可见，开始执行私有视频评论流程", history.getBvId());
 
-                            VideoEditUploadDto editDto = new VideoEditUploadDto();
-                            editDto.setAid(Long.parseLong(history.getAvId()));
-                            editDto.setTitle(history.getTitle());
-                            editDto.setTag(room.getTags());
-                            editDto.setTid(room.getTid());
-                            editDto.setCopyright(room.getCopyright());
-                            
-                            Map<String, Object> map = new HashMap<>();
-                            map.put("${uname}", room.getUname());
-                            map.put("${title}", history.getTitle());
-                            map.put("${roomId}", room.getRoomId());
-                            map.put("date", LocalDateTime.now());
-                            VideoEditUploadDto.DescDto descDto = generateDesc(room.getDescTemplate(), map);
-                            editDto.setDesc(descDto.getDesc());
-                            editDto.setDesc_v2(descDto.getDescV2Dtos());
-
-                            List<SingleVideoDto> videos = new ArrayList<>();
-                            for (RecordHistoryPart p : parts) {
-                                SingleVideoDto v = new SingleVideoDto();
-                                v.setCid(p.getCid());
-                                v.setTitle(p.getTitle());
-                                v.setFilename(p.getFileName());
-                                v.setDesc("");
-                                videos.add(v);
-                            }
-                            editDto.setVideos(videos);
-
-                            editDto.setIs_only_self(0);
-                            String editRes = BiliApi.editPublish(user, editDto);
+                            // 使用轻量级接口切换为公开状态
+                            String editRes = BiliApi.updateVideoVisibility(user, Long.parseLong(history.getAvId()), 0);
                             log.info("切换视频{}为公开状态结果: {}", history.getBvId(), editRes);
-                            Thread.sleep(5000);
+                            
+                            // 检查响应结果
+                            try {
+                                com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
+                                if (jsonObject.getInteger("code") != 0) {
+                                    log.error("切换视频公开状态失败，停止后续操作。BVID: {}, 错误信息: {}", history.getBvId(), editRes);
+                                    // 抛出异常以中断当前视频的处理流程，避免继续发送评论或弹幕
+                                    throw new RuntimeException("切换公开状态失败: " + editRes);
+                                }
+                            } catch (Exception e) {
+                                if (e instanceof RuntimeException) {
+                                    throw e;
+                                }
+                                log.error("解析切换公开状态响应失败，停止后续操作。BVID: {}, 响应内容: {}", history.getBvId(), editRes);
+                                throw new RuntimeException("解析响应失败", e);
+                            }
+
+                            // 等待B站状态同步
+                            Thread.sleep(15000);
                         }
                     }
                 } catch (Exception e) {
-                    log.error("检查视频状态或切换公开失败 标题:{} bvid:{}", history.getTitle(), history.getBvId(), e);
+                    log.error("检查视频状态或切换公开失败，跳过本视频处理。标题:{} bvid:{}", history.getTitle(), history.getBvId(), e);
+                    // 如果切换公开失败，直接跳过当前视频的后续所有操作（评论、弹幕、切回私有）
+                    continue;
                 }
 
                 List<BiliReply> replies = new ArrayList<>();
@@ -242,42 +235,35 @@ public class LiveMsgSendSync {
                     } catch (Exception ignored) {
 
                     }
+                } else {
+                    log.info("没有需要发送的评论数据(0条) 标题:{} bvid:{}", history.getTitle(), history.getBvId());
+                    // 即使没有评论，也稍微等待一下，避免操作过快
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
 
                 if (isPrivateFlow) {
                     try {
-                        VideoEditUploadDto editDto = new VideoEditUploadDto();
-                        editDto.setAid(Long.parseLong(history.getAvId()));
-                        editDto.setTitle(history.getTitle());
-                        editDto.setTag(room.getTags());
-                        editDto.setTid(room.getTid());
-                        editDto.setCopyright(room.getCopyright());
-                        
-                        Map<String, Object> map = new HashMap<>();
-                        map.put("${uname}", room.getUname());
-                        map.put("${title}", history.getTitle());
-                        map.put("${roomId}", room.getRoomId());
-                        map.put("date", LocalDateTime.now());
-                        VideoEditUploadDto.DescDto descDto = generateDesc(room.getDescTemplate(), map);
-                        editDto.setDesc(descDto.getDesc());
-                        editDto.setDesc_v2(descDto.getDescV2Dtos());
-
-                        List<SingleVideoDto> videos = new ArrayList<>();
-                        for (RecordHistoryPart p : parts) {
-                            SingleVideoDto v = new SingleVideoDto();
-                            v.setCid(p.getCid());
-                            v.setTitle(p.getTitle());
-                            v.setFilename(p.getFileName());
-                            v.setDesc("");
-                            videos.add(v);
-                        }
-                        editDto.setVideos(videos);
-
-                        editDto.setIs_only_self(1);
-                        String editRes = BiliApi.editPublish(user, editDto);
+                        // 使用轻量级接口切换回仅自己可见状态
+                        String editRes = BiliApi.updateVideoVisibility(user, Long.parseLong(history.getAvId()), 1);
                         log.info("切换视频{}回仅自己可见状态结果: {}", history.getBvId(), editRes);
+                        
+                        // 检查响应结果
+                        com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
+                        if (jsonObject.getInteger("code") != 0) {
+                            log.error("切换视频回仅自己可见失败。BVID: {}, 错误信息: {}", history.getBvId(), editRes);
+                        }
                     } catch (Exception e) {
                         log.error("切换视频回仅自己可见失败 标题:{} bvid:{}", history.getTitle(), history.getBvId(), e);
+                    }
+                    // 操作完成后等待一段时间，避免频繁请求
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
                     }
                     continue;
                 }

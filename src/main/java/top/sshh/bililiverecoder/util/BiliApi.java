@@ -233,6 +233,21 @@ public class BiliApi {
         return HttpClientUtil.post(url, headers, body);
     }
 
+    public static String updateVideoVisibility(BiliBiliUser user, long aid, int isOnlySelf) {
+        WebCookie cookie = Cookie.parse(user.getCookies());
+        String url = "https://member.bilibili.com/x/vu/web/edit/visibility";
+        Map<String, String> headers = getCommonHeaders();
+        headers.put("cookie", cookie.getCookie());
+        headers.put("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+        
+        Map<String, String> params = new HashMap<>();
+        params.put("aid", String.valueOf(aid));
+        params.put("is_only_self", String.valueOf(isOnlySelf));
+        params.put("csrf", cookie.getCsrf());
+        
+        return HttpClientUtil.post(url, headers, params, false);
+    }
+
     public static String uploadCover(BiliBiliUser user, String fileName, byte[] fileBytes) {
         WebCookie cookie = Cookie.parse(user.getCookies());
         String url = "https://member.bilibili.com/x/vu/web/cover/up?t=" + System.currentTimeMillis() + "&csrf=" + cookie.getCsrf();
