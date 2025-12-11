@@ -272,7 +272,10 @@ public class LiveMsgSendSync {
                     continue;
                 }
             }
-            partList.addAll(parts);
+            // 只有非仅自己可见(-50)的稿件，才加入弹幕发送队列
+            if (history.getCode() != -50) {
+                partList.addAll(parts);
+            }
         }
         if (CollectionUtils.isEmpty(partList)) {
             return;
