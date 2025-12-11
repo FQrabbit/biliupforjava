@@ -225,6 +225,8 @@ public class HistoryController {
                     msgService.processing(part);
                 }
             }
+            history.setSendReply(false);
+            historyRepository.save(history);
             result.put("type", "success");
             result.put("msg", "弹幕重新加载成功");
             return result;

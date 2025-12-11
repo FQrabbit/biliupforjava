@@ -53,7 +53,7 @@
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
-                { time: '2025-12-11', version: '1.4.1-beta4.3', content: '紧急修复编辑稿件可见性问题，并将工作流程增加日志提示以及操作延迟。' },
+                { time: '2025-12-11', version: '1.4.1-beta4.3', content: '紧急修复编辑稿件可见性问题，并将工作流程增加日志提示以及操作延迟；修复评论发送逻辑，避免无评论时重复检查。' },
                 { time: '2025-12-11', version: '1.4.1-beta4.2', content: '修复404无限循环问题（增加Member API二次确认）；修复文件管理模块日志等级错误（成功操作不再标记为ERROR）；优化日志信息（增加BVID/标题显示，弹幕超时降级为WARN）。' },
                 { time: '2025-12-11', version: '1.4.1-beta4.1', content: '支持“仅自己可见”稿件视为发布成功并自动执行后续操作（发评论/弹幕/文件处理）；优化评论区SC和上舰信息格式；优化历史记录查询性能。' },
                 { time: '2025-12-11', version: '1.4.1-beta4', content: '新增视频投稿状态同步（支持审核中、转码中等状态识别）；新增直播间状态主动查询兜底机制；优化界面卡片颜色指示；修复被退回稿件导致无限查询等问题。' },

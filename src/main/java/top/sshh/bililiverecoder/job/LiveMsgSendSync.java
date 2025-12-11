@@ -245,6 +245,8 @@ public class LiveMsgSendSync {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
+                    history.setSendReply(true);
+                    historyRepository.save(history);
                 }
 
                 if (isPrivateFlow) {
