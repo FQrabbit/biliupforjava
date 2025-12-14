@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
@@ -77,6 +78,8 @@ public class RecordBiliPublishService {
     private LiveMsgService liveMsgService;
     @Autowired
     private LiveMsgRepository msgRepository;
+    @Autowired
+    private CaptchaService captchaService;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -555,9 +558,30 @@ public class RecordBiliPublishService {
                         uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
                         log.info("webPublish uploadRes==>{}", uploadRes);
                         if (uploadRes.contains("验证码")) {
-                            Thread.sleep(120 * 1000L);
-                            uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-                            log.info("clientPublish uploadRes==>{}", uploadRes);
+                            try {
+                                String voucher = JsonPath.read(uploadRes, "data.v_voucher");
+                                Map<String, Object> data = JsonPath.read(uploadRes, "data");
+                                // 尝试从 data 中获取 geetest 相关信息，如果没有，前端会使用默认的 V4 captchaId
+                                captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
+                                Map<String, String> captchaResult = captchaService.waitForCaptcha();
+                                if (captchaResult != null) {
+                                    // 如果前端返回了 V4 的结果，我们需要确保包含 v_voucher
+                                    if (!captchaResult.containsKey("v_voucher")) {
+                                        captchaResult.put("v_voucher", voucher);
+                                    }
+                                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
+                                    log.info("captchaPublish uploadRes==>{}", uploadRes);
+                                } else {
+                                    log.warn("Captcha wait timeout, retrying without captcha...");
+                                    Thread.sleep(10 * 1000L);
+                                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+                                }
+                            } catch (Exception e) {
+                                log.error("Handle captcha error", e);
+                                Thread.sleep(120 * 1000L);
+                                uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+                                log.info("clientPublish uploadRes==>{}", uploadRes);
+                            }
                         }
                         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
                         String aid = JSON.parseObject(uploadRes).getJSONObject("data").getString("aid");

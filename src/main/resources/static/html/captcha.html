@@ -8,6 +8,7 @@
     <script src="../js/element-ui.js"></script>
     <link rel="stylesheet" href="../css/element-ui.css">
     <script src="https://static.geetest.com/static/js/gt.0.4.9.js"></script>
+    <script src="https://static.geetest.com/v4/gt4.js"></script>
 </head>
 <body>
 <div id="app">
@@ -126,11 +127,15 @@
                 
                 console.log("Extra info:", this.extra);
                 
+                // B站投稿通常使用固定的 captchaId
+                const BILI_UPLOAD_CAPTCHA_ID = 'a431eaf5e5dadd28bc0553c29682bd4b';
                 
+                // 检查是否是 V3 (旧版)
                 let gt = this.extra.gt || (this.extra.geetest ? this.extra.geetest.gt : null);
                 let challenge = this.extra.challenge || (this.extra.geetest ? this.extra.geetest.challenge : null);
                 
                 if (gt && challenge) {
+                    // V3 初始化逻辑
                     initGeetest({
                         gt: gt,
                         challenge: challenge,
@@ -147,16 +152,33 @@
                         });
                     });
                 } else {
-                    // 如果没有 gt/challenge，可能是 v4 或者其他方式
-                    // 暂时显示错误信息
-                    $('#captcha-box').html(`
-                        <div style="text-align: center; padding: 20px; background-color: #fdf6ec; color: #e6a23c; border-radius: 4px;">
-                            <i class="el-icon-warning-outline" style="font-size: 24px; margin-bottom: 10px;"></i>
-                            <p style="margin: 0; font-weight: bold;">未检测到自动验证参数 (gt/challenge)</p>
-                            <p style="margin: 10px 0 0 0; font-size: 14px;">这通常意味着需要手机验证、实名认证，或者需要在B站网页端手动处理。</p>
-                            <p style="margin: 5px 0 0 0; font-size: 14px;">建议操作：请在浏览器登录B站创作中心，尝试上传任意视频触发并完成验证，然后点击下方的 <span style="font-weight: bold;">“已在网页完成验证，直接重试”</span>。</p>
-                        </div>
-                    `);
+                    // V4 初始化逻辑 (默认尝试)
+                    initGeetest4({
+                        captchaId: BILI_UPLOAD_CAPTCHA_ID,
+                        product: 'popup'
+                    }, (captchaObj) => {
+                        this.captchaObj = captchaObj;
+                        captchaObj.appendTo("#captcha-box");
+                        captchaObj.onSuccess(() => {
+                            let result = captchaObj.getValidate();
+
+                            this.captchaResult = {
+                                geetest_challenge: result.captcha_id, 
+                                geetest_validate: result.lot_number,
+                                geetest_seccode: result.pass_token,
+                                // 同时带上 V4 原生参数，以防万一
+                                lot_number: result.lot_number,
+                                pass_token: result.pass_token,
+                                gen_time: result.gen_time,
+                                captcha_output: result.captcha_output
+                            };
+                            this.captchaSuccess = true;
+                        });
+                        captchaObj.onError((e) => {
+                            console.error("Geetest V4 Error:", e);
+                            this.$message.error("验证码加载失败，请尝试手动处理");
+                        });
+                    });
                 }
             },
             submitCaptcha() {

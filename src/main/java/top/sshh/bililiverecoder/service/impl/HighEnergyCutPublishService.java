@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.jayway.jsonpath.JsonPath;
 import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
@@ -259,8 +260,26 @@ public class HighEnergyCutPublishService {
         uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
         log.info("webPublish uploadRes==>{}", uploadRes);
         if (uploadRes.contains("验证码")) {
-            Thread.sleep(120 * 1000L);
-            uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+            try {
+                String voucher = JsonPath.read(uploadRes, "data.v_voucher");
+                Map<String, Object> data = JsonPath.read(uploadRes, "data");
+                captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
+                Map<String, String> captchaResult = captchaService.waitForCaptcha();
+                if (captchaResult != null) {
+                    if (!captchaResult.containsKey("v_voucher")) {
+                        captchaResult.put("v_voucher", voucher);
+                    }
+                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
+                    log.info("验证码发布 上传结果==>{}", uploadRes);
+                } else {
+                    log.warn("验证码等待超时，重试不使用验证码...");
+                    Thread.sleep(10 * 1000L);
+                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+                }
+            } catch (Exception e) {
+                log.error("处理验证码错误", e);
+                Thread.sleep(120 * 1000L);
+                uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
             log.info("clientPublish uploadRes==>{}", uploadRes);
         }
         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
@@ -318,7 +337,7 @@ public class HighEnergyCutPublishService {
             do {
                 preUploadBean = preuploadRequest.getPojo();
                 if (preUploadBean == null || preUploadBean.getOK() == 0) {
-                    log.warn("PreUpload failed. Bean: {}", JSON.toJSONString(preUploadBean));
+                    log.warn("预上传失败。Bean: {}", JSON.toJSONString(preUploadBean));
                     if (preUploadBean != null && ((preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) || preUploadBean.getCode() == 406)) {
                         String voucher = (preUploadBean.getDetail() != null) ? (String) preUploadBean.getDetail().get("v_voucher") : "MANUAL_INTERVENTION";
                         log.warn("投稿受阻(Code:{})，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", preUploadBean.getCode(), uploadFile.getName(), serverPort);

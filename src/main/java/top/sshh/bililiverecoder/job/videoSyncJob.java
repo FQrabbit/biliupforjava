@@ -66,6 +66,15 @@ public class videoSyncJob {
             int code = videoInfoResponse.getCode();
             if(code != 0){
                 log.warn("获取视频信息失败 标题:{} bvid:{} code:{} msg:{}", next.getTitle(), next.getBvId(), code, videoInfoResponse.getMessage());
+                
+                // 处理 62002 (稿件不可见)
+                if (code == 62002) {
+                    next.setCode(code);
+                    historyRepository.save(next);
+                    log.info("稿件不可见 (code 62002), 停止同步");
+                    continue;
+                }
+
                 if (code == -404) {
                     if (user != null) {
                         // 尝试使用 Member API 二次确认
@@ -75,6 +84,15 @@ public class videoSyncJob {
                             next.setCode(code);
                             historyRepository.save(next);
                             log.info("视频已确认删除 (Member API 404), 更新状态为 -404");
+                        } else if (partInfo.getCode() == 0) {
+                            // Member API 返回 0，视为成功（可能审核中或仅自己可见）
+                            log.info("Member API 返回成功 (code 0)，视为视频已存在，停止同步");
+                            next.setCode(0);
+                            if (partInfo.getData() != null && partInfo.getData().getVideos() != null && !partInfo.getData().getVideos().isEmpty()) {
+                                next.setAvId(String.valueOf(partInfo.getData().getVideos().get(0).getAid()));
+                            }
+                            historyRepository.save(next);
+                            continue;
                         } else {
                             log.warn("Member API 返回 code {}, 暂不标记为删除", partInfo.getCode());
                         }

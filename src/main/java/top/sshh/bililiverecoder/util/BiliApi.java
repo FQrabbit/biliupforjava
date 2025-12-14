@@ -195,13 +195,21 @@ public class BiliApi {
 
 
     public static String webPublish(BiliBiliUser user, VideoUploadDto data) {
+        return webPublish(user, data, null);
+    }
+
+    public static String webPublish(BiliBiliUser user, VideoUploadDto data, Map<String, String> captcha) {
         WebCookie cookie = Cookie.parse(user.getCookies());
         String url = "https://member.bilibili.com/x/vu/web/add/v3?t=" + System.currentTimeMillis() + "&csrf=" + cookie.getCsrf();
         Map<String, String> headers = new HashMap<>();
         data.setCsrf(cookie.getCsrf());
         BiliResponseDto<BillBuvId> buvId = getBuvId();
         headers.put("cookie", cookie.getCookie() + "buvid3=" + buvId.getData().getB3() + ";buvid4=" + buvId.getData().getB4());
-        String body = JSON.toJSONString(data);
+        com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSONObject.parseObject(JSON.toJSONString(data));
+        if (captcha != null) {
+            jsonObject.putAll(captcha);
+        }
+        String body = jsonObject.toJSONString();
         return HttpClientUtil.post(url, headers, body);
     }
 
