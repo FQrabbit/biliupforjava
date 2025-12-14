@@ -53,6 +53,7 @@
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2025-12-14', version: '1.4.1-beta4.6', content: '新增验证码控制台脚本方案及Debug信息；新增上传线路错误(500/504)自动暂停机制；请求增加限流保护（投稿/上传/同步/刷新）；优化评论发送；优化异常提醒界面支持长日志查看与复制；录制历史新增房间号列。' },
                 { time: '2025-12-11', version: '1.4.1-beta4.4', content: '优化弹幕发送逻辑，自动忽略仅自己可见稿件。' },
                 { time: '2025-12-11', version: '1.4.1-beta4.3', content: '紧急修复编辑稿件可见性问题，并将工作流程增加日志提示以及操作延迟；修复评论发送逻辑，避免无评论时重复检查' },
                 { time: '2025-12-11', version: '1.4.1-beta4.2', content: '修复404无限循环问题（增加Member API二次确认）；修复文件管理模块日志等级错误（成功操作不再标记为ERROR）；优化日志信息（增加BVID/标题显示，弹幕超时降级为WARN）。' },

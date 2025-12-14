@@ -182,8 +182,6 @@ public class LiveMsgSendSync {
                         BiliReplyResponse replyResponse = BiliApi.sendVideoReply(user, reply);
                         if (replyResponse.getCode() == 0) {
                             log.info("av{}发送评论成功：{}", reply.getOid(), reply.getMessage());
-                            history.setSendReply(true);
-                            history = historyRepository.save(history);
                             //第一个评论进行置顶操作
                             if (i == 0) {
                                 replId = replyResponse.getData().getRpid();
@@ -216,10 +214,16 @@ public class LiveMsgSendSync {
                             } catch (Exception ignored) {
 
                             }
+                        } else {
+                            log.error("发送评论失败: {}", JSON.toJSONString(replyResponse));
+                            throw new RuntimeException("发送评论失败: " + replyResponse.getMessage());
                         }
                         //等待一段时间在发送
                         Thread.sleep(5000L);
                     }
+                    // 全部发送成功后，标记为已发送
+                    history.setSendReply(true);
+                    history = historyRepository.save(history);
                 } catch (Exception e) {
                     log.error("发送sc评论失败 标题:{} bvid:{} 内容:{}", history.getTitle(), history.getBvId(), JSON.toJSONString(replies), e);
                     try {

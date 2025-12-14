@@ -62,6 +62,12 @@ public class videoSyncJob {
             if(room.getUploadUserId() != null){
                 user = userRepository.findById(room.getUploadUserId()).orElse(null);
             }
+            try {
+                // 避免请求过快，每次请求间隔3秒
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             BiliVideoInfoResponse videoInfoResponse = BiliApi.getVideoInfo(user,next.getBvId());
             int code = videoInfoResponse.getCode();
             if(code != 0){

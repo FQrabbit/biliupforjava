@@ -34,6 +34,8 @@ public class RefreshTokenJob {
                 continue;
             }
             try {
+                // 避免请求过快，每次请求间隔5秒
+                Thread.sleep(5000);
                 userService.refreshToken(user);
             }catch (Exception e){
                 log.error("刷新token失败==>{}", JSON.toJSONString(user), e);

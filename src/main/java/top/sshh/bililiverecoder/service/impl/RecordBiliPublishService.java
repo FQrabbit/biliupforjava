@@ -45,6 +45,11 @@ public class RecordBiliPublishService {
     @Value("${record.work-path}")
     private String workPath;
 
+    @Value("${server.port:8080}")
+    private String serverPort;
+
+    private static final java.util.concurrent.ConcurrentHashMap<Long, LocalDateTime> suspendMap = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static final String WX_MSG_FORMAT = """
             投稿结果: %s
             收到主播%s投稿事件
@@ -267,6 +272,14 @@ public class RecordBiliPublishService {
     }
 
     public boolean publishRecordHistory(RecordHistory history) {
+        if (suspendMap.containsKey(history.getId())) {
+            if (suspendMap.get(history.getId()).isAfter(LocalDateTime.now())) {
+                log.info("视频发布任务被暂停，跳过: {}, 恢复时间: {}", history.getTitle(), suspendMap.get(history.getId()));
+                return false;
+            } else {
+                suspendMap.remove(history.getId());
+            }
+        }
         if (history.isPublish()) {
             log.error("视频状态为已发布，退出==>{}", JSON.toJSONString(history));
             return false;
@@ -344,6 +357,7 @@ public class RecordBiliPublishService {
                 }
             }
             LocalDateTime now = LocalDateTime.now();
+            try {
             for (RecordHistoryPart uploadPart : uploadParts) {
                 Optional<RecordHistoryPart> flsuhPartOptional = partRepository.findById(uploadPart.getId());
                 uploadPart = flsuhPartOptional.get();
@@ -396,6 +410,12 @@ public class RecordBiliPublishService {
                             if (!part.isUpload()) {
                                 log.info("视频发布流程获取part上传锁成功，检查到未上传完成");
                                 uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                                try {
+                                    log.info("分P上传完成，等待20秒避免频繁请求...");
+                                    Thread.sleep(20000);
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
                             }
                         }
 
@@ -403,8 +423,23 @@ public class RecordBiliPublishService {
                 } else {
                     log.info("视频发布流程,检查到未上传完成,开始上传！");
                     uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                    try {
+                        log.info("分P上传完成，等待20秒避免频繁请求...");
+                        Thread.sleep(20000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
 
+            }
+            } catch (RuntimeException e) {
+                if (e.getMessage() != null && e.getMessage().startsWith("UPLOAD_GATEWAY_ERROR")) {
+                    log.error("捕获到网关错误，暂停任务30分钟: {}", e.getMessage());
+                    suspendMap.put(history.getId(), LocalDateTime.now().plusMinutes(30));
+                    TaskUtil.publishTask.remove(history.getId());
+                    return false;
+                }
+                throw e;
             }
             int preSize = uploadParts.size();
             //重新加载上传列表
@@ -561,6 +596,7 @@ public class RecordBiliPublishService {
                             try {
                                 String voucher = JsonPath.read(uploadRes, "data.v_voucher");
                                 Map<String, Object> data = JsonPath.read(uploadRes, "data");
+                                log.warn("投稿受阻，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", history.getTitle(), serverPort);
                                 // 尝试从 data 中获取 geetest 相关信息，如果没有，前端会使用默认的 V4 captchaId
                                 captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
                                 Map<String, String> captchaResult = captchaService.waitForCaptcha();
@@ -569,8 +605,16 @@ public class RecordBiliPublishService {
                                     if (!captchaResult.containsKey("v_voucher")) {
                                         captchaResult.put("v_voucher", voucher);
                                     }
+                                    log.info("Submitting captcha result: {}", JSON.toJSONString(captchaResult));
                                     uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
                                     log.info("captchaPublish uploadRes==>{}", uploadRes);
+                                    
+                                    if (uploadRes.contains("验证码") || uploadRes.contains("\"code\":601")) {
+                                        log.error("验证码验证失败，请检查参数或重试。暂停5分钟后重试。");
+                                        Thread.sleep(300 * 1000L);
+                                        // 抛出异常以触发重试机制，但有了长休眠，不会频繁刷屏
+                                        throw new RuntimeException("验证码验证失败: " + uploadRes);
+                                    }
                                 } else {
                                     log.warn("Captcha wait timeout, retrying without captcha...");
                                     Thread.sleep(10 * 1000L);

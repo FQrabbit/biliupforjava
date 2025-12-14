@@ -265,6 +265,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             // 分段上传
                             AtomicInteger upCount = new AtomicInteger(0);
                             AtomicInteger tryCount = new AtomicInteger(0);
+                            java.util.concurrent.atomic.AtomicReference<String> gatewayError = new java.util.concurrent.atomic.AtomicReference<>(null);
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
                                 long finalI = i;
@@ -273,6 +274,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 Runnable runnable = () -> {
                                     try {
                                         while (tryCount.get() < 200) {
+                                            if (gatewayError.get() != null) {
+                                                break;
+                                            }
                                             try {
                                                 // 上传
                                                 long endSize = (finalI + 1) * chunkSize;
@@ -306,6 +310,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         filePath, count, chunkNum);
                                                 break;
                                             } catch (Exception e) {
+                                                if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("504"))) {
+                                                    log.error("检测到网关错误(500/504)，暂停上传: {}", e.getMessage());
+                                                    gatewayError.set(e.getMessage());
+                                                    tryCount.set(200); // 停止其他线程的重试
+                                                    break;
+                                                }
                                                 tryCount.incrementAndGet();
                                                 log.warn("{}==>[{}] 上传视频part {}, index {}, size {}, start {}, end {}, exception={}", Thread.currentThread().getName(), room.getTitle(),
                                                         filePath, finalI, chunkSize, finalI * chunkSize, (finalI + 1) * chunkSize, ExceptionUtils.getStackTrace(e));
@@ -338,6 +348,11 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             WxPusher.send(message);
 
                             runnableList.stream().parallel().forEach(Runnable::run);
+
+                            if (gatewayError.get() != null) {
+                                throw new RuntimeException("UPLOAD_GATEWAY_ERROR:" + gatewayError.get());
+                            }
+
                             if (tryCount.get() >= 200) {
                                 part = partRepository.findById(part.getId()).get();
                                 part.setUpload(false);

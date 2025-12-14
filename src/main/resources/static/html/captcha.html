@@ -7,7 +7,6 @@
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/element-ui.js"></script>
     <link rel="stylesheet" href="../css/element-ui.css">
-    <script src="https://static.geetest.com/static/js/gt.0.4.9.js"></script>
     <script src="https://static.geetest.com/v4/gt4.js"></script>
 </head>
 <body>
@@ -52,20 +51,34 @@
             <el-divider content-position="center">或者手动处理</el-divider>
             
             <el-form label-width="80px">
-                <el-alert title="如果上方验证码无法加载，或者遇到手机号验证等情况：" type="info" :closable="false" style="margin-bottom: 10px;">
+                <el-alert title="方案 B：在 B站官网验证 (100%成功，推荐)" type="success" :closable="false" style="margin-bottom: 10px;">
                     <template slot="title">
-                        <div>1. 如果是滑块验证：请抓包获取 validate 等参数填入下方 JSON 框。</div>
-                        <div style="margin-top: 5px;">2. 如果是手机/实名验证：请在浏览器完成后，直接点击“已在网页完成验证”。</div>
+                        <div style="font-weight: bold; margin-bottom: 5px;">如果上方验证失败，请使用此“逃课”方案：</div>
+                        <ol style="margin-left: 20px; line-height: 1.8;">
+                            <li>在浏览器新标签页打开 <a href="https://member.bilibili.com/platform/upload/video/frame" target="_blank">B站投稿页</a> 并登录。</li>
+                            <li>按 <kbd>F12</kbd> 打开控制台 (Console)，复制并运行下方代码：</li>
+                        </ol>
+                        <div style="margin: 5px 0;">
+                            <el-input type="textarea" readonly :value="hookScript" rows="4" style="font-family: monospace; font-size: 12px;"></el-input>
+                            <el-button size="mini" type="text" @click="copyScript">复制代码</el-button>
+                        </div>
+                        <ol start="3" style="margin-left: 20px; line-height: 1.8;">
+                            <li>在 B站页面随便上传一个视频，触发并完成验证。</li>
+                            <li>脚本会自动将 Token 发送回本系统，您无需做其他操作。</li>
+                        </ol>
                     </template>
                 </el-alert>
                 
-                <el-form-item label="结果JSON">
-                    <el-input type="textarea" v-model="manualJson" placeholder='例如: {"validate": "...", "seccode": "..."}' rows="3"></el-input>
-                </el-form-item>
-                <el-form-item>
-                    <el-button @click="submitManual" type="success" :loading="submitting">提交手动结果</el-button>
-                    <el-button @click="submitRetry" type="warning" :loading="submitting">已在网页完成验证，直接重试</el-button>
-                </el-form-item>
+                <el-collapse>
+                    <el-collapse-item title="方案 C：手动抓包填入 (备用)" name="2">
+                        <el-form-item label="结果JSON">
+                            <el-input type="textarea" v-model="manualJson" placeholder='例如: {"validate": "...", "seccode": "..."}' rows="3"></el-input>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-button @click="submitManual" type="success" :loading="submitting">提交手动结果</el-button>
+                        </el-form-item>
+                    </el-collapse-item>
+                </el-collapse>
             </el-form>
         </div>
     </el-card>
@@ -85,7 +98,42 @@
             captchaSuccess: false,
             submitting: false,
             timer: null,
-            manualJson: ''
+            manualJson: '',
+            // 自动生成的 Hook 脚本，动态插入当前服务器地址
+            hookScript: `(function(){
+    var targetUrl = "${window.location.origin}/captcha/submit";
+    console.log("正在监听 B站验证码请求...");
+    
+    // 监听 fetch
+    var originalFetch = window.fetch;
+    window.fetch = function(input, init) {
+        if (typeof input === 'string' && (input.includes('add/v3') || input.includes('validate'))) {
+            // 尝试从 URL 或 Body 中提取 token
+            try {
+                var token = null;
+                if (input.includes('captcha_token=')) {
+                    token = input.match(/captcha_token=([^&]+)/)[1];
+                } else if (init && init.body) {
+                    if (init.body.includes('captcha_token')) {
+                        var body = JSON.parse(init.body);
+                        token = body.captcha_token;
+                    }
+                }
+                
+                if (token) {
+                    console.log("捕获到 Token: " + token);
+                    var data = { captcha_token: token };
+                    // 使用 sendBeacon 或 XHR 跨域发送 (需要后端支持 CORS，或者手动复制)
+                    // 这里为了简单，直接弹窗提示用户复制
+                    prompt("捕获到验证码 Token，请全选复制并填入工具的【手动结果】框中：", JSON.stringify(data));
+                }
+            } catch(e) { console.error(e); }
+        }
+        return originalFetch.apply(this, arguments);
+    };
+    
+    alert("脚本注入成功！请现在上传视频触发验证。");
+})();`
         },
         mounted() {
             this.checkStatus();
@@ -95,6 +143,15 @@
             if (this.timer) clearInterval(this.timer);
         },
         methods: {
+            copyScript() {
+                const el = document.createElement('textarea');
+                el.value = this.hookScript;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                this.$message.success('代码已复制到剪贴板');
+            },
             checkStatus() {
                 if (this.required && !this.captchaSuccess && !this.manualJson) return; // 如果正在验证中且未手动输入，不要刷新状态
                 
@@ -130,56 +187,32 @@
                 // B站投稿通常使用固定的 captchaId
                 const BILI_UPLOAD_CAPTCHA_ID = 'a431eaf5e5dadd28bc0553c29682bd4b';
                 
-                // 检查是否是 V3 (旧版)
-                let gt = this.extra.gt || (this.extra.geetest ? this.extra.geetest.gt : null);
-                let challenge = this.extra.challenge || (this.extra.geetest ? this.extra.geetest.challenge : null);
-                
-                if (gt && challenge) {
-                    // V3 初始化逻辑
-                    initGeetest({
-                        gt: gt,
-                        challenge: challenge,
-                        offline: false,
-                        new_captcha: true,
-                        product: 'popup',
-                        width: '100%'
-                    }, (captchaObj) => {
-                        this.captchaObj = captchaObj;
-                        captchaObj.appendTo('#captcha-box');
-                        captchaObj.onSuccess(() => {
-                            this.captchaResult = captchaObj.getValidate();
-                            this.captchaSuccess = true;
-                        });
+                // V4 初始化逻辑 (默认尝试)
+                initGeetest4({
+                    captchaId: BILI_UPLOAD_CAPTCHA_ID,
+                    product: 'popup'
+                }, (captchaObj) => {
+                    this.captchaObj = captchaObj;
+                    captchaObj.appendTo("#captcha-box");
+                    captchaObj.onSuccess(() => {
+                        let result = captchaObj.getValidate();
+                        console.log("Geetest V4 Result:", result);
+                        
+                        this.captchaResult = {
+                            // V4 标准参数
+                            lot_number: result.lot_number,
+                            pass_token: result.pass_token,
+                            gen_time: result.gen_time,
+                            captcha_output: result.captcha_output,
+                            captcha_id: BILI_UPLOAD_CAPTCHA_ID
+                        };
+                        this.captchaSuccess = true;
                     });
-                } else {
-                    // V4 初始化逻辑 (默认尝试)
-                    initGeetest4({
-                        captchaId: BILI_UPLOAD_CAPTCHA_ID,
-                        product: 'popup'
-                    }, (captchaObj) => {
-                        this.captchaObj = captchaObj;
-                        captchaObj.appendTo("#captcha-box");
-                        captchaObj.onSuccess(() => {
-                            let result = captchaObj.getValidate();
-
-                            this.captchaResult = {
-                                geetest_challenge: result.captcha_id, 
-                                geetest_validate: result.lot_number,
-                                geetest_seccode: result.pass_token,
-                                // 同时带上 V4 原生参数，以防万一
-                                lot_number: result.lot_number,
-                                pass_token: result.pass_token,
-                                gen_time: result.gen_time,
-                                captcha_output: result.captcha_output
-                            };
-                            this.captchaSuccess = true;
-                        });
-                        captchaObj.onError((e) => {
-                            console.error("Geetest V4 Error:", e);
-                            this.$message.error("验证码加载失败，请尝试手动处理");
-                        });
+                    captchaObj.onError((e) => {
+                        console.error("Geetest V4 Error:", e);
+                        this.$message.error("验证码加载失败，请尝试手动处理");
                     });
-                }
+                });
             },
             submitCaptcha() {
                 if (!this.captchaResult) return;

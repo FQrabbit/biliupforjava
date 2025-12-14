@@ -269,8 +269,15 @@ public class HighEnergyCutPublishService {
                     if (!captchaResult.containsKey("v_voucher")) {
                         captchaResult.put("v_voucher", voucher);
                     }
+                    log.info("Submitting captcha result: {}", JSON.toJSONString(captchaResult));
                     uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
                     log.info("验证码发布 上传结果==>{}", uploadRes);
+
+                    if (uploadRes.contains("验证码") || uploadRes.contains("\"code\":601")) {
+                        log.error("验证码验证失败，请检查参数或重试。暂停5分钟后重试。");
+                        Thread.sleep(300 * 1000L);
+                        throw new RuntimeException("验证码验证失败: " + uploadRes);
+                    }
                 } else {
                     log.warn("验证码等待超时，重试不使用验证码...");
                     Thread.sleep(10 * 1000L);

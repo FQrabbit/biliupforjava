@@ -53,6 +53,12 @@ public class publishJob {
 
         for (RecordHistory history : historyList) {
             publishService.publishRecordHistory(history);
+            try {
+                log.info("单个视频发布流程结束，等待30秒继续下一个任务...");
+                Thread.sleep(30000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 }
