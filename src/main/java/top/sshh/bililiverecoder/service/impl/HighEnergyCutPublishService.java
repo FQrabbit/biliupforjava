@@ -280,7 +280,8 @@ public class HighEnergyCutPublishService {
                 log.error("处理验证码错误", e);
                 Thread.sleep(120 * 1000L);
                 uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-            log.info("clientPublish uploadRes==>{}", uploadRes);
+                log.info("clientPublish uploadRes==>{}", uploadRes);
+            }
         }
         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
         String aid = JSON.parseObject(uploadRes).getJSONObject("data").getString("aid");
