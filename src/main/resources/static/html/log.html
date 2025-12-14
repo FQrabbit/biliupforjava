@@ -7,6 +7,7 @@
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
+    <link href="../css/log.css" rel="stylesheet">
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
@@ -16,52 +17,6 @@
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
-    <style>
-        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
-        #app { height: 100%; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; }
-        .toolbar { margin-bottom: 10px; }
-        .toolbar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        .log-console { 
-            flex: 1; 
-            background-color: #1e1e1e; 
-            color: #d4d4d4; 
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
-            padding: 10px; 
-            overflow-y: auto; 
-            border-radius: 4px; 
-            font-size: 13px;
-            line-height: 1.4;
-        }
-        .log-line { white-space: pre-wrap; word-break: break-all; margin-bottom: 2px; }
-        .log-line:hover { background-color: #2a2d2e; }
-        .log-time { color: #569cd6; margin-right: 8px; }
-        .log-level { font-weight: bold; margin-right: 8px; }
-        .log-thread { color: #4ec9b0; margin-right: 8px; }
-        .level-INFO { color: #4caf50; }
-        .level-WARN { color: #ce9178; }
-        .level-ERROR { color: #f44747; }
-        .level-DEBUG { color: #9cdcfe; }
-        
-        .log-line.nowrap { white-space: pre; overflow-x: hidden; word-break: normal; }
-        .log-line.selection-mode { cursor: pointer; }
-        .log-line.selected { background-color: #3a3d41; border-left: 3px solid #007acc; padding-left: 7px; }
-        
-        /* Syntax Highlighting */
-        .log-url { color: #569cd6; text-decoration: underline; }
-        .log-path { color: #9cdcfe; text-decoration: underline; }
-        .log-number { color: #b5cea8; }
-        .log-date { color: #6a9955; }
-        .log-string { color: #ce9178; }
-        .log-bracket { color: #4ec9b0; }
-        .log-brace { color: #da70d6; }
-
-        @media (max-width: 768px) {
-            .toolbar-row { gap: 5px; }
-            .el-button--small, .el-button--small.is-round { padding: 9px 15px; }
-            .log-time { display: none; } /* Hide time on very small screens to save space */
-            .log-thread { display: none; }
-        }
-    </style>
 </head>
 <body>
 <div id="app">

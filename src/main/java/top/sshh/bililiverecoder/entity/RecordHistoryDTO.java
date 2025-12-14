@@ -34,7 +34,7 @@ public class RecordHistoryDTO {
     // 是否发布成功
     private Boolean publish;
 
-    private int code = -1;
+    private Integer code;
 
     private int uploadRetryCount = 0;
 

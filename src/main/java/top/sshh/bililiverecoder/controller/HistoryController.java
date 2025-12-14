@@ -404,12 +404,8 @@ public class HistoryController {
         if (request.getPublish() != null) {
             predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), request.getPublish())));
         }
-        if (request.getCode() != -1) {
-            if (request.getCode() == 0) {
-                predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("code"), 0)));
-            } else if (request.getCode() == -2) {
-                predicatesList.add(criteriaBuilder.and(criteriaBuilder.notEqual(root.get("code"), 0)));
-            }
+        if (request.getCode() != null) {
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("code"), request.getCode())));
         }
 
         if (request.getFrom() != null && request.getTo() != null) {

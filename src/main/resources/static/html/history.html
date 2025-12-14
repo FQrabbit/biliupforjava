@@ -6,6 +6,7 @@
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
+    <link href="../css/history.css" rel="stylesheet">
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
@@ -15,17 +16,6 @@
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
-    <style>
-        html, body {
-            height: 100%;
-            overflow: hidden;
-        }
-        #historyTable {
-            height: 100%;
-            overflow-y: auto;
-            box-sizing: border-box;
-        }
-    </style>
 </head>
 <body>
 <div class="container" id="historyTable">
@@ -36,94 +26,194 @@
                 <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
             </el-radio-group>
         </div>
-        <el-collapse v-model="activeNames">
-            <el-collapse-item title="筛选条件" name="1">
-                <el-form :model="form" label-position="right" label-width="100px" ref="form">
-                    <el-row :gutter="20">
-                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                            <el-form-item label="房间号">
-                                <el-select v-model="form.roomId" clearable filterable placeholder="请选择房间号" @change="initTable" style="width: 100%">
-                                    <el-option label="全部" value=""></el-option>
-                                    <el-option
-                                            v-for="room in roomList"
-                                            :key="room.roomId"
-                                            :label="room.roomId + '-' + room.uname"
-                                            :value="room.roomId">
+        
+        <!-- 现代化筛选面板 -->
+        <div class="filter-panel" :class="{ 'is-expanded': filterExpanded }">
+            <div class="filter-header" @click="filterExpanded = !filterExpanded">
+                <div class="filter-title">
+                    <i class="el-icon-search"></i>
+                    <span>筛选条件</span>
+                    <el-badge :value="activeFilterCount" :hidden="activeFilterCount === 0" class="filter-badge"></el-badge>
+                </div>
+                <div class="filter-actions">
+                    <el-button v-if="activeFilterCount > 0" type="text" size="mini" @click.stop="resetFilters" class="reset-btn">
+                        <i class="el-icon-refresh-left"></i> 重置
+                    </el-button>
+                    <i :class="filterExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="expand-icon"></i>
+                </div>
+            </div>
+            
+            <transition name="filter-slide">
+                <div class="filter-body" v-show="filterExpanded">
+                    <!-- 快捷筛选标签 -->
+                    <div class="quick-filters">
+                        <span class="quick-filter-label">快捷筛选：</span>
+                        <el-tag 
+                            :type="quickFilter === 'recording' ? 'primary' : 'info'" 
+                            :effect="quickFilter === 'recording' ? 'dark' : 'plain'"
+                            @click="setQuickFilter('recording')"
+                            class="quick-tag">
+                            <i class="el-icon-video-camera"></i> 录制中
+                        </el-tag>
+                        <el-tag 
+                            :type="quickFilter === 'pending' ? 'warning' : 'info'" 
+                            :effect="quickFilter === 'pending' ? 'dark' : 'plain'"
+                            @click="setQuickFilter('pending')"
+                            class="quick-tag">
+                            <i class="el-icon-time"></i> 审核中
+                        </el-tag>
+                        <el-tag 
+                            :type="quickFilter === 'failed' ? 'danger' : 'info'" 
+                            :effect="quickFilter === 'failed' ? 'dark' : 'plain'"
+                            @click="setQuickFilter('failed')"
+                            class="quick-tag">
+                            <i class="el-icon-warning"></i> 被退回
+                        </el-tag>
+                        <el-tag 
+                            :type="quickFilter === 'success' ? 'success' : 'info'" 
+                            :effect="quickFilter === 'success' ? 'dark' : 'plain'"
+                            @click="setQuickFilter('success')"
+                            class="quick-tag">
+                            <i class="el-icon-circle-check"></i> 已通过
+                        </el-tag>
+                    </div>
+                    
+                    <!-- 详细筛选 -->
+                    <div class="filter-grid">
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-house"></i> 房间号</label>
+                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small">
+                                <el-option
+                                        v-for="room in roomList"
+                                        :key="room.roomId"
+                                        :label="room.roomId + ' - ' + room.uname"
+                                        :value="room.roomId">
+                                    <span style="float: left">{{ room.uname }}</span>
+                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ room.roomId }}</span>
+                                </el-option>
+                            </el-select>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-video-play"></i> BV号</label>
+                            <el-input v-model="form.bvId" clearable placeholder="输入BV号" size="small" @clear="onFilterChange">
+                                <i slot="prefix" class="el-input__icon el-icon-search"></i>
+                            </el-input>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-upload2"></i> 上传状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.upload" class="select-prefix-icon" :class="form.upload === 'true' ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === 'true' ? '#67c23a' : '#f56c6c'}"></i>
+                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload}">
+                                    <el-option label="已上传" value="true">
+                                        <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已上传
+                                    </el-option>
+                                    <el-option label="未上传" value="false">
+                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>未上传
                                     </el-option>
                                 </el-select>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                            <el-form-item label="bvId">
-                                <el-input clearable v-model="form.bvId"></el-input>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                            <el-form-item label="是否上传">
-                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.upload" style="width: 100%">
-                                    <el-option label="全部" value=""></el-option>
-                                    <el-option label="是" value="true"></el-option>
-                                    <el-option label="否" value="false"></el-option>
+                            </div>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-video-camera"></i> 录制状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.recording" class="select-prefix-icon" :class="form.recording === 'true' ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === 'true' ? '#e6a23c' : '#909399'}"></i>
+                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording}">
+                                    <el-option label="录制中" value="true">
+                                        <i class="el-icon-video-camera" style="color: #e6a23c; margin-right: 6px;"></i>录制中
+                                    </el-option>
+                                    <el-option label="未录制" value="false">
+                                        <i class="el-icon-video-pause" style="color: #909399; margin-right: 6px;"></i>未录制
+                                    </el-option>
                                 </el-select>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                            <el-form-item label="是否录制中">
-                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.recording" style="width: 100%">
-                                    <el-option label="全部" value=""></el-option>
-                                    <el-option label="是" value="true"></el-option>
-                                    <el-option label="否" value="false"></el-option>
+                            </div>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.publish" class="select-prefix-icon" :class="form.publish === 'true' ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === 'true' ? '#67c23a' : '#909399'}"></i>
+                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.publish}">
+                                    <el-option label="已发布" value="true">
+                                        <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已发布
+                                    </el-option>
+                                    <el-option label="未发布" value="false">
+                                        <i class="el-icon-circle-close" style="color: #909399; margin-right: 6px;"></i>未发布
+                                    </el-option>
                                 </el-select>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                            <el-form-item label="是否已发布">
-                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.publish" style="width: 100%">
-                                    <el-option label="全部" value=""></el-option>
-                                    <el-option label="是" value="true"></el-option>
-                                    <el-option label="否" value="false"></el-option>
+                            </div>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-s-check"></i> 审核状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.code !== null && form.code !== undefined && form.code !== ''" class="select-prefix-icon" :class="getCodeIcon(form.code)" :style="{color: getCodeColor(form.code)}"></i>
+                                <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}">
+                                    <el-option label="通过" :value="0">
+                                        <i class="el-icon-success" style="color: #67c23a; margin-right: 6px;"></i>通过
+                                    </el-option>
+                                    <el-option label="仅自己可见" :value="-50">
+                                        <i class="el-icon-view" style="color: #67c23a; margin-right: 6px;"></i>仅自己可见
+                                    </el-option>
+                                    <el-option label="审核中" :value="-1">
+                                        <i class="el-icon-time" style="color: #e6a23c; margin-right: 6px;"></i>审核中
+                                    </el-option>
+                                    <el-option label="被退回" :value="-2">
+                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>被退回
+                                    </el-option>
+                                    <el-option label="被锁定" :value="-4">
+                                        <i class="el-icon-lock" style="color: #f56c6c; margin-right: 6px;"></i>被锁定
+                                    </el-option>
+                                    <el-option label="转码中" :value="-9">
+                                        <i class="el-icon-refresh" style="color: #e6a23c; margin-right: 6px;"></i>转码中
+                                    </el-option>
+                                    <el-option label="已提交" :value="-30">
+                                        <i class="el-icon-upload" style="color: #e6a23c; margin-right: 6px;"></i>已提交
+                                    </el-option>
+                                    <el-option label="定时发布" :value="-40">
+                                        <i class="el-icon-time" style="color: #409eff; margin-right: 6px;"></i>定时发布
+                                    </el-option>
+                                    <el-option label="已删除" :value="-100">
+                                        <i class="el-icon-delete" style="color: #f56c6c; margin-right: 6px;"></i>已删除
+                                    </el-option>
                                 </el-select>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                            <el-form-item label="是否审核通过">
-                                <el-select @change="initTable" clearable placeholder="请选择" v-model="form.code" style="width: 100%">
-                                    <el-option label="全部" value=""></el-option>
-                                    <el-option label="是" value="0"></el-option>
-                                    <el-option label="否" value="-2"></el-option>
-                                </el-select>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :xs="24" :sm="24" :md="16" :lg="12">
-                            <el-form-item label="结束时间">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <el-date-picker
-                                            placeholder="开始时间"
-                                            type="datetime"
-                                            value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
-                                            v-model="form.from"
-                                            style="flex: 1; width: 100%">
-                                    </el-date-picker>
-                                    <span style="margin: 0 10px; color: var(--text-disabled);">-</span>
-                                    <el-date-picker
-                                            placeholder="结束时间"
-                                            type="datetime"
-                                            value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
-                                            v-model="form.to"
-                                            style="flex: 1; width: 100%">
-                                    </el-date-picker>
-                                </div>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :xs="24" :sm="24" :md="24" :lg="24" style="text-align: right;">
-                            <el-form-item>
-                                <el-button @click="initTable" type="primary">查询</el-button>
-                            </el-form-item>
-                        </el-col>
-                    </el-row>
-                </el-form>
-            </el-collapse-item>
-        </el-collapse>
+                            </div>
+                        </div>
+                        
+                        <div class="filter-item filter-item-wide">
+                            <label class="filter-label"><i class="el-icon-date"></i> 结束时间</label>
+                            <div class="date-range">
+                                <el-date-picker
+                                        v-model="form.from"
+                                        type="datetime"
+                                        placeholder="开始时间"
+                                        value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
+                                        size="small"
+                                        @change="onFilterChange">
+                                </el-date-picker>
+                                <span class="date-separator">至</span>
+                                <el-date-picker
+                                        v-model="form.to"
+                                        type="datetime"
+                                        placeholder="结束时间"
+                                        value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
+                                        size="small"
+                                        @change="onFilterChange">
+                                </el-date-picker>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 操作按钮 -->
+                    <div class="filter-footer">
+                        <el-button type="primary" icon="el-icon-search" @click="initTable" size="small">查询</el-button>
+                        <el-button icon="el-icon-refresh" @click="resetFilters" size="small">重置</el-button>
+                    </div>
+                </div>
+            </transition>
+        </div>
     </div>
 
     <transition :name="transitionName" mode="out-in">
@@ -508,7 +598,22 @@
             transitionName: 'fade-transform',
             showSwipeHint: false,
             userChangedPageSize: false,
-            pageSizes: [5, 10, 25, 50, 100]
+            pageSizes: [5, 10, 25, 50, 100],
+            filterExpanded: false,
+            quickFilter: null
+        },
+        computed: {
+            activeFilterCount: function() {
+                let count = 0;
+                if (this.form.roomId) count++;
+                if (this.form.bvId) count++;
+                if (this.form.upload) count++;
+                if (this.form.recording) count++;
+                if (this.form.publish) count++;
+                if (this.form.code !== undefined && this.form.code !== null && this.form.code !== '') count++;
+                if (this.form.from || this.form.to) count++;
+                return count;
+            }
         },
         watch: {
             viewMode: function (val) {
@@ -539,6 +644,72 @@
                         _this.roomList = data;
                     }
                 });
+            },
+            resetFilters: function() {
+                this.form.roomId = '';
+                this.form.bvId = '';
+                this.form.upload = '';
+                this.form.recording = '';
+                this.form.publish = '';
+                this.form.code = null;
+                this.form.from = null;
+                this.form.to = null;
+                this.quickFilter = null;
+                this.initTable();
+            },
+            setQuickFilter: function(type) {
+                this.resetFilters();
+                if (this.quickFilter === type) {
+                    this.quickFilter = null;
+                    return;
+                }
+                this.quickFilter = type;
+                switch(type) {
+                    case 'recording':
+                        this.form.recording = 'true';
+                        break;
+                    case 'pending':
+                        this.form.code = -1;
+                        break;
+                    case 'failed':
+                        this.form.code = -2;
+                        break;
+                    case 'success':
+                        this.form.code = 0;
+                        break;
+                }
+                this.initTable();
+            },
+            onFilterChange: function() {
+                this.quickFilter = null;
+            },
+            getCodeIcon: function(code) {
+                const iconMap = {
+                    0: 'el-icon-success',
+                    '-50': 'el-icon-view',
+                    '-1': 'el-icon-time',
+                    '-2': 'el-icon-circle-close',
+                    '-4': 'el-icon-lock',
+                    '-9': 'el-icon-refresh',
+                    '-30': 'el-icon-upload',
+                    '-40': 'el-icon-time',
+                    '-100': 'el-icon-delete'
+                };
+                return iconMap[String(code)] || '';
+            },
+            getCodeColor: function(code) {
+                const colorMap = {
+                    0: '#67c23a',
+                    '-50': '#67c23a',
+                    '-1': '#e6a23c',
+                    '-2': '#f56c6c',
+                    '-4': '#f56c6c',
+                    '-9': '#e6a23c',
+                    '-30': '#e6a23c',
+                    '-40': '#409eff',
+                    '-100': '#f56c6c'
+                };
+                return colorMap[String(code)] || '';
             },
             closeSwipeHint() {
                 this.showSwipeHint = false;
@@ -901,57 +1072,5 @@
         }
     });
 </script>
-<style>
-    .el-row {
-        margin-bottom: 10px;
-
-    &
-    :last-child {
-        margin-bottom: 0;
-    }
-
-    }
-
-    .detail-group {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-bottom: 10px;
-    }
-    .detail-row {
-        width: calc(50% - 5px);
-        display: flex;
-        align-items: flex-start;
-        font-size: 14px;
-        line-height: 1.5;
-    }
-    .detail-row.full {
-        width: 100%;
-    }
-    .detail-row label {
-        color: var(--text-secondary);
-        width: 80px;
-        flex-shrink: 0;
-        text-align: right;
-        margin-right: 10px;
-    }
-    .detail-row span {
-        color: var(--text-primary);
-        flex: 1;
-        word-break: break-all;
-    }
-    .detail-row .el-tag {
-        flex: none;
-    }
-    @media (max-width: 768px) {
-        .detail-row {
-            width: 100%;
-        }
-        .detail-row label {
-            text-align: left;
-            width: 70px;
-        }
-    }
-</style>
 </body>
 </html>

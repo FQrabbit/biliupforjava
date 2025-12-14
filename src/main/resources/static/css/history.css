@@ -1,0 +1,375 @@
+/* history.html 页面专属样式 */
+
+/* 页面基础布局 */
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+#historyTable {
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+/* 现代化筛选面板样式 */
+.filter-panel {
+    background: var(--bg-card);
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    margin-bottom: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+.filter-panel:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+    border-bottom: 1px solid transparent;
+    transition: all 0.3s ease;
+}
+.filter-panel.is-expanded .filter-header {
+    border-bottom-color: var(--border-color);
+}
+.filter-header:hover {
+    background: var(--bg-secondary);
+}
+.filter-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.filter-title i {
+    color: var(--primary-color, #409eff);
+    font-size: 18px;
+}
+.filter-badge .el-badge__content {
+    background: var(--primary-color, #409eff);
+}
+.filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.reset-btn {
+    color: var(--text-secondary);
+    padding: 4px 8px;
+}
+.reset-btn:hover {
+    color: var(--primary-color, #409eff);
+}
+.expand-icon {
+    color: var(--text-secondary);
+    transition: transform 0.3s ease;
+    font-size: 14px;
+}
+
+.filter-body {
+    padding: 20px;
+}
+
+/* 快捷筛选标签 */
+.quick-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px dashed var(--border-color);
+    flex-wrap: wrap;
+}
+.quick-filter-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-right: 4px;
+}
+.quick-tag {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 16px;
+    padding: 0 12px;
+}
+.quick-tag:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.quick-tag i {
+    margin-right: 4px;
+}
+
+/* 筛选网格 */
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.filter-item-wide {
+    grid-column: span 2;
+}
+.filter-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.filter-label i {
+    font-size: 14px;
+    color: var(--primary-color, #409eff);
+}
+.filter-item .el-select,
+.filter-item .el-input {
+    width: 100%;
+}
+
+/* 日期范围 */
+.date-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.date-range .el-date-editor {
+    flex: 1;
+}
+.date-separator {
+    color: var(--text-disabled);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+/* 筛选底部操作 */
+.filter-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* 筛选面板动画 */
+.filter-slide-enter-active,
+.filter-slide-leave-active {
+    transition: all 0.3s ease;
+    max-height: 500px;
+    opacity: 1;
+}
+.filter-slide-enter,
+.filter-slide-leave-to {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* 详情弹窗样式 */
+.detail-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.detail-row {
+    width: calc(50% - 5px);
+    display: flex;
+    align-items: flex-start;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.detail-row.full {
+    width: 100%;
+}
+.detail-row label {
+    color: var(--text-secondary);
+    width: 80px;
+    flex-shrink: 0;
+    text-align: right;
+    margin-right: 10px;
+}
+.detail-row span {
+    color: var(--text-primary);
+    flex: 1;
+    word-break: break-all;
+}
+.detail-row .el-tag {
+    flex: none;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+    .filter-grid {
+        grid-template-columns: 1fr;
+    }
+    .filter-item-wide {
+        grid-column: span 1;
+    }
+    .quick-filters {
+        flex-wrap: wrap;
+    }
+    .date-range {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .date-separator {
+        text-align: center;
+    }
+    .filter-footer {
+        flex-direction: column;
+    }
+    .filter-footer .el-button {
+        width: 100%;
+    }
+    .detail-row {
+        width: 100%;
+    }
+    .detail-row label {
+        text-align: left;
+        width: 70px;
+    }
+}
+
+/* 带图标的下拉框 */
+.select-with-icon {
+    position: relative;
+    width: 100%;
+}
+.select-prefix-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    font-size: 14px;
+    pointer-events: none;
+    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+.select-with-icon .el-select {
+    width: 100%;
+}
+.select-with-icon .el-select.has-prefix .el-input__inner {
+    padding-left: 30px;
+}
+
+/* 图标动画效果 */
+@keyframes iconBounceIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-50%) scale(0);
+    }
+    50% {
+        transform: translateY(-50%) scale(1.2);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1);
+    }
+}
+
+@keyframes iconPulse {
+    0%, 100% {
+        transform: translateY(-50%) scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: translateY(-50%) scale(1.15);
+        opacity: 0.85;
+    }
+}
+
+@keyframes iconSpin {
+    from {
+        transform: translateY(-50%) rotate(0deg);
+    }
+    to {
+        transform: translateY(-50%) rotate(360deg);
+    }
+}
+
+/* 成功状态图标 - 脉冲效果 */
+.select-prefix-icon.el-icon-success,
+.select-prefix-icon.el-icon-circle-check {
+    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), iconPulse 2s ease-in-out infinite 0.4s;
+}
+
+/* 处理中状态图标 - 旋转效果 */
+.select-prefix-icon.el-icon-refresh,
+.select-prefix-icon.el-icon-loading {
+    animation: iconSpin 1.5s linear infinite;
+}
+
+/* 警告/等待状态图标 - 慢脉冲 */
+.select-prefix-icon.el-icon-time,
+.select-prefix-icon.el-icon-video-camera {
+    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), iconPulse 2.5s ease-in-out infinite 0.4s;
+}
+
+/* 错误状态图标 - 快速脉冲 */
+.select-prefix-icon.el-icon-circle-close,
+.select-prefix-icon.el-icon-warning,
+.select-prefix-icon.el-icon-lock {
+    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), iconPulse 1.5s ease-in-out infinite 0.4s;
+}
+
+/* ========== 下拉选项内图标动画 ========== */
+@keyframes optionPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+    }
+}
+
+@keyframes optionSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 下拉选项图标基础样式 */
+.el-select-dropdown .el-select-dropdown__item i {
+    display: inline-block;
+}
+
+/* 成功状态 - 脉冲 */
+.el-select-dropdown .el-select-dropdown__item i.el-icon-success,
+.el-select-dropdown .el-select-dropdown__item i.el-icon-circle-check,
+.el-select-dropdown .el-select-dropdown__item i.el-icon-view {
+    animation: optionPulse 2s ease-in-out infinite;
+}
+
+/* 处理中 - 旋转 */
+.el-select-dropdown .el-select-dropdown__item i.el-icon-refresh {
+    animation: optionSpin 1.5s linear infinite;
+}
+
+/* 等待状态 - 慢脉冲 */
+.el-select-dropdown .el-select-dropdown__item i.el-icon-time,
+.el-select-dropdown .el-select-dropdown__item i.el-icon-upload,
+.el-select-dropdown .el-select-dropdown__item i.el-icon-video-camera {
+    animation: optionPulse 2.5s ease-in-out infinite;
+}
+
+/* 错误状态 - 快脉冲 */
+.el-select-dropdown .el-select-dropdown__item i.el-icon-circle-close,
+.el-select-dropdown .el-select-dropdown__item i.el-icon-lock,
+.el-select-dropdown .el-select-dropdown__item i.el-icon-delete,
+.el-select-dropdown .el-select-dropdown__item i.el-icon-warning {
+    animation: optionPulse 1.5s ease-in-out infinite;
+}
