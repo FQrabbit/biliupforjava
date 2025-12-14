@@ -42,7 +42,15 @@
                     <el-row :gutter="20">
                         <el-col :xs="24" :sm="12" :md="8" :lg="6">
                             <el-form-item label="房间号">
-                                <el-input clearable placeholder="请输入房间号" v-model="form.roomId"></el-input>
+                                <el-select v-model="form.roomId" clearable filterable placeholder="请选择房间号" @change="initTable" style="width: 100%">
+                                    <el-option label="全部" value=""></el-option>
+                                    <el-option
+                                            v-for="room in roomList"
+                                            :key="room.roomId"
+                                            :label="room.roomId + '-' + room.uname"
+                                            :value="room.roomId">
+                                    </el-option>
+                                </el-select>
                             </el-form-item>
                         </el-col>
                         <el-col :xs="24" :sm="12" :md="8" :lg="6">
@@ -483,6 +491,7 @@
             tableData: [],
             total: 0,
             partData: [],
+            roomList: [],
             editDialogFormVisible: false,
             uploadEditDialogFormVisible: false,
             form: {},
@@ -520,6 +529,17 @@
             window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            loadRoomList: function () {
+                let _this = this;
+                $.ajax({
+                    url: '/room',
+                    type: 'post',
+                    dataType: 'json',
+                    success: function (data) {
+                        _this.roomList = data;
+                    }
+                });
+            },
             closeSwipeHint() {
                 this.showSwipeHint = false;
                 localStorage.setItem('hasShownSwipeHint', 'true');
@@ -869,6 +889,7 @@
                 this.$set(this.form, 'current', 1);
             }
             this.initTable();
+            this.loadRoomList();
             this.handleResize();
             window.addEventListener('resize', this.handleResize);
             var cached = localStorage.getItem('history-view-mode');

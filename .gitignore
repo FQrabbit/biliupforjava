@@ -1,2 +1,16 @@
 local-dev-proxy/
 node_modules/
+
+# Maven
+target/
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+
+# Runtime generated files
+device.properties
