@@ -3,8 +3,8 @@ server:
   forward-headers-strategy: native
   undertow:
     threads:
-      worker: 2
-      io: 2
+      worker: 16
+      io: 4
 spring:
   servlet:
     multipart:

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>录制历史 - Bili Live Recorder</title>
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
@@ -18,14 +19,35 @@
     </script>
 </head>
 <body>
-<div class="container" id="historyTable">
-    <div style="margin-bottom: 10px;">
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
-            <el-radio-group v-model="viewMode" size="mini">
-                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
-                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
-            </el-radio-group>
+<div class="history-container" id="historyApp">
+    <!-- 顶部导航栏 -->
+    <header class="history-header">
+        <div class="header-left">
+            <div class="back-btn" @click="goBack" title="返回首页">
+                <i class="el-icon-arrow-left" style="font-size: 20px;"></i>
+            </div>
+            <h1 class="page-title">
+                <i class="el-icon-time"></i>
+                <span>录制历史</span>
+            </h1>
         </div>
+        <div class="header-actions">
+            <div class="view-toggle">
+                <button class="view-btn" :class="{ 'is-active': viewMode === 'card' }" @click="viewMode = 'card'" title="卡片视图">
+                    <i class="el-icon-menu"></i>
+                </button>
+                <button class="view-btn" :class="{ 'is-active': viewMode === 'table' }" @click="viewMode = 'table'" title="表格视图">
+                    <i class="el-icon-s-grid"></i>
+                </button>
+            </div>
+            <button class="theme-toggle-btn" @click="toggleTheme" :title="isDarkTheme ? '切换到亮色模式' : '切换到暗色模式'">
+                <i :class="isDarkTheme ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="history-main">
         
         <!-- 现代化筛选面板 -->
         <div class="filter-panel" :class="{ 'is-expanded': filterExpanded }">
@@ -214,204 +236,128 @@
                 </div>
             </transition>
         </div>
-    </div>
 
-    <transition :name="transitionName" mode="out-in">
-    <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current">
-        <div class="data-card" 
-             :class="{ 
-                'is-processing': item.upload && (item.code == -1 || item.code == -9 || item.code == -30),
-                'is-failed': item.upload && (item.code == -2 || item.code == -4 || item.code == -100),
-                'is-success': item.upload && (item.code == 0 || item.code == -50),
-                'is-audit-failed': item.upload && item.code != 0 && item.code != -50 && item.code != -1 && item.code != -9 && item.code != -30 && item.code != -2 && item.code != -4 && item.code != -100
-             }" 
-             v-for="item in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="flex: 1; min-width: 0; margin-right: 10px; overflow: hidden;">
-                    <div class="card-title" style="margin-bottom: 8px; word-break: break-all; line-height: 1.4; font-weight: bold; font-size: 16px;">{{ item.title || '无标题' }}</div>
-                    <div v-if="item.bvId" style="margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">BV: {{ item.bvId }}</div>
-                    <div class="card-status-row" style="margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 5px; width: 100%;">
-                        <span class="status-chip success" v-if="item.upload">上传:是</span>
-                        <span class="status-chip danger" v-else>上传:否</span>
-                        <span class="status-chip warn" v-if="item.recording">录制中</span>
-                        <span class="status-chip" :class="item.recording ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
-                    </div>
-                    <div class="card-meta">
-                        <span class="meta-chip">{{ item.startTime }}</span>
-                    </div>
-                </div>
-                
-                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0;">
-                    <el-tag size="mini" type="info">{{ item.roomName }}</el-tag>
-                    <el-tag size="mini" :type="getFileSizeColorType(item.fileSize)">{{ formatFileSize(item.fileSize) }}</el-tag>
-                    <div style="font-size: 12px; color: var(--text-disabled); white-space: nowrap;">
-                        分P: {{ item.partCount }} / 已传: {{ item.uploadPartCount }}
-                    </div>
-                    <div style="font-size: 12px; color: var(--text-disabled); white-space: nowrap;">
-                        弹幕: {{ item.msgCount }}
+        <!-- 数据内容区域 -->
+        <transition :name="transitionName" mode="out-in">
+            <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current">
+                <div class="data-card" 
+                     :class="{ 
+                        'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
+                        'is-failed': item.publish && (item.code == -2 || item.code == -4 || item.code == -100),
+                        'is-success': item.publish && (item.code == 0 || item.code == -50)
+                     }" 
+                     v-for="item in tableData" :key="item.id" @click="showDetail(item)">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
+                            <div class="card-title">{{ item.title || '无标题' }}</div>
+                            <div v-if="item.bvId" class="card-bvid">BV: {{ item.bvId }}</div>
+                            <div class="card-status-row">
+                                <span class="status-chip success" v-if="item.upload">已上传</span>
+                                <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未上传</span>
+                                <span class="status-chip warn" v-if="item.recording">录制中</span>
+                                <span class="status-chip" :class="item.recording ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
+                            </div>
+                            <div class="card-meta">
+                                <span class="meta-chip">{{ item.startTime }}</span>
+                            </div>
+                        </div>
+                        <div class="card-info-right">
+                            <el-tag size="mini" type="info">{{ item.roomName }}</el-tag>
+                            <el-tag size="mini" :type="getFileSizeColorType(item.fileSize)">{{ formatFileSize(item.fileSize) }}</el-tag>
+                            <span class="card-info-text">分P: {{ item.partCount }} / 已传: {{ item.uploadPartCount }}</span>
+                            <span class="card-info-text">弹幕: {{ item.msgCount }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div v-else class="table-scroll" key="table">
-        <el-table
-                v-loading="loading"
-                :data="tableData"
-                height="calc(100vh - 230px )"
-                style="width: 100%">
-        <el-table-column
-                label="id"
-                prop="id"
-                width="60">
-        </el-table-column>
-        <el-table-column
-                label="房间号"
-                prop="roomId"
-                width="100">
-        </el-table-column>
-        <el-table-column
-                label="主播名"
-                prop="roomName"
-                width="80">
-        </el-table-column>
-        <el-table-column
-                label="bv号"
-                prop="bvId"
-                width="120">
-        </el-table-column>
-        <el-table-column
-                label="标题"
-                prop="title"
-                width="120">
-        </el-table-column>
-        <el-table-column
-                label="文件大小"
-                prop="fileSize"
-                width="100">
-            <template slot-scope="scope">
-                {{(scope.row.fileSize/1024/1024/1024).toFixed(2)}}(GB)
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="视频总时长"
-                prop="partDuration"
-                width="120">
-            <template slot-scope="scope">
-                {{Math.floor(scope.row.partDuration/60/60)}}小时{{((scope.row.partDuration/60)%60).toFixed(0)}}分钟
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="分p数量"
-                prop="partCount"
-                width="80">
-        </el-table-column>
-        <el-table-column
-                label="录制中的分p数量"
-                prop="recordPartCount"
-                width="80">
-        </el-table-column>
-        <el-table-column
-                label="已上传的分p数量"
-                prop="uploadPartCount"
-                width="80">
-        </el-table-column>
-        <el-table-column
-                label="弹幕数量"
-                prop="msgCount"
-                width="80">
-        </el-table-column>
-        <el-table-column
-                label="发送成功的弹幕数量"
-                prop="successMsgCount"
-                width="80">
-        </el-table-column>
-        <el-table-column
-                label="录制中"
-                prop="recording"
-                width="100">
-            <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.recording">录制中</span>
-                <span class="status-chip danger" v-else>未录制</span>
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="是否上传"
-                prop="upload"
-                width="100">
-            <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.upload">是</span>
-                <span class="status-chip danger" v-else>否</span>
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="是否发布成功"
-                prop="publish"
-                width="100">
-            <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.publish">已发布</span>
-                <span class="status-chip danger" v-else>未发布</span>
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="是否审核通过"
-                prop="code"
-                width="100">
-            <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.code == 0">通过</span>
-                <span class="status-chip success" v-else-if="scope.row.code == -50">仅自己可见</span>
-                <span class="status-chip warn" v-else-if="scope.row.code == -1">审核中</span>
-                <span class="status-chip danger" v-else-if="scope.row.code == -2">被退回</span>
-                <span class="status-chip danger" v-else-if="scope.row.code == -4">被锁定</span>
-                <span class="status-chip warn" v-else-if="scope.row.code == -9">转码中</span>
-                <span class="status-chip warn" v-else-if="scope.row.code == -30">已提交</span>
-                <span class="status-chip warn" v-else-if="scope.row.code == -40">定时发布</span>
-                <span class="status-chip danger" v-else-if="scope.row.code == -100">已删除</span>
-                <span class="status-chip danger" v-else>未通过({{scope.row.code}})</span>
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="开始时间"
-                prop="startTime"
-                width="170">
-        </el-table-column>
-        <el-table-column
-                label="结束时间"
-                prop="endTime"
-                width="170">
-        </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
-            <template slot-scope="scope">
-                <el-button
-                        @click="handleEdit(scope.$index, scope.row)" size="mini"
-                        type="text">编辑
-                </el-button>
-                <el-dropdown trigger="click" size="mini">
-                    <el-button size="mini" type="text">
-                        更多<i class="el-icon-arrow-down el-icon--right"></i>
-                    </el-button>
-                    <el-dropdown-menu slot="dropdown">
-                        <el-dropdown-item @click.native="rePublish(scope.row.id)">转码失败修复</el-dropdown-item>
-                        <el-dropdown-item @click.native="highEnergyCutPublish(scope.row.id)">发布高能片段</el-dropdown-item>
-                        <el-dropdown-item divided></el-dropdown-item>
-                        <el-dropdown-item @click.native="updatePartStatus(scope.row.id)">结束分p录制状态</el-dropdown-item>
-                        <el-dropdown-item @click.native="touchPublish(scope.row.id)">触发发布事件</el-dropdown-item>
-                        <el-dropdown-item @click.native="updatePublishStatus(scope.row.id)">重置为未上传发布</el-dropdown-item>
-                        <el-dropdown-item divided></el-dropdown-item>
-                        <el-dropdown-item @click.native="reloadHistoryMsg(scope.row.id)">重新加载弹幕</el-dropdown-item>
-                        <el-dropdown-item @click.native="deleteHistoryMsg(scope.row.id)">删除弹幕</el-dropdown-item>
-                        <el-dropdown-item divided></el-dropdown-item>
-                        <el-dropdown-item @click.native="deleteHistory(scope.row.id)" style="color: #F56C6C;">删除</el-dropdown-item>
-                    </el-dropdown-menu>
-                </el-dropdown>
-            </template>
-        </el-table-column>
-        </el-table>
-    </div>
-    </transition>
-    <template>
-        <div class="block" style="text-align: center; margin-top: 20px; padding-bottom: 20px;">
+            <!-- 表格视图 -->
+            <div v-else class="table-container" key="table">
+                <el-table
+                        v-loading="loading"
+                        :data="tableData"
+                        height="calc(100vh - 280px)"
+                        style="width: 100%">
+                    <el-table-column label="ID" prop="id" width="60"></el-table-column>
+                    <el-table-column label="房间号" prop="roomId" width="100"></el-table-column>
+                    <el-table-column label="主播" prop="roomName" width="100"></el-table-column>
+                    <el-table-column label="BV号" prop="bvId" width="120"></el-table-column>
+                    <el-table-column label="标题" prop="title" min-width="150" show-overflow-tooltip></el-table-column>
+                    <el-table-column label="文件大小" prop="fileSize" width="100">
+                        <template slot-scope="scope">
+                            <el-tag size="mini" :type="getFileSizeColorType(scope.row.fileSize)">{{ formatFileSize(scope.row.fileSize) }}</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="时长" prop="partDuration" width="110">
+                        <template slot-scope="scope">{{ formatDuration(scope.row.partDuration) }}</template>
+                    </el-table-column>
+                    <el-table-column label="分P" prop="partCount" width="60"></el-table-column>
+                    <el-table-column label="录制中分P" prop="recordPartCount" width="80"></el-table-column>
+                    <el-table-column label="已上传分P" prop="uploadPartCount" width="80"></el-table-column>
+                    <el-table-column label="弹幕" prop="msgCount" width="70"></el-table-column>
+                    <el-table-column label="成功弹幕" prop="successMsgCount" width="80"></el-table-column>
+                    <el-table-column label="录制" prop="recording" width="80">
+                        <template slot-scope="scope">
+                            <span class="status-chip" :class="scope.row.recording ? 'warn' : 'success'">{{ scope.row.recording ? '录制中' : '已完成' }}</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="是否上传" prop="upload" width="90">
+                        <template slot-scope="scope">
+                            <span class="status-chip success" v-if="scope.row.upload">是</span>
+                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>否</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="是否发布成功" prop="publish" width="80">
+                        <template slot-scope="scope">
+                            <span class="status-chip success" v-if="scope.row.publish">已发布</span>
+                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="是否审核通过" prop="code" width="90">
+                        <template slot-scope="scope">
+                            <el-tag size="mini" type="info" v-if="!scope.row.publish">未审核</el-tag>
+                            <el-tag size="mini" type="success" v-else-if="scope.row.code == 0">通过</el-tag>
+                            <el-tag size="mini" type="success" v-else-if="scope.row.code == -50">仅自己可见</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -1">审核中</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == -2">被退回</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == -4">被锁定</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -9">转码中</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -30">已提交</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -40">定时发布</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == -100">已删除</el-tag>
+                            <el-tag size="mini" type="danger" v-else>未通过</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="开始时间" prop="startTime" width="160"></el-table-column>
+                    <el-table-column label="操作" width="140" fixed="right">
+                        <template slot-scope="scope">
+                            <el-button @click.stop="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
+                            <el-dropdown trigger="click" size="mini" @command="handleCommand($event, scope.row)">
+                                <el-button size="mini" type="text">
+                                    更多<i class="el-icon-arrow-down el-icon--right"></i>
+                                </el-button>
+                                <el-dropdown-menu slot="dropdown">
+                                    <el-dropdown-item command="rePublish">转码失败修复</el-dropdown-item>
+                                    <el-dropdown-item command="highEnergyCutPublish">发布高能片段</el-dropdown-item>
+                                    <el-dropdown-item divided></el-dropdown-item>
+                                    <el-dropdown-item command="updatePartStatus">结束分p录制状态</el-dropdown-item>
+                                    <el-dropdown-item command="touchPublish">触发发布事件</el-dropdown-item>
+                                    <el-dropdown-item command="updatePublishStatus">重置为未上传发布</el-dropdown-item>
+                                    <el-dropdown-item divided></el-dropdown-item>
+                                    <el-dropdown-item command="reloadHistoryMsg">重新加载弹幕</el-dropdown-item>
+                                    <el-dropdown-item command="deleteHistoryMsg">删除弹幕</el-dropdown-item>
+                                    <el-dropdown-item divided></el-dropdown-item>
+                                    <el-dropdown-item command="deleteHistory" style="color: #F56C6C;">删除</el-dropdown-item>
+                                </el-dropdown-menu>
+                            </el-dropdown>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+        </transition>
+
+        <!-- 分页 -->
+        <div class="pagination-container">
             <div v-if="isMobile && showSwipeHint && viewMode === 'card'" class="swipe-hint" @click="closeSwipeHint">
                 <i class="el-icon-back swipe-icon"></i>
                 <span>左右滑动可切换页码</span>
@@ -429,8 +375,10 @@
                     :total="total">
             </el-pagination>
         </div>
-    </template>
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body>
+    </main>
+
+    <!-- 详情弹窗 -->
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog">
         <div class="detail-content" v-if="currentDetail.id">
             <div class="detail-group">
                 <div class="detail-row full">
@@ -486,11 +434,13 @@
             <div class="detail-group">
                 <div class="detail-row">
                     <label>上传状态</label>
-                    <el-tag size="mini" :type="currentDetail.upload ? 'success' : 'danger'" effect="dark">{{ currentDetail.upload ? '已上传' : '未上传' }}</el-tag>
+                    <el-tag size="mini" type="success" effect="dark" v-if="currentDetail.upload">已上传</el-tag>
+                    <el-tag size="mini" type="info" effect="dark" v-else>未上传</el-tag>
                 </div>
                 <div class="detail-row">
                     <label>发布状态</label>
-                    <el-tag size="mini" :type="currentDetail.publish ? 'success' : 'danger'" effect="dark">{{ currentDetail.publish ? '已发布' : '未发布' }}</el-tag>
+                    <el-tag size="mini" type="success" effect="dark" v-if="currentDetail.publish">已发布</el-tag>
+                    <el-tag size="mini" type="info" effect="dark" v-else>未发布</el-tag>
                 </div>
                 <div class="detail-row">
                     <label>录制状态</label>
@@ -498,7 +448,8 @@
                 </div>
                 <div class="detail-row">
                     <label>审核状态</label>
-                    <el-tag size="mini" type="success" effect="dark" v-if="currentDetail.code == 0">通过</el-tag>
+                    <el-tag size="mini" type="info" effect="dark" v-if="!currentDetail.publish">未审核</el-tag>
+                    <el-tag size="mini" type="success" effect="dark" v-else-if="currentDetail.code == 0">通过</el-tag>
                     <el-tag size="mini" type="success" effect="dark" v-else-if="currentDetail.code == -50">仅自己可见</el-tag>
                     <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -1">审核中</el-tag>
                     <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -2">被退回</el-tag>
@@ -512,40 +463,33 @@
             </div>
             
             <el-divider content-position="left">操作</el-divider>
-            
-            <div class="detail-actions" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
-                <el-button @click="handleEdit(0, currentDetail)" size="small" type="primary" plain>编辑</el-button>
-                
-                <el-button @click="rePublish(currentDetail.id)" size="small" type="danger" plain>转码失败修复</el-button>
-                
-                <el-button @click="highEnergyCutPublish(currentDetail.id)" size="small" type="primary" plain>发布高能片段</el-button>
-                
-                <el-button @click="updatePartStatus(currentDetail.id)" size="small" type="danger" plain>结束分p录制状态</el-button>
-                
-                <el-button @click="touchPublish(currentDetail.id)" size="small" type="danger" plain>触发发布事件</el-button>
-                
-                <el-button @click="updatePublishStatus(currentDetail.id)" size="small" type="danger" plain>重置为未上传发布</el-button>
-                
-                <el-button @click="reloadHistoryMsg(currentDetail.id)" size="small" type="danger" plain>重新加载弹幕</el-button>
-                
-                <el-button @click="deleteHistoryMsg(currentDetail.id)" size="small" type="danger" plain>删除弹幕</el-button>
-                
-                <el-button @click="deleteHistory(currentDetail.id)" size="small" type="danger" plain>删除</el-button>
+            <div class="detail-actions">
+                <el-button @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
+                <el-button @click="rePublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
+                <el-button @click="highEnergyCutPublish(currentDetail.id)" size="small" type="success" plain icon="el-icon-video-play">高能片段</el-button>
+                <el-button @click="updatePartStatus(currentDetail.id)" size="small" plain icon="el-icon-video-pause">结束录制</el-button>
+                <el-button @click="touchPublish(currentDetail.id)" size="small" plain icon="el-icon-s-promotion">触发发布</el-button>
+                <el-button @click="updatePublishStatus(currentDetail.id)" size="small" plain icon="el-icon-refresh-left">重置状态</el-button>
+                <el-button @click="reloadHistoryMsg(currentDetail.id)" size="small" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
+                <el-button @click="deleteHistoryMsg(currentDetail.id)" size="small" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
+                <el-button @click="deleteHistory(currentDetail.id)" size="small" type="danger" icon="el-icon-delete">删除记录</el-button>
             </div>
         </div>
         <div slot="footer" class="dialog-footer">
             <el-button @click="detailDialogVisible = false">关 闭</el-button>
         </div>
     </el-dialog>
-    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="用户信息">
-        <el-form :model="history">
-            <el-form-item label="是否上传" label-width="80px">
+
+    <!-- 编辑弹窗 -->
+    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="编辑记录" custom-class="edit-dialog">
+        <el-form :model="history" label-width="100px">
+            <el-form-item label="是否上传">
                 <el-select placeholder="请选择" v-model="history.upload">
                     <el-option label="是" :value="true"></el-option>
                     <el-option label="否" :value="false"></el-option>
                 </el-select>
             </el-form-item>
-            <el-form-item label="是否录制中" label-width="90px">
+            <el-form-item label="是否录制中">
                 <el-select placeholder="请选择" v-model="history.recording">
                     <el-option label="是" :value="true"></el-option>
                     <el-option label="否" :value="false"></el-option>
@@ -553,29 +497,13 @@
             </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
-            <el-button @click="editDialogFormVisible = false">放 弃</el-button>
+            <el-button @click="editDialogFormVisible = false">取 消</el-button>
             <el-button @click="updateHistory()" type="primary">保 存</el-button>
         </div>
-    </el-dialog>
-
-    <!--    <el-dialog :visible.sync="uploadEditDialogFormVisible" title="上传到云剪辑">-->
-    <!--        <el-select v-model="uploadEditPartId" placeholder="请选择">-->
-    <!--            <el-option-->
-    <!--                    v-for="item in partData"-->
-    <!--                    :key="item.id"-->
-    <!--                    :label="item.title"-->
-    <!--                    :value="item.id">-->
-    <!--            </el-option>-->
-    <!--        </el-select>-->
-    <!--        <div class="dialog-footer" slot="footer">-->
-    <!--            <el-button @click="uploadEditDialogFormVisible = false">取 消</el-button>-->
-    <!--            <el-button @click="uploadEditPart();uploadEditDialogFormVisible = false" type="primary">确 定</el-button>-->
-    <!--        </div>-->
-    <!--    </el-dialog>-->
 </div>
 <script>
     new Vue({
-        el: '#historyTable',
+        el: '#historyApp',
         data: {
             formLabelWidth: '150px',
             tableData: [],
@@ -600,7 +528,8 @@
             userChangedPageSize: false,
             pageSizes: [5, 10, 25, 50, 100],
             filterExpanded: false,
-            quickFilter: null
+            quickFilter: null,
+            isDarkTheme: document.documentElement.getAttribute('data-theme') === 'dark'
         },
         computed: {
             activeFilterCount: function() {
@@ -634,6 +563,26 @@
             window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            goBack: function() {
+                window.location.href = '../index.html';
+            },
+            toggleTheme: function() {
+                this.isDarkTheme = !this.isDarkTheme;
+                document.documentElement.setAttribute('data-theme', this.isDarkTheme ? 'dark' : 'light');
+                localStorage.setItem('theme', this.isDarkTheme ? 'dark' : 'light');
+            },
+            handleCommand: function(command, row) {
+                switch(command) {
+                    case 'rePublish': this.rePublish(row.id); break;
+                    case 'highEnergyCutPublish': this.highEnergyCutPublish(row.id); break;
+                    case 'updatePartStatus': this.updatePartStatus(row.id); break;
+                    case 'touchPublish': this.touchPublish(row.id); break;
+                    case 'updatePublishStatus': this.updatePublishStatus(row.id); break;
+                    case 'reloadHistoryMsg': this.reloadHistoryMsg(row.id); break;
+                    case 'deleteHistoryMsg': this.deleteHistoryMsg(row.id); break;
+                    case 'deleteHistory': this.deleteHistory(row.id); break;
+                }
+            },
             loadRoomList: function () {
                 let _this = this;
                 $.ajax({
@@ -670,12 +619,15 @@
                         break;
                     case 'pending':
                         this.form.code = -1;
+                        this.form.publish = 'true'; // 只有已发布的才有真正的审核状态
                         break;
                     case 'failed':
                         this.form.code = -2;
+                        this.form.publish = 'true';
                         break;
                     case 'success':
                         this.form.code = 0;
+                        this.form.publish = 'true';
                         break;
                 }
                 this.initTable();

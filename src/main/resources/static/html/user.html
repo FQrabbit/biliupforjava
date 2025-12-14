@@ -6,6 +6,7 @@
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
+    <link href="../css/user.css" rel="stylesheet">
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
@@ -17,126 +18,171 @@
     </script>
 </head>
 <body>
-<div class="container" id="userTable">
-    <div class="action-bar" style="justify-content: space-between;">
-        <el-button @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-mobile-phone" type="primary">登录</el-button>
-        <el-radio-group v-model="viewMode" size="small">
-            <el-radio-button label="card"><i class="el-icon-menu"></i> 卡片</el-radio-button>
-            <el-radio-button label="table"><i class="el-icon-s-grid"></i> 表格</el-radio-button>
-        </el-radio-group>
-    </div>
-
-    <transition name="fade-transform" mode="out-in">
-    <div v-if="viewMode === 'card'" class="data-card-grid" key="card">
-        <div class="data-card" v-for="item in tableData" :key="item.id">
-            <div class="card-header">
-                <span class="card-title">{{ item.uname || '未命名用户' }}</span>
-                <el-tag size="mini" type="info">{{ item.uid }}</el-tag>
+<div class="user-container" id="userTable">
+    <!-- 页面头部 -->
+    <div class="user-header">
+        <div class="user-header-left">
+            <div class="user-header-title">
+                <i class="el-icon-user icon"></i>
+                <h2>用户管理</h2>
             </div>
-            <div class="card-body">
-                <div class="card-status-row">
-                    <span class="status-chip success" v-if="item.login">已登录</span>
-                    <span class="status-chip danger" v-else>未登录</span>
-                    <span class="status-chip success" v-if="item.enable">弹幕:开</span>
-                    <span class="status-chip danger" v-else>弹幕:关</span>
+            <div class="user-stats">
+                <div class="user-stat-item">
+                    <div class="user-stat-value">{{ tableData.length }}</div>
+                    <div class="user-stat-label">总用户</div>
                 </div>
-                <div class="card-meta">
-                    <span class="meta-chip">{{ item.updateTime }}</span>
+                <div class="user-stat-item">
+                    <div class="user-stat-value">{{ tableData.filter(u => u.login).length }}</div>
+                    <div class="user-stat-label">已登录</div>
                 </div>
             </div>
-            <div class="card-footer" style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                <el-button size="mini" icon="el-icon-edit" @click="handleEdit(0, item)">编辑</el-button>
-                <el-popconfirm @confirm="deleteUser(item.id)" title="确定删除吗？" confirm-button-text="删除" cancel-button-text="保留" confirm-button-type="danger" style="margin-left: 10px;">
-                    <el-button slot="reference" size="mini" type="danger" icon="el-icon-delete">删除</el-button>
-                </el-popconfirm>
-            </div>
+        </div>
+        <div class="user-header-actions">
+            <el-button class="login-btn" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus" type="primary">
+                添加账号
+            </el-button>
+            <el-radio-group v-model="viewMode" size="small">
+                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
+                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
+            </el-radio-group>
         </div>
     </div>
 
-    <div v-else class="table-scroll" key="table">
-        <el-table
-                v-loading="loading"
-                :data="tableData"
-                height="calc(100vh - 150px )"
-                style="width: 100%">
-        <el-table-column
-                label="用户id"
-                prop="uid"
-                width="120">
-        </el-table-column>
-        <el-table-column
-                label="昵称"
-                prop="uname"
-                width="120">
-        </el-table-column>
-        <el-table-column
-                label="是否登录"
-                prop="login"
-                width="120">
-            <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.login">已登录</span>
-                <span class="status-chip danger" v-else>未登录</span>
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="发送弹幕"
-                prop="enable"
-                width="120">
-            <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.enable">允许</span>
-                <span class="status-chip danger" v-else>关闭</span>
-            </template>
-        </el-table-column>
-        <el-table-column
-                label="更新时间"
-                prop="updateTime"
-                width="220">
-        </el-table-column>
-        <el-table-column label="操作"
-                 width="180">
-            <template slot-scope="scope">
-                <el-button
-                        @click="handleEdit(scope.$index, scope.row)" size="mini"
-                        type="primary">编辑
-                </el-button>
-                <el-popconfirm
-                        @confirm="deleteUser(scope.row.id)"
-                        title="确定删除吗？" confirm-button-text="删除" cancel-button-text="保留" confirm-button-type="danger">
-                    <el-button slot="reference" size="mini"
-                               type="danger">删除
-                    </el-button>
-                </el-popconfirm>
-            </template>
-        </el-table-column>
-        </el-table>
-    </div>
+    <!-- 内容区域 -->
+    <transition name="fade-transform" mode="out-in">
+        <!-- 空状态 -->
+        <div v-if="tableData.length === 0 && !loading" class="empty-state" key="empty">
+            <i class="el-icon-user empty-icon"></i>
+            <h3 class="empty-title">还没有添加账号</h3>
+            <p class="empty-desc">点击上方"添加账号"按钮，扫码登录您的B站账号</p>
+            <el-button type="primary" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus">
+                立即添加
+            </el-button>
+        </div>
+
+        <!-- 卡片视图 -->
+        <div v-else-if="viewMode === 'card'" class="user-card-grid" key="card">
+            <div class="user-card" 
+                 :class="{ 'is-active': item.login && item.enable, 'is-warning': !item.login }" 
+                 v-for="item in tableData" :key="item.id">
+                <div class="user-card-header">
+                    <div class="user-avatar">{{ (item.uname || 'U').charAt(0).toUpperCase() }}</div>
+                    <div class="user-info">
+                        <h3 class="user-name">{{ item.uname || '未命名用户' }}</h3>
+                        <div class="user-uid">UID: {{ item.uid }}</div>
+                    </div>
+                </div>
+                <div class="user-card-body">
+                    <div class="user-status-grid">
+                        <div class="status-item">
+                            <div class="status-icon" :class="item.login ? 'success' : 'danger'">
+                                <i :class="item.login ? 'el-icon-check' : 'el-icon-close'"></i>
+                            </div>
+                            <div class="status-text">
+                                <div class="status-label">登录状态</div>
+                                <div class="status-value" :class="item.login ? 'success' : 'danger'">
+                                    {{ item.login ? '已登录' : '未登录' }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-icon" :class="item.enable ? 'success' : 'danger'">
+                                <i :class="item.enable ? 'el-icon-chat-dot-round' : 'el-icon-turn-off'"></i>
+                            </div>
+                            <div class="status-text">
+                                <div class="status-label">弹幕发送</div>
+                                <div class="status-value" :class="item.enable ? 'success' : 'danger'">
+                                    {{ item.enable ? '已开启' : '已关闭' }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="user-update-time">
+                        <i class="el-icon-time"></i>
+                        <span>更新于 {{ item.updateTime }}</span>
+                    </div>
+                </div>
+                <div class="user-card-footer">
+                    <el-button size="small" icon="el-icon-edit" @click="handleEdit(0, item)">编辑</el-button>
+                    <el-popconfirm @confirm="deleteUser(item.id)" title="确定删除该账号吗？" confirm-button-text="删除" cancel-button-text="取消" confirm-button-type="danger">
+                        <el-button slot="reference" size="small" type="danger" icon="el-icon-delete">删除</el-button>
+                    </el-popconfirm>
+                </div>
+            </div>
+        </div>
+
+        <!-- 表格视图 -->
+        <div v-else class="table-wrapper" key="table">
+            <el-table
+                    v-loading="loading"
+                    :data="tableData"
+                    style="width: 100%">
+                <el-table-column label="用户ID" prop="uid" width="130"></el-table-column>
+                <el-table-column label="昵称" prop="uname" min-width="150"></el-table-column>
+                <el-table-column label="登录状态" width="120">
+                    <template slot-scope="scope">
+                        <el-tag :type="scope.row.login ? 'success' : 'danger'" size="small">
+                            {{ scope.row.login ? '已登录' : '未登录' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="弹幕发送" width="120">
+                    <template slot-scope="scope">
+                        <el-tag :type="scope.row.enable ? 'success' : 'info'" size="small">
+                            {{ scope.row.enable ? '已开启' : '已关闭' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="更新时间" prop="updateTime" width="200"></el-table-column>
+                <el-table-column label="操作" width="180" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" icon="el-icon-edit">编辑</el-button>
+                        <el-popconfirm @confirm="deleteUser(scope.row.id)" title="确定删除吗？" confirm-button-type="danger">
+                            <el-button slot="reference" size="mini" type="danger" icon="el-icon-delete">删除</el-button>
+                        </el-popconfirm>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
     </transition>
 
-    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="isMobile" @close="try{loginReturnAjax.abort();}catch(e){}" title="登录" center>
-        <div style="text-align: center; margin-bottom: 20px;">
-            <div style="margin-bottom: 10px;">登录成功请自行刷新二维码(有效期五分钟)</div>
-            <el-image
-                    :src="'data:image/png;base64,' + image" fit="fill"
-                    style="width: 250px; height: 250px"></el-image>
+    <!-- 登录弹窗 -->
+    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="isMobile" @close="cancelLogin" title="扫码登录" center custom-class="login-dialog" width="420px">
+        <div class="login-qr-wrapper">
+            <div class="login-tips">
+                <i class="el-icon-mobile-phone"></i>
+                <span>请使用哔哩哔哩APP扫描二维码</span>
+            </div>
+            <div class="login-status" :style="{color: loginStatusColor}">
+                <i :class="loginStatusIcon"></i>
+                <span>{{ loginStatusText }}</span>
+            </div>
+            <div class="qr-container">
+                <el-image :src="'data:image/png;base64,' + image" fit="contain"></el-image>
+            </div>
         </div>
         <div slot="footer" class="dialog-footer">
-            <el-button @click="getLoginImage();initTable();" type="primary">刷新</el-button>
-            <el-button @click="dialogLoginVisible = false;initTable();loginReturnAjax.abort();">关闭</el-button>
+            <el-button @click="getLoginImage();" type="primary" icon="el-icon-refresh" :loading="loginLoading">刷新二维码</el-button>
+            <el-button @click="cancelLogin">关闭</el-button>
         </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="用户信息">
-        <el-form :model="user">
-            <el-form-item :label-width="formLabelWidth" label="是否启用弹幕发送">
-                <el-select placeholder="请选择" v-model="user.enable">
-                    <el-option label="是" :value="true"></el-option>
-                    <el-option label="否" :value="false"></el-option>
-                </el-select>
+    <!-- 编辑弹窗 -->
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="编辑用户设置" width="500px">
+        <el-form :model="user" label-width="120px">
+            <el-form-item label="用户昵称">
+                <el-input :value="user.uname" disabled></el-input>
+            </el-form-item>
+            <el-form-item label="弹幕发送权限">
+                <el-switch v-model="user.enable" active-text="开启" inactive-text="关闭"></el-switch>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                    开启后，此账号可用于发送弹幕
+                </div>
             </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
-            <el-button @click="dialogFormVisible = false">放 弃</el-button>
-            <el-button @click="updateUser()" type="primary">保 存</el-button>
+            <el-button @click="dialogFormVisible = false">取消</el-button>
+            <el-button @click="updateUser()" type="primary">保存设置</el-button>
         </div>
     </el-dialog>
 </div>
@@ -150,10 +196,45 @@
             tableData: [],
             user: {},
             image: '',
-            loginReturnAjax: {},
+            loginKey: '',
+            loginCheckTimer: null,
+            loginLoading: false,
+            loginStatus: 'pending', // pending, scanned, success, expired, failed
             loading: false,
             isMobile: window.innerWidth <= 768,
             viewMode: 'card'
+        },
+        computed: {
+            loginStatusText: function() {
+                switch(this.loginStatus) {
+                    case 'pending': return '等待扫码，二维码有效期5分钟';
+                    case 'scanned': return '已扫码，请在手机上确认登录';
+                    case 'success': return '登录成功！';
+                    case 'expired': return '二维码已过期，请刷新';
+                    case 'failed': return '登录失败，请重试';
+                    default: return '等待扫码';
+                }
+            },
+            loginStatusColor: function() {
+                switch(this.loginStatus) {
+                    case 'pending': return 'var(--text-disabled)';
+                    case 'scanned': return '#e6a23c';
+                    case 'success': return '#67c23a';
+                    case 'expired': 
+                    case 'failed': return '#f56c6c';
+                    default: return 'var(--text-disabled)';
+                }
+            },
+            loginStatusIcon: function() {
+                switch(this.loginStatus) {
+                    case 'pending': return 'el-icon-time';
+                    case 'scanned': return 'el-icon-loading';
+                    case 'success': return 'el-icon-success';
+                    case 'expired': return 'el-icon-warning';
+                    case 'failed': return 'el-icon-error';
+                    default: return 'el-icon-time';
+                }
+            }
         },
         watch: {
             viewMode: function (val) {
@@ -182,32 +263,84 @@
             },
             getLoginImage: function () {
                 let _this = this;
-                try {
-                    _this.loginReturnAjax.abort();
-                } catch (e) {
-                }
+                // 停止之前的轮询
+                _this.stopLoginCheck();
+                _this.loginLoading = true;
+                _this.loginStatus = 'pending';
 
                 $.ajax({
                     url: '/biliUser/login',
                     type: 'get',
+                    dataType: 'json',
                     success: function (data) {
-                        _this.image = data;
-                        var param = {key: _this.image.substring(_this.image.length - 100)};
-                        _this.loginReturnAjax = $.ajax({
-                            url: '/biliUser/loginReturn',
-                            type: 'get',
-                            data: param,
-                            success: function (returnData) {
-                                _this.$message({
-                                    message: returnData.msg,
-                                    type: returnData.type
-                                });
-                                _this.initTable();
-                                _this.dialogLoginVisible = false;
-                            }
-                        });
+                        _this.loginLoading = false;
+                        if (data.error) {
+                            _this.$message.error(data.error);
+                            return;
+                        }
+                        _this.image = data.image;
+                        _this.loginKey = data.key;
+                        _this.loginStatus = 'pending';
+                        // 开始轮询检查登录状态
+                        _this.startLoginCheck();
+                    },
+                    error: function() {
+                        _this.loginLoading = false;
+                        _this.$message.error('获取二维码失败');
                     }
                 });
+            },
+            startLoginCheck: function() {
+                let _this = this;
+                // 每2秒检查一次登录状态
+                _this.loginCheckTimer = setInterval(function() {
+                    if (!_this.loginKey) return;
+                    
+                    $.ajax({
+                        url: '/biliUser/loginCheck',
+                        type: 'get',
+                        data: { key: _this.loginKey },
+                        dataType: 'json',
+                        success: function(data) {
+                            _this.loginStatus = data.status;
+                            
+                            if (data.status === 'success') {
+                                _this.stopLoginCheck();
+                                _this.$message.success(data.message);
+                                _this.initTable();
+                                _this.dialogLoginVisible = false;
+                            } else if (data.status === 'expired' || data.status === 'failed') {
+                                _this.stopLoginCheck();
+                                _this.$message.warning(data.message);
+                            }
+                            // scanned 和 pending 状态继续轮询
+                        },
+                        error: function() {
+                            // 网络错误时不停止轮询，继续尝试
+                        }
+                    });
+                }, 2000);
+            },
+            stopLoginCheck: function() {
+                if (this.loginCheckTimer) {
+                    clearInterval(this.loginCheckTimer);
+                    this.loginCheckTimer = null;
+                }
+            },
+            cancelLogin: function() {
+                let _this = this;
+                _this.stopLoginCheck();
+                // 通知后端取消登录会话
+                if (_this.loginKey) {
+                    $.ajax({
+                        url: '/biliUser/loginCancel',
+                        type: 'get',
+                        data: { key: _this.loginKey }
+                    });
+                    _this.loginKey = '';
+                }
+                _this.dialogLoginVisible = false;
+                _this.initTable();
             },
             handleEdit: function (index, row) {
                 this.user = JSON.parse(JSON.stringify(row));
@@ -254,6 +387,7 @@
             }
         },
         beforeDestroy: function () {
+            this.stopLoginCheck();
             window.removeEventListener('resize', this.handleResize);
         }
     });

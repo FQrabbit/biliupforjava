@@ -146,10 +146,16 @@ public class RecordBiliPublishService {
                 BiliVideoPartInfoResponse.Video video = videoMap.get(uploadPart.getTitle());
                 // video.getFailCode() == 14 && video.getXcodeState() == 1 时间戳跳变
                 if (video == null || (video.getFailCode() == 9 && video.getXcodeState() == 3) || (video.getFailCode() == 14 && video.getXcodeState() == 1) || (video.getFailCode() == 0 && video.getXcodeState() == 2)) {
+                    boolean isTimestampError = video != null && video.getFailCode() == 14 && video.getXcodeState() == 1;
                     if (video == null) {
                         errMsg.append(uploadPart.getTitle()).append("   视频不存在\n");
                     } else if (video.getXcodeState() == 2) {
                         errMsg.append(uploadPart.getTitle()).append("   转码中\n");
+                    } else if (isTimestampError) {
+                        // 时间戳跳变错误 (code 21588) - 文件损坏，放弃上传
+                        log.error("视频转码失败：时间戳跳变 failCode=14 xcodeState=1，文件损坏放弃上传 ==> partTitle={}, historyId={}", 
+                                uploadPart.getTitle(), history.getId());
+                        errMsg.append(uploadPart.getTitle()).append("   转码失败(时间戳跳变-文件损坏已放弃)\n");
                     } else {
                         errMsg.append(uploadPart.getTitle()).append("   转码失败\n");
                     }
@@ -157,6 +163,11 @@ public class RecordBiliPublishService {
                     uploadPart.setCid(null);
                     uploadPart.setFileName(null);
                     uploadPart = partRepository.save(uploadPart);
+                    // 时间戳跳变错误表示文件损坏，不再重试上传
+                    if (isTimestampError) {
+                        log.info("时间戳跳变错误，跳过重新上传 ==> partTitle={}", uploadPart.getTitle());
+                        continue;
+                    }
                     String filePath = uploadPart.getFilePath().intern();
                     File file = new File(filePath);
                     if (file.exists()) {
@@ -630,6 +641,13 @@ public class RecordBiliPublishService {
                         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
                         String aid = JSON.parseObject(uploadRes).getJSONObject("data").getString("aid");
                         if (StringUtils.isBlank(bvid) || StringUtils.isBlank(aid)) {
+                            // 检测是否是时间戳跳变错误(code:21588)，如果是则放弃该投稿
+                            if (uploadRes.contains("21588") || uploadRes.contains("时间跳跃") || uploadRes.contains("时间戳")) {
+                                log.error("发布视频失败：文件存在时间戳跳变问题，放弃该投稿 ==> room={}, historyId={}, response={}", 
+                                        room.getUname(), history.getId(), uploadRes);
+                                // 不抛出异常，直接返回，避免无意义的重试
+                                return false;
+                            }
                             log.info("发布={}=视频失败 == > {}", room.getUname(), uploadRes);
                             throw new RuntimeException(uploadRes);
                         }

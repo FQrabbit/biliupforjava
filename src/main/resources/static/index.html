@@ -16,33 +16,101 @@
     <script src="js/index.js"></script>
 </head>
 <body>
-<div id="app">
-    <div class="theme-toggle" @click="toggleTheme" title="切换主题">
-        <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-    </div>
-    <el-tabs @tab-click="handleClick" v-model="activeName" type="card">
-        <el-tab-pane label="🏠 更新日志" name="home"></el-tab-pane>
-        <el-tab-pane label="🎬 直播间" name="room"></el-tab-pane>
-        <el-tab-pane label="👤 bilibili用户" name="user"></el-tab-pane>
-        <el-tab-pane label="📋 录制历史" name="history"></el-tab-pane>
-        <el-tab-pane name="log">
-            <span slot="label" :class="{ 'alert-flashing': hasAlerts }">🖥️ 日志控制台</span>
-        </el-tab-pane>
-    </el-tabs>
-    <div id="p">
-        <transition name="fade-transform" mode="out-in">
-            <div v-if="activeName === 'home'" class="version-container" key="home">
-                <div v-for="(version, idx) in sortedVersions" :key="version.version + '-' + version.time" class="version-item">
-                    <div class="version-header">
-                        <div class="version-time">{{ version.time }}</div>
-                        <span class="version-number">v{{ version.version }}</span>
+<div id="app" class="app-container">
+    <!-- 顶部导航栏 -->
+    <header class="app-header">
+        <div class="header-brand">
+            <img src="img/icon.svg" alt="Logo" class="brand-logo">
+            <div class="brand-info">
+                <h1 class="brand-title">录播姬上传插件</h1>
+                <span class="brand-version">v1.4.1-beta4.7</span>
+            </div>
+        </div>
+        <nav class="header-nav">
+            <div class="nav-item" 
+                 :class="{ 'is-active': activeName === 'home' }" 
+                 @click="activeName = 'home'">
+                <i class="el-icon-document"></i>
+                <span>更新日志</span>
+            </div>
+            <div class="nav-item" 
+                 :class="{ 'is-active': activeName === 'room' }" 
+                 @click="activeName = 'room'; handleClick()">
+                <i class="el-icon-video-camera"></i>
+                <span>直播间</span>
+            </div>
+            <div class="nav-item" 
+                 :class="{ 'is-active': activeName === 'user' }" 
+                 @click="activeName = 'user'; handleClick()">
+                <i class="el-icon-user"></i>
+                <span>用户</span>
+            </div>
+            <div class="nav-item" 
+                 :class="{ 'is-active': activeName === 'history' }" 
+                 @click="activeName = 'history'; handleClick()">
+                <i class="el-icon-time"></i>
+                <span>录制历史</span>
+            </div>
+            <div class="nav-item" 
+                 :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts }" 
+                 @click="activeName = 'log'; handleClick()">
+                <i class="el-icon-monitor"></i>
+                <span>日志</span>
+                <span v-if="hasAlerts" class="alert-badge"></span>
+            </div>
+            
+            <!-- 主题切换按钮 -->
+            <div class="theme-toggle" @click="toggleTheme" title="切换主题">
+                <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+            </div>
+        </nav>
+    </header>
+    
+    <!-- 主内容区域 -->
+    <main class="app-main">
+        <transition name="fade-slide" mode="out-in">
+            <!-- 更新日志页面 -->
+            <div v-if="activeName === 'home'" class="changelog-container" key="home">
+                <div class="changelog-header">
+                    <div class="changelog-title">
+                        <i class="el-icon-document"></i>
+                        <h2>更新日志</h2>
                     </div>
-                    <div class="version-content">{{ version.content }}</div>
+                    <div class="changelog-stats">
+                        <span class="stat-item">
+                            <span class="stat-value">{{ versions.length }}</span>
+                            <span class="stat-label">版本更新</span>
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="version-timeline">
+                    <div v-for="(version, idx) in sortedVersions" 
+                         :key="version.version + '-' + version.time" 
+                         class="version-card"
+                         :class="{ 'is-latest': idx === 0 }">
+                        <div class="version-marker">
+                            <div class="marker-dot"></div>
+                            <div class="marker-line" v-if="idx < sortedVersions.length - 1"></div>
+                        </div>
+                        <div class="version-content-wrapper">
+                            <div class="version-badge" :class="{ 'is-latest': idx === 0 }">
+                                v{{ version.version }}
+                            </div>
+                            <div class="version-date">
+                                <i class="el-icon-calendar"></i>
+                                {{ version.time }}
+                            </div>
+                            <div class="version-text">{{ version.content }}</div>
+                        </div>
+                    </div>
                 </div>
             </div>
+            
+            <!-- iframe 子页面 -->
             <iframe v-else :src="tabSrc" class="tab-frame" frameborder="0" :key="activeName"></iframe>
         </transition>
-    </div>
+    </main>
 </div>
 </body>
 <script>
@@ -53,6 +121,7 @@
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2025-12-15', version: '1.4.1-beta4.7', content: '界面优化：主页导航栏重构、更新日志时间线布局、录制历史筛选面板优化、直播间/用户页面新增统计信息和空状态提示、登录二维码状态实时显示；修复时间戳跳变错误无限重试问题，改为直接放弃该投稿。' },
                 { time: '2025-12-14', version: '1.4.1-beta4.6', content: '新增验证码控制台脚本方案及Debug信息；新增上传线路错误(500/504)自动暂停机制；请求增加限流保护（投稿/上传/同步/刷新）；优化评论发送；优化异常提醒界面支持长日志查看与复制；录制历史新增房间号列。' },
                 { time: '2025-12-11', version: '1.4.1-beta4.4', content: '优化弹幕发送逻辑，自动忽略仅自己可见稿件。' },
                 { time: '2025-12-11', version: '1.4.1-beta4.3', content: '紧急修复编辑稿件可见性问题，并将工作流程增加日志提示以及操作延迟；修复评论发送逻辑，避免无评论时重复检查' },
@@ -120,13 +189,6 @@
         },
         mounted: function() {
             this.applyTheme(this.theme);
-            if (this.activeName !== 'home') {
-                this.handleClick();
-            }
-            var self = this;
-            setTimeout(function() {
-                self.enableTabDrag();
-            }, 100);
             this.checkAlerts();
             setInterval(this.checkAlerts, 30000);
         },
@@ -151,75 +213,8 @@
                     iframe.contentDocument.documentElement.setAttribute('data-theme', theme);
                 }
             },
-            enableTabDrag: function () {
-                var navWrap = document.querySelector('.el-tabs__nav-wrap');
-                var navScroll = document.querySelector('.el-tabs__nav-scroll') || navWrap;
-                var container = navScroll || navWrap;
-                
-                if (!container) {
-                    console.warn('Tab scroll container not found');
-                    return;
-                }
-                
-                container.style.overflowX = 'auto';
-                container.style.overflowY = 'hidden';
-                container.style.overscrollBehavior = 'contain';
-                
-                var isDown = false;
-                var startX = 0;
-                var scrollLeft = 0;
-                
-                container.addEventListener('mousedown', function(e) {
-                    if (e.target.closest('.el-tabs__item') || e.target.closest('.el-tabs__nav-next') || e.target.closest('.el-tabs__nav-prev')) {
-                        return;
-                    }
-                    isDown = true;
-                    startX = e.pageX - container.getBoundingClientRect().left;
-                    scrollLeft = container.scrollLeft;
-                    container.style.cursor = 'grabbing';
-                    e.preventDefault();
-                    e.stopPropagation();
-                }, true);
-                
-                document.addEventListener('mousemove', function(e) {
-                    if (!isDown) return;
-                    e.preventDefault();
-                    var x = e.pageX - container.getBoundingClientRect().left;
-                    var walk = startX - x;
-                    container.scrollLeft = scrollLeft + walk;
-                }, true);
-                
-                document.addEventListener('mouseup', function() {
-                    isDown = false;
-                    container.style.cursor = 'grab';
-                }, true);
-                
-                container.addEventListener('mouseleave', function() {
-                    isDown = false;
-                    container.style.cursor = 'grab';
-                });
-                
-                var touchStartX = 0;
-                var touchScrollLeft = 0;
-                
-                container.addEventListener('touchstart', function(e) {
-                    if (e.target.closest('.el-tabs__item')) return;
-                    touchStartX = e.touches[0].pageX;
-                    touchScrollLeft = container.scrollLeft;
-                }, false);
-                
-                container.addEventListener('touchmove', function(e) {
-                    if (touchStartX === 0) return;
-                    var x = e.touches[0].pageX;
-                    var walk = touchStartX - x;
-                    container.scrollLeft = touchScrollLeft + walk;
-                }, false);
-                
-                container.addEventListener('touchend', function() {
-                    touchStartX = 0;
-                }, false);
-            },
             handleClick: function () {
+                // Navigate to tab content
             }
         }
     });

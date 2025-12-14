@@ -405,7 +405,10 @@ public class HistoryController {
             predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), request.getPublish())));
         }
         if (request.getCode() != null) {
+            // 当筛选审核状态时，需要同时检查publish状态
+            // 只有已发布的视频才有真正的审核状态，未发布的视频code默认值是-1但不应被当作"审核中"
             predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("code"), request.getCode())));
+            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), true)));
         }
 
         if (request.getFrom() != null && request.getTo() != null) {

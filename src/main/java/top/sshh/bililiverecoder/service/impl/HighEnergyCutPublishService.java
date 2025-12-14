@@ -293,6 +293,13 @@ public class HighEnergyCutPublishService {
         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
         String aid = JSON.parseObject(uploadRes).getJSONObject("data").getString("aid");
         if (StringUtils.isBlank(bvid) || StringUtils.isBlank(aid)) {
+            // 检测是否是时间戳跳变错误(code:21588)，如果是则放弃该投稿
+            if (uploadRes.contains("21588") || uploadRes.contains("时间跳跃") || uploadRes.contains("时间戳")) {
+                log.error("发布高能片段失败：文件存在时间戳跳变问题，放弃该投稿 ==> room={}, historyId={}, response={}", 
+                        room.getUname(), history.getId(), uploadRes);
+                // 不抛出异常，直接返回，避免无意义的重试
+                return;
+            }
             log.info("发布={}=视频失败 == > {}", room.getUname(), uploadRes);
             if (StringUtils.isNotBlank(wxuid)) {
                 Message message = new Message();

@@ -18,69 +18,125 @@
     </script>
 </head>
 <body>
-<div id="roomTable">
-    <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <el-button @click="addRoomDialog = true" type="primary" size="small">添加房间</el-button>
-            <el-tooltip class="item" content="导出用户后若程序继续运行，则用户登录状态会失效" effect="dark" placement="top">
-                <el-button @click="exportConfigDialog=true" type="primary" size="small">导出配置</el-button>
-            </el-tooltip>
-            <el-upload class="item" action="/room/uploadConfig" accept=".json" :on-success="uploadSuccess" :show-file-list="false" style="display: inline-block;">
-                <el-button type="primary" size="small">导入配置</el-button>
-            </el-upload>
+<div id="roomTable" class="room-container">
+    <!-- 页面头部 -->
+    <div class="room-header">
+        <div class="room-header-left">
+            <div class="room-header-title">
+                <i class="el-icon-video-camera icon"></i>
+                <h2>直播间监控</h2>
+            </div>
+            <div class="room-stats">
+                <div class="room-stat-item">
+                    <div class="room-stat-value">{{ tableData.length }}</div>
+                    <div class="room-stat-label">总房间</div>
+                </div>
+                <div class="room-stat-item">
+                    <div class="room-stat-value live">{{ tableData.filter(r => r.streaming).length }}</div>
+                    <div class="room-stat-label">直播中</div>
+                </div>
+                <div class="room-stat-item">
+                    <div class="room-stat-value recording">{{ tableData.filter(r => r.recording).length }}</div>
+                    <div class="room-stat-label">录制中</div>
+                </div>
+            </div>
         </div>
-        <el-radio-group v-model="viewMode" size="small">
-            <el-radio-button label="card"><i class="el-icon-menu"></i> 卡片</el-radio-button>
-            <el-radio-button label="table"><i class="el-icon-s-grid"></i> 表格</el-radio-button>
-        </el-radio-group>
+        <div class="room-header-actions">
+            <el-button class="neon-btn neon-btn-primary" @click="addRoomDialog = true" icon="el-icon-plus">
+                添加房间
+            </el-button>
+            <el-tooltip content="导出用户后若程序继续运行，则用户登录状态会失效" effect="dark" placement="top">
+                <el-button class="neon-btn neon-btn-primary" @click="exportConfigDialog=true" icon="el-icon-download">
+                    导出配置
+                </el-button>
+            </el-tooltip>
+            <el-upload action="/room/uploadConfig" accept=".json" :on-success="uploadSuccess" :show-file-list="false" style="display: inline-block;">
+                <el-button class="neon-btn neon-btn-primary" icon="el-icon-upload2">导入配置</el-button>
+            </el-upload>
+            <el-radio-group v-model="viewMode" size="small">
+                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
+                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
+            </el-radio-group>
+        </div>
     </div>
 
-    <transition name="fade-transform" mode="out-in">
-    <div v-if="viewMode === 'card'" class="data-card-grid" key="card">
-        <div class="data-card" 
-             :class="{ 
-                'is-success': item.recording, 
-                'is-processing': item.streaming && !item.recording 
-             }" 
-             v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="flex: 1; min-width: 0; margin-right: 10px;">
-                    <div class="card-title" style="font-weight: bold; font-size: 16px; margin-bottom: 5px; word-break: break-all;">{{ item.uname }}</div>
-                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">
-                        <div style="margin-bottom: 4px;">{{ item.title || '无标题' }}</div>
-                        <div><i class="el-icon-house"></i> {{ item.roomId }}</div>
-                    </div>
-                    <div class="card-status-row" style="display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 5px;">
-                         <el-tag size="mini" type="success" v-if="item.streaming">直播中</el-tag>
-                         <el-tag size="mini" type="info" v-else>未直播</el-tag>
-                         
-                         <el-tag size="mini" type="success" v-if="item.recording">录制中</el-tag>
-                         <el-tag size="mini" type="info" v-else>未录制</el-tag>
+    <!-- 内容区域 -->
+    <transition name="fade-slide" mode="out-in">
+        <!-- 空状态 -->
+        <div v-if="tableData.length === 0 && !loading" class="room-empty" key="empty">
+            <i class="el-icon-video-camera room-empty-icon"></i>
+            <h3 class="room-empty-title">还没有添加直播间</h3>
+            <p class="room-empty-desc">点击"添加房间"按钮，开始监控房间</p>
+            <el-button class="neon-btn neon-btn-primary" @click="addRoomDialog = true" icon="el-icon-plus">
+                添加房间
+            </el-button>
+        </div>
 
-                         <el-tag size="mini" type="success" v-if="item.upload">开启上传</el-tag>
-                         <el-tag size="mini" type="info" v-else>关闭上传</el-tag>
+        <!-- 卡片视图 -->
+        <div v-else-if="viewMode === 'card'" class="room-card-grid" key="card">
+            <div class="room-card" 
+                 :class="{ 
+                    'is-recording': item.recording, 
+                    'is-streaming': item.streaming && !item.recording 
+                 }" 
+                 v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)">
+                
+                <div class="room-card-header">
+                    <div class="room-avatar">
+                        {{ (item.uname || 'R').charAt(0).toUpperCase() }}
+                        <span v-if="item.streaming" class="live-indicator"></span>
+                    </div>
+                    <div class="room-info">
+                        <h3 class="room-name">{{ item.uname }}</h3>
+                        <p class="room-title">{{ item.title || '暂无直播标题' }}</p>
+                        <div class="room-id">
+                            <i class="el-icon-house"></i>
+                            <span>{{ item.roomId }}</span>
+                        </div>
                     </div>
                 </div>
                 
-                <div style="display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; font-size: 12px;">
-                    <el-tag size="small" :type="item.copyright == 1 ? 'warning' : 'info'" style="margin-bottom: 5px;">
-                        {{ item.copyright == 1 ? '自制' : '转载' }}
-                    </el-tag>
-                    <div style="color: var(--text-disabled); text-align: right; max-width: 120px; line-height: 1.2;">
-                        {{ formatDelete(item) }}
+                <div class="room-card-body">
+                    <div class="room-tags">
+                        <span class="room-tag" :class="item.streaming ? 'live' : 'offline'">
+                            <i :class="item.streaming ? 'el-icon-video-camera' : 'el-icon-video-pause'"></i>
+                            {{ item.streaming ? '直播中' : '未直播' }}
+                        </span>
+                        <span class="room-tag" :class="item.recording ? 'recording' : 'offline'">
+                            <i :class="item.recording ? 'el-icon-video-play' : 'el-icon-video-pause'"></i>
+                            {{ item.recording ? '录制中' : '未录制' }}
+                        </span>
+                        <span class="room-tag" :class="item.upload ? 'upload' : 'offline'">
+                            <i :class="item.upload ? 'el-icon-upload' : 'el-icon-close'"></i>
+                            {{ item.upload ? '自动上传' : '关闭上传' }}
+                        </span>
+                    </div>
+                    <div class="room-meta">
+                        <span class="room-copyright" :class="item.copyright == 1 ? 'original' : 'repost'">
+                            {{ item.copyright == 1 ? '自制' : '转载' }}
+                        </span>
+                        <span class="room-partition" v-if="item.tid">
+                            <i class="el-icon-folder"></i>
+                            {{ getTypeName(item.tid) }}
+                        </span>
+                        <span class="room-visibility" :class="item.isOnlySelf == 1 ? 'private' : 'public'">
+                            <i :class="item.isOnlySelf == 1 ? 'el-icon-lock' : 'el-icon-view'"></i>
+                            {{ item.isOnlySelf == 1 ? '仅自己' : '公开' }}
+                        </span>
+                        <span class="room-delete-info">{{ formatDelete(item) }}</span>
                     </div>
                 </div>
-            </div>
-            
-            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #EBEEF5; display: flex; justify-content: flex-end; gap: 10px;">
-                <el-button size="mini" type="primary" @click.stop="handleEdit(index, item)">编辑</el-button>
-                <el-button size="mini" type="primary" @click.stop="handleEeditLiveMsg(index, item)">弹幕规则</el-button>
-                <el-button size="mini" type="danger" @click.stop="deleteRoom(item.id)">删除</el-button>
+                
+                <div class="room-card-footer" @click.stop>
+                    <el-button size="mini" type="primary" icon="el-icon-edit" @click="handleEdit(index, item)">编辑</el-button>
+                    <el-button size="mini" icon="el-icon-chat-line-round" @click="handleEeditLiveMsg(index, item)">弹幕</el-button>
+                    <el-button size="mini" type="danger" icon="el-icon-delete" @click="deleteRoom(item.id)">删除</el-button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div v-else key="table">
+        <!-- 表格视图 -->
+        <div v-else class="room-table-wrapper" key="table">
         <el-table :data="tableData" border style="width: 100%">
             <el-table-column type="expand">
                 <template slot-scope="props">
@@ -196,214 +252,285 @@
                 </template>
             </el-table-column>
         </el-table>
-    </div>
+        </div>
     </transition>
 
-    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" :before-close="handleClose" :close-on-click-modal="false">
-        <div slot="title">
-            <span class="el-dialog__title">房间信息</span>
-            <div style="position: absolute; right: 50px; top: 0; height: 54px; display: flex; align-items: center;">
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" :before-close="handleClose" :close-on-click-modal="false" custom-class="room-edit-dialog">
+        <div slot="title" class="dialog-header">
+            <div class="dialog-title-wrapper">
+                <i class="el-icon-setting"></i>
+                <span class="el-dialog__title">房间配置</span>
+                <span class="dialog-room-info" v-if="room.uname">{{ room.uname }}</span>
+            </div>
+            <div class="dialog-header-actions">
                 <el-tooltip :content="allExpanded ? '全部收起' : '全部展开'" placement="bottom">
-                    <el-button type="text" @click="toggleAllSections" style="padding: 10px;">
-                        <img src="/img/icon.svg" style="width: 20px; height: 20px;" :style="{transform: allExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s'}">
+                    <el-button type="text" @click="toggleAllSections" class="expand-toggle-btn">
+                        <i :class="allExpanded ? 'el-icon-minus' : 'el-icon-plus'"></i>
                     </el-button>
                 </el-tooltip>
             </div>
         </div>
-        <el-form :model="room">
-            <div class="section-group">
-                <div class="section-header" @click="section.basic = !section.basic">基础设置<i :class="section.basic ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
+        <el-form :model="room" class="room-edit-form">
+            <!-- 基础设置 -->
+            <div class="section-group" :class="{ 'is-expanded': section.basic }">
+                <div class="section-header" @click="section.basic = !section.basic">
+                    <div class="section-header-left">
+                        <i class="el-icon-document section-icon"></i>
+                        <span>基础设置</span>
+                    </div>
+                    <i :class="section.basic ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="section-arrow"></i>
+                </div>
                 <el-collapse-transition>
                     <div class="section-body" v-show="section.basic">
-                        <el-form-item :label-width="formLabelWidth" label="投稿分区id">
-                            <el-row>
-                                <el-col :span="12">
-                                    <el-input autocomplete="off" type="number" v-model="room.tid"></el-input>
-                                </el-col>
-                            </el-row>
-                            <div @click="openPartitionDialog" class="partition-trigger">
-                                <el-input :value="getTypeName(room.tid)" readonly placeholder="点击选择分区">
-                                     <i slot="suffix" class="el-icon-arrow-right"></i>
-                                </el-input>
-                            </div>
-                        </el-form-item>
+                        <div class="form-row">
+                            <el-form-item :label-width="formLabelWidth" label="投稿分区">
+                                <div class="partition-input-group">
+                                    <el-input autocomplete="off" type="number" v-model="room.tid" placeholder="分区ID" class="partition-id-input"></el-input>
+                                    <div @click="openPartitionDialog" class="partition-trigger">
+                                        <el-input :value="getTypeName(room.tid)" readonly placeholder="点击选择分区">
+                                            <i slot="suffix" class="el-icon-arrow-right"></i>
+                                        </el-input>
+                                    </div>
+                                </div>
+                            </el-form-item>
+                        </div>
                         <el-form-item :label-width="formLabelWidth" label="标题模板">
-                            <el-input autocomplete="off" maxlength="100" v-model="room.titleTemplate"></el-input>
+                            <el-input autocomplete="off" maxlength="100" v-model="room.titleTemplate" placeholder="支持变量: ${uname}, ${title}, ${date} 等"></el-input>
                         </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="分p标题模板">
-                            <el-input autocomplete="off" maxlength="100" v-model="room.partTitleTemplate"></el-input>
+                        <el-form-item :label-width="formLabelWidth" label="分P标题模板">
+                            <el-input autocomplete="off" maxlength="100" v-model="room.partTitleTemplate" placeholder="支持变量: ${fileName}, ${title} 等"></el-input>
                         </el-form-item>
                         <el-form-item :label-width="formLabelWidth" label="描述模板">
-                            <el-input :rows="2" autocomplete="off" autosize maxlength="1800" type="textarea" v-model="room.descTemplate"></el-input>
+                            <el-input :rows="2" autocomplete="off" autosize maxlength="1800" type="textarea" v-model="room.descTemplate" placeholder="视频描述内容..."></el-input>
                         </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="空间动态模板">
-                            <el-input :rows="2" autocomplete="off" autosize maxlength="1800" type="textarea" v-model="room.dynamicTemplate"></el-input>
+                        <el-form-item :label-width="formLabelWidth" label="动态模板">
+                            <el-input :rows="2" autocomplete="off" autosize maxlength="1800" type="textarea" v-model="room.dynamicTemplate" placeholder="发布到空间动态的内容..."></el-input>
                         </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="上传tag">
-                            <el-input autocomplete="off" v-model="room.tags"></el-input>
+                        <el-form-item :label-width="formLabelWidth" label="标签(Tags)">
+                            <el-input autocomplete="off" v-model="room.tags" placeholder="多个标签用逗号分隔"></el-input>
                         </el-form-item>
                     </div>
                 </el-collapse-transition>
             </div>
 
-            <div class="section-group">
-                <div class="section-header" @click="section.upload = !section.upload">上传与封面<i :class="section.upload ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
+            <!-- 上传与封面 -->
+            <div class="section-group" :class="{ 'is-expanded': section.upload }">
+                <div class="section-header" @click="section.upload = !section.upload">
+                    <div class="section-header-left">
+                        <i class="el-icon-upload section-icon"></i>
+                        <span>上传与封面</span>
+                    </div>
+                    <i :class="section.upload ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="section-arrow"></i>
+                </div>
                 <el-collapse-transition>
                     <div class="section-body" v-show="section.upload">
-                        <el-form-item :label-width="formLabelWidth" label="上传线路">
-                            <el-select placeholder="请选择" v-model="room.line">
-                                <el-option :label="item" :value="item" v-for="item in lines"></el-option>
-                            </el-select>
-                            <el-link :underline="false" href="http://member.bilibili.com/preupload?r=ping" target="_blank" type="primary">点击测速</el-link>
+                        <div class="form-row two-col">
+                            <el-form-item :label-width="formLabelWidth" label="上传线路">
+                                <el-select placeholder="请选择" v-model="room.line">
+                                    <el-option :label="item" :value="item" v-for="item in lines"></el-option>
+                                </el-select>
+                            </el-form-item>
+                            <el-link :underline="false" href="http://member.bilibili.com/preupload?r=ping" target="_blank" type="primary" class="speed-test-link">
+                                <i class="el-icon-connection"></i> 测速
+                            </el-link>
+                        </div>
+                        <el-form-item :label-width="formLabelWidth" label="封面类型">
+                            <el-radio-group v-model="room.coverType" @change="coverTypeChange" class="cover-type-group">
+                                <el-radio-button label="default">系统默认</el-radio-button>
+                                <el-radio-button label="live">直播封面</el-radio-button>
+                                <el-radio-button label="diy">自定义</el-radio-button>
+                            </el-radio-group>
                         </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="投稿封面类型">
-                            <el-select @change="coverTypeChange" v-model="room.coverType">
-                                <el-option label="系统默认" value="default"></el-option>
-                                <el-option label="直播封面" value="live"></el-option>
-                                <el-option label="自定义" value="diy"></el-option>
-                            </el-select>
-                        </el-form-item>
-                        <el-form-item v-if="room.coverType == 'diy'" :label-width="formLabelWidth" label="投稿封面上传">
+                        <el-form-item v-if="room.coverType == 'diy'" :label-width="formLabelWidth" label="上传封面">
                             <el-upload
-                                    class="avatar-uploader"
+                                    class="cover-uploader"
                                     action="/room/uploadCover"
                                     accept=".jpg, .jpeg, .png"
                                     :data="room"
                                     :show-file-list="false"
                                     :on-success="handleCoverSuccess"
                                     :before-upload="beforeCoverUpload">
-                                <img id="coverImg" v-if="room.coverUrl" :src="room.coverUrl" class="avatar">
-                                <i v-else class="el-icon-plus avatar-uploader-icon"></i>
+                                <div class="cover-upload-area">
+                                    <img id="coverImg" v-if="room.coverUrl" :src="room.coverUrl" class="cover-preview">
+                                    <div v-else class="cover-upload-placeholder">
+                                        <i class="el-icon-picture-outline"></i>
+                                        <span>点击上传封面</span>
+                                        <small>建议尺寸 1920x1080</small>
+                                    </div>
+                                </div>
                             </el-upload>
                         </el-form-item>
                     </div>
                 </el-collapse-transition>
             </div>
 
-            <div class="section-group">
-                <div class="section-header" @click="section.control = !section.control">录制/上传控制<i :class="section.control ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
+            <!-- 投稿设置 -->
+            <div class="section-group" :class="{ 'is-expanded': section.control }">
+                <div class="section-header" @click="section.control = !section.control">
+                    <div class="section-header-left">
+                        <i class="el-icon-video-play section-icon"></i>
+                        <span>投稿设置</span>
+                    </div>
+                    <i :class="section.control ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="section-arrow"></i>
+                </div>
                 <el-collapse-transition>
                     <div class="section-body" v-show="section.control">
-                        <el-form-item :label-width="formLabelWidth" label="文件忽略大小(MB)">
-                            <el-col :span="12">
-                                <el-input autocomplete="off" type="number" v-model="room.fileSizeLimit"></el-input>
-                            </el-col>
-                        </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="文件忽略时长(秒)">
-                            <el-col :span="12">
-                                <el-input autocomplete="off" type="number" v-model="room.durationLimit"></el-input>
-                            </el-col>
-                        </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="是否自制">
-                            <el-select :disabled="room.copyrightDisabled" placeholder="请选择" v-model="room.copyright">
-                                <el-option label="是" :value="1"></el-option>
-                                <el-option label="否" :value="2"></el-option>
-                            </el-select>
-                        </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="是否仅自己可见">
-                            <el-select placeholder="请选择" v-model="room.isOnlySelf">
-                                <el-option :value="1" label="是"></el-option>
-                                <el-option :value="0" label="否"></el-option>
-                            </el-select>
-                        </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="是否上传">
-                            <el-select placeholder="请选择" v-model="room.upload">
-                                <el-option label="是" :value="true"></el-option>
-                                <el-option label="否" :value="false"></el-option>
-                            </el-select>
-                        </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="是否投稿高能片段">
-                            <el-select placeholder="请选择" v-model="room.highEnergyCut">
-                                <el-option :value="true" label="是"></el-option>
-                                <el-option :value="false" label="否"></el-option>
-                            </el-select>
-                        </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="高能片段因子">
-                            <el-col :span="12">
-                                <el-input autocomplete="off" max="0.99" min="0.5" step="0.01" type="number" v-model="room.percentileRank" placeholder="如0.95"></el-input>
-                            </el-col>
-                        </el-form-item>
+                        <div class="form-grid">
+                            <el-form-item :label-width="formLabelWidth" label="忽略大小(MB)">
+                                <el-input autocomplete="off" type="number" v-model="room.fileSizeLimit" placeholder="小于该大小不上传"></el-input>
+                            </el-form-item>
+                            <el-form-item :label-width="formLabelWidth" label="忽略时长(秒)">
+                                <el-input autocomplete="off" type="number" v-model="room.durationLimit" placeholder="小于该时长不上传"></el-input>
+                            </el-form-item>
+                        </div>
+                        <div class="switch-group">
+                            <div class="switch-item">
+                                <span class="switch-label">版权类型</span>
+                                <el-radio-group v-model="room.copyright" :disabled="room.copyrightDisabled" size="small">
+                                    <el-radio-button :label="1">自制</el-radio-button>
+                                    <el-radio-button :label="2">转载</el-radio-button>
+                                </el-radio-group>
+                            </div>
+                            <div class="switch-item">
+                                <span class="switch-label">可见性</span>
+                                <el-radio-group v-model="room.isOnlySelf" size="small">
+                                    <el-radio-button :label="0">公开</el-radio-button>
+                                    <el-radio-button :label="1">仅自己</el-radio-button>
+                                </el-radio-group>
+                            </div>
+                            <div class="switch-item">
+                                <span class="switch-label">自动上传</span>
+                                <el-switch v-model="room.upload" active-color="#52c41a" inactive-color="#d9d9d9"></el-switch>
+                            </div>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="switch-group">
+                            <div class="switch-item">
+                                <span class="switch-label">高能片段投稿</span>
+                                <el-switch v-model="room.highEnergyCut" active-color="#52c41a" inactive-color="#d9d9d9"></el-switch>
+                            </div>
+                            <div class="switch-item" v-if="room.highEnergyCut">
+                                <span class="switch-label">高能因子</span>
+                                <el-input-number v-model="room.percentileRank" :min="0.5" :max="0.99" :step="0.01" :precision="2" size="small"></el-input-number>
+                            </div>
+                        </div>
                     </div>
                 </el-collapse-transition>
             </div>
 
-            <div class="section-group">
-                <div class="section-header" @click="section.delete = !section.delete">文件后处理<i :class="section.delete ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
+            <!-- 文件后处理 -->
+            <div class="section-group" :class="{ 'is-expanded': section.delete }">
+                <div class="section-header" @click="section.delete = !section.delete">
+                    <div class="section-header-left">
+                        <i class="el-icon-folder section-icon"></i>
+                        <span>文件后处理</span>
+                    </div>
+                    <i :class="section.delete ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="section-arrow"></i>
+                </div>
                 <el-collapse-transition>
                     <div class="section-body" v-show="section.delete">
-                        <el-form-item :label-width="formLabelWidth" label="文件后处理">
-                            <el-select placeholder="请选择" v-model="room.deleteType">
-                                <el-option label="不删除" :value="0"></el-option>
-                                <el-option label="上传完成后删除" :value="1"></el-option>
-                                <el-option :value="9" label="投稿成功后删除"></el-option>
-                                <el-option label="审核通过后删除" :value="2"></el-option>
-                                <el-option label="几天后删除" :value="3"></el-option>
-                                <el-option label="录制结束几天后移动" :value="8"></el-option>
-                                <el-option label="上传完成后移动" :value="4"></el-option>
-                                <el-option label="审核通过后移动" :value="5"></el-option>
-                                <el-option :value="6" label="录制结束后移动(无法上传)"></el-option>
-                                <el-option :value="7" label="录制结束后复制"></el-option>
-                                <el-option :value="10" label="投稿成功后移动"></el-option>
-                                <el-option :value="11" label="审核通过成功后复制"></el-option>
+                        <el-form-item :label-width="formLabelWidth" label="处理方式">
+                            <el-select placeholder="请选择" v-model="room.deleteType" class="full-width-select">
+                                <el-option-group label="保留文件">
+                                    <el-option label="不删除" :value="0"></el-option>
+                                </el-option-group>
+                                <el-option-group label="删除文件">
+                                    <el-option label="上传完成后删除" :value="1"></el-option>
+                                    <el-option label="投稿成功后删除" :value="9"></el-option>
+                                    <el-option label="审核通过后删除" :value="2"></el-option>
+                                    <el-option label="几天后删除" :value="3"></el-option>
+                                </el-option-group>
+                                <el-option-group label="移动文件">
+                                    <el-option label="录制结束几天后移动" :value="8"></el-option>
+                                    <el-option label="上传完成后移动" :value="4"></el-option>
+                                    <el-option label="投稿成功后移动" :value="10"></el-option>
+                                    <el-option label="审核通过后移动" :value="5"></el-option>
+                                    <el-option label="录制结束后移动(无法上传)" :value="6"></el-option>
+                                </el-option-group>
+                                <el-option-group label="复制文件">
+                                    <el-option label="录制结束后复制" :value="7"></el-option>
+                                    <el-option label="审核通过后复制" :value="11"></el-option>
+                                </el-option-group>
                             </el-select>
                         </el-form-item>
-                        <el-form-item v-if="room.deleteType==3||room.deleteType==8 " :label-width="formLabelWidth" label="几天后">
-                            <el-col :span="12">
-                                <el-input autocomplete="off" type="number" min="1" max="365" v-model="room.deleteDay"></el-input>
-                            </el-col>
+                        <el-form-item v-if="room.deleteType==3||room.deleteType==8" :label-width="formLabelWidth" label="延迟天数">
+                            <el-input-number v-model="room.deleteDay" :min="1" :max="365" size="small"></el-input-number>
+                            <span class="input-suffix-text">天后执行</span>
                         </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="移动目录"
-                                      v-if="room.deleteType==4||room.deleteType==5||room.deleteType==6||room.deleteType==7||room.deleteType==8||room.deleteType==10||room.deleteType==11 ">
-                            <el-col :span="18">
-                                <el-input autocomplete="off" placeholder="如 /complete 容器环境需要映射该目录到主机内" v-model="room.moveDir"></el-input>
-                            </el-col>
+                        <el-form-item :label-width="formLabelWidth" label="目标目录"
+                                      v-if="room.deleteType==4||room.deleteType==5||room.deleteType==6||room.deleteType==7||room.deleteType==8||room.deleteType==10||room.deleteType==11">
+                            <el-input autocomplete="off" placeholder="如 /complete (Docker需映射)" v-model="room.moveDir">
+                                <i slot="prefix" class="el-icon-folder-opened"></i>
+                            </el-input>
                         </el-form-item>
                     </div>
                 </el-collapse-transition>
             </div>
 
-            <div class="section-group">
-                <div class="section-header" @click="section.notify = !section.notify">通知与弹幕<i :class="section.notify ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
+            <!-- 通知与弹幕 -->
+            <div class="section-group" :class="{ 'is-expanded': section.notify }">
+                <div class="section-header" @click="section.notify = !section.notify">
+                    <div class="section-header-left">
+                        <i class="el-icon-message section-icon"></i>
+                        <span>通知与弹幕</span>
+                    </div>
+                    <i :class="section.notify ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="section-arrow"></i>
+                </div>
                 <el-collapse-transition>
                     <div class="section-body" v-show="section.notify">
-                        <el-form-item :label-width="formLabelWidth" label="是否发送弹幕">
-                            <el-select placeholder="请选择" v-model="room.sendDm">
-                                <el-option :value="true" label="是"></el-option>
-                                <el-option :value="false" label="否"></el-option>
-                            </el-select>
+                        <div class="switch-group">
+                            <div class="switch-item full-width">
+                                <span class="switch-label">发送弹幕</span>
+                                <el-switch v-model="room.sendDm" active-color="#52c41a" inactive-color="#d9d9d9"></el-switch>
+                            </div>
+                        </div>
+                        <div class="divider"></div>
+                        <el-form-item :label-width="formLabelWidth" label="微信通知">
+                            <div class="wx-input-group">
+                                <el-input autocomplete="off" v-model="room.wxuid" placeholder="填写UID接收微信通知">
+                                    <i slot="prefix" class="el-icon-chat-dot-round"></i>
+                                </el-input>
+                                <el-button @click="wxDialogVisible = true" size="small" type="primary" icon="el-icon-full-screen">扫码</el-button>
+                            </div>
                         </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="微信消息uid">
-                            <el-button @click="wxDialogVisible = true" size="mini" type="primary">扫码获取uid</el-button>
-                            <el-input autocomplete="off" v-model="room.wxuid"></el-input>
-                        </el-form-item>
-                        <el-form-item :label-width="formLabelWidth" label="微信消息类型">
-                            <el-input autocomplete="off" v-model="room.pushMsgTags"></el-input>
+                        <el-form-item :label-width="formLabelWidth" label="通知类型">
+                            <el-input autocomplete="off" v-model="room.pushMsgTags" placeholder="消息类型标签"></el-input>
                         </el-form-item>
                     </div>
                 </el-collapse-transition>
             </div>
 
-            <div class="section-group">
-                <div class="section-header" @click="section.uploadUser = !section.uploadUser">投稿用户<i :class="section.uploadUser ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
+            <!-- 投稿用户 -->
+            <div class="section-group" :class="{ 'is-expanded': section.uploadUser }">
+                <div class="section-header" @click="section.uploadUser = !section.uploadUser">
+                    <div class="section-header-left">
+                        <i class="el-icon-user section-icon"></i>
+                        <span>投稿用户</span>
+                    </div>
+                    <i :class="section.uploadUser ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="section-arrow"></i>
+                </div>
                 <el-collapse-transition>
                     <div class="section-body" v-show="section.uploadUser">
-                        <el-form-item :label-width="formLabelWidth" label="上传用户">
-                            <el-select v-model="room.uploadUserId">
-                                <el-option :key="item.id" :label="item.uname" :value="item.id" v-for="item in users"></el-option>
+                        <el-form-item :label-width="formLabelWidth" label="上传账号">
+                            <el-select v-model="room.uploadUserId" placeholder="选择用于投稿的B站账号" class="full-width-select">
+                                <el-option :key="item.id" :label="item.uname" :value="item.id" v-for="item in users">
+                                    <span style="float: left">{{ item.uname }}</span>
+                                    <span style="float: right; color: #8492a6; font-size: 12px">UID: {{ item.id }}</span>
+                                </el-option>
                             </el-select>
                         </el-form-item>
                     </div>
                 </el-collapse-transition>
             </div>
         </el-form>
-        <div class="drawer-footer" slot="footer" style="display: flex; justify-content: space-between;">
-            <div>
-                <el-button @click="copyConfig" type="info" icon="el-icon-document-copy" size="small">复制配置</el-button>
-                <el-button @click="pasteConfig" type="warning" icon="el-icon-document-add" size="small">粘贴配置</el-button>
+        <div class="dialog-footer" slot="footer">
+            <div class="footer-left">
+                <el-button @click="copyConfig" icon="el-icon-document-copy" size="small">复制配置</el-button>
+                <el-button @click="pasteConfig" icon="el-icon-document-add" size="small">粘贴配置</el-button>
             </div>
-            <div>
-                <el-button @click="cancelEdit" type="danger">放 弃</el-button>
-                <el-button @click="updateRoom()" type="success">保 存</el-button>
+            <div class="footer-right">
+                <el-button @click="cancelEdit">取消</el-button>
+                <el-button @click="updateRoom()" type="primary" icon="el-icon-check">保存</el-button>
             </div>
         </div>
     </el-dialog>
@@ -553,36 +680,118 @@
             <el-button @click="exportConfigF()" type="success">导 出</el-button>
         </div>
     </el-dialog>
-    <el-dialog :visible.sync="editLiveMsgSettingVisible" :fullscreen="isMobile" title="弹幕过滤">
-        <el-form :model="room">
-            <el-form-item label="弹幕重复过滤" label-width="300">
-                <el-select placeholder="请选择" v-model="room.dmDistinct">
-                    <el-option :value="false" label="不过滤"></el-option>
-                    <el-option :value="true" label="过滤"></el-option>
-                </el-select>
-            </el-form-item>
-            <el-form-item label="粉丝勋章屏蔽(需录制原始数据生效)" label-width="300">
-                <el-select placeholder="请选择" v-model="room.dmFanMedal">
-                    <el-option :value="0" label="不过滤"></el-option>
-                    <el-option :value="1" label="佩戴粉丝勋章"></el-option>
-                    <el-option :value="2" label="佩戴主播粉丝勋章"></el-option>
-                </el-select>
-            </el-form-item>
-            <el-form-item label="用户ul等级(佩戴勋章的弹幕无效)" label-width="300">
-                <el-col :span="8">
-                    <el-input autocomplete="off" type="number" v-model="room.dmUlLevel"></el-input>
-                </el-col>
-            </el-form-item>
-            <el-form-item label="关键词屏蔽(一行一个)" label-width="300">
-                <el-col :span="8">
-                    <el-input :rows="3" autocomplete="off"
-                              type="textarea" v-model="room.dmKeywordBlacklist"></el-input>
-                </el-col>
-            </el-form-item>
-        </el-form>
+    
+    <!-- 弹幕过滤设置对话框 -->
+    <el-dialog :visible.sync="editLiveMsgSettingVisible" :fullscreen="isMobile" custom-class="danmaku-filter-dialog">
+        <div slot="title" class="dialog-header">
+            <div class="dialog-title-wrapper">
+                <i class="el-icon-chat-line-round"></i>
+                <span class="el-dialog__title">弹幕过滤设置</span>
+                <span class="dialog-room-info" v-if="room.uname">{{ room.uname }}</span>
+            </div>
+        </div>
+        
+        <div class="danmaku-settings">
+            <!-- 基础过滤 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-filter"></i>
+                    <span>基础过滤</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="filter-item">
+                        <div class="filter-item-info">
+                            <span class="filter-item-label">重复弹幕过滤</span>
+                            <span class="filter-item-desc">过滤同一场直播中的重复弹幕内容</span>
+                        </div>
+                        <el-switch v-model="room.dmDistinct" active-color="#52c41a" inactive-color="#d9d9d9"></el-switch>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 粉丝勋章过滤 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-medal"></i>
+                    <span>粉丝勋章过滤</span>
+                    <span class="filter-section-tip">需录制原始数据生效</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="medal-filter-options">
+                        <div class="medal-option" 
+                             :class="{ 'is-active': room.dmFanMedal === 0 }"
+                             @click="room.dmFanMedal = 0">
+                            <i class="el-icon-close-notification"></i>
+                            <span>不过滤</span>
+                            <small>接收所有弹幕</small>
+                        </div>
+                        <div class="medal-option" 
+                             :class="{ 'is-active': room.dmFanMedal === 1 }"
+                             @click="room.dmFanMedal = 1">
+                            <i class="el-icon-medal-1"></i>
+                            <span>需佩戴勋章</span>
+                            <small>佩戴任意粉丝勋章</small>
+                        </div>
+                        <div class="medal-option" 
+                             :class="{ 'is-active': room.dmFanMedal === 2 }"
+                             @click="room.dmFanMedal = 2">
+                            <i class="el-icon-star-on"></i>
+                            <span>需佩戴主播勋章</span>
+                            <small>仅限该主播的勋章</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 用户等级过滤 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-user"></i>
+                    <span>用户等级过滤</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="level-filter">
+                        <div class="level-filter-info">
+                            <span class="filter-item-label">最低UL等级</span>
+                            <span class="filter-item-desc">低于此等级的弹幕将被过滤（佩戴勋章用户不受限制）</span>
+                        </div>
+                        <div class="level-input-wrapper">
+                            <el-input-number v-model="room.dmUlLevel" :min="0" :max="60" size="small"></el-input-number>
+                            <span class="level-suffix">级</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 关键词屏蔽 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-document-delete"></i>
+                    <span>关键词屏蔽</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="keyword-filter">
+                        <div class="keyword-filter-info">
+                            <span class="filter-item-desc">包含以下关键词的弹幕将被过滤，每行一个关键词</span>
+                        </div>
+                        <el-input 
+                            type="textarea" 
+                            v-model="room.dmKeywordBlacklist"
+                            :rows="4"
+                            placeholder="输入关键词，每行一个&#10;例如：&#10;广告&#10;推销"
+                            class="keyword-textarea">
+                        </el-input>
+                        <div class="keyword-count" v-if="room.dmKeywordBlacklist">
+                            已添加 {{ (room.dmKeywordBlacklist.match(/\n/g) || []).length + (room.dmKeywordBlacklist.trim() ? 1 : 0) }} 个关键词
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="dialog-footer" slot="footer">
-            <el-button @click="editLiveMsgSettingVisible = false">放 弃</el-button>
-            <el-button @click="editLiveMsgSetting()" type="primary">保 存</el-button>
+            <el-button @click="editLiveMsgSettingVisible = false">取消</el-button>
+            <el-button @click="editLiveMsgSetting()" type="primary" icon="el-icon-check">保存设置</el-button>
         </div>
     </el-dialog>
 

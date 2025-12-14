@@ -32,89 +32,183 @@ public class BiliUserController {
     @Autowired
     BiliUserRepository biliUserRepository;
 
-    private final Map<String, Future<String>> futureMap = new HashMap<>();
-    ExecutorService service = Executors.newFixedThreadPool(10);
+    // 存储登录会话信息：key -> {authCode, createTime, status, message}
+    private final Map<String, LoginSession> loginSessionMap = new ConcurrentHashMap<>();
+    
+    // 定时清理过期会话（5分钟）
+    private static final long SESSION_EXPIRE_MS = 5 * 60 * 1000;
+    
+    // 登录会话类
+    private static class LoginSession {
+        String authCode;
+        long createTime;
+        volatile String status; // "pending", "success", "failed", "expired"
+        volatile String message;
+        
+        LoginSession(String authCode) {
+            this.authCode = authCode;
+            this.createTime = System.currentTimeMillis();
+            this.status = "pending";
+            this.message = "等待扫码";
+        }
+        
+        boolean isExpired() {
+            return System.currentTimeMillis() - createTime > SESSION_EXPIRE_MS;
+        }
+    }
 
     @GetMapping("/login")
-    public String loginUser() throws Exception {
-
+    public Map<String, String> loginUser() throws Exception {
+        Map<String, String> result = new HashMap<>();
+        
+        // 清理过期会话
+        cleanExpiredSessions();
+        
         BiliApi.BiliResponseDto<BiliApi.GenerateQRDto> s = BiliApi.generateQRUrlTV();
         if (s.getCode() != 0) {
-            throw new RuntimeException("生成二维码异常，请检查日志");
+            result.put("error", "生成二维码异常，请检查日志");
+            return result;
         }
+        
         BitMatrix bm = new QRCodeWriter().encode(s.getData().getUrl(),
                 BarcodeFormat.QR_CODE, 256, 256);
         BufferedImage bi = MatrixToImageWriter.toBufferedImage(bm);
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         ImageIO.write(bi, "jpg", stream);
         byte[] bytes = Base64.encodeBase64(stream.toByteArray());
-        // 偷懒直接new一个Thread
-        // new thread to check login status
-        Callable<String> callable = () -> {
-            try {
-                Thread.sleep(5000);
-                String loginResp = "";
-                for (int i = 0; i < 60; i++) {
-                    loginResp = BiliApi.loginOnTV(s.getData().getAuth_code());
-                    Integer code = JsonPath.read(loginResp, "code");
-                    if (code == 0) {
-                        BiliSessionDto dto = JSON.parseObject(loginResp).getObject("data", BiliSessionDto.class);
-                        BiliBiliUser biliUser = biliUserRepository.findByUid(dto.getMid());
-                        if (biliUser == null) {
-                            biliUser = new BiliBiliUser();
-                        }
-                        JSONArray cookies = JSON.parseArray(JsonPath.read(loginResp, "data.cookie_info.cookies").toString());
-                        StringBuilder cookieString = new StringBuilder();
-                        for (Object object : cookies) {
-                            JSONObject cookie = (JSONObject) object;
-                            cookieString.append(cookie.get("name").toString());
-                            cookieString.append(":");
-                            cookieString.append(cookie.get("value").toString());
-                            cookieString.append("; ");
-                        }
-                        biliUser.setCookies(cookieString.toString());
-                        biliUser.setUid(dto.getMid());
-                        biliUser.setAccessToken(dto.getAccessToken());
-                        biliUser.setRefreshToken(dto.getRefreshToken());
-                        biliUser.setLogin(true);
-                        biliUser.setUpdateTime(LocalDateTime.now());
-                        String userInfo = BiliApi.appMyInfo(biliUser);
-                        biliUser.setUname(JsonPath.read(userInfo, "data.uname"));
-                        log.info("{} 登录成功!!!", biliUser.getUname());
-                        biliUserRepository.save(biliUser);
-                        return "登录成功";
-                    } else if (code == 86038) {
-                        log.info("扫码超时");
-                        return JsonPath.read(loginResp, "message");
-                    }
-                    Thread.sleep(5000);
-
-                }
-                return "登录失败，" + JsonPath.read(loginResp, "message");
-            } catch (InterruptedException e) {
-                return "登录失败";
-            }
-        };
-        Future<String> submit = service.submit(callable);
         String imagesBase64 = new String(bytes);
-        futureMap.put(imagesBase64.substring(imagesBase64.length() - 100), submit);
-        return imagesBase64;
+        
+        // 生成会话key并存储
+        String sessionKey = imagesBase64.substring(imagesBase64.length() - 100);
+        LoginSession session = new LoginSession(s.getData().getAuth_code());
+        loginSessionMap.put(sessionKey, session);
+        
+        result.put("image", imagesBase64);
+        result.put("key", sessionKey);
+        return result;
     }
 
-    @GetMapping("loginReturn")
-    public Map<String, String> loginReturn(@RequestParam String key) throws ExecutionException, InterruptedException, TimeoutException {
-        Future<String> stringFuture = futureMap.get(key);
+    @GetMapping("/loginCheck")
+    public Map<String, String> loginCheck(@RequestParam String key) {
         Map<String, String> result = new HashMap<>();
-        if (stringFuture == null) {
-            result.put("type", "warning");
-            result.put("msg", "登录失败");
-            return result;
-        } else {
-            futureMap.remove(key);
-            result.put("type", "warning");
-            result.put("msg", stringFuture.get(5, TimeUnit.MINUTES));
+        LoginSession session = loginSessionMap.get(key);
+        
+        if (session == null) {
+            result.put("status", "failed");
+            result.put("message", "会话不存在或已过期");
             return result;
         }
+        
+        // 检查是否过期
+        if (session.isExpired()) {
+            loginSessionMap.remove(key);
+            result.put("status", "expired");
+            result.put("message", "二维码已过期，请刷新");
+            return result;
+        }
+        
+        // 如果已经有结果，直接返回
+        if (!"pending".equals(session.status)) {
+            if ("success".equals(session.status)) {
+                loginSessionMap.remove(key);
+            }
+            result.put("status", session.status);
+            result.put("message", session.message);
+            return result;
+        }
+        
+        // 检查登录状态（非阻塞，立即返回）
+        try {
+            String loginResp = BiliApi.loginOnTV(session.authCode);
+            Integer code = JsonPath.read(loginResp, "code");
+            
+            if (code == 0) {
+                // 登录成功，处理用户信息
+                BiliSessionDto dto = JSON.parseObject(loginResp).getObject("data", BiliSessionDto.class);
+                BiliBiliUser biliUser = biliUserRepository.findByUid(dto.getMid());
+                if (biliUser == null) {
+                    biliUser = new BiliBiliUser();
+                }
+                JSONArray cookies = JSON.parseArray(JsonPath.read(loginResp, "data.cookie_info.cookies").toString());
+                StringBuilder cookieString = new StringBuilder();
+                for (Object object : cookies) {
+                    JSONObject cookie = (JSONObject) object;
+                    cookieString.append(cookie.get("name").toString());
+                    cookieString.append(":");
+                    cookieString.append(cookie.get("value").toString());
+                    cookieString.append("; ");
+                }
+                biliUser.setCookies(cookieString.toString());
+                biliUser.setUid(dto.getMid());
+                biliUser.setAccessToken(dto.getAccessToken());
+                biliUser.setRefreshToken(dto.getRefreshToken());
+                biliUser.setLogin(true);
+                biliUser.setUpdateTime(LocalDateTime.now());
+                String userInfo = BiliApi.appMyInfo(biliUser);
+                biliUser.setUname(JsonPath.read(userInfo, "data.uname"));
+                log.info("{} 登录成功!!!", biliUser.getUname());
+                biliUserRepository.save(biliUser);
+                
+                session.status = "success";
+                session.message = "登录成功";
+                result.put("status", "success");
+                result.put("message", "登录成功");
+                loginSessionMap.remove(key);
+                
+            } else if (code == 86038) {
+                // 二维码过期
+                session.status = "expired";
+                session.message = "二维码已过期";
+                result.put("status", "expired");
+                result.put("message", "二维码已过期，请刷新");
+                loginSessionMap.remove(key);
+                
+            } else if (code == 86039) {
+                // 等待扫码
+                result.put("status", "pending");
+                result.put("message", "等待扫码");
+                
+            } else if (code == 86090) {
+                // 已扫码，等待确认
+                result.put("status", "scanned");
+                result.put("message", "已扫码，请在手机上确认");
+                
+            } else {
+                // 其他错误
+                result.put("status", "pending");
+                result.put("message", JsonPath.read(loginResp, "message"));
+            }
+            
+        } catch (Exception e) {
+            log.error("检查登录状态异常", e);
+            result.put("status", "pending");
+            result.put("message", "检查中...");
+        }
+        
+        return result;
+    }
+    
+    @GetMapping("/loginCancel")
+    public Map<String, String> loginCancel(@RequestParam String key) {
+        Map<String, String> result = new HashMap<>();
+        loginSessionMap.remove(key);
+        result.put("status", "cancelled");
+        result.put("message", "已取消");
+        return result;
+    }
+    
+    private void cleanExpiredSessions() {
+        loginSessionMap.entrySet().removeIf(entry -> entry.getValue().isExpired());
+    }
+
+    // 保留旧接口兼容性（已废弃，但保留避免报错）
+    @GetMapping("loginReturn")
+    @Deprecated
+    public Map<String, String> loginReturn(@RequestParam String key) {
+        Map<String, String> result = new HashMap<>();
+        result.put("type", "warning");
+        result.put("msg", "此接口已废弃，请刷新页面使用新版登录");
+        return result;
     }
 
     @GetMapping("/list")
