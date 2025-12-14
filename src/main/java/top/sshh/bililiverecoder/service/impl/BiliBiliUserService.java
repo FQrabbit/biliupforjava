@@ -39,7 +39,7 @@ public class BiliBiliUserService {
             }
 
             user.setCookies(cookieString.toString());
-            log.info("{} 刷新token成功!!!", user.getUname());
+            log.debug("{} 刷新token成功!!!", user.getUname());
             user.setUid(dto.getMid());
             user.setAccessToken(dto.getAccessToken());
             user.setRefreshToken(dto.getRefreshToken());

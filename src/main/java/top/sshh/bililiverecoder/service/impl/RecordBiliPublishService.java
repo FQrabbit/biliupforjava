@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
@@ -43,6 +44,11 @@ public class RecordBiliPublishService {
 
     @Value("${record.work-path}")
     private String workPath;
+
+    @Value("${server.port:8080}")
+    private String serverPort;
+
+    private static final java.util.concurrent.ConcurrentHashMap<Long, LocalDateTime> suspendMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final String WX_MSG_FORMAT = """
             投稿结果: %s
@@ -77,6 +83,8 @@ public class RecordBiliPublishService {
     private LiveMsgService liveMsgService;
     @Autowired
     private LiveMsgRepository msgRepository;
+    @Autowired
+    private CaptchaService captchaService;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -153,13 +161,13 @@ public class RecordBiliPublishService {
                     File file = new File(filePath);
                     if (file.exists()) {
                         synchronized (filePath.intern()) {
-                            log.error("视频重新发布流程获取part上传锁成功，即将再次检查是否已上传完成");
+                            log.info("视频重新发布流程获取part上传锁成功，即将再次检查是否已上传完成");
                             //再次检查是否上传完成
                             Optional<RecordHistoryPart> partOptional = partRepository.findById(uploadPart.getId());
                             if (partOptional.isPresent()) {
                                 RecordHistoryPart part = partOptional.get();
                                 if (!part.isUpload()) {
-                                    log.error("视频发布流程获取part上传锁成功，检查到未上传完成");
+                                    log.info("视频发布流程获取part上传锁成功，检查到未上传完成");
                                     uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
                                 }
                             }
@@ -264,6 +272,14 @@ public class RecordBiliPublishService {
     }
 
     public boolean publishRecordHistory(RecordHistory history) {
+        if (suspendMap.containsKey(history.getId())) {
+            if (suspendMap.get(history.getId()).isAfter(LocalDateTime.now())) {
+                log.info("视频发布任务被暂停，跳过: {}, 恢复时间: {}", history.getTitle(), suspendMap.get(history.getId()));
+                return false;
+            } else {
+                suspendMap.remove(history.getId());
+            }
+        }
         if (history.isPublish()) {
             log.error("视频状态为已发布，退出==>{}", JSON.toJSONString(history));
             return false;
@@ -341,6 +357,7 @@ public class RecordBiliPublishService {
                 }
             }
             LocalDateTime now = LocalDateTime.now();
+            try {
             for (RecordHistoryPart uploadPart : uploadParts) {
                 Optional<RecordHistoryPart> flsuhPartOptional = partRepository.findById(uploadPart.getId());
                 uploadPart = flsuhPartOptional.get();
@@ -368,12 +385,12 @@ public class RecordBiliPublishService {
                             return false;
                         }
                         if (uploadPart.getFileSize() < 1024 * 1024 * room.getFileSizeLimit()) {
-                            log.error("文件大小小于设置的忽略大小，自动删除。");
+                            log.info("文件大小小于设置的忽略大小，自动删除。");
                             partRepository.delete(uploadPart);
                             continue;
                         }
                         if (uploadPart.getDuration() < room.getDurationLimit()) {
-                            log.error("文件时长小于设置的忽略时间，自动删除。");
+                            log.info("文件时长小于设置的忽略时间，自动删除。");
                             partRepository.delete(uploadPart);
                             continue;
                         }
@@ -385,23 +402,44 @@ public class RecordBiliPublishService {
                     log.info("partId={},{} ===>正在上传 ，等待上传完成在发布,即将等待获取锁", uploadPart.getId(), filePath);
                     synchronized (filePath) {
                         TaskUtil.partUploadTask.remove(uploadPart.getId());
-                        log.error("视频发布流程获取part上传锁成功，即将再次检查是否已上传完成");
+                        log.info("视频发布流程获取part上传锁成功，即将再次检查是否已上传完成");
                         //再次检查是否上传完成
                         Optional<RecordHistoryPart> partOptional = partRepository.findById(uploadPart.getId());
                         if (partOptional.isPresent()) {
                             RecordHistoryPart part = partOptional.get();
                             if (!part.isUpload()) {
-                                log.error("视频发布流程获取part上传锁成功，检查到未上传完成");
+                                log.info("视频发布流程获取part上传锁成功，检查到未上传完成");
                                 uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                                try {
+                                    log.info("分P上传完成，等待20秒避免频繁请求...");
+                                    Thread.sleep(20000);
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
                             }
                         }
 
                     }
                 } else {
-                    log.error("视频发布流程,检查到未上传完成,开始上传！");
+                    log.info("视频发布流程,检查到未上传完成,开始上传！");
                     uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                    try {
+                        log.info("分P上传完成，等待20秒避免频繁请求...");
+                        Thread.sleep(20000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
 
+            }
+            } catch (RuntimeException e) {
+                if (e.getMessage() != null && e.getMessage().startsWith("UPLOAD_GATEWAY_ERROR")) {
+                    log.error("捕获到网关错误，暂停任务30分钟: {}", e.getMessage());
+                    suspendMap.put(history.getId(), LocalDateTime.now().plusMinutes(30));
+                    TaskUtil.publishTask.remove(history.getId());
+                    return false;
+                }
+                throw e;
             }
             int preSize = uploadParts.size();
             //重新加载上传列表
@@ -555,9 +593,39 @@ public class RecordBiliPublishService {
                         uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
                         log.info("webPublish uploadRes==>{}", uploadRes);
                         if (uploadRes.contains("验证码")) {
-                            Thread.sleep(120 * 1000L);
-                            uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-                            log.info("clientPublish uploadRes==>{}", uploadRes);
+                            try {
+                                String voucher = JsonPath.read(uploadRes, "data.v_voucher");
+                                Map<String, Object> data = JsonPath.read(uploadRes, "data");
+                                log.warn("投稿受阻，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", history.getTitle(), serverPort);
+                                // 尝试从 data 中获取 geetest 相关信息，如果没有，前端会使用默认的 V4 captchaId
+                                captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
+                                Map<String, String> captchaResult = captchaService.waitForCaptcha();
+                                if (captchaResult != null) {
+                                    // 如果前端返回了 V4 的结果，我们需要确保包含 v_voucher
+                                    if (!captchaResult.containsKey("v_voucher")) {
+                                        captchaResult.put("v_voucher", voucher);
+                                    }
+                                    log.info("Submitting captcha result: {}", JSON.toJSONString(captchaResult));
+                                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
+                                    log.info("captchaPublish uploadRes==>{}", uploadRes);
+                                    
+                                    if (uploadRes.contains("验证码") || uploadRes.contains("\"code\":601")) {
+                                        log.error("验证码验证失败，请检查参数或重试。暂停5分钟后重试。");
+                                        Thread.sleep(300 * 1000L);
+                                        // 抛出异常以触发重试机制，但有了长休眠，不会频繁刷屏
+                                        throw new RuntimeException("验证码验证失败: " + uploadRes);
+                                    }
+                                } else {
+                                    log.warn("Captcha wait timeout, retrying without captcha...");
+                                    Thread.sleep(10 * 1000L);
+                                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+                                }
+                            } catch (Exception e) {
+                                log.error("Handle captcha error", e);
+                                Thread.sleep(120 * 1000L);
+                                uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+                                log.info("clientPublish uploadRes==>{}", uploadRes);
+                            }
                         }
                         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
                         String aid = JSON.parseObject(uploadRes).getJSONObject("data").getString("aid");
@@ -580,14 +648,14 @@ public class RecordBiliPublishService {
                             message.setUid(wxuid);
                             WxPusher.send(message);
                         }
+                        for (RecordHistoryPart part : uploadParts) {
+                            //解析弹幕入库
+                            List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
+                            msgRepository.deleteAll(liveMsgs);
+                            liveMsgService.processing(part);
+                        }
                         //处理高能剪辑事件
                         if (room.isHighEnergyCut()) {
-                            for (RecordHistoryPart part : uploadParts) {
-                                //解析弹幕入库
-                                List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
-                                msgRepository.deleteAll(liveMsgs);
-                                liveMsgService.processing(part);
-                            }
                             highEnergyCutPublishService.process(history);
                         }
 
@@ -612,7 +680,7 @@ public class RecordBiliPublishService {
                                     File file = new File(filePath);
                                     boolean delete = file.delete();
                                     if (delete) {
-                                        log.error("{}=>文件删除成功！！！", filePath);
+                                        log.info("{}=>文件删除成功！！！", filePath);
                                     } else {
                                         log.error("{}=>文件删除失败！！！", filePath);
                                     }
@@ -637,7 +705,7 @@ public class RecordBiliPublishService {
                                             try {
                                                 Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                                         StandardCopyOption.REPLACE_EXISTING);
-                                                log.error("{}=>文件移动成功！！！", file.getName());
+                                                log.info("{}=>文件移动成功！！！", file.getName());
                                             } catch (Exception e) {
                                                 log.error("{}=>文件移动失败！！！", file.getName());
                                             }

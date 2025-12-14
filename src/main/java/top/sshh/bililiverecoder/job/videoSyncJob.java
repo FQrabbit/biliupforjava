@@ -52,33 +52,76 @@ public class videoSyncJob {
     @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void syncVideo() {
         //查询出所有需要同步的录播记录
-        for (RecordHistory next : historyRepository.findByBvIdNotNullAndPublishIsTrueAndCodeLessThan(0)) {
+        for (RecordHistory next : historyRepository.findSyncList()) {
             RecordRoom room = roomRepository.findByRoomId(next.getRoomId());
             if (room == null) {
                 log.error("同步视频状态，未找到房间{}，请删除该录制历史 {}", next.getRoomId(), next);
                 continue;
             }
             BiliBiliUser user = null;
-            if(room.getIsOnlySelf() == 1){
-                user = userRepository.findById(room.getUploadUserId()).get();
+            if(room.getUploadUserId() != null){
+                user = userRepository.findById(room.getUploadUserId()).orElse(null);
+            }
+            try {
+                // 避免请求过快，每次请求间隔3秒
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
             BiliVideoInfoResponse videoInfoResponse = BiliApi.getVideoInfo(user,next.getBvId());
             int code = videoInfoResponse.getCode();
-            if(code == 62002 || code == -400 || code == -404){
-                next = historyRepository.save(next);
-            }
             if(code != 0){
+                log.warn("获取视频信息失败 标题:{} bvid:{} code:{} msg:{}", next.getTitle(), next.getBvId(), code, videoInfoResponse.getMessage());
+                
+                // 处理 62002 (稿件不可见)
+                if (code == 62002) {
+                    next.setCode(code);
+                    historyRepository.save(next);
+                    log.info("稿件不可见 (code 62002), 停止同步");
+                    continue;
+                }
+
+                if (code == -404) {
+                    if (user != null) {
+                        // 尝试使用 Member API 二次确认
+                        var partInfo = BiliApi.getVideoPartInfo(user, next.getBvId());
+                        if (partInfo.getCode() == -404) {
+                            // Member API 也返回 404，确认删除
+                            next.setCode(code);
+                            historyRepository.save(next);
+                            log.info("视频已确认删除 (Member API 404), 更新状态为 -404");
+                        } else if (partInfo.getCode() == 0) {
+                            // Member API 返回 0，视为成功（可能审核中或仅自己可见）
+                            log.info("Member API 返回成功 (code 0)，视为视频已存在，停止同步");
+                            next.setCode(0);
+                            if (partInfo.getData() != null && partInfo.getData().getVideos() != null && !partInfo.getData().getVideos().isEmpty()) {
+                                next.setAvId(String.valueOf(partInfo.getData().getVideos().get(0).getAid()));
+                            }
+                            historyRepository.save(next);
+                            continue;
+                        } else {
+                            log.warn("Member API 返回 code {}, 暂不标记为删除", partInfo.getCode());
+                        }
+                    } else {
+                        log.warn("未配置上传用户，无法确认 404 是否为权限问题，跳过状态更新");
+                    }
+                }
                 continue;
             }
             BiliVideoInfoResponse.BiliVideoInfo videoInfoResponseData = videoInfoResponse.getData();
-            if(videoInfoResponseData.getState() != 0){
-                continue;
-            }
-            next.setCode(code);
+            // 更新状态
+            next.setCode(videoInfoResponseData.getState());
             next.setAvId(videoInfoResponseData.getAid());
             next.setBvId(videoInfoResponseData.getBvid());
             next.setCoverUrl(videoInfoResponseData.getPic());
             next = historyRepository.save(next);
+
+            // 0: 开放浏览, -50: 仅自己可见
+            // 这两种状态都视为"发布成功"，可以进行后续的弹幕解析
+            if(videoInfoResponseData.getState() != 0 && videoInfoResponseData.getState() != -50){
+                continue;
+            }
+            
             RecordRoom recordRoom = room;
             List<BiliVideoInfoResponse.BiliVideoInfoPart> pages = videoInfoResponseData.getPages();
             for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
@@ -104,7 +147,7 @@ public class videoSyncJob {
                         File file = new File(filePath);
                         boolean delete = file.delete();
                         if (delete) {
-                            log.error("{}=>文件删除成功！！！", filePath);
+                            log.info("{}=>文件删除成功！！！", filePath);
                         } else {
                             log.error("{}=>文件删除失败！！！", filePath);
                         }
@@ -129,7 +172,7 @@ public class videoSyncJob {
                                 try {
                                     Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                             StandardCopyOption.REPLACE_EXISTING);
-                                    log.error("{}=>文件移动成功！！！", file.getName());
+                                    log.info("{}=>文件移动成功！！！", file.getName());
                                 } catch (Exception e) {
                                     log.error("{}=>文件移动失败！！！", file.getName());
                                 }
@@ -155,7 +198,7 @@ public class videoSyncJob {
                                 try {
                                     Files.copy(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                             StandardCopyOption.REPLACE_EXISTING);
-                                    log.error("{}=>文件复制成功！！！", file.getName());
+                                    log.info("{}=>文件复制成功！！！", file.getName());
                                 } catch (Exception e) {
                                     log.error("{}=>文件复制失败！！！", file.getName());
                                 }
@@ -165,7 +208,11 @@ public class videoSyncJob {
                     }
                 }
             }
-
+            try {
+                Thread.sleep(2000L);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
     }

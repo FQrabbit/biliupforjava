@@ -10,6 +10,14 @@ public class PreUploadBean {
 
     private int OK;
 
+    private int code;
+
+    private String message;
+
+    private String info;
+
+    private Map<String, Object> detail;
+
     private String bili_filename;
 
     private String auth;

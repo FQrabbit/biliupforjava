@@ -21,14 +21,19 @@
     --radius-lg: 12px;
 }
 
-body {
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
 }
 
 #app {
-    height: 100vh;
+    height: 100%;
     display: flex;
     flex-direction: column;
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -214,6 +219,7 @@ body {
     line-height: 1.7;
     position: relative;
     z-index: 1;
+    word-break: break-word;
 }
 
 .tab-frame {
@@ -384,22 +390,76 @@ body {
     box-shadow: var(--shadow-md);
 }
 
-.data-card.is-streaming {
-    box-shadow: 0 4px 12px rgba(82, 196, 26, 0.25);
-    border-color: rgba(82, 196, 26, 0.3);
-}
-
-.data-card.is-streaming:hover {
-    box-shadow: 0 6px 16px rgba(82, 196, 26, 0.35);
-}
-
 .data-card.is-audit-failed {
-    box-shadow: 0 4px 12px rgba(250, 173, 20, 0.25);
-    border-color: rgba(250, 173, 20, 0.3);
+    border-color: rgba(250, 173, 20, 0.8);
+    box-shadow: 
+        inset 0 0 8px rgba(250, 173, 20, 0.1),
+        0 0 10px rgba(250, 173, 20, 0.3),
+        0 4px 20px rgba(250, 173, 20, 0.1);
 }
 
 .data-card.is-audit-failed:hover {
-    box-shadow: 0 6px 16px rgba(250, 173, 20, 0.35);
+    transform: translateY(-2px) scale(1.005);
+    border-color: #faad14;
+    box-shadow: 
+        inset 0 0 12px rgba(250, 173, 20, 0.2),
+        0 0 18px rgba(250, 173, 20, 0.5),
+        0 8px 28px rgba(250, 173, 20, 0.2);
+    z-index: 1;
+}
+
+/* Processing State (Blue) - Auditing, Transcoding */
+.data-card.is-processing {
+    border-color: rgba(91, 108, 255, 0.8);
+    box-shadow: 
+        inset 0 0 8px rgba(91, 108, 255, 0.1),
+        0 0 10px rgba(91, 108, 255, 0.3),
+        0 4px 20px rgba(91, 108, 255, 0.1);
+}
+.data-card.is-processing:hover {
+    transform: translateY(-2px) scale(1.005);
+    border-color: #5b6cff;
+    box-shadow: 
+        inset 0 0 12px rgba(91, 108, 255, 0.2),
+        0 0 18px rgba(91, 108, 255, 0.5),
+        0 8px 28px rgba(91, 108, 255, 0.2);
+    z-index: 1;
+}
+
+/* Failed State (Red) - Rejected, Locked */
+.data-card.is-failed {
+    border-color: rgba(255, 77, 79, 0.8);
+    box-shadow: 
+        inset 0 0 8px rgba(255, 77, 79, 0.1),
+        0 0 10px rgba(255, 77, 79, 0.3),
+        0 4px 20px rgba(255, 77, 79, 0.1);
+}
+.data-card.is-failed:hover {
+    transform: translateY(-2px) scale(1.005);
+    border-color: #ff4d4f;
+    box-shadow: 
+        inset 0 0 12px rgba(255, 77, 79, 0.2),
+        0 0 18px rgba(255, 77, 79, 0.5),
+        0 8px 28px rgba(255, 77, 79, 0.2);
+    z-index: 1;
+}
+
+/* Success State (Green) - Passed */
+.data-card.is-success {
+    border-color: rgba(82, 196, 26, 0.8);
+    box-shadow: 
+        inset 0 0 8px rgba(82, 196, 26, 0.1),
+        0 0 10px rgba(82, 196, 26, 0.3),
+        0 4px 20px rgba(82, 196, 26, 0.1);
+}
+.data-card.is-success:hover {
+    transform: translateY(-2px) scale(1.005);
+    border-color: #52c41a;
+    box-shadow: 
+        inset 0 0 12px rgba(82, 196, 26, 0.2),
+        0 0 18px rgba(82, 196, 26, 0.5),
+        0 8px 28px rgba(82, 196, 26, 0.2);
+    z-index: 1;
 }
 
 .card-header {
@@ -825,5 +885,52 @@ pre {
  margin-right: 0;
  margin-bottom: 0;
  width: 50%;
+}
+
+@media (max-width: 768px) {
+    #p {
+        padding: 0 0 20px 0;
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    .el-tabs__item {
+        padding: 0 15px;
+        font-size: 14px;
+    }
+
+    .tab-frame {
+        border: none;
+        border-radius: 0;
+        height: 100%;
+    }
+    
+    .version-item {
+        padding: 15px;
+        border-radius: 0;
+        border-left: none;
+        border-top: 4px solid var(--primary-color);
+    }
+    
+    .version-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+}
+
+
+
+/* Alert Flashing Animation */
+@keyframes flash-orange {
+    0% { background-color: transparent; color: inherit; }
+    50% { background-color: rgba(255, 165, 0, 0.2); color: #ff8c00; text-shadow: 0 0 5px rgba(255, 140, 0, 0.5); }
+    100% { background-color: transparent; color: inherit; }
+}
+.alert-flashing {
+    animation: flash-orange 2s infinite;
+    padding: 0 5px;
+    border-radius: 4px;
+    display: inline-block;
 }
 

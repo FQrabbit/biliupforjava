@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="录播姬上传插件 - 自动化直播录制上传解决方案">
     <meta name="theme-color" content="#5b6cff">
+    <link rel="icon" href="img/icon.svg" type="image/svg+xml">
     <title>录播姬上传插件</title>
     <link href="css/element-ui.css" rel="stylesheet">
     <link href="css/index.css" rel="stylesheet">
@@ -24,6 +25,9 @@
         <el-tab-pane label="🎬 直播间" name="room"></el-tab-pane>
         <el-tab-pane label="👤 bilibili用户" name="user"></el-tab-pane>
         <el-tab-pane label="📋 录制历史" name="history"></el-tab-pane>
+        <el-tab-pane name="log">
+            <span slot="label" :class="{ 'alert-flashing': hasAlerts }">🖥️ 日志控制台</span>
+        </el-tab-pane>
     </el-tabs>
     <div id="p">
         <transition name="fade-transform" mode="out-in">
@@ -47,7 +51,15 @@
         data: {
             activeName: 'home',
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+            hasAlerts: false,
             versions: [
+                { time: '2025-12-14', version: '1.4.1-beta4.6', content: '新增验证码控制台脚本方案及Debug信息；新增上传线路错误(500/504)自动暂停机制；请求增加限流保护（投稿/上传/同步/刷新）；优化评论发送；优化异常提醒界面支持长日志查看与复制；录制历史新增房间号列。' },
+                { time: '2025-12-11', version: '1.4.1-beta4.4', content: '优化弹幕发送逻辑，自动忽略仅自己可见稿件。' },
+                { time: '2025-12-11', version: '1.4.1-beta4.3', content: '紧急修复编辑稿件可见性问题，并将工作流程增加日志提示以及操作延迟；修复评论发送逻辑，避免无评论时重复检查' },
+                { time: '2025-12-11', version: '1.4.1-beta4.2', content: '修复404无限循环问题（增加Member API二次确认）；修复文件管理模块日志等级错误（成功操作不再标记为ERROR）；优化日志信息（增加BVID/标题显示，弹幕超时降级为WARN）。' },
+                { time: '2025-12-11', version: '1.4.1-beta4.1', content: '支持“仅自己可见”稿件视为发布成功并自动执行后续操作（发评论/弹幕/文件处理）；优化评论区SC和上舰信息格式；优化历史记录查询性能。' },
+                { time: '2025-12-11', version: '1.4.1-beta4', content: '新增视频投稿状态同步（支持审核中、转码中等状态识别）；新增直播间状态主动查询兜底机制；优化界面卡片颜色指示；修复被退回稿件导致无限查询等问题。' },
+                { time: '2025-12-09', version: '1.4.1-beta3-alpha10', content: '新增日志功能，方便直接网页直接看错误信息。' },
                 { time: '2025-12-09', version: '1.4.1-beta3', content: '主页美化。' },
                 { time: '2025-09-15', version: '1.4.1', content: '修复高能片段弹幕太少导致生成错误，逻辑微调。' },
                 { time: '2025-08-15', version: '1.4.0', content: '新增高能片段自动剪辑投稿功能。' },
@@ -99,6 +111,8 @@
                         return 'html/user.html';
                     case 'history':
                         return 'html/history.html';
+                    case 'log':
+                        return 'html/log.html';
                     default:
                         return '';
                 }
@@ -113,8 +127,18 @@
             setTimeout(function() {
                 self.enableTabDrag();
             }, 100);
+            this.checkAlerts();
+            setInterval(this.checkAlerts, 30000);
         },
         methods: {
+            checkAlerts: function() {
+                fetch('/log/alerts')
+                    .then(res => res.json())
+                    .then(data => {
+                        this.hasAlerts = data && data.length > 0;
+                    })
+                    .catch(e => console.error(e));
+            },
             toggleTheme: function() {
                 this.theme = this.theme === 'dark' ? 'light' : 'dark';
                 this.applyTheme(this.theme);

@@ -35,6 +35,7 @@ import top.sshh.bililiverecoder.util.bili.upload.pojo.CompleteUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean;
 import top.sshh.bililiverecoder.util.bili.user.UserMy;
 import top.sshh.bililiverecoder.util.bili.user.UserMyRootBean;
+import top.sshh.bililiverecoder.service.CaptchaService;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -52,6 +53,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service("kodoRecordPartBilibiliUploadService")
 public class KodoRecordPartBilibiliUploadService implements RecordPartUploadService {
+
+    @Autowired
+    private CaptchaService captchaService;
+
+    @Value("${server.port:8080}")
+    private String serverPort;
 
     public static final String OS = "kodo";
 
@@ -180,6 +187,10 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                             Map<String, String> preParams = new HashMap<>();
                             preParams.put("r", uploadEnums.getOs());
                             preParams.put("profile", uploadEnums.getProfile());
+                            preParams.put("ssl", "0");
+                            preParams.put("version", "2.14.0.0");
+                            preParams.put("build", "2140000");
+                            preParams.put("webVersion", "2.14.0");
                             preParams.put("name", uploadFile.getName());
                             preParams.put("size", String.valueOf(uploadFile.length()));
                             long fileSize = uploadFile.length();
@@ -191,11 +202,22 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 do {
                                     preUploadBean = preuploadRequest.getPojo();
                                     if (preUploadBean == null || preUploadBean.getOK() == 0) {
-                                        try {
-                                            log.info("上传限流等待十秒==>{}", uploadFile.getName());
-                                            Thread.sleep(10000L);
-                                        } catch (InterruptedException e) {
-                                            e.printStackTrace();
+                                            log.warn("PreUpload failed. Bean: {}", JSON.toJSONString(preUploadBean));
+                                            if (preUploadBean != null && ((preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) || preUploadBean.getCode() == 406)) {
+                                                String voucher = (preUploadBean.getDetail() != null) ? (String) preUploadBean.getDetail().get("v_voucher") : "MANUAL_INTERVENTION";
+                                                log.warn("投稿受阻(Code:{})，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", preUploadBean.getCode(), uploadFile.getName(), serverPort);
+                                                captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
+                                                Map<String, String> result = captchaService.waitForCaptcha();
+                                                if (result != null) {
+                                                    preParams.putAll(result);
+                                                }
+                                            } else {
+                                            log.warn("上传限流等待十秒==>{}", uploadFile.getName());
+                                            try {
+                                                Thread.sleep(10000L);
+                                            } catch (InterruptedException e) {
+                                                e.printStackTrace();
+                                            }
                                         }
                                     }
                                 } while (Objects.requireNonNull(preUploadBean).getOK() == 0);
@@ -251,7 +273,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     break;
                                                 }
                                                 int count = upCount.incrementAndGet();
-                                                log.info("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
+                                                log.debug("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
                                                         filePath, count, chunkNum);
                                                 break;
                                             } catch (Exception e) {
@@ -354,7 +376,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     if (room.getDeleteType() == 1) {
                                         boolean delete = uploadFile.delete();
                                         if (delete) {
-                                            log.error("{}=>文件删除成功！！！", filePath);
+                                            log.info("{}=>文件删除成功！！！", filePath);
                                         } else {
                                             log.error("{}=>文件删除失败！！！", filePath);
                                         }
@@ -379,7 +401,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 try {
                                                     Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                                             StandardCopyOption.REPLACE_EXISTING);
-                                                    log.error("{}=>文件移动成功！！！", file.getName());
+                                                    log.info("{}=>文件移动成功！！！", file.getName());
                                                 } catch (Exception e) {
                                                     log.error("{}=>文件移动失败！！！", file.getName());
                                                 }

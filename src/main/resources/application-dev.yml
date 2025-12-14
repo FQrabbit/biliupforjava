@@ -38,7 +38,14 @@ record:
   work-path: /bilirecord
   wx-push-token: AT_oboGsjlaGphljfVS9TtC7JfuBB0xPJrn
 
+bili:
+  app-key: 4409e2ce8ffd12b8
+  app-secret: 59b43e04ad6965f34319062b478f83dd
+
 logging:
+  level:
+    org.springframework.web.servlet.DispatcherServlet: WARN
+    top.sshh.bililiverecoder: DEBUG
   file:
     path: ${record.work-path}/log/
   logback:

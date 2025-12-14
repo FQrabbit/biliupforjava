@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
     <script src="../js/jquery-3.3.1.min.js"></script>
@@ -47,7 +48,12 @@
 
     <transition name="fade-transform" mode="out-in">
     <div v-if="viewMode === 'card'" class="data-card-grid" key="card">
-        <div class="data-card" :class="{ 'is-streaming': item.streaming }" v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
+        <div class="data-card" 
+             :class="{ 
+                'is-success': item.recording, 
+                'is-processing': item.streaming && !item.recording 
+             }" 
+             v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1; min-width: 0; margin-right: 10px;">
                     <div class="card-title" style="font-weight: bold; font-size: 16px; margin-bottom: 5px; word-break: break-all;">{{ item.uname }}</div>
@@ -204,7 +210,17 @@
     </div>
     </transition>
 
-    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="房间信息" :before-close="handleClose" :close-on-click-modal="false">
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" :before-close="handleClose" :close-on-click-modal="false">
+        <div slot="title">
+            <span class="el-dialog__title">房间信息</span>
+            <div style="position: absolute; right: 50px; top: 0; height: 54px; display: flex; align-items: center;">
+                <el-tooltip :content="allExpanded ? '全部收起' : '全部展开'" placement="bottom">
+                    <el-button type="text" @click="toggleAllSections" style="padding: 10px;">
+                        <img src="/img/icon.svg" style="width: 20px; height: 20px;" :style="{transform: allExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s'}">
+                    </el-button>
+                </el-tooltip>
+            </div>
+        </div>
         <el-form :model="room">
             <div class="section-group">
                 <div class="section-header" @click="section.basic = !section.basic">基础设置<i :class="section.basic ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i></div>
@@ -391,9 +407,15 @@
                 </el-collapse-transition>
             </div>
         </el-form>
-        <div class="drawer-footer" slot="footer">
-            <el-button @click="cancelEdit" type="danger">放 弃</el-button>
-            <el-button @click="updateRoom()" type="success">保 存</el-button>
+        <div class="drawer-footer" slot="footer" style="display: flex; justify-content: space-between;">
+            <div>
+                <el-button @click="copyConfig" type="info" icon="el-icon-document-copy" size="small">复制配置</el-button>
+                <el-button @click="pasteConfig" type="warning" icon="el-icon-document-add" size="small">粘贴配置</el-button>
+            </div>
+            <div>
+                <el-button @click="cancelEdit" type="danger">放 弃</el-button>
+                <el-button @click="updateRoom()" type="success">保 存</el-button>
+            </div>
         </div>
     </el-dialog>
 
@@ -586,11 +608,31 @@
             <el-button @click="wxDialogVisible = false" type="primary">关 闭</el-button>
         </div>
     </el-dialog>
+
+    <el-dialog :visible.sync="manualPasteDialogVisible" :fullscreen="isMobile" title="手动粘贴配置" append-to-body>
+        <div style="margin-bottom: 15px;">
+            <p>由于浏览器安全限制，无法自动读取剪贴板。</p>
+            <p>请手动将配置内容粘贴到下方的文本框中，然后点击“应用”。</p>
+            <el-link type="primary" @click="showPasteHelp" style="margin-top: 5px;">为什么无法自动粘贴？</el-link>
+        </div>
+        <el-input
+            type="textarea"
+            :rows="10"
+            placeholder="在此处粘贴配置内容..."
+            v-model="manualPasteContent">
+        </el-input>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="manualPasteDialogVisible = false">取 消</el-button>
+            <el-button type="primary" @click="handleManualPaste">应 用</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script>
     new Vue({
         el: '#roomTable',
         data: {
+            manualPasteDialogVisible: false,
+            manualPasteContent: '',
             loading: false,
             seasonsList: [],
             typeList: [
@@ -2144,13 +2186,14 @@
             isMobile: window.innerWidth <= 768,
             viewMode: 'card',
             section: {
-                basic: true,
+                basic: false,
                 upload: false,
                 control: false,
                 delete: false,
                 notify: false,
                 uploadUser: false
             },
+            allExpanded: false,
             partitionDialogVisible: false,
             currentPartitionLevel: 0,
             currentPartitionParent: null,
@@ -2189,6 +2232,136 @@
                     type: 'warning'
                 });
                 this.dialogFormVisible = false;
+            },
+            copyConfig() {
+                // 复制当前房间配置到剪贴板（排除id和roomId等唯一标识）
+                const config = JSON.parse(JSON.stringify(this.room));
+                // 移除不应复制的字段
+                delete config.id;
+                delete config.roomId;
+                delete config.uname;
+                delete config.title;
+                delete config.streaming;
+                delete config.recording;
+                delete config.startTime;
+                delete config.coverUrl; // 封面通常不复制
+                
+                const configStr = JSON.stringify(config);
+                
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(configStr).then(() => {
+                        this.$message.success('配置已复制到剪贴板');
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                        this.$message.error('复制失败');
+                    });
+                } else {
+                    // Fallback
+                    const textArea = document.createElement("textarea");
+                    textArea.value = configStr;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        this.$message.success('配置已复制到剪贴板');
+                    } catch (err) {
+                        console.error('Fallback copy failed', err);
+                        this.$message.error('复制失败');
+                    }
+                    document.body.removeChild(textArea);
+                }
+            },
+            pasteConfig() {
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    navigator.clipboard.readText().then(text => {
+                        this.applyPastedConfig(text);
+                    }).catch(err => {
+                        console.error('Failed to read clipboard: ', err);
+                        // 读取失败时，尝试打开手动粘贴对话框
+                        this.manualPasteContent = '';
+                        this.manualPasteDialogVisible = true;
+                    });
+                } else {
+                    // 不支持自动读取时，打开手动粘贴对话框
+                    this.manualPasteContent = '';
+                    this.manualPasteDialogVisible = true;
+                }
+            },
+            handleManualPaste() {
+                if (!this.manualPasteContent) {
+                    this.$message.warning('请先粘贴配置内容');
+                    return;
+                }
+                this.applyPastedConfig(this.manualPasteContent);
+                this.manualPasteDialogVisible = false;
+            },
+            showPasteHelp() {
+                 const flagUrl = 'chrome://flags/#unsafely-treat-insecure-origin-as-secure';
+                 const currentOrigin = window.location.origin;
+                 this.$alert(`
+                    <div style="text-align: left;">
+                        <p>浏览器的安全策略限制了剪贴板访问。</p>
+                        <p><b>原因：</b>当前使用的是非安全连接 (HTTP) 且非本地访问 (localhost)。</p>
+                        <p><b>解决方案：</b></p>
+                        <ol style="padding-left: 20px; margin: 5px 0;">
+                            <li>使用 HTTPS 访问</li>
+                            <li>使用 localhost 访问</li>
+                            <li>修改浏览器 flag 允许不安全源</li>
+                        </ol>
+                        <div style="margin-top: 10px; padding: 10px; background-color: #f0f9eb; border-radius: 4px;">
+                            <div style="font-weight: bold; margin-bottom: 5px;">如何修改 Flag (方案3):</div>
+                            <div style="font-size: 12px; color: #606266; margin-bottom: 5px;">请复制下方地址到浏览器地址栏打开 (无法直接跳转):</div>
+                            <div style="background: #fff; padding: 5px; border: 1px solid #dcdfe6; border-radius: 3px; color: #409EFF; word-break: break-all; font-family: monospace; user-select: all;">
+                                ${flagUrl}
+                            </div>
+                            <div style="font-size: 12px; margin-top: 5px; line-height: 1.5;">
+                                1. 将 <b>Insecure origins treated as secure</b> 设置为 <b>Enabled</b><br>
+                                2. 在下方输入框填入: <span style="color: #F56C6C; font-weight: bold;">${currentOrigin}</span><br>
+                                3. 点击右下角 <b>重启</b> 重启浏览器
+                            </div>
+                        </div>
+                    </div>
+                 `, '无法自动粘贴', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '知道了',
+                    width: '600px'
+                });
+            },
+            applyPastedConfig(text) {
+                try {
+                    const config = JSON.parse(text);
+                    // 验证是否是有效的配置对象 (简单验证)
+                    if (typeof config !== 'object') {
+                        throw new Error('Invalid config format');
+                    }
+                    
+                    // 保留当前房间的唯一标识
+                    const currentId = this.room.id;
+                    const currentRoomId = this.room.roomId;
+                    const currentUname = this.room.uname;
+                    
+                    // 合并配置
+                    this.room = { ...this.room, ...config };
+                    
+                    // 恢复唯一标识
+                    this.room.id = currentId;
+                    this.room.roomId = currentRoomId;
+                    this.room.uname = currentUname;
+                    
+                    // 强制更新视图
+                    this.room = JSON.parse(JSON.stringify(this.room));
+                    
+                    this.$message.success('配置已粘贴并应用');
+                } catch (e) {
+                    console.error(e);
+                    this.$message.error('粘贴失败：无效的配置内容');
+                }
+            },
+            toggleAllSections() {
+                this.allExpanded = !this.allExpanded;
+                for (let key in this.section) {
+                    this.section[key] = this.allExpanded;
+                }
             },
             getTypeName: function (id) {
                 for (let i = 0; i < this.typeList.length; i++) {
@@ -2578,6 +2751,7 @@
     .el-dialog__body {
         overflow-y: auto;
         flex: 1;
+        position: relative;
     }
 
     .el-dialog__footer {

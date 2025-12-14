@@ -34,6 +34,7 @@ import top.sshh.bililiverecoder.util.bili.upload.pojo.LineUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean;
 import top.sshh.bililiverecoder.util.bili.user.UserMy;
 import top.sshh.bililiverecoder.util.bili.user.UserMyRootBean;
+import top.sshh.bililiverecoder.service.CaptchaService;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -49,6 +50,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 @Service("uposRecordPartBilibiliUploadService")
 public class UposRecordPartBilibiliUploadService implements RecordPartUploadService {
+
+    @Autowired
+    private CaptchaService captchaService;
+
+    @Value("${server.port:8080}")
+    private String serverPort;
 
     public static final String OS = "upos";
 
@@ -86,10 +93,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
 
+    private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public void asyncUpload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
-        log.info("partId={},异步上传任务开始==>{}", part.getId(), part.getFilePath());
+        log.info("[UPLOAD_START] 异步上传任务开始 | PartId: {} | File: {}", part.getId(), part.getFilePath());
         this.upload(part);
     }
 
@@ -175,9 +184,14 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                             }
                             // 登录验证结束
+                            synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
                             Map<String, String> preParams = new HashMap<>();
                             preParams.put("r", uploadEnums.getOs());
                             preParams.put("profile", uploadEnums.getProfile());
+                            preParams.put("ssl", "0");
+                            preParams.put("version", "2.14.0.0");
+                            preParams.put("build", "2140000");
+                            preParams.put("webVersion", "2.14.0");
                             preParams.put("name", uploadFile.getName());
                             preParams.put("size", String.valueOf(uploadFile.length()));
                             long fileSize = uploadFile.length();
@@ -191,11 +205,29 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 do {
                                     preUploadBean = preuploadRequest.getPojo();
                                     if (preUploadBean == null || preUploadBean.getOK() == 0) {
-                                        try {
-                                            log.info("上传限流等待十秒==>{}", uploadFile.getName());
-                                            Thread.sleep(10000L);
-                                        } catch (InterruptedException e) {
-                                            e.printStackTrace();
+                                            log.warn("PreUpload failed. Bean: {}", JSON.toJSONString(preUploadBean));
+                                            if (preUploadBean != null && ((preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) || preUploadBean.getCode() == 406)) {
+                                                String voucher = (preUploadBean.getDetail() != null) ? (String) preUploadBean.getDetail().get("v_voucher") : "MANUAL_INTERVENTION";
+                                                log.warn("投稿受阻(Code:{})，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", preUploadBean.getCode(), uploadFile.getName(), serverPort);
+                                                captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
+                                                Map<String, String> result = captchaService.waitForCaptcha();
+                                                if (result != null) {
+                                                    preParams.putAll(result);
+                                                } else {
+                                                    log.warn("验证码等待超时，将休眠10分钟后重试: {}", uploadFile.getName());
+                                                    try {
+                                                        Thread.sleep(600000L);
+                                                    } catch (InterruptedException e) {
+                                                        e.printStackTrace();
+                                                    }
+                                                }
+                                            } else {
+                                            log.warn("上传限流等待十秒==>{}", uploadFile.getName());
+                                            try {
+                                                Thread.sleep(10000L);
+                                            } catch (InterruptedException e) {
+                                                e.printStackTrace();
+                                            }
                                         }
                                     } else {
                                         // 同步更新
@@ -212,7 +244,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         }
                                         LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
                                         uploadBean = uploadRequest.getPojo();
-                                        log.error("preUploadBean==>{}\nuploadBean==>{}", JSON.toJSONString(preUploadBean), JSON.toJSONString(uploadBean));
+                                        log.debug("preUploadBean==>{}\nuploadBean==>{}", JSON.toJSONString(preUploadBean), JSON.toJSONString(uploadBean));
                                     }
                                 } while (preUploadBean.getOK() == 0);
                             } catch (Exception e) {
@@ -233,6 +265,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             // 分段上传
                             AtomicInteger upCount = new AtomicInteger(0);
                             AtomicInteger tryCount = new AtomicInteger(0);
+                            java.util.concurrent.atomic.AtomicReference<String> gatewayError = new java.util.concurrent.atomic.AtomicReference<>(null);
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
                                 long finalI = i;
@@ -241,6 +274,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 Runnable runnable = () -> {
                                     try {
                                         while (tryCount.get() < 200) {
+                                            if (gatewayError.get() != null) {
+                                                break;
+                                            }
                                             try {
                                                 // 上传
                                                 long endSize = (finalI + 1) * chunkSize;
@@ -270,12 +306,18 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     break;
                                                 }
                                                 int count = upCount.incrementAndGet();
-                                                log.info("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
+                                                log.debug("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
                                                         filePath, count, chunkNum);
                                                 break;
                                             } catch (Exception e) {
+                                                if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("504"))) {
+                                                    log.error("检测到网关错误(500/504)，暂停上传: {}", e.getMessage());
+                                                    gatewayError.set(e.getMessage());
+                                                    tryCount.set(200); // 停止其他线程的重试
+                                                    break;
+                                                }
                                                 tryCount.incrementAndGet();
-                                                log.info("{}==>[{}] 上传视频part {}, index {}, size {}, start {}, end {}, exception={}", Thread.currentThread().getName(), room.getTitle(),
+                                                log.warn("{}==>[{}] 上传视频part {}, index {}, size {}, start {}, end {}, exception={}", Thread.currentThread().getName(), room.getTitle(),
                                                         filePath, finalI, chunkSize, finalI * chunkSize, (finalI + 1) * chunkSize, ExceptionUtils.getStackTrace(e));
                                                 try {
                                                     //                                                log.info("上传失败等待十秒==>{}", uploadFile.getName());
@@ -306,6 +348,11 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             WxPusher.send(message);
 
                             runnableList.stream().parallel().forEach(Runnable::run);
+
+                            if (gatewayError.get() != null) {
+                                throw new RuntimeException("UPLOAD_GATEWAY_ERROR:" + gatewayError.get());
+                            }
+
                             if (tryCount.get() >= 200) {
                                 part = partRepository.findById(part.getId()).get();
                                 part.setUpload(false);
@@ -373,7 +420,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     if (room.getDeleteType() == 1) {
                                         boolean delete = uploadFile.delete();
                                         if (delete) {
-                                            log.error("{}=>文件删除成功！！！", filePath);
+                                            log.info("{}=>文件删除成功！！！", filePath);
                                         } else {
                                             log.error("{}=>文件删除失败！！！", filePath);
                                         }
@@ -398,7 +445,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 try {
                                                     Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                                             StandardCopyOption.REPLACE_EXISTING);
-                                                    log.error("{}=>文件移动成功！！！", file.getName());
+                                                    log.info("{}=>文件移动成功！！！", file.getName());
                                                 } catch (Exception e) {
                                                     log.error("{}=>文件移动失败！！！", file.getName());
                                                 }
@@ -440,6 +487,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     WxPusher.send(message);
                                 }
                             }
+                        }
                         }
                     } else {
                         log.info("分片上传事件，文件不需要上传 ==>{}", JSON.toJSONString(part));

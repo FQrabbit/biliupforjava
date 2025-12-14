@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
     <script src="../js/jquery-3.3.1.min.js"></script>
@@ -119,14 +120,21 @@
 
     <transition :name="transitionName" mode="out-in">
     <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current">
-        <div class="data-card" :class="{ 'is-audit-failed': item.upload && item.code != 0 }" v-for="item in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
+        <div class="data-card" 
+             :class="{ 
+                'is-processing': item.upload && (item.code == -1 || item.code == -9 || item.code == -30),
+                'is-failed': item.upload && (item.code == -2 || item.code == -4 || item.code == -100),
+                'is-success': item.upload && (item.code == 0 || item.code == -50),
+                'is-audit-failed': item.upload && item.code != 0 && item.code != -50 && item.code != -1 && item.code != -9 && item.code != -30 && item.code != -2 && item.code != -4 && item.code != -100
+             }" 
+             v-for="item in tableData" :key="item.id" @click="showDetail(item)" style="cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1; min-width: 0; margin-right: 10px; overflow: hidden;">
                     <div class="card-title" style="margin-bottom: 8px; word-break: break-all; line-height: 1.4; font-weight: bold; font-size: 16px;">{{ item.title || '无标题' }}</div>
                     <div v-if="item.bvId" style="margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">BV: {{ item.bvId }}</div>
                     <div class="card-status-row" style="margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 5px; width: 100%;">
-                        <span class="status-chip success" v-if="item.upload">已上传</span>
-                        <span class="status-chip danger" v-else>未上传</span>
+                        <span class="status-chip success" v-if="item.upload">上传:是</span>
+                        <span class="status-chip danger" v-else>上传:否</span>
                         <span class="status-chip warn" v-if="item.recording">录制中</span>
                         <span class="status-chip" :class="item.recording ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
                     </div>
@@ -159,6 +167,11 @@
                 label="id"
                 prop="id"
                 width="60">
+        </el-table-column>
+        <el-table-column
+                label="房间号"
+                prop="roomId"
+                width="100">
         </el-table-column>
         <el-table-column
                 label="主播名"
@@ -230,8 +243,8 @@
                 prop="upload"
                 width="100">
             <template slot-scope="scope">
-                <span class="status-chip success" v-if="scope.row.upload">已上传</span>
-                <span class="status-chip danger" v-else>未上传</span>
+                <span class="status-chip success" v-if="scope.row.upload">是</span>
+                <span class="status-chip danger" v-else>否</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -249,7 +262,15 @@
                 width="100">
             <template slot-scope="scope">
                 <span class="status-chip success" v-if="scope.row.code == 0">通过</span>
-                <span class="status-chip warn" v-else>未通过</span>
+                <span class="status-chip success" v-else-if="scope.row.code == -50">仅自己可见</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -1">审核中</span>
+                <span class="status-chip danger" v-else-if="scope.row.code == -2">被退回</span>
+                <span class="status-chip danger" v-else-if="scope.row.code == -4">被锁定</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -9">转码中</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -30">已提交</span>
+                <span class="status-chip warn" v-else-if="scope.row.code == -40">定时发布</span>
+                <span class="status-chip danger" v-else-if="scope.row.code == -100">已删除</span>
+                <span class="status-chip danger" v-else>未通过({{scope.row.code}})</span>
             </template>
         </el-table-column>
         <el-table-column
@@ -303,7 +324,7 @@
                     @size-change="handleSizeChange"
                     @current-change="handleCurrentChange"
                     :current-page.sync="form.current"
-                    :page-sizes="[5, 10, 25, 50, 100]"
+                    :page-sizes="pageSizes"
                     :page-size="form.pageSize || 10"
                     :layout="isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
                     :pager-count="isMobile ? 5 : 7"
@@ -379,7 +400,16 @@
                 </div>
                 <div class="detail-row">
                     <label>审核状态</label>
-                    <el-tag size="mini" :type="currentDetail.code == 0 ? 'success' : 'warning'" effect="dark">{{ currentDetail.code == 0 ? '通过' : '未通过' }}</el-tag>
+                    <el-tag size="mini" type="success" effect="dark" v-if="currentDetail.code == 0">通过</el-tag>
+                    <el-tag size="mini" type="success" effect="dark" v-else-if="currentDetail.code == -50">仅自己可见</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -1">审核中</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -2">被退回</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -4">被锁定</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -9">转码中</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -30">已提交</el-tag>
+                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -40">定时发布</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -100">已删除</el-tag>
+                    <el-tag size="mini" type="danger" effect="dark" v-else>未通过({{currentDetail.code}})</el-tag>
                 </div>
             </div>
             
@@ -468,7 +498,8 @@
             touchEndX: 0,
             transitionName: 'fade-transform',
             showSwipeHint: false,
-            userChangedPageSize: false
+            userChangedPageSize: false,
+            pageSizes: [5, 10, 25, 50, 100]
         },
         watch: {
             viewMode: function (val) {
@@ -531,6 +562,12 @@
                     if (calculatedSize > 50) calculatedSize = 50;
 
                     const newSize = this.isMobile ? 5 : calculatedSize;
+                    
+                    if (!this.pageSizes.includes(newSize)) {
+                        this.pageSizes.push(newSize);
+                        this.pageSizes.sort((a, b) => a - b);
+                    }
+
                     if (this.form.pageSize !== newSize) {
                         this.$set(this.form, 'pageSize', newSize);
                         this.initTable();
@@ -820,7 +857,13 @@
                 let calculatedSize = Math.floor(availableHeight / estimatedRowHeight);
                 if (calculatedSize < 5) calculatedSize = 5;
                 if (calculatedSize > 50) calculatedSize = 50;
-                this.$set(this.form, 'pageSize', window.innerWidth < 768 ? 5 : calculatedSize);
+                const newSize = window.innerWidth < 768 ? 5 : calculatedSize;
+                this.$set(this.form, 'pageSize', newSize);
+
+                if (!this.pageSizes.includes(newSize)) {
+                    this.pageSizes.push(newSize);
+                    this.pageSizes.sort((a, b) => a - b);
+                }
             }
             if (!this.form.current) {
                 this.$set(this.form, 'current', 1);

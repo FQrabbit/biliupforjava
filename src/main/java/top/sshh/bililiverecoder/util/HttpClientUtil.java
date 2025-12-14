@@ -49,11 +49,9 @@ public class HttpClientUtil {
                     .url(url)
                     .post(requestBody)
                     .build();
-            Response response = client.newCall(build).execute();
-            String string = response.body().string();
-            return string;
+            return execute(build);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("HTTP Request Failed: {}", e.getMessage());
             throw new RuntimeException(e.getMessage());
         }
     }
@@ -64,11 +62,9 @@ public class HttpClientUtil {
                     .url(url)
                     .post(requestBody)
                     .build();
-            Response response = client.newCall(build).execute();
-            String string = response.body().string();
-            return string;
+            return execute(build);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("HTTP Request Failed: {}", e.getMessage());
             throw new RuntimeException(e.getMessage());
         }
     }
@@ -87,13 +83,36 @@ public class HttpClientUtil {
                 .build();
         OkHttpClient currentClient = allowCookie ? clientAllowCookie : client;
         try {
-
-            Response response = currentClient.newCall(build).execute();
-            String string = response.body().string();
-            return string;
+            return execute(currentClient, build);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("HTTP Request Failed: {}", e.getMessage());
             throw new RuntimeException(e.getMessage());
+        }
+    }
+
+    private static String execute(Request request) throws IOException {
+        return execute(client, request);
+    }
+
+    private static String execute(OkHttpClient client, Request request) throws IOException {
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                log.warn("[HTTP_ERROR] Request failed | Code: {} | URL: {}", response.code(), request.url());
+                // 如果是 502/504 等错误，通常返回的是 HTML，直接截断或返回 JSON 格式的错误信息
+                if (response.code() >= 500 || (response.body() != null && response.body().contentType() != null && 
+                    response.body().contentType().toString().contains("text/html"))) {
+                    return "{\"code\": " + response.code() + ", \"message\": \"HTTP " + response.code() + " Error\", \"data\": null}";
+                }
+            }
+            
+            String string = response.body().string();
+            
+            // 简单的风控检测
+            if (string.contains("\"code\":-412") || string.contains("\"code\": -412")) {
+                log.warn("[RISK_CONTROL] 触发B站风控(-412) | URL: {}", request.url());
+            }
+            
+            return string;
         }
     }
 
@@ -108,36 +127,31 @@ public class HttpClientUtil {
                 .build();
         OkHttpClient currentClient = allowCookie ? clientAllowCookie : client;
         try {
-
-            Response response = currentClient.newCall(build).execute();
-            String string = response.body().string();
-            return string;
+            return execute(currentClient, build);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("HTTP Request Failed: {}", e.getMessage());
             throw new RuntimeException(e.getMessage());
         }
     }
 
     public static String get(String url, Map<String, String> headers) {
-        String string;
         do {
             try {
-                Response response = client.newCall(new Request.Builder()
+                Request request = new Request.Builder()
                         .url(url)
                         .headers(Headers.of(headers))
                         .get()
-                        .build()
-                ).execute();
-                string = response.body().string();
-                return string;
+                        .build();
+                return execute(request);
             } catch (UnknownHostException e) {
+                log.warn("UnknownHostException, retrying in 5s: {}", e.getMessage());
                 try {
                     Thread.sleep(5000L);
                 } catch (Exception ignored) {
                 }
 
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("HTTP Get Failed: {}", e.getMessage());
                 throw new RuntimeException(e.getMessage());
             }
         } while (true);
@@ -145,12 +159,11 @@ public class HttpClientUtil {
     }
 
     public static String get(String url) throws IOException {
-        Response response = client.newCall(new Request.Builder()
+        Request request = new Request.Builder()
                 .url(url)
                 .get()
-                .build()
-        ).execute();
-        return response.body().string();
+                .build();
+        return execute(request);
     }
 
     public static String upload(String url, Map<String,String> headers, Map<String, Object> params) throws IOException {
@@ -163,15 +176,13 @@ public class HttpClientUtil {
                 builder.addFormDataPart(k, "file", (RequestBody)v);
             }
         });
-
-        Request.Builder post = new Request.Builder()
+        
+        Request request = new Request.Builder()
                 .url(url)
-                .post(builder.build());
-        headers.forEach(post::header);
-        Request request = post
+                .headers(Headers.of(headers))
+                .post(builder.build())
                 .build();
-        String string = clientAllowCookie.newCall(request).execute().body().string();
-        return string;
+        return execute(request);
     }
 
 

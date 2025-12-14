@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.jayway.jsonpath.JsonPath;
 import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ import top.sshh.bililiverecoder.util.bili.upload.PreUploadRequest;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.CompleteUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.LineUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean;
+import top.sshh.bililiverecoder.service.CaptchaService;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -50,6 +52,12 @@ import java.util.stream.Stream;
 @Component
 public class HighEnergyCutPublishService {
 
+    @Autowired
+    private CaptchaService captchaService;
+
+    @Value("${server.port:8080}")
+    private String serverPort;
+
     public static final Map<Long, String> taskRunningMsg = new ConcurrentHashMap<>();
     private static final String WX_MSG_FORMAT = """
             结果: %s
@@ -58,7 +66,8 @@ public class HighEnergyCutPublishService {
             时间: %s
             原因: %s
             """;
-    @Value("${record.wx-push-token}")
+
+    @Value("${record.work-path}")
     private String wxToken;
     @Autowired
     private BiliUserRepository biliUserRepository;
@@ -251,9 +260,35 @@ public class HighEnergyCutPublishService {
         uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
         log.info("webPublish uploadRes==>{}", uploadRes);
         if (uploadRes.contains("验证码")) {
-            Thread.sleep(120 * 1000L);
-            uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-            log.info("clientPublish uploadRes==>{}", uploadRes);
+            try {
+                String voucher = JsonPath.read(uploadRes, "data.v_voucher");
+                Map<String, Object> data = JsonPath.read(uploadRes, "data");
+                captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
+                Map<String, String> captchaResult = captchaService.waitForCaptcha();
+                if (captchaResult != null) {
+                    if (!captchaResult.containsKey("v_voucher")) {
+                        captchaResult.put("v_voucher", voucher);
+                    }
+                    log.info("Submitting captcha result: {}", JSON.toJSONString(captchaResult));
+                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
+                    log.info("验证码发布 上传结果==>{}", uploadRes);
+
+                    if (uploadRes.contains("验证码") || uploadRes.contains("\"code\":601")) {
+                        log.error("验证码验证失败，请检查参数或重试。暂停5分钟后重试。");
+                        Thread.sleep(300 * 1000L);
+                        throw new RuntimeException("验证码验证失败: " + uploadRes);
+                    }
+                } else {
+                    log.warn("验证码等待超时，重试不使用验证码...");
+                    Thread.sleep(10 * 1000L);
+                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+                }
+            } catch (Exception e) {
+                log.error("处理验证码错误", e);
+                Thread.sleep(120 * 1000L);
+                uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
+                log.info("clientPublish uploadRes==>{}", uploadRes);
+            }
         }
         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
         String aid = JSON.parseObject(uploadRes).getJSONObject("data").getString("aid");
@@ -293,6 +328,10 @@ public class HighEnergyCutPublishService {
         Map<String, String> preParams = new HashMap<>();
         preParams.put("r", uploadEnums.getOs());
         preParams.put("profile", uploadEnums.getProfile());
+        preParams.put("ssl", "0");
+        preParams.put("version", "2.14.0.0");
+        preParams.put("build", "2140000");
+        preParams.put("webVersion", "2.14.0");
         preParams.put("name", uploadFile.getName());
         preParams.put("size", String.valueOf(uploadFile.length()));
         long fileSize = uploadFile.length();
@@ -306,11 +345,22 @@ public class HighEnergyCutPublishService {
             do {
                 preUploadBean = preuploadRequest.getPojo();
                 if (preUploadBean == null || preUploadBean.getOK() == 0) {
-                    try {
-                        log.info("上传限流等待十秒==>{}", uploadFile.getName());
-                        Thread.sleep(10000L);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                    log.warn("预上传失败。Bean: {}", JSON.toJSONString(preUploadBean));
+                    if (preUploadBean != null && ((preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) || preUploadBean.getCode() == 406)) {
+                        String voucher = (preUploadBean.getDetail() != null) ? (String) preUploadBean.getDetail().get("v_voucher") : "MANUAL_INTERVENTION";
+                        log.warn("投稿受阻(Code:{})，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", preUploadBean.getCode(), uploadFile.getName(), serverPort);
+                        captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
+                        Map<String, String> result = captchaService.waitForCaptcha();
+                        if (result != null) {
+                            preParams.putAll(result);
+                        }
+                    } else {
+                        log.warn("上传限流等待十秒==>{}", uploadFile.getName());
+                        try {
+                            Thread.sleep(10000L);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
                 } else {
                     // 同步更新
@@ -327,7 +377,7 @@ public class HighEnergyCutPublishService {
                     }
                     LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
                     uploadBean = uploadRequest.getPojo();
-                    log.error("preUploadBean==>{}\nuploadBean==>{}", JSON.toJSONString(preUploadBean), JSON.toJSONString(uploadBean));
+                    log.debug("preUploadBean==>{}\nuploadBean==>{}", JSON.toJSONString(preUploadBean), JSON.toJSONString(uploadBean));
                 }
             } while (preUploadBean.getOK() == 0);
         } catch (Exception e) {
@@ -373,7 +423,7 @@ public class HighEnergyCutPublishService {
                                 break;
                             }
                             int count = upCount.incrementAndGet();
-                            log.info("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
+                            log.debug("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
                                     filePath, count, chunkNum);
                             break;
                         } catch (Exception e) {

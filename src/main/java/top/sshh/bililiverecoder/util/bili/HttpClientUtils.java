@@ -120,7 +120,7 @@ public class HttpClientUtils {
         httpGet.setConfig(requestConfig);
 
         //        httpGet.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36");
-        httpGet.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36");
+        httpGet.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         httpGet.setHeader("referer", "http://www.bilibili.com");
         // 设置请求头
         packageHeader(headers, httpGet);
@@ -280,7 +280,7 @@ public class HttpClientUtils {
 		httpPost.setHeader("Accept", "application/json");
 		httpPost.setHeader("Accept-Language", "zh-CN,zh;q=0.9");
 		httpPost.setHeader("Accept-Encoding", "gzip, deflate, br");*/
-        httpPost.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36");
+        httpPost.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         packageHeader(headers, httpPost);
 
         // 创建httpResponse对象
