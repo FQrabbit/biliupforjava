@@ -465,6 +465,7 @@
             <el-divider content-position="left">操作</el-divider>
             <div class="detail-actions">
                 <el-button @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
+                <el-button @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
                 <el-button @click="rePublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
                 <el-button @click="highEnergyCutPublish(currentDetail.id)" size="small" type="success" plain icon="el-icon-video-play">高能片段</el-button>
                 <el-button @click="updatePartStatus(currentDetail.id)" size="small" plain icon="el-icon-video-pause">结束录制</el-button>
@@ -789,6 +790,44 @@
                     }
                 });
             },
+            refreshStatus: function (id) {
+                let _this = this;
+                this.$confirm('此操作将立即从B站API获取最新的稿件状态（如审核通过、被退回、锁定等）并更新到本地数据库。<br/><br/>确定要刷新状态吗？', '刷新状态确认', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '刷新',
+                    cancelButtonText: '取消',
+                    type: 'primary'
+                }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在同步B站数据...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    $.ajax({
+                        url: '/history/refreshStatus',
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'post',
+                        data: JSON.stringify({id: id}),
+                        success: function () {
+                            loading.close();
+                            _this.$message({
+                                message: '状态刷新成功',
+                                type: 'success'
+                            });
+                            _this.detailDialogVisible = false;
+                            _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message({
+                                message: '刷新失败，请检查网络或日志',
+                                type: 'error'
+                            });
+                        }
+                    });
+                }).catch(() => {});
+            },
             uploadEditPart: function () {
                 let _this = this;
                 $.ajax({
@@ -806,7 +845,8 @@
             },
             updatePartStatus: function (id) {
                 let _this = this;
-                this.$confirm('确定结束分p录制状态吗？', '提示', {
+                this.$confirm('此操作将强制结束当前正在录制的分P状态。请仅在录制卡死或状态异常时使用。<br/><br/>确定要强制结束录制吗？', '结束录制确认', {
+                    dangerouslyUseHTMLString: true,
                     confirmButtonText: '结束',
                     cancelButtonText: '取消',
                     type: 'warning'
@@ -828,7 +868,8 @@
             },
             updatePublishStatus: function (id) {
                 let _this = this;
-                this.$confirm('确定重置为未上传发布吗？', '提示', {
+                this.$confirm('此操作将把该记录及其所有分P重置为【未上传、未发布】的初始状态，并清除BVID关联。系统将重新开始上传流程。<br/><br/>确定要重置状态吗？', '重置状态确认', {
+                    dangerouslyUseHTMLString: true,
                     confirmButtonText: '重置',
                     cancelButtonText: '取消',
                     type: 'warning'
@@ -850,7 +891,8 @@
             },
             touchPublish: function (id) {
                 let _this = this;
-                this.$confirm('确定触发发布事件吗？', '提示', {
+                this.$confirm('此操作将手动触发视频发布流程。通常用于自动发布失败后的手动重试。<br/><br/>确定要触发发布吗？', '触发发布确认', {
+                    dangerouslyUseHTMLString: true,
                     confirmButtonText: '发布',
                     cancelButtonText: '取消',
                     type: 'warning'
@@ -872,7 +914,8 @@
             },
             rePublish: function (id) {
                 let _this = this;
-                this.$confirm('确定重新上传转码失败部分吗？', '提示', {
+                this.$confirm('此操作将重新上传那些因转码失败（如时间戳跳变）而未成功的视频分P。适用于部分分P上传失败的情况。<br/><br/>确定要执行转码修复吗？', '转码修复确认', {
+                    dangerouslyUseHTMLString: true,
                     confirmButtonText: '上传',
                     cancelButtonText: '取消',
                     type: 'warning'
@@ -894,23 +937,31 @@
             },
             highEnergyCutPublish: function (id) {
                 let _this = this;
-                $.ajax({
-                    url: '/history/highEnergyCutPublish/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
-                });
+                this.$confirm('此操作将根据弹幕数据生成高能剪辑片段并尝试发布。<br/><br/>确定要生成高能片段吗？', '高能片段确认', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '生成',
+                    cancelButtonText: '取消',
+                    type: 'success'
+                }).then(() => {
+                    $.ajax({
+                        url: '/history/highEnergyCutPublish/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        }
+                    });
+                }).catch(() => {});
             },
             deleteHistory: function (id) {
                 let _this = this;
-                this.$confirm('确定删除吗？会同时删除录制文件', '提示', {
+                this.$confirm('此操作将永久删除该条录制历史记录，并同时删除本地的视频文件和弹幕文件！此操作不可恢复！<br/><br/>确定要删除吗？', '删除记录确认', {
+                    dangerouslyUseHTMLString: true,
                     confirmButtonText: '删除',
                     cancelButtonText: '保留',
                     confirmButtonClass: 'el-button--danger',
@@ -934,7 +985,8 @@
             },
             deleteHistoryMsg: function (id) {
                 let _this = this;
-                this.$confirm('确定删除弹幕吗？', '提示', {
+                this.$confirm('此操作将清空数据库中该记录关联的所有弹幕数据（不会删除本地弹幕文件）。<br/><br/>确定要删除弹幕吗？', '删除弹幕确认', {
+                    dangerouslyUseHTMLString: true,
                     confirmButtonText: '删除',
                     cancelButtonText: '保留',
                     confirmButtonClass: 'el-button--danger',
@@ -958,7 +1010,8 @@
             },
             reloadHistoryMsg: function (id) {
                 let _this = this;
-                this.$confirm('确定重新加载弹幕吗？', '提示', {
+                this.$confirm('此操作将重新解析并加载弹幕文件到数据库。<br/><br/>确定要重新加载弹幕吗？', '重载弹幕确认', {
+                    dangerouslyUseHTMLString: true,
                     confirmButtonText: '重新加载',
                     cancelButtonText: '取消',
                     type: 'warning'

@@ -13,6 +13,7 @@ public class BiliVideoPartInfoResponse {
 
     @Data
     public static class BiliVideoInfo {
+        private int state;
         private List<Video> videos;
     }
 

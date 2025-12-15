@@ -50,6 +50,8 @@ public class HistoryController {
     private LiveMsgService msgService;
     @Autowired
     private HighEnergyCutPublishService highEnergyCutPublishService;
+    @Autowired
+    private top.sshh.bililiverecoder.job.videoSyncJob videoSyncJob;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -116,6 +118,14 @@ public class HistoryController {
         result.put("data",list);
         result.put("total",total);
         return result;
+    }
+
+    @PostMapping("/refreshStatus")
+    public void refreshStatus(@RequestBody RecordHistoryDTO request) {
+        Optional<RecordHistory> historyOptional = historyRepository.findById(request.getId());
+        if (historyOptional.isPresent()) {
+            videoSyncJob.syncOne(historyOptional.get());
+        }
     }
 
 

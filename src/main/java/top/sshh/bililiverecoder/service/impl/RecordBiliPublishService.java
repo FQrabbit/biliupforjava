@@ -645,7 +645,9 @@ public class RecordBiliPublishService {
                             if (uploadRes.contains("21588") || uploadRes.contains("时间跳跃") || uploadRes.contains("时间戳")) {
                                 log.error("发布视频失败：文件存在时间戳跳变问题，放弃该投稿 ==> room={}, historyId={}, response={}", 
                                         room.getUname(), history.getId(), uploadRes);
-                                // 不抛出异常，直接返回，避免无意义的重试
+                                // 设置为不上传，避免后续任务再次扫描到
+                                history.setUpload(false);
+                                historyRepository.save(history);
                                 return false;
                             }
                             log.info("发布={}=视频失败 == > {}", room.getUname(), uploadRes);
