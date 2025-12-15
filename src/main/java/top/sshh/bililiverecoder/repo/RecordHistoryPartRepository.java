@@ -35,4 +35,8 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     float sumHistoryDurationByHistoryId(Long historyId);
 
     boolean existsByFilePath(String filePath);
+
+    // 查询需要上传但未上传的分P（录制已结束、未上传、结束时间在指定范围内）
+    List<RecordHistoryPart> findByRoomIdAndRecordingIsFalseAndUploadIsFalseAndEndTimeBetweenOrderByEndTimeAsc(
+        String roomId, LocalDateTime startTime, LocalDateTime endTime);
 }
