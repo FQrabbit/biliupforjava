@@ -26,6 +26,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 @RestController
 @RequestMapping("/room")
 public class RoomController {
@@ -336,6 +342,153 @@ public class RoomController {
     @GetMapping("/lines")
     public UploadEnums[] lines() {
         return UploadEnums.values();
+    }
+
+    @GetMapping("/test-lines")
+    public Map<String, String> testLines() {
+        Map<String, String> result = new HashMap<>();
+        try {
+            // 1. 获取官方线路列表
+            URL url = new URL("https://member.bilibili.com/preupload?r=ping&file=lines.json");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            
+            if (conn.getResponseCode() == 200) {
+                String jsonStr = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                List<Map<String, String>> officialLines = JSON.parseObject(jsonStr, new TypeReference<List<Map<String, String>>>(){});
+                
+                // 2. 准备并发测速
+                // 使用足够的线程数以确保所有线路能同时开始测速，避免排队等待
+                ExecutorService executor = Executors.newFixedThreadPool(UploadEnums.values().length);
+                List<CompletableFuture<Void>> futures = new ArrayList<>();
+                Map<String, String> queryToUrl = new HashMap<>();
+                
+                for (Map<String, String> line : officialLines) {
+                    queryToUrl.put(line.get("query"), line.get("url"));
+                }
+
+                // 3. 遍历本地枚举进行测速
+                for (UploadEnums enumItem : UploadEnums.values()) {
+                    // 去掉 lineQuery 开头的 ? 号来匹配
+                    String queryKey = enumItem.getLineQuery().substring(1);
+                    String testUrlStr = queryToUrl.get(queryKey);
+                    
+                    if (testUrlStr != null) {
+                        if (testUrlStr.startsWith("//")) {
+                            testUrlStr = "https:" + testUrlStr;
+                        }
+                        
+                        String finalTestUrl = testUrlStr;
+                        futures.add(CompletableFuture.runAsync(() -> {
+                            long start = System.currentTimeMillis();
+                            try {
+                                URL testUrl = new URL(finalTestUrl);
+                                HttpURLConnection testConn = (HttpURLConnection) testUrl.openConnection();
+                                testConn.setRequestMethod("GET");
+                                testConn.setConnectTimeout(3000);
+                                testConn.setReadTimeout(3000);
+                                
+                                if (testConn.getResponseCode() == 200) {
+                                    long cost = System.currentTimeMillis() - start;
+                                    synchronized (result) {
+                                        result.put(enumItem.getLine(), cost + "ms");
+                                    }
+                                } else {
+                                    synchronized (result) {
+                                        result.put(enumItem.getLine(), "Error " + testConn.getResponseCode());
+                                    }
+                                }
+                            } catch (Exception e) {
+                                synchronized (result) {
+                                    result.put(enumItem.getLine(), "Timeout");
+                                }
+                            }
+                        }, executor));
+                    } else {
+                        result.put(enumItem.getLine(), "Unknown");
+                    }
+                }
+                
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+                executor.shutdown();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
+
+    @GetMapping("/test-speed")
+    public Map<String, Object> testSpeed(@RequestParam String line) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            UploadEnums enumItem = UploadEnums.find(line);
+            // 1. 获取官方线路列表
+            URL url = new URL("https://member.bilibili.com/preupload?r=ping&file=lines.json");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+
+            if (conn.getResponseCode() == 200) {
+                String jsonStr = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                List<Map<String, String>> officialLines = JSON.parseObject(jsonStr, new TypeReference<List<Map<String, String>>>() {});
+
+                String queryKey = enumItem.getLineQuery().substring(1);
+                String testUrlStr = null;
+                for (Map<String, String> officialLine : officialLines) {
+                    if (officialLine.get("query").equals(queryKey)) {
+                        testUrlStr = officialLine.get("url");
+                        break;
+                    }
+                }
+
+                if (testUrlStr != null) {
+                    if (testUrlStr.startsWith("//")) {
+                        testUrlStr = "https:" + testUrlStr;
+                    }
+                    // 构造 1MB 数据
+                    int size = 1 * 1024 * 1024;
+                    byte[] data = new byte[size];
+                    new Random().nextBytes(data);
+
+                    long start = System.currentTimeMillis();
+                    URL testUrl = new URL(testUrlStr + "?line=1"); // line=1 表示 1MB，参考官方 ping.js
+                    HttpURLConnection testConn = (HttpURLConnection) testUrl.openConnection();
+                    testConn.setRequestMethod("POST");
+                    testConn.setDoOutput(true);
+                    testConn.setConnectTimeout(5000);
+                    testConn.setReadTimeout(10000); // 上传可能较慢，给多点时间
+
+                    try (OutputStream os = testConn.getOutputStream()) {
+                        os.write(data);
+                        os.flush();
+                    }
+
+                    if (testConn.getResponseCode() == 200) {
+                        long cost = System.currentTimeMillis() - start;
+                        // 计算速度 MB/s
+                        double speed = (double) size / 1024 / 1024 / ((double) cost / 1000);
+                        result.put("speed", String.format("%.2f MB/s", speed));
+                        result.put("cost", cost);
+                        result.put("success", true);
+                    } else {
+                        result.put("success", false);
+                        result.put("msg", "Error " + testConn.getResponseCode());
+                    }
+                } else {
+                    result.put("success", false);
+                    result.put("msg", "Unknown Line");
+                }
+            }
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("msg", "Timeout/Error");
+            e.printStackTrace();
+        }
+        return result;
     }
 
     @GetMapping("/verification")

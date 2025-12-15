@@ -10,6 +10,7 @@
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
+    <script src="../js/index.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -326,13 +327,28 @@
                     <div class="section-body" v-show="section.upload">
                         <div class="form-row two-col">
                             <el-form-item :label-width="formLabelWidth" label="上传线路">
-                                <el-select placeholder="请选择" v-model="room.line">
-                                    <el-option :label="item" :value="item" v-for="item in lines"></el-option>
+                                <el-select placeholder="请选择" v-model="room.line" style="width: 100%">
+                                    <el-option :label="item" :value="item" v-for="item in lines">
+                                        <span style="float: left">{{ item }}</span>
+                                        <span style="float: right; color: #8492a6; font-size: 13px; margin-left: 10px" v-if="lineStats[item]">
+                                            <i :class="getLineStatusIcon(lineStats[item])" :style="{color: getLineStatusColor(lineStats[item])}"></i>
+                                            {{ lineStats[item] }}
+                                            <span v-if="lineSpeeds[item]" style="margin-left: 5px; color: #409EFF">
+                                                <i class="el-icon-upload2"></i> {{ lineSpeeds[item] }}
+                                            </span>
+                                        </span>
+                                    </el-option>
                                 </el-select>
                             </el-form-item>
-                            <el-link :underline="false" href="http://member.bilibili.com/preupload?r=ping" target="_blank" type="primary" class="speed-test-link">
-                                <i class="el-icon-connection"></i> 测速
-                            </el-link>
+                            <div style="display: flex; align-items: center; margin-left: 10px;">
+                                <el-button type="text" @click="testLines" :loading="testingLines" icon="el-icon-connection">
+                                    {{ testingLines ? '测速中...' : '检测线路' }}
+                                </el-button>
+                                <el-divider direction="vertical"></el-divider>
+                                <el-button type="text" @click="testDeepSpeed" :loading="testingDeepSpeed" icon="el-icon-odometer" :disabled="testingLines">
+                                    {{ testingDeepSpeed ? '深度测速中...' : '深度测速' }}
+                                </el-button>
+                            </div>
                         </div>
                         <el-form-item :label-width="formLabelWidth" label="封面类型">
                             <el-radio-group v-model="room.coverType" @change="coverTypeChange" class="cover-type-group">
@@ -2380,6 +2396,10 @@
             exportConfig: {},
             tableData: [],
             lines: [],
+            lineStats: {},
+            lineSpeeds: {},
+            testingLines: false,
+            testingDeepSpeed: false,
             users: [],
             isMobile: window.innerWidth <= 768,
             viewMode: 'card',
@@ -2793,6 +2813,88 @@
                     type: data.type
                 });
                 this.room.coverUrl = data.coverUrl;
+            },
+            testLines() {
+                var _this = this;
+                this.testingLines = true;
+                this.lineStats = {};
+                this.lineSpeeds = {}; // 清空之前的深度测速结果
+                ApiUtil.get('/room/test-lines', function (data) {
+                    _this.lineStats = data;
+                    _this.testingLines = false;
+                    _this.$message({
+                        message: '线路检测完成',
+                        type: 'success'
+                    });
+                }, function() {
+                    _this.testingLines = false;
+                    _this.$message.error('线路检测失败');
+                });
+            },
+            async testDeepSpeed() {
+                if (Object.keys(this.lineStats).length === 0) {
+                    this.$message.warning('请先进行普通线路检测');
+                    return;
+                }
+                
+                this.testingDeepSpeed = true;
+                this.lineSpeeds = {};
+                
+                // 筛选出可用的线路（非 Error/Unknown/Timeout）
+                var availableLines = this.lines.filter(line => {
+                    var status = this.lineStats[line];
+                    return status && status.includes('ms');
+                });
+
+                if (availableLines.length === 0) {
+                    this.$message.warning('没有可用的线路进行深度测速');
+                    this.testingDeepSpeed = false;
+                    return;
+                }
+
+                this.$message.info('开始深度测速，请耐心等待...');
+
+                for (var i = 0; i < availableLines.length; i++) {
+                    var line = availableLines[i];
+                    // 显示 loading 状态
+                    this.$set(this.lineSpeeds, line, '测速中...');
+                    
+                    try {
+                        await new Promise((resolve) => {
+                            ApiUtil.get('/room/test-speed?line=' + encodeURIComponent(line), (data) => {
+                                if (data.success) {
+                                    this.$set(this.lineSpeeds, line, data.speed);
+                                } else {
+                                    this.$set(this.lineSpeeds, line, '失败');
+                                }
+                                resolve();
+                            }, () => {
+                                this.$set(this.lineSpeeds, line, '失败');
+                                resolve();
+                            });
+                        });
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+                
+                this.testingDeepSpeed = false;
+                this.$message.success('深度测速完成');
+            },
+            getLineStatusColor(status) {
+                if (!status) return '';
+                if (status.includes('ms')) {
+                    var ms = parseInt(status);
+                    if (ms < 200) return '#67C23A'; // Green
+                    if (ms < 500) return '#E6A23C'; // Yellow
+                    return '#F56C6C'; // Red
+                }
+                return '#F56C6C'; // Error
+            },
+            getLineStatusIcon(status) {
+                if (!status) return '';
+                if (status.includes('ms')) return 'el-icon-success';
+                return 'el-icon-error';
             },
             beforeCoverUpload(file) {
                 const isLt2M = file.size / 1024 / 1024 < 2;
