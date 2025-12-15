@@ -43,6 +43,8 @@ public class LogAnalyzeService {
             type = "CAPTCHA_REQUIRED";
         } else if ("WARN".equalsIgnoreCase(level)) {
             type = "WARN";
+        } else if ("ERROR".equalsIgnoreCase(level)) {
+            type = "ERROR";
         }
 
         if (type != null) {

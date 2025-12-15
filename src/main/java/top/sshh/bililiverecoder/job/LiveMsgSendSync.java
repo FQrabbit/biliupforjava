@@ -350,9 +350,13 @@ public class LiveMsgSendSync {
                             }
                             try {
                                 if (code == 36703) {
+                                    log.warn("{}用户，高级弹幕发送频率过快(36703)，将暂停120秒。", user.getUname());
                                     Thread.sleep(120 * 1000L);
                                 } else if (code == 0) {
                                     Thread.sleep(25 * 1000L);
+                                } else {
+                                    // 其他失败情况，默认暂停5秒，防止死循环风控
+                                    Thread.sleep(5000L);
                                 }
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
@@ -411,6 +415,7 @@ public class LiveMsgSendSync {
                     }
                     int code = liveMsgService.sendMsg(user, msg);
                     if (code == 36703) {
+                        log.warn("{}用户，发送弹幕频率过快(36703)，暂停5秒后重试...", user.getUname());
                         try {
                             Thread.sleep(5000L);
                         } catch (InterruptedException e) {
@@ -419,7 +424,7 @@ public class LiveMsgSendSync {
                         user = userRepository.findByUid(user.getUid());
                         code = liveMsgService.sendMsg(user, msg);
                         if (code == 36703) {
-                            log.error("{}用户，发送失败，错误代码{}发送过于频繁，一共发送{}条弹幕。", user.getUname(), code, count.get());
+                            log.error("{}用户，发送失败，错误代码{}发送过于频繁，一共发送{}条弹幕。将暂停发送120秒。", user.getUname(), code, count.get());
 
                         }
                     } else if (code == 36714) {
@@ -440,6 +445,9 @@ public class LiveMsgSendSync {
                             Thread.sleep(120 * 1000L);
                         } else if (code == 0) {
                             Thread.sleep(25 * 1000L);
+                        } else {
+                            // 其他未中断的错误（如36714），默认暂停5秒
+                            Thread.sleep(5000L);
                         }
                     } catch (InterruptedException e) {
                         e.printStackTrace();
