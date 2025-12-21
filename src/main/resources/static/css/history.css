@@ -460,6 +460,13 @@ html, body {
     font-size: 13px;
     color: var(--text-secondary);
     margin-bottom: 12px;
+    min-height: 18px;
+    line-height: 18px;
+}
+
+.card-bvid.is-placeholder {
+    /* 仅占位，不展示内容（保留高度用于对齐） */
+    color: transparent;
 }
 
 .card-status-row {

@@ -226,7 +226,10 @@
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
                             <div class="card-title">{{ item.title || '无标题' }}</div>
-                            <div v-if="item.bvId" class="card-bvid">BV: {{ item.bvId }}</div>
+                            <div class="card-bvid" :class="{ 'is-placeholder': !item.bvId }">
+                                <span v-if="item.bvId">BV: {{ item.bvId }}</span>
+                                <span v-else>&nbsp;</span>
+                            </div>
                             <div class="card-status-row">
                                 <span class="status-chip success" v-if="item.upload">开启上传</span>
                                 <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>关闭上传</span>
