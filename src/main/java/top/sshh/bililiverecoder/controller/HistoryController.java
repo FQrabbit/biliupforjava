@@ -9,6 +9,7 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -108,24 +109,29 @@ public class HistoryController {
             history.setPartCount(partRepository.countByHistoryId(history.getId()));
             history.setPartDuration(partRepository.sumHistoryDurationByHistoryId(history.getId()));
             history.setUploadPartCount(partRepository.countByHistoryIdAndFileNameNotNull(history.getId()));
-            history.setRecordPartCount(partRepository.countByHistoryIdAndRecordingIsTrue(history.getId()));
 
-            // 录制状态纠偏：有些历史数据可能因为事件丢失/异常退出导致 recording 标志未被清理。
-            // 这里以"是否还有录制中的分P"为准，在"已结束的历史(endTime != null)"场景下自动修正并落库，
-            // 避免出现“已发布且审核通过，但仍显示录制中”的矛盾状态。
-            boolean hasRecordingParts = history.getRecordPartCount() > 0;
-            boolean needFixRecording = false;
-            if (hasRecordingParts && !history.isRecording()) {
-                history.setRecording(true);
-                needFixRecording = true;
-            } else if (!hasRecordingParts && history.isRecording() && history.getEndTime() != null) {
-                history.setRecording(false);
-                needFixRecording = true;
+            // 标记“永久放弃上传”的分P，便于 UI 提示用户具体哪个文件异常
+            int giveUpCount = 0;
+            try {
+                giveUpCount = partRepository.countGiveUpPartsByHistoryId(history.getId());
+            } catch (Exception ignored) {
             }
-            if (needFixRecording) {
-                history.setUpdateTime(LocalDateTime.now());
-                historyRepository.save(history);
+            history.setGiveUpPartCount(giveUpCount);
+            if (giveUpCount > 0) {
+                try {
+                    history.setGiveUpPartFiles(partRepository.findGiveUpPartFilePathsByHistoryId(history.getId()));
+                } catch (Exception ignored) {
+                }
             }
+
+            // 注意：这里不要在列表接口里落库纠偏 recording。
+            // 原因：历史数据可能处于“分P切片/短暂事件延迟”的中间态，
+            // 若在此处把 recording 误改为 false，会让发布定时任务误判并触发投稿。
+            // 列表展示层面仅基于分P实际状态计算。
+            int actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
+            history.setRecordPartCount(actuallyRecordingParts);
+            history.setRecording(actuallyRecordingParts > 0);
+
             if (StringUtils.isNotBlank(history.getBvId())) {
                 history.setMsgCount(msgRepository.countByBvid(history.getBvId()));
                 history.setSuccessMsgCount(msgRepository.countByBvidAndCode(history.getBvId(), 0));
@@ -423,7 +429,25 @@ public class HistoryController {
         }
 
         if (request.getRecording() != null) {
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("recording"), request.getRecording())));
+            // 录制状态筛选：以分P真实状态为准。
+            // 只要存在 recording=true 或 endTime=null 的分P，就视为“录制中”。
+            Subquery<Long> partExists = criteriaBuilder.createQuery().subquery(Long.class);
+            Root<RecordHistoryPart> partRoot = partExists.from(RecordHistoryPart.class);
+            partExists.select(criteriaBuilder.literal(1L));
+            partExists.where(
+                criteriaBuilder.and(
+                    criteriaBuilder.equal(partRoot.get("historyId"), root.get("id")),
+                    criteriaBuilder.or(
+                        criteriaBuilder.isTrue(partRoot.get("recording")),
+                        criteriaBuilder.isNull(partRoot.get("endTime"))
+                    )
+                )
+            );
+            if (Boolean.TRUE.equals(request.getRecording())) {
+                predicatesList.add(criteriaBuilder.exists(partExists));
+            } else {
+                predicatesList.add(criteriaBuilder.not(criteriaBuilder.exists(partExists)));
+            }
         }
         if (request.getUpload() != null) {
             predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("upload"), request.getUpload())));
@@ -432,10 +456,16 @@ public class HistoryController {
             predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), request.getPublish())));
         }
         if (request.getCode() != null) {
-            // 当筛选审核状态时，需要同时检查publish状态
-            // 只有已发布的视频才有真正的审核状态，未发布的视频code默认值是-1但不应被当作"审核中"
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("code"), request.getCode())));
-            predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), true)));
+            // 当筛选审核状态时，需要同时检查publish状态。
+            // 只有已发布的视频才有真正的审核状态，未发布的视频code默认值是-1但不应被当作"审核中"。
+            // 前端值：code=1 表示“未通过/不通过”（即已发布但审核状态非 通过/仅自己可见）。
+            if (Objects.equals(request.getCode(), 1)) {
+                predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), true)));
+                predicatesList.add(criteriaBuilder.and(criteriaBuilder.not(root.get("code").in(0, -50))));
+            } else {
+                predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("code"), request.getCode())));
+                predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), true)));
+            }
         }
 
         if (request.getFrom() != null && request.getTo() != null) {

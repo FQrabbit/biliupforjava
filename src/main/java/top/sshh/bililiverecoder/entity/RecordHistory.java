@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Entity
@@ -71,6 +72,13 @@ public class RecordHistory {
 
     @Transient
     private int recordPartCount;
+
+    // 分P上传补偿任务中“永久放弃”的分P（例如无法读取时长/大小）
+    @Transient
+    private int giveUpPartCount;
+
+    @Transient
+    private List<String> giveUpPartFiles;
 
     @Transient
     private int msgCount;

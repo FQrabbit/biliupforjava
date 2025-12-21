@@ -23,9 +23,6 @@
     <!-- 顶部导航栏 -->
     <header class="history-header">
         <div class="header-left">
-            <div class="back-btn" @click="goBack" title="返回首页">
-                <i class="el-icon-arrow-left" style="font-size: 20px;"></i>
-            </div>
             <h1 class="page-title">
                 <i class="el-icon-time"></i>
                 <span>录制历史</span>
@@ -40,9 +37,6 @@
                     <i class="el-icon-s-grid"></i>
                 </button>
             </div>
-            <button class="theme-toggle-btn" @click="toggleTheme" :title="isDarkTheme ? '切换到亮色模式' : '切换到暗色模式'">
-                <i :class="isDarkTheme ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-            </button>
         </div>
     </header>
 
@@ -78,25 +72,25 @@
                             <i class="el-icon-video-camera"></i> 录制中
                         </el-tag>
                         <el-tag 
-                            :type="quickFilter === 'pending' ? 'warning' : 'info'" 
-                            :effect="quickFilter === 'pending' ? 'dark' : 'plain'"
-                            @click="setQuickFilter('pending')"
-                            class="quick-tag">
-                            <i class="el-icon-time"></i> 审核中
-                        </el-tag>
-                        <el-tag 
-                            :type="quickFilter === 'failed' ? 'danger' : 'info'" 
-                            :effect="quickFilter === 'failed' ? 'dark' : 'plain'"
-                            @click="setQuickFilter('failed')"
-                            class="quick-tag">
-                            <i class="el-icon-warning"></i> 被退回
-                        </el-tag>
-                        <el-tag 
                             :type="quickFilter === 'success' ? 'success' : 'info'" 
                             :effect="quickFilter === 'success' ? 'dark' : 'plain'"
                             @click="setQuickFilter('success')"
                             class="quick-tag">
                             <i class="el-icon-circle-check"></i> 已通过
+                        </el-tag>
+                        <el-tag 
+                            :type="quickFilter === 'self' ? 'success' : 'info'" 
+                            :effect="quickFilter === 'self' ? 'dark' : 'plain'"
+                            @click="setQuickFilter('self')"
+                            class="quick-tag">
+                            <i class="el-icon-view"></i> 仅自己可见
+                        </el-tag>
+                        <el-tag 
+                            :type="quickFilter === 'fail' ? 'danger' : 'info'" 
+                            :effect="quickFilter === 'fail' ? 'dark' : 'plain'"
+                            @click="setQuickFilter('fail')"
+                            class="quick-tag">
+                            <i class="el-icon-circle-close"></i> 不通过
                         </el-tag>
                     </div>
                     
@@ -146,8 +140,8 @@
                                     <el-option label="录制中" :value="true">
                                         <i class="el-icon-video-camera" style="color: #e6a23c; margin-right: 6px;"></i>录制中
                                     </el-option>
-                                    <el-option label="未录制" :value="false">
-                                        <i class="el-icon-video-pause" style="color: #909399; margin-right: 6px;"></i>未录制
+                                    <el-option label="已结束" :value="false">
+                                        <i class="el-icon-video-pause" style="color: #909399; margin-right: 6px;"></i>已结束
                                     </el-option>
                                 </el-select>
                             </div>
@@ -179,26 +173,8 @@
                                     <el-option label="仅自己可见" :value="-50">
                                         <i class="el-icon-view" style="color: #67c23a; margin-right: 6px;"></i>仅自己可见
                                     </el-option>
-                                    <el-option label="审核中" :value="-1">
-                                        <i class="el-icon-time" style="color: #e6a23c; margin-right: 6px;"></i>审核中
-                                    </el-option>
-                                    <el-option label="被退回" :value="-2">
-                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>被退回
-                                    </el-option>
-                                    <el-option label="被锁定" :value="-4">
-                                        <i class="el-icon-lock" style="color: #f56c6c; margin-right: 6px;"></i>被锁定
-                                    </el-option>
-                                    <el-option label="转码中" :value="-9">
-                                        <i class="el-icon-refresh" style="color: #e6a23c; margin-right: 6px;"></i>转码中
-                                    </el-option>
-                                    <el-option label="已提交" :value="-30">
-                                        <i class="el-icon-upload" style="color: #e6a23c; margin-right: 6px;"></i>已提交
-                                    </el-option>
-                                    <el-option label="定时发布" :value="-40">
-                                        <i class="el-icon-time" style="color: #409eff; margin-right: 6px;"></i>定时发布
-                                    </el-option>
-                                    <el-option label="已删除" :value="-100">
-                                        <i class="el-icon-delete" style="color: #f56c6c; margin-right: 6px;"></i>已删除
+                                    <el-option label="不通过" :value="1">
+                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>不通过
                                     </el-option>
                                 </el-select>
                             </div>
@@ -252,11 +228,12 @@
                             <div class="card-title">{{ item.title || '无标题' }}</div>
                             <div v-if="item.bvId" class="card-bvid">BV: {{ item.bvId }}</div>
                             <div class="card-status-row">
-                                <span class="status-chip success" v-if="item.upload">已上传</span>
-                                <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未上传</span>
+                                <span class="status-chip success" v-if="item.upload">开启上传</span>
+                                <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>关闭上传</span>
+                                <span class="status-chip success" v-if="item.publish">已发布</span>
+                                <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
                                 <span class="status-chip warn" v-if="isActuallyRecording(item)">录制中</span>
-                                <span class="status-chip" style="background: rgba(230, 162, 60, 0.2); color: #e6a23c;" v-if="hasRecordingMismatch(item)">状态可能未同步</span>
-                                <span class="status-chip" :class="isActuallyRecording(item) ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
+                                <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;" v-if="item.giveUpPartCount && item.giveUpPartCount > 0">异常分P {{ item.giveUpPartCount }}</span>
                             </div>
                             <div class="card-meta">
                                 <span class="meta-chip">{{ formatDateTime(item.startTime) }}</span>
@@ -265,6 +242,7 @@
                         <div class="card-info-right">
                             <el-tag size="mini" type="info">{{ item.roomName }}</el-tag>
                             <el-tag size="mini" :type="getFileSizeColorType(item.fileSize)">{{ formatFileSize(item.fileSize) }}</el-tag>
+                            <span class="card-info-text">时长: {{ formatDuration(item.partDuration) }}</span>
                             <span class="card-info-text">分P: {{ item.partCount }} / 已传: {{ item.uploadPartCount }}</span>
                             <span class="card-info-text">弹幕: {{ item.msgCount }}</span>
                         </div>
@@ -295,11 +273,18 @@
                     <el-table-column label="分P" prop="partCount" width="60"></el-table-column>
                     <el-table-column label="录制中分P" prop="recordPartCount" width="80"></el-table-column>
                     <el-table-column label="已上传分P" prop="uploadPartCount" width="80"></el-table-column>
+                    <el-table-column label="异常分P" prop="giveUpPartCount" width="80">
+                        <template slot-scope="scope">
+                            <el-tag v-if="scope.row.giveUpPartCount && scope.row.giveUpPartCount > 0" size="mini" type="danger">{{ scope.row.giveUpPartCount }}</el-tag>
+                            <span v-else style="color: #909399;">0</span>
+                        </template>
+                    </el-table-column>
                     <el-table-column label="弹幕" prop="msgCount" width="70"></el-table-column>
                     <el-table-column label="成功弹幕" prop="successMsgCount" width="80"></el-table-column>
                     <el-table-column label="录制" prop="recording" width="80">
                         <template slot-scope="scope">
-                            <span class="status-chip" :class="scope.row.recording ? 'warn' : 'success'">{{ scope.row.recording ? '录制中' : '已完成' }}</span>
+                            <span v-if="isActuallyRecording(scope.row)" class="status-chip warn">录制中</span>
+                            <span v-else class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;">未录制</span>
                         </template>
                     </el-table-column>
                     <el-table-column label="是否上传" prop="upload" width="90">
@@ -431,6 +416,21 @@
                         <span style="font-size: 12px; color: var(--success-color);"> (成功:{{currentDetail.successMsgCount}})</span>
                     </span>
                 </div>
+                <div class="detail-row" v-if="currentDetail.giveUpPartCount && currentDetail.giveUpPartCount > 0">
+                    <label>异常分P</label>
+                    <span>
+                        <el-tag size="mini" type="danger" effect="dark">{{ currentDetail.giveUpPartCount }} 个已放弃</el-tag>
+                        <span style="font-size: 12px; color: var(--text-disabled); margin-left: 8px;">(无法读取大小/时长，已停止重试)</span>
+                    </span>
+                </div>
+                <div class="detail-row full" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
+                    <label>异常文件</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                        <el-tooltip v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx" effect="dark" :content="p" placement="top">
+                            <el-tag size="mini" type="danger" effect="plain">{{ (p || '').split('/').pop() || p }}</el-tag>
+                        </el-tooltip>
+                    </div>
+                </div>
             </div>
 
             <el-divider content-position="left">状态</el-divider>
@@ -447,7 +447,8 @@
                 </div>
                 <div class="detail-row">
                     <label>录制状态</label>
-                    <el-tag size="mini" :type="currentDetail.recording ? 'success' : 'info'" effect="dark">{{ currentDetail.recording ? '录制中' : '未录制' }}</el-tag>
+                    <el-tag size="mini" :type="isActuallyRecording(currentDetail) ? 'warning' : 'info'" effect="dark">{{ isActuallyRecording(currentDetail) ? '录制中' : '未录制' }}</el-tag>
+                    <el-tag v-if="hasRecordingMismatch(currentDetail)" size="mini" type="warning" effect="plain" style="margin-left: 8px;">状态可能未同步</el-tag>
                 </div>
                 <div class="detail-row">
                     <label>审核状态</label>
@@ -541,8 +542,7 @@
             userChangedPageSize: false,
             pageSizes: [5, 10, 25, 50, 100],
             filterExpanded: false,
-            quickFilter: null,
-            isDarkTheme: document.documentElement.getAttribute('data-theme') === 'dark'
+            quickFilter: null
         },
         computed: {
             isPublishLockedByCode: function() {
@@ -612,16 +612,11 @@
             hasRecordingMismatch: function(item) {
                 if (!item) return false;
                 const recordPartCount = (item.recordPartCount !== null && item.recordPartCount !== undefined) ? item.recordPartCount : null;
-                // 明显矛盾：历史标记录制中，但没有任何录制中分P，并且已经有结束时间
+                // 明显矛盾：
+                // 1) 已结束/已发布，但仍存在录制中的分P
+                // 2) 历史标记录制中，但没有任何录制中分P，并且已经有结束时间
+                if ((!!item.endTime || item.publish === true) && recordPartCount !== null && recordPartCount > 0) return true;
                 return item.recording === true && recordPartCount === 0 && !!item.endTime;
-            },
-            goBack: function() {
-                window.location.href = '../index.html';
-            },
-            toggleTheme: function() {
-                this.isDarkTheme = !this.isDarkTheme;
-                document.documentElement.setAttribute('data-theme', this.isDarkTheme ? 'dark' : 'light');
-                localStorage.setItem('theme', this.isDarkTheme ? 'dark' : 'light');
             },
             handleCommand: function(command, row) {
                 switch(command) {
@@ -669,16 +664,17 @@
                     case 'recording':
                         this.form.recording = true;
                         break;
-                    case 'pending':
-                        this.form.code = -1;
-                        this.form.publish = true; // 只有已发布的才有真正的审核状态
-                        break;
-                    case 'failed':
-                        this.form.code = -2;
-                        this.form.publish = true;
-                        break;
                     case 'success':
                         this.form.code = 0;
+                        this.form.publish = true;
+                        break;
+                    case 'self':
+                        this.form.code = -50;
+                        this.form.publish = true;
+                        break;
+                    case 'fail':
+                        // 后端值：1 表示“未通过/不通过”（publish=true 且 code 非 0/-50）
+                        this.form.code = 1;
                         this.form.publish = true;
                         break;
                 }
@@ -691,13 +687,7 @@
                 const iconMap = {
                     0: 'el-icon-success',
                     '-50': 'el-icon-view',
-                    '-1': 'el-icon-time',
-                    '-2': 'el-icon-circle-close',
-                    '-4': 'el-icon-lock',
-                    '-9': 'el-icon-refresh',
-                    '-30': 'el-icon-upload',
-                    '-40': 'el-icon-time',
-                    '-100': 'el-icon-delete'
+                    1: 'el-icon-circle-close'
                 };
                 return iconMap[String(code)] || '';
             },
@@ -705,13 +695,7 @@
                 const colorMap = {
                     0: '#67c23a',
                     '-50': '#67c23a',
-                    '-1': '#e6a23c',
-                    '-2': '#f56c6c',
-                    '-4': '#f56c6c',
-                    '-9': '#e6a23c',
-                    '-30': '#e6a23c',
-                    '-40': '#409eff',
-                    '-100': '#f56c6c'
+                    1: '#f56c6c'
                 };
                 return colorMap[String(code)] || '';
             },

@@ -7,18 +7,56 @@ html, body {
     padding: 0;
     overflow: hidden;
 }
-#app {
+
+/* 现代化页面布局（复用 index.css 的 app-container 变量体系） */
+.log-page {
     height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    box-sizing: border-box;
 }
 
-/* 工具栏 */
-.toolbar {
+.log-layout {
+    height: 100%;
+}
+
+.log-header {
+    padding: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.log-toolbar-card {
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-light);
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme="dark"] .log-toolbar-card {
+    background: rgba(39, 39, 42, 0.7);
+    border-color: rgba(63, 63, 70, 0.5);
+}
+
+.log-toolbar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 10px;
 }
+
+.log-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.log-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .toolbar-row {
     display: flex;
     align-items: center;
@@ -26,15 +64,32 @@ html, body {
     flex-wrap: wrap;
 }
 
+.log-switches {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.log-content {
+    height: 100%;
+    padding: 0 12px 12px;
+}
+
+.log-content.el-main {
+    padding: 0 12px 12px;
+}
+
 /* 日志控制台 */
 .log-console { 
-    flex: 1; 
+    height: 100%;
     background-color: #1e1e1e; 
     color: #d4d4d4; 
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
     padding: 10px; 
     overflow-y: auto; 
-    border-radius: 4px; 
+    border-radius: var(--radius-lg);
     font-size: 13px;
     line-height: 1.4;
 }
@@ -90,6 +145,39 @@ html, body {
     color: #9cdcfe;
 }
 
+/* 日志等级下拉（更紧凑、更一致） */
+.log-level-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+.log-level-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    display: inline-block;
+}
+.log-level-dot.level-INFO { background-color: #4caf50; }
+.log-level-dot.level-WARN { background-color: #ce9178; }
+.log-level-dot.level-ERROR { background-color: #f44747; }
+.log-level-dot.level-DEBUG { background-color: #9cdcfe; }
+
+.log-level-popper .el-select-dropdown__item {
+    height: auto;
+    line-height: 1.2;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+}
+.log-level-popper .el-select-dropdown__item .log-level-text {
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+.log-level-popper .el-select-dropdown__item i.el-icon-check {
+    font-size: 14px;
+    opacity: 0.75;
+}
+
 /* 语法高亮 */
 .log-url {
     color: #569cd6;
@@ -117,9 +205,14 @@ html, body {
 
 /* 响应式适配 */
 @media (max-width: 768px) {
-    .toolbar-row {
-        gap: 5px;
+    .log-header {
+        padding: 10px;
     }
+    .log-content.el-main {
+        padding: 0 10px 10px;
+    }
+    .toolbar-row { gap: 8px; }
+    .log-switches { justify-content: flex-start; }
     .el-button--small, .el-button--small.is-round {
         padding: 9px 15px;
     }

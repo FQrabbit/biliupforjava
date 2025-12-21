@@ -86,10 +86,12 @@ public class RecordEventFileClosedService implements RecordEventService {
                 part.setFileSize(0L);
                 part.setSessionId(sessionId);
                 part.setRecording(eventData.isRecording());
-                if ("blrec".equals(sessionId)) {
-                    part.setStartTime(LocalDateTime.now());
-                } else {
-                    part.setStartTime(LocalDateTime.ofInstant(eventData.getFileOpenTime().toInstant(), ZoneId.of("Asia/Shanghai")));
+                // startTime 优先使用 fileOpenTime（blrec 也可能提供），避免 duration=0 时 startTime=now 导致计算结果为 0
+                if (eventData.getFileOpenTime() != null) {
+                    try {
+                        part.setStartTime(LocalDateTime.ofInstant(eventData.getFileOpenTime().toInstant(), ZoneId.of("Asia/Shanghai")));
+                    } catch (Exception ignored) {
+                    }
                 }
                 part.setEndTime(LocalDateTime.now());
             }
@@ -102,11 +104,23 @@ public class RecordEventFileClosedService implements RecordEventService {
                 fileSize = eventData.getFileSize();
             }
             LocalDateTime startTime = part.getStartTime();
-            Duration duration = Duration.between(startTime, LocalDateTime.now());
+            LocalDateTime endTime = LocalDateTime.now();
+            long durationSeconds = 0L;
+            if (startTime != null) {
+                try {
+                    durationSeconds = Duration.between(startTime, endTime).getSeconds();
+                    if (durationSeconds < 0) {
+                        durationSeconds = 0L;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
             part.setRecording(false);
             part.setFileSize(fileSize);
-            part.setDuration(eventData.getDuration() != 0.0f ? (int)eventData.getDuration() : duration.getSeconds());
-            part.setEndTime(LocalDateTime.now());
+            float durationFromEvent = eventData.getDuration();
+            float durationToSave = durationFromEvent > 0.0f ? durationFromEvent : (float) durationSeconds;
+            part.setDuration(durationToSave);
+            part.setEndTime(endTime);
             part.setAreaName(eventData.getAreaNameChild());
             part.setUpdateTime(LocalDateTime.now());
             part = historyPartRepository.save(part);

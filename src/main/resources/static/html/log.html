@@ -19,56 +19,107 @@
     </script>
 </head>
 <body>
-<div id="app">
-    <div class="toolbar">
-        <el-row :gutter="10" class="toolbar-row">
-            <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                <el-button-group style="width: 100%; display: flex;">
-                    <el-button size="small" type="danger" @click="clearLogs" style="flex: 1;">清空</el-button>
-                    <el-button size="small" type="warning" icon="el-icon-warning" v-if="alerts.length > 0" @click="showAlerts = true" style="flex: 1;">
-                        异常({{ alerts.length }})
-                    </el-button>
-                </el-button-group>
-            </el-col>
-            
-            <el-col :xs="24" :sm="12" :md="8" :lg="6">
-                <el-select v-model="visibleLevels" multiple collapse-tags placeholder="日志等级" size="small" style="width: 100%;">
-                    <el-option label="INFO" value="INFO">
-                        <span style="color: #4caf50; font-weight: bold;">INFO</span>
-                    </el-option>
-                    <el-option label="WARN" value="WARN">
-                        <span style="color: #e6a23c; font-weight: bold;">WARN</span>
-                    </el-option>
-                    <el-option label="ERROR" value="ERROR">
-                        <span style="color: #f56c6c; font-weight: bold;">ERROR</span>
-                    </el-option>
-                    <el-option label="DEBUG" value="DEBUG">
-                        <span style="color: #409eff; font-weight: bold;">DEBUG</span>
-                    </el-option>
-                </el-select>
-            </el-col>
+<div id="app" class="app-container log-page">
+    <el-container class="log-layout">
+        <el-header class="log-header" height="auto">
+            <el-card shadow="never" class="log-toolbar-card">
+                <div class="log-toolbar-head">
+                    <div class="log-title">日志控制台</div>
+                    <div class="log-meta">
+                        <el-tag size="mini" :type="statusTagType" effect="dark">{{ statusText }}</el-tag>
+                    </div>
+                </div>
+                <el-row :gutter="10" class="toolbar-row">
+                    <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                        <el-button-group style="width: 100%; display: flex;">
+                            <el-button size="small" type="danger" @click="clearLogs" style="flex: 1;">清空</el-button>
+                            <el-button size="small" type="warning" icon="el-icon-warning" v-if="alerts.length > 0" @click="showAlerts = true" style="flex: 1;">
+                                异常({{ alerts.length }})
+                            </el-button>
+                        </el-button-group>
+                    </el-col>
+                    
+                    <el-col :xs="24" :sm="12" :md="8" :lg="6">
+                        <el-select v-model="visibleLevels" multiple collapse-tags placeholder="日志等级" size="small" style="width: 100%;" class="log-level-select" popper-class="log-level-popper">
+                            <el-option label="INFO" value="INFO">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-INFO"></span>
+                                    <span class="log-level-text level-INFO">INFO</span>
+                                </span>
+                            </el-option>
+                            <el-option label="WARN" value="WARN">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-WARN"></span>
+                                    <span class="log-level-text level-WARN">WARN</span>
+                                </span>
+                            </el-option>
+                            <el-option label="ERROR" value="ERROR">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-ERROR"></span>
+                                    <span class="log-level-text level-ERROR">ERROR</span>
+                                </span>
+                            </el-option>
+                            <el-option label="DEBUG" value="DEBUG">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-DEBUG"></span>
+                                    <span class="log-level-text level-DEBUG">DEBUG</span>
+                                </span>
+                            </el-option>
+                        </el-select>
+                    </el-col>
 
-            <el-col :xs="24" :sm="24" :md="8" :lg="12" style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
-                <el-switch v-model="selectionMode" active-text="多选模式" @change="handleSelectionModeChange"></el-switch>
-                <el-switch v-model="autoWrap" active-text="自动换行"></el-switch>
-                <el-switch v-model="autoScroll" active-text="自动滚动"></el-switch>
-                <el-switch v-model="realtime" active-text="实时推送" @change="toggleRealtime"></el-switch>
-                <span style="font-size: 12px; color: #888; margin-left: 5px;" class="hidden-xs-only">{{ statusText }}</span>
-            </el-col>
-        </el-row>
-    </div>
+                    <el-col :xs="24" :sm="24" :md="8" :lg="12">
+                        <div class="log-switches">
+                            <el-tooltip effect="dark" placement="top" content="开启后会加载/保留更多日志（最多2000行）；关闭时仅保留较少日志（默认500行），保证浏览器更流畅。">
+                                <span>
+                                    <el-switch v-model="detailedMode" active-text="详细模式" @change="handleDetailedModeChange"></el-switch>
+                                </span>
+                            </el-tooltip>
 
-    <div class="log-console" ref="console">
-        <div v-for="(log, index) in filteredLogs" :key="index" 
-             class="log-line" 
-             :class="{ 'nowrap': !autoWrap, 'selection-mode': selectionMode, 'selected': isSelected(log) }"
-             @click="handleLogClick(log)">
-            <span class="log-time">{{ log.timestamp }}</span>
-            <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
-            <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
-            <span class="log-message" v-html="formatLogMessage(log.message)"></span>
-        </div>
-    </div>
+                            <el-tooltip effect="dark" placement="top" content="开启后点击日志行可多选，并自动把已选日志复制到剪贴板。">
+                                <span>
+                                    <el-switch v-model="selectionMode" active-text="多选模式" @change="handleSelectionModeChange"></el-switch>
+                                </span>
+                            </el-tooltip>
+
+                            <el-tooltip effect="dark" placement="top" content="开启后日志会自动换行；关闭后单行不换行，便于对齐查看。">
+                                <span>
+                                    <el-switch v-model="autoWrap" active-text="自动换行"></el-switch>
+                                </span>
+                            </el-tooltip>
+
+                            <el-tooltip effect="dark" placement="top" content="开启后新日志到来会自动滚动到底部；关闭后保持当前位置不动。">
+                                <span>
+                                    <el-switch v-model="autoScroll" active-text="自动滚动"></el-switch>
+                                </span>
+                            </el-tooltip>
+
+                            <el-tooltip effect="dark" placement="top" content="开启后通过 WebSocket 实时接收日志；关闭后暂停实时推送（可继续查看已加载内容）。">
+                                <span>
+                                    <el-switch v-model="realtime" active-text="实时推送" @change="toggleRealtime"></el-switch>
+                                </span>
+                            </el-tooltip>
+                        </div>
+                    </el-col>
+                </el-row>
+            </el-card>
+        </el-header>
+
+        <el-main class="log-content">
+            <div class="log-console" ref="console">
+                <div v-for="(log, index) in filteredLogs" :key="log.__id" 
+                     class="log-line" 
+                     :class="{ 'nowrap': !autoWrap, 'selection-mode': selectionMode, 'selected': isSelected(log) }"
+                     :data-log-id="log.__id"
+                     @click="handleLogClick(log)">
+                    <span class="log-time">{{ log.timestamp }}</span>
+                    <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
+                    <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
+                    <span class="log-message" v-html="formatLogMessage(log.message)"></span>
+                </div>
+            </div>
+        </el-main>
+    </el-container>
 
     <el-dialog title="系统异常提醒" :visible.sync="showAlerts" width="90%" :fullscreen="isMobile">
         <el-alert
@@ -89,7 +140,7 @@
             <el-table-column label="详情" min-width="300">
                 <template slot-scope="scope">
                     <div style="display: flex; align-items: flex-start;">
-                        <div style="flex: 1; max-height: 46px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; word-break: break-all; margin-right: 8px; font-size: 12px; color: #606266;">
+                        <div style="flex: 1; max-height: 46px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; word-break: break-all; margin-right: 8px; font-size: 12px; color: #606266;">
                             {{ scope.row.message }}
                         </div>
                         <el-button size="mini" type="text" @click="showDetail(scope.row.message)" style="padding: 0;">详情</el-button>
@@ -124,12 +175,16 @@
             autoWrap: true,
             autoScroll: true,
             realtime: true,
+            detailedMode: false,
+            maxLogsLite: 500,
+            maxLogsDetailed: 2000,
             selectionMode: false,
             selectedLogs: new Set(),
             loadingHistory: false,
             ws: null,
             statusText: '未连接',
-            maxLogs: 2000,
+            maxLogs: 500,
+            nextLogId: 1,
             alerts: [],
             showAlerts: false,
             isMobile: window.innerWidth < 768,
@@ -140,6 +195,15 @@
         computed: {
             filteredLogs() {
                 return this.logs.filter(log => this.visibleLevels.includes(log.level));
+            },
+            statusTagType() {
+                if (!this.realtime) return 'info';
+                const text = this.statusText || '';
+                if (text.includes('已建立')) return 'success';
+                if (text.includes('超时')) return 'danger';
+                if (text.includes('断开')) return 'warning';
+                if (text.includes('未连接')) return 'info';
+                return 'info';
             }
         },
         mounted() {
@@ -153,6 +217,72 @@
             if (this.ws) this.ws.close();
         },
         methods: {
+            getHistoryLines() {
+                return this.detailedMode ? this.maxLogsDetailed : this.maxLogsLite;
+            },
+            handleDetailedModeChange() {
+                const newMax = this.detailedMode ? this.maxLogsDetailed : this.maxLogsLite;
+                this.maxLogs = newMax;
+
+                // 切换到非详细模式时，主动裁剪内存日志，降低渲染压力。
+                if (this.logs.length > newMax) {
+                    const container = this.$refs.console;
+                    const anchor = (!this.autoScroll && container) ? this.getScrollAnchor() : null;
+                    const beforeScrollHeight = (container ? container.scrollHeight : 0);
+                    this.logs.splice(0, this.logs.length - newMax);
+                    if (!this.autoScroll && container) {
+                        this.restoreScrollAnchor(anchor, beforeScrollHeight);
+                    }
+                }
+
+                // 重新加载历史（按当前模式拉取更少/更多行）。
+                this.loadHistory();
+            },
+            getScrollAnchor() {
+                const container = this.$refs.console;
+                if (!container) return null;
+                const lines = container.querySelectorAll('.log-line');
+                if (!lines || lines.length === 0) return null;
+                const scrollTop = container.scrollTop;
+
+                // 找到当前视口顶部可见的第一行（或最接近顶部的行）作为锚点。
+                let anchorEl = null;
+                for (let i = 0; i < lines.length; i++) {
+                    const el = lines[i];
+                    if (el.offsetTop + el.offsetHeight > scrollTop) {
+                        anchorEl = el;
+                        break;
+                    }
+                }
+                if (!anchorEl) anchorEl = lines[lines.length - 1];
+
+                const id = anchorEl.getAttribute('data-log-id');
+                if (!id) return null;
+                return {
+                    id,
+                    offset: scrollTop - anchorEl.offsetTop
+                };
+            },
+            restoreScrollAnchor(anchor, beforeScrollHeight) {
+                const container = this.$refs.console;
+                if (!container || !anchor || !anchor.id) return;
+
+                this.$nextTick(() => {
+                    const c = this.$refs.console;
+                    if (!c) return;
+                    const el = c.querySelector(`.log-line[data-log-id="${anchor.id}"]`);
+                    if (el) {
+                        c.scrollTop = el.offsetTop + anchor.offset;
+                        return;
+                    }
+                    // 锚点行被裁剪掉了：退化为按 scrollHeight 差值补偿，尽量减少跳动。
+                    if (typeof beforeScrollHeight === 'number') {
+                        const afterScrollHeight = c.scrollHeight;
+                        const delta = afterScrollHeight - beforeScrollHeight;
+                        c.scrollTop = c.scrollTop + delta;
+                    }
+                });
+            },
             handleResize() {
                 this.isMobile = window.innerWidth < 768;
             },
@@ -226,11 +356,36 @@
                 }
             },
             addLog(log) {
+                // 为每条日志生成稳定 key，避免裁剪/过滤导致 DOM 复用引起滚动位移
+                if (log && (log.__id === undefined || log.__id === null)) {
+                    log.__id = String(this.nextLogId++);
+                }
+
+                // 关闭自动滚动时，达到上限裁剪会删掉顶部内容。
+                // 用“锚点行”锁定当前视口位置，裁剪后恢复 scrollTop，避免位移。
+                const willTrim = (this.logs.length + 1 > this.maxLogs);
+                const container = this.$refs.console;
+                let anchor = null;
+                let beforeScrollHeight = 0;
+                if (willTrim && !this.autoScroll && container) {
+                    anchor = this.getScrollAnchor();
+                    beforeScrollHeight = container.scrollHeight;
+                }
+
                 this.logs.push(log);
-                // 暂时取消前端日志数量限制，避免滚动条抖动
-                // if (this.logs.length > this.maxLogs) {
-                //     this.logs.shift();
-                // }
+
+                // 前端日志数量限制：避免 logs 无限增长导致浏览器内存/渲染压力过大。
+                // 为解决“关闭自动滚动时，因删除旧日志导致滚动跳动”的问题：
+                // 在裁剪前记录滚动高度与 scrollTop，裁剪后按高度变化补偿 scrollTop。
+                if (willTrim) {
+                    const removeCount = this.logs.length - this.maxLogs;
+                    if (removeCount > 0) {
+                        this.logs.splice(0, removeCount);
+                    }
+                }
+                if (willTrim && !this.autoScroll && container) {
+                    this.restoreScrollAnchor(anchor, beforeScrollHeight);
+                }
                 
                 if (this.autoScroll) {
                     this.$nextTick(() => {
@@ -241,7 +396,8 @@
             },
             loadHistory() {
                 this.loadingHistory = true;
-                fetch('/log/history?lines=2000')
+                const lines = this.getHistoryLines();
+                fetch(`/log/history?lines=${lines}`)
                     .then(res => res.json())
                     .then(lines => {
                         // 格式: 2023-01-01 12:00:00.000 | INFO  | thread | logger | message
@@ -263,6 +419,12 @@
                                 };
                             }
                         });
+                        // 赋予稳定 id
+                        const base = this.nextLogId;
+                        for (let i = 0; i < parsedLogs.length; i++) {
+                            parsedLogs[i].__id = String(base + i);
+                        }
+                        this.nextLogId = base + parsedLogs.length;
                         this.logs = parsedLogs;
                         this.loadingHistory = false;
                         this.$nextTick(() => {

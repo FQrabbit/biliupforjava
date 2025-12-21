@@ -50,6 +50,8 @@ public class RecordBiliPublishService {
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, LocalDateTime> suspendMap = new java.util.concurrent.ConcurrentHashMap<>();
 
+    private static final int UPLOAD_RETRY_GIVE_UP = 9999;
+
     private static final String WX_MSG_FORMAT = """
             投稿结果: %s
             收到主播%s投稿事件
@@ -162,10 +164,13 @@ public class RecordBiliPublishService {
                     uploadPart.setUpload(false);
                     uploadPart.setCid(null);
                     uploadPart.setFileName(null);
+                    if (isTimestampError) {
+                        uploadPart.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    }
                     uploadPart = partRepository.save(uploadPart);
                     // 时间戳跳变错误表示文件损坏，不再重试上传
                     if (isTimestampError) {
-                        log.info("时间戳跳变错误，跳过重新上传 ==> partTitle={}", uploadPart.getTitle());
+                        log.info("时间戳跳变错误，已标记为永久放弃该分P，跳过重新上传 ==> partTitle={}, partId={}", uploadPart.getTitle(), uploadPart.getId());
                         continue;
                     }
                     String filePath = uploadPart.getFilePath().intern();
@@ -387,7 +392,9 @@ public class RecordBiliPublishService {
                         uploadPart.setRecording(false);
                         if (uploadPart.getFileSize() == 0 || uploadPart.getDuration() == 0) {
                             uploadPart.setFileSize(file.length());
-                            uploadPart.setDuration((float)file.length() / 1024 / 1024);
+                            if (uploadPart.getDuration() == 0 && uploadPart.getStartTime() != null && uploadPart.getEndTime() != null) {
+                                uploadPart.setDuration((int) java.time.Duration.between(uploadPart.getStartTime(), uploadPart.getEndTime()).getSeconds());
+                            }
                         }
                         uploadPart = partRepository.save(uploadPart);
                         if (uploadPart.getEndTime().isAfter(now.plusMinutes(11L))) {

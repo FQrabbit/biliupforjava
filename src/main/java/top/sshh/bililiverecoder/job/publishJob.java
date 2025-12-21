@@ -41,6 +41,8 @@ public class publishJob {
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Long> uploadFailureMap = new java.util.concurrent.ConcurrentHashMap<>();
 
+    private static final int UPLOAD_RETRY_GIVE_UP = 9999;
+
 
     // 定时查询直播历史，如果下一次直播开始时间和上一次结束时间小于5min，视为同一次直播
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
@@ -61,6 +63,24 @@ public class publishJob {
         }
 
         for (RecordHistory history : historyList) {
+            // 二次校验：不信任 history.recording 单字段，避免被历史数据/列表纠偏误改后误触发投稿。
+            // 只要存在未结束(endTime=null)或仍标记录制中的分P，就视为仍在录制，直接跳过。
+            int actuallyRecordingParts = 0;
+            try {
+                actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
+            } catch (Exception e) {
+                log.warn("视频发布定时任务 统计录制中分P失败，跳过投稿 HistoryId={} Err={}", history.getId(), e.getMessage());
+                continue;
+            }
+            if (actuallyRecordingParts > 0) {
+                log.warn("视频发布定时任务 检测到仍在录制的分P，跳过投稿 HistoryId={} recordPartCount={}", history.getId(), actuallyRecordingParts);
+                continue;
+            }
+            if (history.isStreaming()) {
+                log.warn("视频发布定时任务 history.streaming=true，跳过投稿 HistoryId={}", history.getId());
+                continue;
+            }
+
             publishService.publishRecordHistory(history);
             try {
                 log.info("单个视频发布流程结束，等待30秒继续下一个任务...");
@@ -79,29 +99,12 @@ public class publishJob {
         
         for (RecordRoom room : roomList) {
             // 查询该房间下所有已录制完成（endTime > 5分钟前）但未上传的分P
-            List<RecordHistoryPart> pendingParts = partRepository.findByRoomIdAndRecordingIsFalseAndUploadIsFalseAndEndTimeBetweenOrderByEndTimeAsc(
+            // 仅扫描所属history存在且已开启上传(upload=true)的分P，避免无意义重复扫描
+            List<RecordHistoryPart> pendingParts = partRepository.findPendingUploadPartsWithHistoryUploadEnabled(
                 room.getRoomId(), now.minusMonths(1L), now.minusMinutes(5L));
-            
-            if (!pendingParts.isEmpty()) {
-                log.info("分P上传补偿任务 房间[{}] 检测到 {} 个未上传的分P", room.getUname(), pendingParts.size());
-            }
-            
-            for (RecordHistoryPart part : pendingParts) {
-                // 如果该分P所属的录制历史本身未开启上传，则无需触发上传补偿，避免无意义的重复尝试
-                RecordHistory history = null;
-                try {
-                    history = historyRepository.findById(part.getHistoryId()).orElse(null);
-                } catch (Exception ignored) {
-                }
-                if (history == null) {
-                    log.warn("分P上传补偿任务 找不到history，跳过 PartId={} HistoryId={}", part.getId(), part.getHistoryId());
-                    continue;
-                }
-                if (!history.isUpload()) {
-                    log.debug("分P上传补偿任务 所属history未开启上传，跳过 PartId={} HistoryId={}", part.getId(), part.getHistoryId());
-                    continue;
-                }
 
+            int triggeredCount = 0;
+            for (RecordHistoryPart part : pendingParts) {
                 // 检查失败冷却时间
                 if (uploadFailureMap.containsKey(part.getId())) {
                     long nextRetry = uploadFailureMap.get(part.getId());
@@ -111,32 +114,77 @@ public class publishJob {
                     uploadFailureMap.remove(part.getId());
                 }
 
-                // 检查文件是否存在
-                File file = new File(part.getFilePath());
-                if (!file.exists()) {
-                    log.warn("分P上传补偿任务 跳过不存在的文件: {}", part.getFilePath());
-                    continue;
-                }
-                
-                // 检查文件大小和时长是否符合要求
-                if (part.getFileSize() < 1024 * 1024 * room.getFileSizeLimit()) {
-                    log.info("分P上传补偿任务 文件大小小于设置的忽略大小，跳过: {}", part.getFilePath());
-                    continue;
-                }
-                if (part.getDuration() < room.getDurationLimit()) {
-                    log.info("分P上传补偿任务 文件时长小于设置的忽略时间，跳过: {}", part.getFilePath());
-                    continue;
-                }
-                
                 // 检查是否已经在上传队列中
                 Thread uploadThread = TaskUtil.partUploadTask.get(part.getId());
                 if (uploadThread != null && uploadThread.isAlive()) {
                     log.debug("分P上传补偿任务 PartId={} 正在上传中，跳过", part.getId());
                     continue;
                 }
+
+                // 检查文件是否存在
+                File file = new File(part.getFilePath());
+                if (!file.exists()) {
+                    log.warn("分P上传补偿任务 跳过不存在的文件: {}", part.getFilePath());
+                    continue;
+                }
+
+                // 以磁盘真实文件为准，避免历史数据 fileSize/duration 写入异常导致误判
+                long actualFileSize = file.length();
+                if (actualFileSize <= 0) {
+                    log.warn("分P上传补偿任务 无法读取文件大小(size={})，可能文件格式/挂载异常，放弃且不再重试 PartId={} File={}",
+                        actualFileSize, part.getId(), part.getFilePath());
+                    part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    try {
+                        partRepository.save(part);
+                    } catch (Exception ignored) {
+                    }
+                    continue;
+                }
+                if (part.getFileSize() != actualFileSize && actualFileSize > 0) {
+                    part.setFileSize(actualFileSize);
+                    try {
+                        partRepository.save(part);
+                    } catch (Exception ignored) {
+                    }
+                }
+                int actualDuration = Math.round(part.getDuration());
+                if (actualDuration <= 0 && part.getStartTime() != null && part.getEndTime() != null) {
+                    actualDuration = (int) java.time.Duration.between(part.getStartTime(), part.getEndTime()).getSeconds();
+                    if (actualDuration > 0) {
+                        part.setDuration(actualDuration);
+                        try {
+                            partRepository.save(part);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+                if (actualDuration <= 0) {
+                    log.warn("分P上传补偿任务 无法读取文件时长(durationSec={})，可能文件格式/事件数据异常，放弃且不再重试 PartId={} File={}",
+                        actualDuration, part.getId(), part.getFilePath());
+                    part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    try {
+                        partRepository.save(part);
+                    } catch (Exception ignored) {
+                    }
+                    continue;
+                }
+                
+                // 检查文件大小和时长是否符合要求
+                long minBytes = 1024L * 1024L * room.getFileSizeLimit();
+                if (actualFileSize < minBytes) {
+                    log.info("分P上传补偿任务 文件大小小于设置的忽略大小，跳过: {} (sizeMB={} < limitMB={})", part.getFilePath(),
+                        String.format("%.2f", actualFileSize / 1024.0 / 1024.0), room.getFileSizeLimit());
+                    continue;
+                }
+                if (actualDuration < room.getDurationLimit()) {
+                    log.info("分P上传补偿任务 文件时长小于设置的忽略时间，跳过: {} (durationSec={} < limitSec={})", part.getFilePath(),
+                        actualDuration, room.getDurationLimit());
+                    continue;
+                }
                 
                 // 触发异步上传（使用新线程避免阻塞定时任务）
                 log.info("分P上传补偿任务 触发上传 PartId={} File={}", part.getId(), part.getFilePath());
+                triggeredCount++;
                 new Thread(() -> {
                     try {
                         uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
@@ -153,6 +201,10 @@ public class publishJob {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+            }
+
+            if (triggeredCount > 0) {
+                log.info("分P上传补偿任务 房间[{}] 本轮触发 {} 个分P上传（待处理未上传分P总数={}）", room.getUname(), triggeredCount, pendingParts.size());
             }
         }
     }
