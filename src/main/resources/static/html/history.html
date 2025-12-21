@@ -157,7 +157,7 @@
                             <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? '#67c23a' : '#909399'}"></i>
-                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}">
+                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}">
                                     <el-option label="已发布" :value="true">
                                         <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已发布
                                     </el-option>
@@ -205,7 +205,7 @@
                         </div>
                         
                         <div class="filter-item filter-item-wide">
-                            <label class="filter-label"><i class="el-icon-date"></i> 结束时间</label>
+                            <label class="filter-label" title="按结束时间(endTime)筛选"><i class="el-icon-date"></i> 结束时间</label>
                             <div class="date-range">
                                 <el-date-picker
                                         v-model="form.from"
@@ -230,7 +230,7 @@
                     
                     <!-- 操作按钮 -->
                     <div class="filter-footer">
-                        <el-button type="primary" icon="el-icon-search" @click="initTable" size="small">查询</el-button>
+                        <el-button type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading">查询</el-button>
                         <el-button icon="el-icon-refresh" @click="resetFilters" size="small">重置</el-button>
                     </div>
                 </div>
@@ -239,7 +239,7 @@
 
         <!-- 数据内容区域 -->
         <transition :name="transitionName" mode="out-in">
-            <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current">
+            <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current" v-loading="loading" element-loading-text="加载中...">
                 <div class="data-card" 
                      :class="{ 
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
@@ -254,11 +254,12 @@
                             <div class="card-status-row">
                                 <span class="status-chip success" v-if="item.upload">已上传</span>
                                 <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未上传</span>
-                                <span class="status-chip warn" v-if="item.recording">录制中</span>
-                                <span class="status-chip" :class="item.recording ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
+                                <span class="status-chip warn" v-if="isActuallyRecording(item)">录制中</span>
+                                <span class="status-chip" style="background: rgba(230, 162, 60, 0.2); color: #e6a23c;" v-if="hasRecordingMismatch(item)">状态可能未同步</span>
+                                <span class="status-chip" :class="isActuallyRecording(item) ? 'warn' : 'success'">{{ formatDuration(item.partDuration) }}</span>
                             </div>
                             <div class="card-meta">
-                                <span class="meta-chip">{{ item.startTime }}</span>
+                                <span class="meta-chip">{{ formatDateTime(item.startTime) }}</span>
                             </div>
                         </div>
                         <div class="card-info-right">
@@ -328,7 +329,9 @@
                             <el-tag size="mini" type="danger" v-else>未通过</el-tag>
                         </template>
                     </el-table-column>
-                    <el-table-column label="开始时间" prop="startTime" width="160"></el-table-column>
+                    <el-table-column label="开始时间" prop="startTime" width="160">
+                        <template slot-scope="scope">{{ formatDateTime(scope.row.startTime) }}</template>
+                    </el-table-column>
                     <el-table-column label="操作" width="140" fixed="right">
                         <template slot-scope="scope">
                             <el-button @click.stop="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
@@ -396,11 +399,11 @@
                 </div>
                 <div class="detail-row">
                     <label>开始时间</label>
-                    <span>{{ currentDetail.startTime }}</span>
+                    <span>{{ formatDateTime(currentDetail.startTime) }}</span>
                 </div>
                 <div class="detail-row">
                     <label>结束时间</label>
-                    <span>{{ currentDetail.endTime }}</span>
+                    <span>{{ formatDateTime(currentDetail.endTime) }}</span>
                 </div>
             </div>
 
@@ -542,6 +545,9 @@
             isDarkTheme: document.documentElement.getAttribute('data-theme') === 'dark'
         },
         computed: {
+            isPublishLockedByCode: function() {
+                return this.form.code !== null && this.form.code !== undefined && this.form.code !== '';
+            },
             activeFilterCount: function() {
                 let count = 0;
                 if (this.form.roomId) count++;
@@ -555,6 +561,12 @@
             }
         },
         watch: {
+            'form.code': function(val) {
+                // 后端筛选 code 时会强制 publish=true，这里前端直接锁定避免出现“选了但必为空”的组合
+                if (val !== null && val !== undefined && val !== '') {
+                    this.form.publish = true;
+                }
+            },
             viewMode: function (val) {
                 localStorage.setItem('history-view-mode', val);
             }
@@ -573,6 +585,36 @@
             window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            formatDateTime: function(val) {
+                if (!val) return '';
+                // 兼容后端常见的 LocalDateTime 字符串（可能包含 'T' 和毫秒/纳秒）
+                if (typeof val === 'string') {
+                    // 仅做展示格式化，不做时区转换
+                    let s = val.replace('T', ' ');
+                    // 去掉多余的纳秒，只保留到毫秒
+                    // 2025-12-21 12:34:56.123456789 -> 2025-12-21 12:34:56.123
+                    s = s.replace(/(\d{2}:\d{2}:\d{2}\.\d{3})\d+/, '$1');
+                    return s;
+                }
+                try {
+                    return String(val);
+                } catch (e) {
+                    return '';
+                }
+            },
+            isActuallyRecording: function(item) {
+                if (!item) return false;
+                if (item.recordPartCount !== null && item.recordPartCount !== undefined) {
+                    return item.recordPartCount > 0;
+                }
+                return !!item.recording;
+            },
+            hasRecordingMismatch: function(item) {
+                if (!item) return false;
+                const recordPartCount = (item.recordPartCount !== null && item.recordPartCount !== undefined) ? item.recordPartCount : null;
+                // 明显矛盾：历史标记录制中，但没有任何录制中分P，并且已经有结束时间
+                return item.recording === true && recordPartCount === 0 && !!item.endTime;
+            },
             goBack: function() {
                 window.location.href = '../index.html';
             },
