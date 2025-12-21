@@ -1,5 +1,6 @@
 package top.sshh.bililiverecoder.entity;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -53,8 +54,10 @@ public class RecordHistoryDTO {
     private int successMsgCount;
 
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss.SSS")
     private LocalDateTime from;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss.SSS")
     private LocalDateTime to;
 
     private int current = 1;

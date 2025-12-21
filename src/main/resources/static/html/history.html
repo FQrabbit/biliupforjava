@@ -126,12 +126,12 @@
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-upload2"></i> 上传状态</label>
                             <div class="select-with-icon">
-                                <i v-if="form.upload" class="select-prefix-icon" :class="form.upload === 'true' ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === 'true' ? '#67c23a' : '#f56c6c'}"></i>
-                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload}">
-                                    <el-option label="已上传" value="true">
+                                <i v-if="form.upload !== null && form.upload !== undefined" class="select-prefix-icon" :class="form.upload === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === true ? '#67c23a' : '#f56c6c'}"></i>
+                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload !== null && form.upload !== undefined}">
+                                    <el-option label="已上传" :value="true">
                                         <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已上传
                                     </el-option>
-                                    <el-option label="未上传" value="false">
+                                    <el-option label="未上传" :value="false">
                                         <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>未上传
                                     </el-option>
                                 </el-select>
@@ -141,12 +141,12 @@
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-video-camera"></i> 录制状态</label>
                             <div class="select-with-icon">
-                                <i v-if="form.recording" class="select-prefix-icon" :class="form.recording === 'true' ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === 'true' ? '#e6a23c' : '#909399'}"></i>
-                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording}">
-                                    <el-option label="录制中" value="true">
+                                <i v-if="form.recording !== null && form.recording !== undefined" class="select-prefix-icon" :class="form.recording === true ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === true ? '#e6a23c' : '#909399'}"></i>
+                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording !== null && form.recording !== undefined}">
+                                    <el-option label="录制中" :value="true">
                                         <i class="el-icon-video-camera" style="color: #e6a23c; margin-right: 6px;"></i>录制中
                                     </el-option>
-                                    <el-option label="未录制" value="false">
+                                    <el-option label="未录制" :value="false">
                                         <i class="el-icon-video-pause" style="color: #909399; margin-right: 6px;"></i>未录制
                                     </el-option>
                                 </el-select>
@@ -156,12 +156,12 @@
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
                             <div class="select-with-icon">
-                                <i v-if="form.publish" class="select-prefix-icon" :class="form.publish === 'true' ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === 'true' ? '#67c23a' : '#909399'}"></i>
-                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.publish}">
-                                    <el-option label="已发布" value="true">
+                                <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? '#67c23a' : '#909399'}"></i>
+                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}">
+                                    <el-option label="已发布" :value="true">
                                         <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已发布
                                     </el-option>
-                                    <el-option label="未发布" value="false">
+                                    <el-option label="未发布" :value="false">
                                         <i class="el-icon-circle-close" style="color: #909399; margin-right: 6px;"></i>未发布
                                     </el-option>
                                 </el-select>
@@ -211,7 +211,7 @@
                                         v-model="form.from"
                                         type="datetime"
                                         placeholder="开始时间"
-                                        value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
+                                    value-format="yyyy-MM-dd HH:mm:ss.SSS"
                                         size="small"
                                         @change="onFilterChange">
                                 </el-date-picker>
@@ -220,7 +220,7 @@
                                         v-model="form.to"
                                         type="datetime"
                                         placeholder="结束时间"
-                                        value-format="yyyy-MM-dd[T]HH:mm:ss.sss[Z]"
+                                    value-format="yyyy-MM-dd HH:mm:ss.SSS"
                                         size="small"
                                         @change="onFilterChange">
                                 </el-date-picker>
@@ -513,7 +513,16 @@
             roomList: [],
             editDialogFormVisible: false,
             uploadEditDialogFormVisible: false,
-            form: {},
+            form: {
+                roomId: '',
+                bvId: '',
+                upload: null,
+                recording: null,
+                publish: null,
+                code: null,
+                from: null,
+                to: null
+            },
             history:{},
             uploadEditPartId:null,
             loading: false,
@@ -537,9 +546,9 @@
                 let count = 0;
                 if (this.form.roomId) count++;
                 if (this.form.bvId) count++;
-                if (this.form.upload) count++;
-                if (this.form.recording) count++;
-                if (this.form.publish) count++;
+                if (this.form.upload !== null && this.form.upload !== undefined) count++;
+                if (this.form.recording !== null && this.form.recording !== undefined) count++;
+                if (this.form.publish !== null && this.form.publish !== undefined) count++;
                 if (this.form.code !== undefined && this.form.code !== null && this.form.code !== '') count++;
                 if (this.form.from || this.form.to) count++;
                 return count;
@@ -598,9 +607,9 @@
             resetFilters: function() {
                 this.form.roomId = '';
                 this.form.bvId = '';
-                this.form.upload = '';
-                this.form.recording = '';
-                this.form.publish = '';
+                this.form.upload = null;
+                this.form.recording = null;
+                this.form.publish = null;
                 this.form.code = null;
                 this.form.from = null;
                 this.form.to = null;
@@ -616,19 +625,19 @@
                 this.quickFilter = type;
                 switch(type) {
                     case 'recording':
-                        this.form.recording = 'true';
+                        this.form.recording = true;
                         break;
                     case 'pending':
                         this.form.code = -1;
-                        this.form.publish = 'true'; // 只有已发布的才有真正的审核状态
+                        this.form.publish = true; // 只有已发布的才有真正的审核状态
                         break;
                     case 'failed':
                         this.form.code = -2;
-                        this.form.publish = 'true';
+                        this.form.publish = true;
                         break;
                     case 'success':
                         this.form.code = 0;
-                        this.form.publish = 'true';
+                        this.form.publish = true;
                         break;
                 }
                 this.initTable();

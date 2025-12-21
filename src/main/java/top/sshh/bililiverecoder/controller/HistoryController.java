@@ -109,6 +109,23 @@ public class HistoryController {
             history.setPartDuration(partRepository.sumHistoryDurationByHistoryId(history.getId()));
             history.setUploadPartCount(partRepository.countByHistoryIdAndFileNameNotNull(history.getId()));
             history.setRecordPartCount(partRepository.countByHistoryIdAndRecordingIsTrue(history.getId()));
+
+            // 录制状态纠偏：有些历史数据可能因为事件丢失/异常退出导致 recording 标志未被清理。
+            // 这里以"是否还有录制中的分P"为准，在"已结束的历史(endTime != null)"场景下自动修正并落库，
+            // 避免出现“已发布且审核通过，但仍显示录制中”的矛盾状态。
+            boolean hasRecordingParts = history.getRecordPartCount() > 0;
+            boolean needFixRecording = false;
+            if (hasRecordingParts && !history.isRecording()) {
+                history.setRecording(true);
+                needFixRecording = true;
+            } else if (!hasRecordingParts && history.isRecording() && history.getEndTime() != null) {
+                history.setRecording(false);
+                needFixRecording = true;
+            }
+            if (needFixRecording) {
+                history.setUpdateTime(LocalDateTime.now());
+                historyRepository.save(history);
+            }
             if (StringUtils.isNotBlank(history.getBvId())) {
                 history.setMsgCount(msgRepository.countByBvid(history.getBvId()));
                 history.setSuccessMsgCount(msgRepository.countByBvidAndCode(history.getBvId(), 0));
