@@ -23,7 +23,7 @@
             <img src="img/icon.svg" alt="Logo" class="brand-logo">
             <div class="brand-info">
                 <h1 class="brand-title">录播姬上传插件</h1>
-                <span class="brand-version">v1.4.1-beta5</span>
+                <span class="brand-version">v1.4.1-beta5.1</span>
             </div>
         </div>
         <nav class="header-nav">
@@ -121,6 +121,7 @@
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2025-12-21', version: '1.4.1-beta5.1', content: '优化分P上传补偿逻辑，避免无意义的重复尝试。' },
                 { time: '2025-12-21', version: '1.4.1-beta5', content: '优化Webhook推送处理，响应更快更稳定；历史记录查询新增加载提示并防重复点击；修复部分历史记录结束后仍显示录制中的异常。' },
                 { time: '2025-12-16', version: '1.4.1-beta4.9', content: '一键并发检测所有线路状态，并在下拉菜单中通过颜色（绿/黄/红）和延迟数值（ms）实时展示线路健康状况；在基础检测通过后，可对可用线路进行真实的上传速度测试，并显示具体速度。' },
                 { time: '2025-12-15', version: '1.4.1-beta4.8', content: '录制历史详情页新增“刷新状态”按钮，支持手动同步稿件最新状态；优化视频状态检测逻辑，游客接口遇-404时不报警告并自动切换至创作中心API，完善“仅自己可见”稿件的识别支持。' },

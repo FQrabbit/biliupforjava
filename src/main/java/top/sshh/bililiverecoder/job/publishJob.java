@@ -87,6 +87,21 @@ public class publishJob {
             }
             
             for (RecordHistoryPart part : pendingParts) {
+                // 如果该分P所属的录制历史本身未开启上传，则无需触发上传补偿，避免无意义的重复尝试
+                RecordHistory history = null;
+                try {
+                    history = historyRepository.findById(part.getHistoryId()).orElse(null);
+                } catch (Exception ignored) {
+                }
+                if (history == null) {
+                    log.warn("分P上传补偿任务 找不到history，跳过 PartId={} HistoryId={}", part.getId(), part.getHistoryId());
+                    continue;
+                }
+                if (!history.isUpload()) {
+                    log.debug("分P上传补偿任务 所属history未开启上传，跳过 PartId={} HistoryId={}", part.getId(), part.getHistoryId());
+                    continue;
+                }
+
                 // 检查失败冷却时间
                 if (uploadFailureMap.containsKey(part.getId())) {
                     long nextRetry = uploadFailureMap.get(part.getId());
