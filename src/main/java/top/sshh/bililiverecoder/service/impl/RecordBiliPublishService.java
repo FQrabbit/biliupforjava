@@ -251,6 +251,7 @@ public class RecordBiliPublishService {
             videoUploadDto.setDynamic_v2(this.template(room.getDescTemplate(), map).getDescV2Dtos());
             videoUploadDto.setVideos(dtos);
             videoUploadDto.setTag(this.template(room.getTags(), map).getDesc());
+            videoUploadDto.setIs_only_self(room.getIsOnlySelf());
             videoUploadDto.setAid(Long.parseLong(history.getAvId()));
             String republishRes = BiliApi.editPublish(biliBiliUser, videoUploadDto);
             log.info("重新投稿={}", republishRes);
@@ -592,7 +593,7 @@ public class RecordBiliPublishService {
                     videoUploadDto.setTid(room.getTid());
                     videoUploadDto.setCover(coverUrl);
                     videoUploadDto.setCopyright(room.getCopyright());
-                    videoUploadDto.setNo_disturbance(room.getIsOnlySelf());
+                    videoUploadDto.setNo_disturbance(room.getNoDisturbance());
                     videoUploadDto.setIs_only_self(room.getIsOnlySelf());
                     videoUploadDto.setTitle(this.template(room.getTitleTemplate(), map).getDesc());
                     if (videoUploadDto.getCopyright() == 2) {
@@ -665,6 +666,19 @@ public class RecordBiliPublishService {
                         history.setPublish(true);
                         history = historyRepository.save(history);
                         log.info("发布={}=视频成功 == > {}", room.getUname(), JSON.toJSONString(history));
+
+                        // 兜底：部分情况下创建投稿接口可能不稳定地忽略 is_only_self，这里在投稿成功后强制同步一次可见性。
+                        try {
+                            int desiredVisibility = room.getIsOnlySelf();
+                            if (desiredVisibility == 0 || desiredVisibility == 1) {
+                                String visRes = BiliApi.updateVideoVisibility(biliBiliUser, Long.parseLong(aid), desiredVisibility);
+                                log.info("同步视频可见性 aid={} is_only_self={} res={}", aid, desiredVisibility, visRes);
+                            } else {
+                                log.warn("房间配置 isOnlySelf 非法值({})，跳过同步可见性 RoomId={}", desiredVisibility, room.getRoomId());
+                            }
+                        } catch (Exception e) {
+                            log.warn("同步视频可见性失败 aid={} RoomId={} isOnlySelf={}", aid, room.getRoomId(), room.getIsOnlySelf(), e);
+                        }
 
                         if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("视频投稿")) {
                             Message message = new Message();
