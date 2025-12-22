@@ -98,14 +98,40 @@ public class videoSyncJob {
                         historyRepository.save(next);
                         log.warn("视频已确认删除 (Member API 404), 更新状态为 -404");
                     } else if (partInfo.getCode() == 0) {
-                        // Member API 返回 0，视为成功（可能审核中或仅自己可见）
-                        int state = partInfo.getData().getState();
-                        log.info("Member API 返回成功 (code 0)，获取到稿件状态: {}", state);
-                        next.setCode(state);
+                        // Member API 返回 0：注意其 state 字段语义不稳定，不能直接当作“可见性/审核状态”。
+                        // 这里再用带 Cookie 的 view API 二次确认真实 state（0:公开, -50:仅自己可见）。
                         if (partInfo.getData() != null && partInfo.getData().getVideos() != null && !partInfo.getData().getVideos().isEmpty()) {
                             next.setAvId(String.valueOf(partInfo.getData().getVideos().get(0).getAid()));
                         }
+
+                        try {
+                            Thread.sleep(800);
+                        } catch (InterruptedException ignored) {
+                        }
+
+                        BiliVideoInfoResponse confirm = BiliApi.getVideoInfo(user, next.getBvId());
+                        if (confirm != null && confirm.getCode() == 0 && confirm.getData() != null) {
+                            int state = confirm.getData().getState();
+                            next.setCode(state);
+                            next.setAvId(confirm.getData().getAid());
+                            next.setBvId(confirm.getData().getBvid());
+                            next.setCoverUrl(confirm.getData().getPic());
+                            historyRepository.save(next);
+                            log.info("二次确认稿件状态成功(view API): bvid={} state={}", next.getBvId(), state);
+                            return;
+                        }
+
+                        int oldCode = next.getCode();
+                        if (room.getIsOnlySelf() == 1) {
+                            // 保守策略：房间配置要求仅自己可见，但当前无法可靠读取状态时，避免误发普通弹幕。
+                            next.setCode(-50);
+                            historyRepository.save(next);
+                            log.warn("无法确认稿件状态，按房间配置仅自己可见处理: bvid={} oldCode={}", next.getBvId(), oldCode);
+                            return;
+                        }
+
                         historyRepository.save(next);
+                        log.warn("无法确认稿件状态，保持原状态: bvid={} oldCode={}", next.getBvId(), oldCode);
                         return;
                     } else {
                         log.warn("Member API 返回 code {}, 暂不标记为删除", partInfo.getCode());
