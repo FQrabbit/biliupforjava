@@ -16,6 +16,7 @@ import top.sshh.bililiverecoder.util.TaskUtil;
 
 import java.io.File;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -72,7 +73,83 @@ public class publishJob {
                 log.warn("视频发布定时任务 统计录制中分P失败，跳过投稿 HistoryId={} Err={}", history.getId(), e.getMessage());
                 continue;
             }
+
+            // 兜底纠偏：有时录制结束事件丢失/顺序异常会导致分P长期残留 recording=true 或 endTime=null。
+            // 若对应文件已超过10分钟未修改，按“录制已结束”处理，避免定时任务长期卡住。
             if (actuallyRecordingParts > 0) {
+                long thresholdMs = 10L * 60L * 1000L;
+                long nowMs = System.currentTimeMillis();
+                int healed = 0;
+                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+                for (RecordHistoryPart part : parts) {
+                    if (!part.isRecording() && part.getEndTime() != null) {
+                        continue;
+                    }
+                    String filePath = part.getFilePath();
+                    if (filePath == null) {
+                        continue;
+                    }
+                    File file = new File(filePath);
+                    if (!file.exists()) {
+                        continue;
+                    }
+                    if (file.lastModified() <= nowMs - thresholdMs) {
+                        boolean changed = false;
+                        if (part.isRecording()) {
+                            part.setRecording(false);
+                            changed = true;
+                        }
+                        if (part.getEndTime() == null) {
+                            part.setEndTime(LocalDateTime.now());
+                            changed = true;
+                        }
+                        if (changed) {
+                            try {
+                                partRepository.save(part);
+                                healed++;
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    }
+                }
+                if (healed > 0) {
+                    try {
+                        actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
+                        log.info("视频发布定时任务 已纠偏分P录制状态 healed={} HistoryId={} remain={}", healed, history.getId(), actuallyRecordingParts);
+                    } catch (Exception e) {
+                        log.warn("视频发布定时任务 纠偏后再次统计失败，跳过投稿 HistoryId={} Err={}", history.getId(), e.getMessage());
+                        continue;
+                    }
+                }
+            }
+
+            if (actuallyRecordingParts > 0) {
+                // 打印最“可疑”的几个分P便于排查（优先 endTime=null / recording=true）
+                try {
+                    List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+                    parts.stream()
+                        .filter(p -> p.isRecording() || p.getEndTime() == null)
+                        .sorted(Comparator.comparing((RecordHistoryPart p) -> p.getEndTime() == null ? 0 : 1)
+                            .thenComparing(p -> p.isRecording() ? 0 : 1))
+                        .limit(3)
+                        .forEach(p -> {
+                            String fp = p.getFilePath();
+                            long lm = -1;
+                            try {
+                                if (fp != null) {
+                                    File f = new File(fp);
+                                    if (f.exists()) {
+                                        lm = f.lastModified();
+                                    }
+                                }
+                            } catch (Exception ignored) {
+                            }
+                            log.warn("视频发布定时任务 录制中分P详情 HistoryId={} PartId={} recording={} endTimeNull={} lastModified={} filePath={}",
+                                history.getId(), p.getId(), p.isRecording(), p.getEndTime() == null, lm, fp);
+                        });
+                } catch (Exception ignored) {
+                }
+
                 log.warn("视频发布定时任务 检测到仍在录制的分P，跳过投稿 HistoryId={} recordPartCount={}", history.getId(), actuallyRecordingParts);
                 continue;
             }

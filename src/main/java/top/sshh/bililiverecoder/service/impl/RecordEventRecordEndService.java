@@ -10,13 +10,17 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordEventData;
 import top.sshh.bililiverecoder.entity.RecordHistory;
+import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
+import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 
+import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -41,6 +45,9 @@ public class RecordEventRecordEndService implements RecordEventService {
     private RecordRoomRepository roomRepository;
 
     @Autowired
+    private RecordHistoryPartRepository partRepository;
+
+    @Autowired
     private RecordBiliPublishService recordBiliPublishService;
 
 
@@ -61,6 +68,60 @@ public class RecordEventRecordEndService implements RecordEventService {
             room.setStreaming(false);
             room.setSessionId(null);
             roomRepository.save(room);
+
+            // 兜底：录播姬 webhook 不重传，若服务离线导致缺失 FileClosed，则分P可能长期残留 recording=true/endTime=null。
+            // 在'录制结束'事件到达时，按磁盘文件是否稳定（10分钟未修改）来纠偏分P结束态。
+            try {
+                long thresholdMs = 10L * 60L * 1000L;
+                long nowMs = System.currentTimeMillis();
+                int healed = 0;
+                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+                for (RecordHistoryPart part : parts) {
+                    if (!part.isRecording() && part.getEndTime() != null) {
+                        continue;
+                    }
+                    String filePath = part.getFilePath();
+                    if (filePath == null) {
+                        continue;
+                    }
+                    File file = new File(filePath);
+                    if (!file.exists()) {
+                        continue;
+                    }
+                    if (file.lastModified() > nowMs - thresholdMs) {
+                        continue;
+                    }
+                    boolean changed = false;
+                    if (part.isRecording()) {
+                        part.setRecording(false);
+                        changed = true;
+                    }
+                    if (part.getEndTime() == null) {
+                        part.setEndTime(LocalDateTime.now());
+                        changed = true;
+                    }
+                    if (part.getFileSize() <= 0) {
+                        part.setFileSize(file.length());
+                        changed = true;
+                    }
+                    if (part.getDuration() <= 0 && part.getStartTime() != null && part.getEndTime() != null) {
+                        try {
+                            part.setDuration((float) java.time.Duration.between(part.getStartTime(), part.getEndTime()).getSeconds());
+                            changed = true;
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (changed) {
+                        partRepository.save(part);
+                        healed++;
+                    }
+                }
+                if (healed > 0) {
+                    log.info("录制结束事件兜底纠偏分P完成 healed={} HistoryId={}", healed, history.getId());
+                }
+            } catch (Exception e) {
+                log.warn("录制结束事件兜底纠偏分P失败 RoomId={} Err={}", eventData.getRoomId(), e.getMessage());
+            }
         }
         String wxuid = room.getWxuid();
         String pushMsgTags = room.getPushMsgTags();
