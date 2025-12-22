@@ -147,7 +147,7 @@ public class HistoryController {
     public void refreshStatus(@RequestBody RecordHistoryDTO request) {
         Optional<RecordHistory> historyOptional = historyRepository.findById(request.getId());
         if (historyOptional.isPresent()) {
-            videoSyncJob.syncOne(historyOptional.get());
+            videoSyncJob.syncStatusOnly(historyOptional.get());
         }
     }
 

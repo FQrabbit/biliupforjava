@@ -65,6 +65,18 @@ public class videoSyncJob {
     }
 
     public void syncOne(RecordHistory next) {
+        syncOneInternal(next, true);
+    }
+
+    /**
+     * 仅同步稿件状态/基础信息，不触发弹幕重解析与文件处理。
+     * 用于前端“刷新状态”按钮，避免误删已有弹幕数据。
+     */
+    public void syncStatusOnly(RecordHistory next) {
+        syncOneInternal(next, false);
+    }
+
+    private void syncOneInternal(RecordHistory next, boolean doPostPublishProcessing) {
         RecordRoom room = roomRepository.findByRoomId(next.getRoomId());
         if (room == null) {
             log.error("同步视频状态，未找到房间{}，请删除该录制历史 {}", next.getRoomId(), next);
@@ -149,6 +161,11 @@ public class videoSyncJob {
         next.setBvId(videoInfoResponseData.getBvid());
         next.setCoverUrl(videoInfoResponseData.getPic());
         next = historyRepository.save(next);
+
+        // 前端“刷新状态”只需要更新状态，不做弹幕重解析/文件处理
+        if (!doPostPublishProcessing) {
+            return;
+        }
 
         // 0: 开放浏览, -50: 仅自己可见
         // 这两种状态都视为"发布成功"，可以进行后续的弹幕解析
