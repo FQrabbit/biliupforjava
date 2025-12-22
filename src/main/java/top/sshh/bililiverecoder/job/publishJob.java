@@ -144,17 +144,17 @@ public class publishJob {
                                 }
                             } catch (Exception ignored) {
                             }
-                            log.warn("视频发布定时任务 录制中分P详情 HistoryId={} PartId={} recording={} endTimeNull={} lastModified={} filePath={}",
+                            log.debug("视频发布定时任务 录制中分P详情 HistoryId={} PartId={} recording={} endTimeNull={} lastModified={} filePath={}",
                                 history.getId(), p.getId(), p.isRecording(), p.getEndTime() == null, lm, fp);
                         });
                 } catch (Exception ignored) {
                 }
 
-                log.warn("视频发布定时任务 检测到仍在录制的分P，跳过投稿 HistoryId={} recordPartCount={}", history.getId(), actuallyRecordingParts);
+                log.info("视频发布定时任务 检测到仍在录制的分P，跳过投稿 HistoryId={} recordPartCount={}", history.getId(), actuallyRecordingParts);
                 continue;
             }
             if (history.isStreaming()) {
-                log.warn("视频发布定时任务 history.streaming=true，跳过投稿 HistoryId={}", history.getId());
+                log.info("视频发布定时任务 history.streaming=true，跳过投稿 HistoryId={}", history.getId());
                 continue;
             }
 
