@@ -143,7 +143,7 @@ public class videoSyncJob {
                         }
 
                         historyRepository.save(next);
-                        log.warn("无法确认稿件状态，保持原状态: bvid={} oldCode={}", next.getBvId(), oldCode);
+                        log.info("无法确认稿件状态，保持原状态: bvid={} oldCode={}", next.getBvId(), oldCode);
                         return;
                     } else {
                         log.warn("Member API 返回 code {}, 暂不标记为删除", partInfo.getCode());
