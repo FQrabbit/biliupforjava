@@ -458,8 +458,11 @@ public class HistoryController {
         if (request.getCode() != null) {
             // 当筛选审核状态时，需要同时检查publish状态。
             // 只有已发布的视频才有真正的审核状态，未发布的视频code默认值是-1但不应被当作"审核中"。
+            // 前端约定：code=-999 表示“未审核/未发布”（publish=false）。
             // 前端值：code=1 表示“未通过/不通过”（即已发布但审核状态非 通过/仅自己可见）。
-            if (Objects.equals(request.getCode(), 1)) {
+            if (Objects.equals(request.getCode(), -999)) {
+                predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), false)));
+            } else if (Objects.equals(request.getCode(), 1)) {
                 predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), true)));
                 predicatesList.add(criteriaBuilder.and(criteriaBuilder.not(root.get("code").in(0, -50))));
             } else {

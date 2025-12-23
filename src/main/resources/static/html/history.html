@@ -167,6 +167,9 @@
                             <div class="select-with-icon">
                                 <i v-if="form.code !== null && form.code !== undefined && form.code !== ''" class="select-prefix-icon" :class="getCodeIcon(form.code)" :style="{color: getCodeColor(form.code)}"></i>
                                 <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}">
+                                    <el-option label="未审核" :value="-999">
+                                        <i class="el-icon-remove-outline" style="color: #909399; margin-right: 6px;"></i>未审核
+                                    </el-option>
                                     <el-option label="通过" :value="0">
                                         <i class="el-icon-success" style="color: #67c23a; margin-right: 6px;"></i>通过
                                     </el-option>
@@ -567,7 +570,11 @@
             'form.code': function(val) {
                 // 后端筛选 code 时会强制 publish=true，这里前端直接锁定避免出现“选了但必为空”的组合
                 if (val !== null && val !== undefined && val !== '') {
-                    this.form.publish = true;
+                    if (Number(val) === -999) {
+                        this.form.publish = false;
+                    } else {
+                        this.form.publish = true;
+                    }
                 }
             },
             viewMode: function (val) {
@@ -688,6 +695,7 @@
             },
             getCodeIcon: function(code) {
                 const iconMap = {
+                    '-999': 'el-icon-remove-outline',
                     0: 'el-icon-success',
                     '-50': 'el-icon-view',
                     1: 'el-icon-circle-close'
@@ -696,6 +704,7 @@
             },
             getCodeColor: function(code) {
                 const colorMap = {
+                    '-999': '#909399',
                     0: '#67c23a',
                     '-50': '#67c23a',
                     1: '#f56c6c'
@@ -1074,8 +1083,8 @@
             },
             getFileSizeColorType: function (size) {
                 const gb = size / 1024 / 1024 / 1024;
-                if (gb <= 8) return 'success';
-                if (gb <= 30) return 'warning';
+                if (gb <= 16) return 'success';
+                if (gb <= 64) return 'warning';
                 return 'danger';
             },
             formatDuration: function (seconds) {

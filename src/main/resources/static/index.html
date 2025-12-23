@@ -23,7 +23,7 @@
             <img src="img/icon.svg" alt="Logo" class="brand-logo">
             <div class="brand-info">
                 <h1 class="brand-title">录播姬上传插件</h1>
-                <span class="brand-version">v1.4.1-beta5.3</span>
+                <span class="brand-version">v1.4.1-beta5.4</span>
             </div>
         </div>
         <nav class="header-nav">
@@ -121,6 +121,7 @@
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2025-12-24', version: '1.4.1-beta5.4', content: '增加未审核状态的筛选选项，并对一些log日志判断增加详细信息方便判断问题。' },
                 { time: '2025-12-23', version: '1.4.1-beta5.3', content: '刷新状态只更新稿件状态，不再重置弹幕；仅自己可见识别更稳定；修复分P状态异常导致卡住的问题。' },
                 { time: '2025-12-22', version: '1.4.1-beta5.2', content: '录制历史信息展示更清晰；日志页面默认更流畅；有问题的分段会标记为异常并停止反复尝试。' },
                 { time: '2025-12-21', version: '1.4.1-beta5.1', content: '优化分P上传补偿逻辑，避免无意义的重复尝试。' },

@@ -70,7 +70,9 @@ public class RecordEventRecordStartedService implements RecordEventService {
             history.setUpload(room.isUpload());
         } else {
             history = historyList.get(0);
-            log.warn("开始录制事件重复/过近，录制历史已存在，复用已有history ==> {}", JSON.toJSONString(history));
+            log.warn("开始录制事件重复/过近（可能是录播姬短时间内重复推送录制开始事件/重连导致），将复用已有录制历史: roomId={} sessionId={} eventId={} historyId={}",
+                roomId, eventData.getSessionId(), event.getEventId(), history.getId());
+            log.debug("复用已有history详情 ==> {}", JSON.toJSONString(history));
         }
         history.setEventId(event.getEventId());
         history.setSessionId(eventData.getSessionId());

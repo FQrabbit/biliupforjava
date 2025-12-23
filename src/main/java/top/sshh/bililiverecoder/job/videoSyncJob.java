@@ -133,12 +133,19 @@ public class videoSyncJob {
                             return;
                         }
 
+                        // 二次确认失败：补充 debug 信息，方便排查(例如 cookie 失效/风控/接口波动等)
+                        if (confirm == null) {
+                            log.debug("二次确认稿件状态失败(view API): bvid={} confirm=null", next.getBvId());
+                        } else {
+                            log.debug("二次确认稿件状态失败(view API): bvid={} code={} msg={}", next.getBvId(), confirm.getCode(), confirm.getMessage());
+                        }
+
                         int oldCode = next.getCode();
                         if (room.getIsOnlySelf() == 1) {
                             // 保守策略：房间配置要求仅自己可见，但当前无法可靠读取状态时，避免误发普通弹幕。
                             next.setCode(-50);
                             historyRepository.save(next);
-                            log.warn("无法确认稿件状态，按房间配置仅自己可见处理: bvid={} oldCode={}", next.getBvId(), oldCode);
+                            log.info("无法确认稿件状态，按房间配置仅自己可见处理: bvid={} oldCode={}", next.getBvId(), oldCode);
                             return;
                         }
 
@@ -149,7 +156,7 @@ public class videoSyncJob {
                         log.warn("Member API 返回 code {}, 暂不标记为删除", partInfo.getCode());
                     }
                 } else {
-                    log.warn("未配置上传用户，无法确认 404 是否为权限问题，跳过状态更新");
+                    log.warn("未配置上传用户，无法确认 404 是否为权限问题，跳过状态更新: bvid={}", next.getBvId());
                 }
             }
             return;
