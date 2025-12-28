@@ -9,6 +9,7 @@ import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -41,13 +42,19 @@ public class DeletePartFileJob {
             LocalDateTime deleteTime = LocalDateTime.now().minusDays(room.getDeleteDay());
             List<RecordHistoryPart> partList = partRepository.findByRoomIdAndFileDeleteIsFalseAndEndTimeIsBefore(room.getRoomId(),deleteTime);
             if (partList.size() > 0) {
-                log.info("定时删除文件任务，主播名称{}，待删除文件数量{}", room.getUname(), partList.size());
+                log.info("[BLR] {}", LogKvs.event("DeletePartFileJob.Start")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("count", partList.size()));
             }
             for (RecordHistoryPart part : partList) {
                 String filePath = part.getFilePath();
                 File file = new File(filePath);
                 if (!file.exists()) {
-                    log.info("定时删除文件任务，主播名称{}，{}=>文件不存在，视为已删除", room.getUname(), filePath);
+                    log.info("[BLR] {}", LogKvs.event("DeletePartFileJob.SkipNotExists")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("filePath", filePath));
                     part.setFileDelete(true);
                     part.setDeleteRetryCount(0);
                     part.setDeleteFailReason(null);
@@ -63,7 +70,10 @@ public class DeletePartFileJob {
                 }
 
                 if (!file.exists()) {
-                    log.info("定时删除文件任务，主播名称{}，{}=>文件删除成功！！！", room.getUname(), filePath);
+                    log.info("[BLR] {}", LogKvs.event("DeletePartFileJob.Success")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("filePath", filePath));
                     part.setFileDelete(true);
                     part.setDeleteRetryCount(0);
                     part.setDeleteFailReason(null);
@@ -77,12 +87,22 @@ public class DeletePartFileJob {
                     part.setDeleteFailReason(failReason);
 
                     if (nextRetry >= maxDeleteRetry) {
-                        log.error("定时删除文件任务，主播名称{}，{}=>文件删除失败(已达重试上限 {}/{} )，停止重试。原因:{}",
-                                room.getUname(), filePath, nextRetry, maxDeleteRetry, failReason);
+            log.error("[BLR] {}", LogKvs.event("DeletePartFileJob.FailedGiveUp")
+                .add("roomId", room.getRoomId())
+                .add("uname", room.getUname())
+                .add("filePath", filePath)
+                .add("retry", nextRetry)
+                .add("maxRetry", maxDeleteRetry)
+                .add("reason", failReason));
                         part.setFileDelete(true);
                     } else {
-                        log.warn("定时删除文件任务，主播名称{}，{}=>文件删除失败(重试 {}/{} )，原因:{}",
-                                room.getUname(), filePath, nextRetry, maxDeleteRetry, failReason);
+            log.warn("[BLR] {}", LogKvs.event("DeletePartFileJob.FailedRetry")
+                .add("roomId", room.getRoomId())
+                .add("uname", room.getUname())
+                .add("filePath", filePath)
+                .add("retry", nextRetry)
+                .add("maxRetry", maxDeleteRetry)
+                .add("reason", failReason));
                         part.setFileDelete(false);
                     }
                 }
@@ -98,7 +118,10 @@ public class DeletePartFileJob {
             LocalDateTime deleteTime = LocalDateTime.now().minusDays(room.getDeleteDay());
             List<RecordHistoryPart> partList = partRepository.findByRoomIdAndFileDeleteIsFalseAndEndTimeIsBefore(room.getRoomId(),deleteTime);
             if (partList.size() > 0) {
-                log.info("定时移动文件任务，主播名称{}，待移动文件数量{}", room.getUname(), partList.size());
+                log.info("[BLR] {}", LogKvs.event("MovePartFileJob.Start")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("count", partList.size()));
             }
             for (RecordHistoryPart part : partList) {
                 String filePath = part.getFilePath();
@@ -122,9 +145,16 @@ public class DeletePartFileJob {
                             try {
                                 Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                         StandardCopyOption.REPLACE_EXISTING);
-                                log.info("{}=>文件移动成功！！！", file.getName());
+                                log.info("[BLR] {}", LogKvs.event("MovePartFileJob.Success")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("fileName", file.getName()));
                             } catch (Exception e) {
-                                log.error("{}=>文件移动失败！！！", file.getName());
+                                log.error("[BLR] {}", LogKvs.event("MovePartFileJob.Failed")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("fileName", file.getName())
+                                        .add("reason", e.getClass().getSimpleName() + ":" + String.valueOf(e.getMessage())));
                             }
                         }
 

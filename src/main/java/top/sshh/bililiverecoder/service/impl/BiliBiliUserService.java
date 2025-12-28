@@ -11,6 +11,7 @@ import top.sshh.bililiverecoder.entity.BiliBiliUser;
 import top.sshh.bililiverecoder.entity.data.BiliSessionDto;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.time.LocalDateTime;
 
@@ -39,7 +40,8 @@ public class BiliBiliUserService {
             }
 
             user.setCookies(cookieString.toString());
-            log.debug("{} 刷新token成功!!!", user.getUname());
+            log.info("[BLR] {}", LogKvs.event("User.RefreshToken.Success")
+                    .add("uname", user.getUname()));
             user.setUid(dto.getMid());
             user.setAccessToken(dto.getAccessToken());
             user.setRefreshToken(dto.getRefreshToken());
@@ -47,7 +49,10 @@ public class BiliBiliUserService {
                 String userInfo = BiliApi.appMyInfo(user);
                 user.setUname(JsonPath.read(userInfo, "data.uname"));
             }catch (Exception e){
-                log.error("刷新token 获取用户名称失败==>{}",user.getUname());
+                log.warn("[BLR] {}", LogKvs.event("User.RefreshToken.MyInfoFailed")
+                        .add("uname", user.getUname())
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()));
             }
             user.setLogin(true);
             user.setUpdateTime(LocalDateTime.now());
@@ -60,15 +65,25 @@ public class BiliBiliUserService {
                 user.setLogin(true);
                 user.setUpdateTime(LocalDateTime.now());
                 userRepository.save(user);
-                log.error("{} 刷新token失败!!!，账号仍然可用==>{}", user.getUname(), response);
+                log.warn("[BLR] {}", LogKvs.event("User.RefreshToken.FailedButUsable")
+                        .add("uname", user.getUname())
+                        .add("code", code)
+                        .add("response", response));
             } catch (Exception e) {
-                log.error("刷新token失败 获取用户名称失败==>{}", user.getUname());
+                log.error("[BLR] {}", LogKvs.event("User.RefreshToken.FailedAndMyInfoFailed")
+                        .add("uname", user.getUname())
+                        .add("code", code)
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
             }
             user.setLogin(false);
             user.setEnable(false);
             user.setUpdateTime(LocalDateTime.now());
             userRepository.save(user);
-            log.error("{} 刷新token失败!!!==>{}", user.getUname(),response);
+            log.error("[BLR] {}", LogKvs.event("User.RefreshToken.Failed")
+                    .add("uname", user.getUname())
+                    .add("code", code)
+                    .add("response", response));
             return false;
         }
 

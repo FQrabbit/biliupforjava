@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.entity.BlrecData;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.service.RecordEventFactory;
 import top.sshh.bililiverecoder.service.WebhookEventDispatcher;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 @Slf4j
 @RestController
@@ -31,17 +32,28 @@ public class RecordWebHook {
         boolean accepted = webhookEventDispatcher.submit(lockKey, delayMs, () -> {
             try {
                 if (recordEvent.getEventData() != null) {
-                    log.info("[WEBHOOK] 收到录播姬推送 | Type: {} | RoomId: {} | Title: {}",
-                            recordEvent.getEventType(),
-                            recordEvent.getEventData().getRoomId(),
-                            recordEvent.getEventData().getTitle());
-                    log.debug("[WEBHOOK_DEBUG] Full Payload: {}", JSON.toJSONString(recordEvent));
+                    log.info("[BLR] {}", LogKvs.event("Webhook.Received")
+                        .add("source", "blrec")
+                        .add("type", recordEvent.getEventType())
+                        .add("roomId", recordEvent.getEventData().getRoomId())
+                        .add("title", recordEvent.getEventData().getTitle()));
+                    log.debug("[BLR] {}", LogKvs.event("Webhook.Payload.Debug")
+                            .add("type", recordEvent.getEventType())
+                            .add("roomId", recordEvent.getEventData().getRoomId())
+                            .add("payloadLen", JSON.toJSONString(recordEvent).length()));
                 } else {
-                    log.info("收到录播姬的推送信息(旧版/未知格式)==> {}", JSON.toJSONString(recordEvent));
+                    log.info("[BLR] {}", LogKvs.event("Webhook.ReceivedLegacy")
+                        .add("source", "blrec")
+                        .add("payload", JSON.toJSONString(recordEvent)));
                 }
                 recordEventFactory.processing(recordEvent);
             } catch (Exception e) {
-                log.error("[WEBHOOK] 后台处理失败 | lockKey={} | err={}", lockKey, e.getMessage(), e);
+                log.error("[BLR] {}", LogKvs.event("Webhook.ProcessFailed")
+                        .add("type", recordEvent != null ? recordEvent.getEventType() : null)
+                        .add("roomId", (recordEvent != null && recordEvent.getEventData() != null) ? recordEvent.getEventData().getRoomId() : null)
+                        .add("lockKeyHash", safeLockKeyHash(lockKey))
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
             }
         });
 
@@ -78,11 +90,21 @@ public class RecordWebHook {
                     lock = "brec:" + recordEvent.getEventData().getSessionId();
                 }
             } catch (Exception e) {
-                log.debug("Error building lock key from eventData | eventType={} | err={}",
-                        recordEvent.getEventType(), e.getMessage(), e);
+                log.debug("[BLR] {}", LogKvs.event("Webhook.LockKey.BuildFailed")
+                        .add("eventType", recordEvent.getEventType())
+                        .addIfNotBlank("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
             }
         }
         return lock;
+    }
+
+    private static String safeLockKeyHash(String lockKey) {
+        if (lockKey == null) {
+            return null;
+        }
+        // lockKey 可能包含 relativePath，不要原样打印，避免泄露本地路径/文件名。
+        return Integer.toHexString(lockKey.hashCode());
     }
 
     @GetMapping

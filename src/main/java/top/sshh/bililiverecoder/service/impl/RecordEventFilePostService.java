@@ -14,6 +14,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 
@@ -54,7 +55,11 @@ public class RecordEventFilePostService implements RecordEventService {
         RecordEventData eventData = event.getEventData();
         String sessionId = eventData.getSessionId();
         String relativePath = eventData.getRelativePath();
-        log.info("分p录制视频文件后处理事件==>{}", relativePath);
+        log.info("[BLR] {}", LogKvs.event("FilePost.Received")
+                .add("eventId", event.getEventId())
+                .add("sessionId", sessionId)
+                .add("relativePath", relativePath)
+                .add("roomId", eventData.getRoomId()));
         if ("blrec".equals(sessionId)) {
             relativePath = relativePath.replace(workPath, "");
         }
@@ -63,7 +68,11 @@ public class RecordEventFilePostService implements RecordEventService {
         String name = filePath.substring(0, filePath.lastIndexOf('.'));
         RecordHistoryPart part = historyPartRepository.findByFilePathStartingWith(name);
         if (part == null) {
-            log.info("文件分片不存在==>{}", relativePath);
+            log.warn("[BLR] {}", LogKvs.event("FilePost.PartMissing")
+                    .add("eventId", event.getEventId())
+                    .add("sessionId", sessionId)
+                    .add("relativePath", relativePath)
+                    .add("filePath", filePath));
             return;
         }
         File vidleFile = new File(filePath);
@@ -71,13 +80,24 @@ public class RecordEventFilePostService implements RecordEventService {
         if (vidleFile.exists()) {
             fileSize = vidleFile.length();
         } else {
-            log.error("文件{}不存在，请考虑工作目录是否设置正确，或者docker 卷是否映射正确", filePath);
+            log.error("[BLR] {}", LogKvs.event("FilePost.FileMissing")
+                    .add("eventId", event.getEventId())
+                    .add("sessionId", sessionId)
+                    .add("roomId", eventData.getRoomId())
+                    .add("partId", part.getId())
+                    .add("filePath", filePath));
             fileSize = eventData.getFileSize();
         }
         part.setRecording(false);
         part.setFilePath(filePath);
         part.setFileSize(fileSize);
         part = historyPartRepository.save(part);
-        log.info("分p录制视频文件后处理成功，文件路径保存成功，路径{}", filePath);
+        log.info("[BLR] {}", LogKvs.event("FilePost.Saved")
+            .add("eventId", event.getEventId())
+            .add("sessionId", sessionId)
+            .add("roomId", eventData.getRoomId())
+            .add("partId", part.getId())
+            .add("filePath", filePath)
+            .add("fileSize", fileSize));
     }
 }

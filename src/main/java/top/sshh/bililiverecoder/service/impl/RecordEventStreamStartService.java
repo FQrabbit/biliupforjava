@@ -12,6 +12,7 @@ import top.sshh.bililiverecoder.entity.RecordEventData;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -56,7 +57,10 @@ public class RecordEventStreamStartService implements RecordEventService {
             synchronized (roomId.intern()) {
                 room = roomRepository.findByRoomId(eventData.getRoomId());
                 if (room == null) {
-                    log.error("房间不存在，重新创建房间保存数据库");
+                    log.warn("[BLR] {}", LogKvs.event("Room.AutoCreate")
+                            .add("roomId", eventData.getRoomId())
+                            .add("title", eventData.getTitle())
+                            .add("uname", eventData.getName()));
                     room = new RecordRoom();
                     room.setRoomId(eventData.getRoomId());
                     room.setCreateTime(LocalDateTime.now());

@@ -3,6 +3,7 @@ package top.sshh.bililiverecoder.util;
 import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.IOException;
 import java.net.CookieManager;
@@ -51,7 +52,11 @@ public class HttpClientUtil {
                     .build();
             return execute(build);
         } catch (IOException e) {
-            log.error("HTTP Request Failed: {}", e.getMessage());
+            log.error("[BLR] {}", LogKvs.event("Http.Request.Failed")
+                    .add("method", "POST")
+                    .addUrl("url", url)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             throw new RuntimeException(e.getMessage());
         }
     }
@@ -64,7 +69,11 @@ public class HttpClientUtil {
                     .build();
             return execute(build);
         } catch (IOException e) {
-            log.error("HTTP Request Failed: {}", e.getMessage());
+            log.error("[BLR] {}", LogKvs.event("Http.Request.Failed")
+                    .add("method", "POST")
+                    .addUrl("url", url)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             throw new RuntimeException(e.getMessage());
         }
     }
@@ -85,7 +94,12 @@ public class HttpClientUtil {
         try {
             return execute(currentClient, build);
         } catch (IOException e) {
-            log.error("HTTP Request Failed: {}", e.getMessage());
+            log.error("[BLR] {}", LogKvs.event("Http.Request.Failed")
+                    .add("method", "POST")
+                    .addUrl("url", url)
+                    .add("allowCookie", allowCookie)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             throw new RuntimeException(e.getMessage());
         }
     }
@@ -97,7 +111,9 @@ public class HttpClientUtil {
     private static String execute(OkHttpClient client, Request request) throws IOException {
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                log.warn("[HTTP_ERROR] Request failed | Code: {} | URL: {}", response.code(), request.url());
+                log.warn("[BLR] {}", LogKvs.event("Http.Response.Error")
+                        .add("code", response.code())
+                        .addUrl("url", request.url()));
                 // 如果是 502/504 等错误，通常返回的是 HTML，直接截断或返回 JSON 格式的错误信息
                 if (response.code() >= 500 || (response.body() != null && response.body().contentType() != null && 
                     response.body().contentType().toString().contains("text/html"))) {
@@ -109,7 +125,9 @@ public class HttpClientUtil {
             
             // 简单的风控检测
             if (string.contains("\"code\":-412") || string.contains("\"code\": -412")) {
-                log.warn("[RISK_CONTROL] 触发B站风控(-412) | URL: {}", request.url());
+                log.warn("[BLR] {}", LogKvs.event("Http.RiskControl.Triggered")
+                        .add("code", -412)
+                        .addUrl("url", request.url()));
             }
             
             return string;
@@ -129,7 +147,12 @@ public class HttpClientUtil {
         try {
             return execute(currentClient, build);
         } catch (IOException e) {
-            log.error("HTTP Request Failed: {}", e.getMessage());
+            log.error("[BLR] {}", LogKvs.event("Http.Request.Failed")
+                    .add("method", "POST")
+                    .addUrl("url", url)
+                    .add("allowCookie", allowCookie)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             throw new RuntimeException(e.getMessage());
         }
     }
@@ -144,14 +167,20 @@ public class HttpClientUtil {
                         .build();
                 return execute(request);
             } catch (UnknownHostException e) {
-                log.warn("UnknownHostException, retrying in 5s: {}", e.getMessage());
+                log.warn("[BLR] {}", LogKvs.event("Http.Dns.UnknownHost.Retry")
+                        .addUrl("url", url)
+                        .add("sleepMs", 5000)
+                        .add("err", e.getMessage()));
                 try {
                     Thread.sleep(5000L);
                 } catch (Exception ignored) {
                 }
 
             } catch (Exception e) {
-                log.error("HTTP Get Failed: {}", e.getMessage());
+                log.error("[BLR] {}", LogKvs.event("Http.Get.Failed")
+                        .addUrl("url", url)
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
                 throw new RuntimeException(e.getMessage());
             }
         } while (true);

@@ -81,6 +81,77 @@ html, body {
     gap: 12px;
 }
 
+/* ========== 霓虹按钮样式（与 room 页保持一致） ========== */
+.neon-btn {
+    position: relative;
+    padding: 10px 20px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border: none !important;
+    border-radius: var(--radius-md) !important;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    color: white !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.neon-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.5s ease;
+}
+
+.neon-btn:hover::before {
+    left: 100%;
+}
+
+.neon-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+}
+
+.neon-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.neon-btn-primary {
+    background: linear-gradient(135deg, #4361ee, #3a56d4) !important;
+    box-shadow: 0 4px 15px rgba(67, 97, 238, 0.35);
+}
+
+.neon-btn-primary:hover {
+    background: linear-gradient(135deg, #3a56d4, #2d4bc4) !important;
+    box-shadow: 0 6px 20px rgba(67, 97, 238, 0.45);
+}
+
+/* 头部视图切换：与霓虹按钮同高对齐 */
+.user-header-actions .el-radio-group {
+    display: inline-flex;
+    align-items: center;
+}
+
+.user-header-actions .el-radio-button__inner {
+    padding: 10px 14px !important;
+    line-height: 1 !important;
+}
+
+/* 头部按钮/视图切换的像素级对齐（避免 baseline/line-height 导致的细微偏移） */
+.user-header-actions .neon-btn,
+.user-header-actions .el-radio-button__inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.user-header-actions .neon-btn [class^="el-icon-"],
+.user-header-actions .el-radio-button__inner [class^="el-icon-"] {
+    line-height: 1;
+}
+
 /* 登录按钮特殊样式 */
 .login-btn {
     background: linear-gradient(135deg, var(--primary-color), var(--primary-dark)) !important;
@@ -96,6 +167,7 @@ html, body {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(91, 108, 255, 0.4);
 }
+
 
 /* ========== 用户卡片网格 ========== */
 .user-card-grid {

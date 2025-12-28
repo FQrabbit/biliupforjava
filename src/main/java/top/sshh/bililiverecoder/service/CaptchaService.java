@@ -1,10 +1,14 @@
 package top.sshh.bililiverecoder.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import top.sshh.bililiverecoder.util.LogKvs;
+
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class CaptchaService {
     private volatile boolean captchaRequired = false;
@@ -49,7 +53,13 @@ public class CaptchaService {
                 }
             }
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            Thread.currentThread().interrupt();
+            log.warn("[BLR] {}", LogKvs.event("Captcha.WaitInterrupted")
+                    .add("waitSec", 300)
+                    .addIfNotBlank("filename", filename)
+                    .addIfNotBlank("voucher", voucher == null ? null : "***")
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
         } finally {
             this.captchaRequired = false;
         }

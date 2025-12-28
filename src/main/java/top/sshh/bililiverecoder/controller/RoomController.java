@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +15,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.UploadEnums;
 
 import javax.imageio.ImageIO;
@@ -34,6 +36,7 @@ import java.util.concurrent.Executors;
 
 @RestController
 @RequestMapping("/room")
+@Slf4j
 public class RoomController {
     @Autowired
     private RecordRoomRepository roomRepository;
@@ -122,7 +125,8 @@ public class RoomController {
                 userRepository.save(user);
                 userIdConverMap.put(id,user.getId());
             }
-            System.out.println("导入用户配置成功，一共"+userList.size()+"条");
+            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Users.Success")
+                    .add("count", userList.size()));
         }
         if(roomList != null && roomList.size()>0){
             for (RecordRoom room : roomList) {
@@ -134,7 +138,8 @@ public class RoomController {
                 }
                 roomRepository.save(room);
             }
-            System.out.println("导入房间配置成功，一共"+roomList.size()+"条");
+            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
+                    .add("count", roomList.size()));
         }
         Map<Long,Long> historyIdConverMap = new HashMap<>();
         if(historyList != null && historyList.size()>0){
@@ -148,7 +153,8 @@ public class RoomController {
                 historyRepository.save(history);
                 historyIdConverMap.put(oldId,history.getId());
             }
-            System.out.println("导入录制历史信息成功，一共"+historyList.size()+"条");
+            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Histories.Success")
+                    .add("count", historyList.size()));
         }
         if(partList != null && partList.size()>0){
             for (RecordHistoryPart part : partList) {
@@ -160,10 +166,11 @@ public class RoomController {
                 part.setHistoryId(historyIdConverMap.get(part.getHistoryId()));
                 partRepository.save(part);
             }
-            System.out.println("导入分P数据成功，一共"+partList.size()+"条");
+            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
+                    .add("count", partList.size()));
         }
         // 在控制台输出转换后的Map对象
-        System.out.println("导入全部配置文件成功!");
+        log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Done"));
     }
 
     @PostMapping("/update")
@@ -415,7 +422,9 @@ public class RoomController {
                 executor.shutdown();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.warn("[BLR] {}", LogKvs.event("UploadLine.TestAll.Failed")
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
         }
         return result;
     }
@@ -486,7 +495,10 @@ public class RoomController {
         } catch (Exception e) {
             result.put("success", false);
             result.put("msg", "Timeout/Error");
-            e.printStackTrace();
+            log.warn("[BLR] {}", LogKvs.event("UploadLine.TestSpeed.Failed")
+                    .add("line", line)
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
         }
         return result;
     }

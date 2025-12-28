@@ -10,6 +10,7 @@
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
+    <script src="../js/index.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -38,9 +39,12 @@
             </div>
         </div>
         <div class="user-header-actions">
-            <el-button class="login-btn" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus" type="primary">
+            <el-button class="neon-btn neon-btn-primary" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus" type="primary">
                 添加账号
             </el-button>
+            <el-tooltip effect="dark" :content="privacyMode ? '隐私模式：开' : '隐私模式：关'" placement="top">
+                <el-button class="neon-btn neon-btn-primary" type="primary" @click="togglePrivacyMode" :icon="privacyMode ? 'el-icon-lock' : 'el-icon-view'">隐私</el-button>
+            </el-tooltip>
             <el-radio-group v-model="viewMode" size="small">
                 <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
                 <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
@@ -66,10 +70,10 @@
                  :class="{ 'is-active': item.login && item.enable, 'is-warning': !item.login }" 
                  v-for="item in tableData" :key="item.id">
                 <div class="user-card-header">
-                    <div class="user-avatar">{{ (item.uname || 'U').charAt(0).toUpperCase() }}</div>
+                    <div class="user-avatar">{{ privacyMode ? '*' : (item.uname || 'U').charAt(0).toUpperCase() }}</div>
                     <div class="user-info">
-                        <h3 class="user-name">{{ item.uname || '未命名用户' }}</h3>
-                        <div class="user-uid">UID: {{ item.uid }}</div>
+                        <h3 class="user-name">{{ maskText(item.uname || '未命名用户') }}</h3>
+                        <div class="user-uid">UID: {{ maskText(item.uid) }}</div>
                     </div>
                 </div>
                 <div class="user-card-body">
@@ -117,8 +121,12 @@
                     v-loading="loading"
                     :data="tableData"
                     style="width: 100%">
-                <el-table-column label="用户ID" prop="uid" width="130"></el-table-column>
-                <el-table-column label="昵称" prop="uname" min-width="150"></el-table-column>
+                <el-table-column label="用户ID" width="130">
+                    <template slot-scope="scope">{{ maskText(scope.row.uid) }}</template>
+                </el-table-column>
+                <el-table-column label="昵称" min-width="150">
+                    <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
+                </el-table-column>
                 <el-table-column label="登录状态" width="120">
                     <template slot-scope="scope">
                         <el-tag :type="scope.row.login ? 'success' : 'danger'" size="small">
@@ -171,7 +179,7 @@
     <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="编辑用户设置" width="500px">
         <el-form :model="user" label-width="120px">
             <el-form-item label="用户昵称">
-                <el-input :value="user.uname" disabled></el-input>
+                <el-input :value="maskText(user.uname)" disabled></el-input>
             </el-form-item>
             <el-form-item label="弹幕发送权限">
                 <el-switch v-model="user.enable" active-text="开启" inactive-text="关闭"></el-switch>

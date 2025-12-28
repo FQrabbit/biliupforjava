@@ -216,6 +216,36 @@ html, body {
     flex-wrap: wrap;
 }
 
+/* 头部视图切换：与霓虹按钮同高对齐 */
+.room-header-actions .el-radio-group {
+    display: inline-flex;
+    align-items: center;
+}
+
+.room-header-actions .el-radio-button__inner {
+    padding: 10px 14px !important;
+    line-height: 1 !important;
+}
+
+/* 头部按钮/视图切换的像素级对齐（避免 baseline/line-height 导致的细微偏移） */
+.room-header-actions .neon-btn,
+.room-header-actions .el-radio-button__inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.room-header-actions .neon-btn [class^="el-icon-"],
+.room-header-actions .el-radio-button__inner [class^="el-icon-"] {
+    line-height: 1;
+}
+
+/* el-upload 作为 flex 子项时，确保与按钮同一对齐方式 */
+.room-header-actions .el-upload {
+    display: inline-flex;
+    align-items: center;
+}
+
 /* ========== 霓虹按钮样式 ========== */
 .neon-btn {
     position: relative;

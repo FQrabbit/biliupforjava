@@ -22,6 +22,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -54,12 +55,22 @@ public class LiveMsgService {
         try {
             BiliDmResponse response = BiliApi.sendVideoDm(user, liveMsg);
             if (response == null) {
-                log.error("{}发送弹幕失败，响应为空", user.getUname());
+                log.error("[BLR] {}", LogKvs.event("LiveMsg.Send.EmptyResponse")
+                        .add("uname", user.getUname())
+                        .add("bvid", liveMsg.getBvid())
+                        .add("cid", liveMsg.getCid())
+                        .add("partId", liveMsg.getPartId()));
                 return -1;
             }
             int code = response.getCode();
             if (code != 0) {
-                log.error("{}发送弹幕错误，code==>{} msg==>{}", user.getUname(), code, response.getMessage());
+                log.warn("[BLR] {}", LogKvs.event("LiveMsg.Send.Failed")
+                        .add("uname", user.getUname())
+                        .add("code", code)
+                        .add("respMsg", response.getMessage())
+                        .add("bvid", liveMsg.getBvid())
+                        .add("cid", liveMsg.getCid())
+                        .add("partId", liveMsg.getPartId()));
                 if (code == 36701 || code == 36702 || code == 36714) {
                     liveMsgRepository.delete(liveMsg);
                 }
@@ -73,7 +84,13 @@ public class LiveMsgService {
             liveMsgRepository.save(liveMsg);
             return code;
         } catch (Exception e) {
-            log.error("{}发送弹幕异常: {}", user.getUname(), e.getMessage());
+            log.error("[BLR] {}", LogKvs.event("LiveMsg.Send.Error")
+                    .add("uname", user.getUname())
+                    .add("bvid", liveMsg.getBvid())
+                    .add("cid", liveMsg.getCid())
+                    .add("partId", liveMsg.getPartId())
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             return -2;
         }
     }
@@ -288,20 +305,41 @@ public class LiveMsgService {
                     liveMsgs.add(msg);
                     if (liveMsgs.size() > 500) {
                         jdbcService.saveLiveMsgList(liveMsgs);
-                        log.info("{} 弹幕解析入库成功，一共入库{}条。", filePath, liveMsgs.size());
+                        log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.BatchSaved")
+                                .add("filePath", filePath)
+                                .add("count", liveMsgs.size())
+                                .add("roomId", part.getRoomId())
+                                .add("partId", part.getId())
+                                .add("historyId", part.getHistoryId()));
                         liveMsgs.clear();
                     }
                 }
                 jdbcService.saveLiveMsgList(liveMsgs);
-                log.info("{} 弹幕解析入库成功，一共入库{}条。", filePath, liveMsgs.size());
+                log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.Saved")
+                        .add("filePath", filePath)
+                        .add("count", liveMsgs.size())
+                        .add("roomId", part.getRoomId())
+                        .add("partId", part.getId())
+                        .add("historyId", part.getHistoryId()));
             } catch (Exception e) {
-                log.info("{} 弹幕解析入库失败", filePath, e);
-                e.printStackTrace();
+                log.error("[BLR] {}", LogKvs.event("LiveMsg.Parse.Failed")
+                        .add("filePath", filePath)
+                        .add("roomId", part.getRoomId())
+                        .add("partId", part.getId())
+                        .add("historyId", part.getHistoryId())
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
             } finally {
                 try {
                     stream.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    log.warn("[BLR] {}", LogKvs.event("LiveMsg.Parse.CloseFailed")
+                            .add("filePath", filePath)
+                            .add("roomId", part.getRoomId())
+                            .add("partId", part.getId())
+                            .add("historyId", part.getHistoryId())
+                            .addIfNotBlank("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
                 }
             }
         }

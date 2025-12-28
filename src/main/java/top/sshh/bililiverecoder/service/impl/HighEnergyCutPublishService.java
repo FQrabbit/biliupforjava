@@ -21,6 +21,7 @@ import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
@@ -130,7 +131,14 @@ public class HighEnergyCutPublishService {
                     long currentTimeMillis = System.currentTimeMillis();
                     taskRunningMsg.put(history.getId(), "开始处理分片 " + i);
                     executor.createJob(builder).run();
-                    log.info("✅ 生成: {} 片段第 {} 个,共{}个 超过，耗时 {} 秒。", history.getTitle(), i, count, (System.currentTimeMillis() - currentTimeMillis) / 1000);
+                    log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Segment.Generated")
+                            .add("historyId", history.getId())
+                            .add("roomId", history.getRoomId())
+                            .addIfNotBlank("title", history.getTitle())
+                            .add("index", i)
+                            .add("total", count)
+                            .add("costSec", (System.currentTimeMillis() - currentTimeMillis) / 1000)
+                            .add("output", output));
                 }
             }
             // 获取所有文件，按名字排序
@@ -142,7 +150,10 @@ public class HighEnergyCutPublishService {
                         .toList();
             }
             if (files.isEmpty()) {
-                log.error("没有找到任何文件。");
+                log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Segment.Empty")
+                        .add("historyId", history.getId())
+                        .add("roomId", history.getRoomId())
+                        .add("outputPath", outputPath.toString()));
             }
             // 创建 list.txt
             Path listFile = outputPath.resolve("list.txt");
@@ -186,7 +197,12 @@ public class HighEnergyCutPublishService {
                         .done();
                 executor.createJob(encodeBuilder).run();
             }
-            log.info("✅ 生成: {} 最终视频，耗时 {} 秒。", history.getTitle(), (System.currentTimeMillis() - currentTimeMillis) / 1000);
+            log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Output.Generated")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .addIfNotBlank("title", history.getTitle())
+                    .add("costSec", (System.currentTimeMillis() - currentTimeMillis) / 1000)
+                    .add("output", output));
             if (StringUtils.isNotBlank(wxuid)) {
                 Message message = new Message();
                 message.setAppToken(wxToken);
@@ -201,7 +217,10 @@ public class HighEnergyCutPublishService {
             taskRunningMsg.put(history.getId(), "开始投稿");
             publish(history, upload);
         } catch (Exception e) {
-            log.error("剪辑投稿: {} 最终视频失败", history.getTitle(), e);
+            log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Process.Failed")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .addIfNotBlank("title", history.getTitle()), e);
             if (StringUtils.isNotBlank(wxuid)) {
                 Message message = new Message();
                 message.setAppToken(wxToken);
@@ -258,36 +277,72 @@ public class HighEnergyCutPublishService {
 
         String uploadRes = null;
         uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-        log.info("webPublish uploadRes==>{}", uploadRes);
+        log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.WebPublish.Response")
+                .add("roomId", room.getRoomId())
+                .add("uname", room.getUname())
+                .add("historyId", history.getId())
+                .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
         if (uploadRes.contains("验证码")) {
             try {
                 String voucher = JsonPath.read(uploadRes, "data.v_voucher");
                 Map<String, Object> data = JsonPath.read(uploadRes, "data");
                 captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
+                log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Required")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("title", history.getTitle())
+                        .addUrl("captchaUrl", "http://localhost:" + serverPort + "/html/captcha.html"));
                 Map<String, String> captchaResult = captchaService.waitForCaptcha();
                 if (captchaResult != null) {
                     if (!captchaResult.containsKey("v_voucher")) {
                         captchaResult.put("v_voucher", voucher);
                     }
-                    log.info("Submitting captcha result: {}", JSON.toJSONString(captchaResult));
+                    log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.Captcha.Submit")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", history.getId())
+                            .add("hasV4", captchaResult.containsKey("captcha_key"))
+                            .add("hasVoucher", captchaResult.containsKey("v_voucher")));
                     uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
-                    log.info("验证码发布 上传结果==>{}", uploadRes);
+                    log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.Captcha.PublishResponse")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", history.getId())
+                            .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                            .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
 
                     if (uploadRes.contains("验证码") || uploadRes.contains("\"code\":601")) {
-                        log.error("验证码验证失败，请检查参数或重试。暂停5分钟后重试。");
+                        log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.Captcha.VerifyFailedPause")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", history.getId())
+                                .add("pauseSeconds", 300));
                         Thread.sleep(300 * 1000L);
                         throw new RuntimeException("验证码验证失败: " + uploadRes);
                     }
                 } else {
-                    log.warn("验证码等待超时，重试不使用验证码...");
+                    log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Timeout")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", history.getId()));
                     Thread.sleep(10 * 1000L);
                     uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
                 }
             } catch (Exception e) {
-                log.error("处理验证码错误", e);
+                log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.Captcha.HandleError")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", history.getId()), e);
                 Thread.sleep(120 * 1000L);
                 uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-                log.info("clientPublish uploadRes==>{}", uploadRes);
+                log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.WebPublish.Response")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", history.getId())
+                        .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                        .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
             }
         }
         String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
@@ -295,12 +350,20 @@ public class HighEnergyCutPublishService {
         if (StringUtils.isBlank(bvid) || StringUtils.isBlank(aid)) {
             // 检测是否是时间戳跳变错误(code:21588)，如果是则放弃该投稿
             if (uploadRes.contains("21588") || uploadRes.contains("时间跳跃") || uploadRes.contains("时间戳")) {
-                log.error("发布高能片段失败：文件存在时间戳跳变问题，放弃该投稿 ==> room={}, historyId={}, response={}", 
-                        room.getUname(), history.getId(), uploadRes);
+                log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.TimestampJump.GiveUp")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("title", history.getTitle())
+                        .add("code", 21588));
                 // 不抛出异常，直接返回，避免无意义的重试
                 return;
             }
-            log.info("发布={}=视频失败 == > {}", room.getUname(), uploadRes);
+            log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.MissingIds")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", history.getId())
+                    .add("respLen", uploadRes == null ? 0 : uploadRes.length()));
             if (StringUtils.isNotBlank(wxuid)) {
                 Message message = new Message();
                 message.setAppToken(wxToken);
@@ -312,7 +375,13 @@ public class HighEnergyCutPublishService {
             }
             throw new RuntimeException(uploadRes);
         }
-        log.info("发布={}=视频成功 == > {}", room.getUname(), JSON.toJSONString(history));
+        log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.Success")
+                .add("roomId", room.getRoomId())
+                .add("uname", room.getUname())
+                .add("historyId", history.getId())
+                .addIfNotBlank("title", history.getTitle())
+                .addIfNotBlank("bvid", bvid)
+                .addIfNotBlank("aid", aid));
         if (StringUtils.isNotBlank(wxuid)) {
             Message message = new Message();
             message.setAppToken(wxToken);
@@ -352,21 +421,49 @@ public class HighEnergyCutPublishService {
             do {
                 preUploadBean = preuploadRequest.getPojo();
                 if (preUploadBean == null || preUploadBean.getOK() == 0) {
-                    log.warn("预上传失败。Bean: {}", JSON.toJSONString(preUploadBean));
+                    Integer preCode = null;
+                    String preMsg = null;
+                    try {
+                        if (preUploadBean != null) {
+                            preCode = preUploadBean.getCode();
+                            preMsg = preUploadBean.getMessage();
+                        }
+                    } catch (Exception ignore) {
+                    }
+                    log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.PreUpload.Failed")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("filePath", filePath)
+                            .add("fileSizeBytes", fileSize)
+                            .add("line", room.getLine())
+                            .add("code", preCode)
+                            .addIfNotBlank("message", preMsg));
                     if (preUploadBean != null && ((preUploadBean.getCode() == 601 && preUploadBean.getDetail() != null && preUploadBean.getDetail().containsKey("v_voucher")) || preUploadBean.getCode() == 406)) {
                         String voucher = (preUploadBean.getDetail() != null) ? (String) preUploadBean.getDetail().get("v_voucher") : "MANUAL_INTERVENTION";
-                        log.warn("投稿受阻(Code:{})，请前往Web端手动处理: {} \n处理地址: http://localhost:{}/html/captcha.html", preUploadBean.getCode(), uploadFile.getName(), serverPort);
+                        log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Required")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("fileName", uploadFile.getName())
+                                .add("code", preUploadBean.getCode())
+                                .addUrl("captchaUrl", "http://localhost:" + serverPort + "/html/captcha.html"));
                         captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
                         Map<String, String> result = captchaService.waitForCaptcha();
                         if (result != null) {
                             preParams.putAll(result);
                         }
                     } else {
-                        log.warn("上传限流等待十秒==>{}", uploadFile.getName());
+                        log.warn("[BLR] {}", LogKvs.event("Upload.RateLimit.Wait")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("fileName", uploadFile.getName())
+                                .add("waitMs", 10000));
                         try {
                             Thread.sleep(10000L);
                         } catch (InterruptedException e) {
-                            e.printStackTrace();
+                            log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.RateLimitWaitInterrupted")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("fileName", uploadFile.getName()), e);
                         }
                     }
                 } else {
@@ -384,7 +481,12 @@ public class HighEnergyCutPublishService {
                     }
                     LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
                     uploadBean = uploadRequest.getPojo();
-                    log.debug("preUploadBean==>{}\nuploadBean==>{}", JSON.toJSONString(preUploadBean), JSON.toJSONString(uploadBean));
+                    log.debug("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.PreUpload.Success")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("fileName", uploadFile.getName())
+                            .add("fileSizeBytes", fileSize)
+                            .add("endpoint", preUploadBean.getEndpoint()));
                 }
             } while (preUploadBean.getOK() == 0);
         } catch (Exception e) {
@@ -426,27 +528,52 @@ public class HighEnergyCutPublishService {
                                 chunkUploadRequest.getPage();
                             } catch (FileNotFoundException fileNotFoundException) {
                                 tryCount.set(200);
-                                log.error("上传失败，{}文件不存在", filePath);
+                                log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.FileMissing")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("filePath", filePath)
+                                        .add("partIndex", finalI));
                                 break;
                             }
                             int count = upCount.incrementAndGet();
-                            log.debug("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
-                                    filePath, count, chunkNum);
+                            log.debug("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.Progress")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("filePath", filePath)
+                                    .add("uploaded", count)
+                                    .add("total", chunkNum)
+                                    .add("thread", Thread.currentThread().getName()));
                             break;
                         } catch (Exception e) {
                             tryCount.incrementAndGet();
-                            log.info("{}==>[{}] 上传视频part {}, index {}, size {}, start {}, end {}, exception={}", Thread.currentThread().getName(), room.getTitle(),
-                                    filePath, finalI, chunkSize, finalI * chunkSize, (finalI + 1) * chunkSize, ExceptionUtils.getStackTrace(e));
+                            log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.Error")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("filePath", filePath)
+                                    .add("partIndex", finalI)
+                                    .add("tryCount", tryCount.get())
+                                    .addIfNotBlank("err", e.getMessage())
+                                    .add("ex", e.getClass().getSimpleName()), e);
                             try {
                                 //                                                log.info("上传失败等待十秒==>{}", uploadFile.getName());
                                 Thread.sleep(10000L);
                             } catch (InterruptedException ex) {
-                                ex.printStackTrace();
+                                log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.RetryWaitInterrupted")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("filePath", filePath)
+                                        .add("partIndex", finalI), ex);
                             }
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.ThreadFailed")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("filePath", filePath)
+                            .add("partIndex", finalI)
+                            .addIfNotBlank("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
                 }
             };
 
@@ -481,7 +608,11 @@ public class HighEnergyCutPublishService {
                     if (completeUploadBean == null) {
                         completeUploadBean = new CompleteUploadBean();
                     }
-                    log.error("{},文件合并失败，准备重试", filePath, e);
+                    log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Complete.Retry")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("filePath", filePath)
+                            .add("attempt", i + 1), e);
                 }
                 if (completeUploadBean != null && completeUploadBean.getOK() != null && completeUploadBean.getOK() == 1) {
                     break;
@@ -489,6 +620,11 @@ public class HighEnergyCutPublishService {
             }
 
             if (completeUploadBean != null && completeUploadBean.getOK() != null && completeUploadBean.getOK() == 1) {
+                log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Complete.Success")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("fileName", uploadBean.getFileName())
+                        .add("fileSizeBytes", fileSize));
                 return uploadBean.getFileName();
             } else {
                 throw new RuntimeException("合并上传文件失败：" + JSON.toJSONString(completeUploadBean));
@@ -685,7 +821,8 @@ public class HighEnergyCutPublishService {
                 String format = localDateTime.format(DateTimeFormatter.ofPattern(date.substring(2, date.length() - 1)));
                 template = template.replace(date, format);
             } catch (Exception e) {
-                log.error("时间格式模板失败：" + template);
+                log.error("[BLR] {}", LogKvs.event("Template.DateFormat.Failed")
+                        .addIfNotBlank("template", template));
             }
         }
         template = template.replace(",,", ",");

@@ -13,6 +13,7 @@ import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -57,7 +58,8 @@ public class videoSyncJob {
                 // 避免请求过快，每次请求间隔3秒
                 Thread.sleep(3000);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                log.warn("[BLR] {}", LogKvs.event("VideoSync.SleepInterrupted")
+                        .add("waitMs", 3000), e);
             }
             syncOne(next);
         }
@@ -79,7 +81,11 @@ public class videoSyncJob {
     private void syncOneInternal(RecordHistory next, boolean doPostPublishProcessing) {
         RecordRoom room = roomRepository.findByRoomId(next.getRoomId());
         if (room == null) {
-            log.error("同步视频状态，未找到房间{}，请删除该录制历史 {}", next.getRoomId(), next);
+            log.error("[BLR] {}", LogKvs.event("VideoSync.RoomMissing")
+                    .add("roomId", next.getRoomId())
+                    .add("historyId", next.getId())
+                    .addIfNotBlank("bvid", next.getBvId())
+                    .addIfNotBlank("title", next.getTitle()));
             return;
         }
         BiliBiliUser user = null;
@@ -90,13 +96,26 @@ public class videoSyncJob {
         BiliVideoInfoResponse videoInfoResponse = BiliApi.getVideoInfo(user,next.getBvId());
         int code = videoInfoResponse.getCode();
         if(code != 0){
-            log.debug("获取视频信息失败 标题:{} bvid:{} code:{} msg:{}", next.getTitle(), next.getBvId(), code, videoInfoResponse.getMessage());
+            log.debug("[BLR] {}", LogKvs.event("VideoSync.VideoInfo.Failed")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", next.getId())
+                    .addIfNotBlank("title", next.getTitle())
+                    .addIfNotBlank("bvid", next.getBvId())
+                    .add("code", code)
+                    .addIfNotBlank("msg", videoInfoResponse.getMessage()));
             
             // 处理 62002 (稿件不可见)
             if (code == 62002) {
                 next.setCode(code);
                 historyRepository.save(next);
-                log.info("稿件不可见 (code 62002), 停止同步");
+                log.info("[BLR] {}", LogKvs.event("VideoSync.NotVisibleStop")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", next.getId())
+                        .addIfNotBlank("bvid", next.getBvId())
+                        .addIfNotBlank("title", next.getTitle())
+                        .add("code", code));
                 return;
             }
 
@@ -108,7 +127,13 @@ public class videoSyncJob {
                         // Member API 也返回 404，确认删除
                         next.setCode(code);
                         historyRepository.save(next);
-                        log.warn("视频已确认删除 (Member API 404), 更新状态为 -404");
+                        log.warn("[BLR] {}", LogKvs.event("VideoSync.DeletedConfirmed")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", next.getId())
+                                .addIfNotBlank("bvid", next.getBvId())
+                                .addIfNotBlank("title", next.getTitle())
+                                .add("code", code));
                     } else if (partInfo.getCode() == 0) {
                         // Member API 返回 0：注意其 state 字段语义不稳定，不能直接当作“可见性/审核状态”。
                         // 这里再用带 Cookie 的 view API 二次确认真实 state（0:公开, -50:仅自己可见）。
@@ -129,15 +154,32 @@ public class videoSyncJob {
                             next.setBvId(confirm.getData().getBvid());
                             next.setCoverUrl(confirm.getData().getPic());
                             historyRepository.save(next);
-                            log.info("二次确认稿件状态成功(view API): bvid={} state={}", next.getBvId(), state);
+                            log.info("[BLR] {}", LogKvs.event("VideoSync.Confirm.Success")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("historyId", next.getId())
+                                    .addIfNotBlank("bvid", next.getBvId())
+                                    .addIfNotBlank("title", next.getTitle())
+                                    .add("state", state));
                             return;
                         }
 
                         // 二次确认失败：补充 debug 信息，方便排查(例如 cookie 失效/风控/接口波动等)
                         if (confirm == null) {
-                            log.debug("二次确认稿件状态失败(view API): bvid={} confirm=null", next.getBvId());
+                            log.debug("[BLR] {}", LogKvs.event("VideoSync.Confirm.Failed")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("historyId", next.getId())
+                                    .addIfNotBlank("bvid", next.getBvId())
+                                    .add("reason", "confirm=null"));
                         } else {
-                            log.debug("二次确认稿件状态失败(view API): bvid={} code={} msg={}", next.getBvId(), confirm.getCode(), confirm.getMessage());
+                            log.debug("[BLR] {}", LogKvs.event("VideoSync.Confirm.Failed")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("historyId", next.getId())
+                                    .addIfNotBlank("bvid", next.getBvId())
+                                    .add("code", confirm.getCode())
+                                    .addIfNotBlank("msg", confirm.getMessage()));
                         }
 
                         int oldCode = next.getCode();
@@ -145,18 +187,38 @@ public class videoSyncJob {
                             // 保守策略：房间配置要求仅自己可见，但当前无法可靠读取状态时，避免误发普通弹幕。
                             next.setCode(-50);
                             historyRepository.save(next);
-                            log.info("无法确认稿件状态，按房间配置仅自己可见处理: bvid={} oldCode={}", next.getBvId(), oldCode);
+                            log.info("[BLR] {}", LogKvs.event("VideoSync.StateFallback.OnlySelfByRoomConfig")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("historyId", next.getId())
+                                    .addIfNotBlank("bvid", next.getBvId())
+                                    .add("oldCode", oldCode)
+                                    .add("newCode", -50));
                             return;
                         }
 
                         historyRepository.save(next);
-                        log.info("无法确认稿件状态，保持原状态: bvid={} oldCode={}", next.getBvId(), oldCode);
+                        log.info("[BLR] {}", LogKvs.event("VideoSync.StateFallback.KeepOld")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", next.getId())
+                                .addIfNotBlank("bvid", next.getBvId())
+                                .add("oldCode", oldCode));
                         return;
                     } else {
-                        log.warn("Member API 返回 code {}, 暂不标记为删除", partInfo.getCode());
+                        log.warn("[BLR] {}", LogKvs.event("VideoSync.MemberApi.Unexpected")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", next.getId())
+                                .addIfNotBlank("bvid", next.getBvId())
+                                .add("code", partInfo.getCode()));
                     }
                 } else {
-                    log.warn("未配置上传用户，无法确认 404 是否为权限问题，跳过状态更新: bvid={}", next.getBvId());
+                    log.warn("[BLR] {}", LogKvs.event("VideoSync.Confirm.SkipNoUser")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", next.getId())
+                            .addIfNotBlank("bvid", next.getBvId()));
                 }
             }
             return;
@@ -193,7 +255,16 @@ public class videoSyncJob {
                 List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
                 msgRepository.deleteAll(liveMsgs);
                 liveMsgService.processing(part);
-                log.info("同步视频分p 成功==>{}", JSON.toJSONString(part));
+                log.info("[BLR] {}", LogKvs.event("VideoSync.PartSynced")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", next.getId())
+                        .addIfNotBlank("bvid", next.getBvId())
+                        .add("partId", part.getId())
+                        .add("page", part.getPage())
+                        .add("cid", part.getCid())
+                        .addIfNotBlank("partTitle", part.getTitle())
+                        .add("durationSec", part.getDuration()));
             }
         }
         for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
@@ -205,9 +276,19 @@ public class videoSyncJob {
                     File file = new File(filePath);
                     boolean delete = file.delete();
                     if (delete) {
-                        log.info("{}=>文件删除成功！！！", filePath);
+                        log.info("[BLR] {}", LogKvs.event("VideoSync.File.DeleteSuccess")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", next.getId())
+                                .add("partId", part.getId())
+                                .add("path", filePath));
                     } else {
-                        log.error("{}=>文件删除失败！！！", filePath);
+                        log.error("[BLR] {}", LogKvs.event("VideoSync.File.DeleteFailed")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", next.getId())
+                                .add("partId", part.getId())
+                                .add("path", filePath));
                     }
                 } else if (recordRoom != null && StringUtils.isNotBlank(recordRoom.getMoveDir()) && recordRoom.getDeleteType() == 5) {
 
@@ -230,9 +311,23 @@ public class videoSyncJob {
                             try {
                                 Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                         StandardCopyOption.REPLACE_EXISTING);
-                                log.info("{}=>文件移动成功！！！", file.getName());
+                                log.info("[BLR] {}", LogKvs.event("VideoSync.File.MoveSuccess")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("historyId", next.getId())
+                                        .add("partId", part.getId())
+                                        .add("from", file.getPath())
+                                        .add("to", toDirPath + file.getName()));
                             } catch (Exception e) {
-                                log.error("{}=>文件移动失败！！！", file.getName());
+                                log.error("[BLR] {}", LogKvs.event("VideoSync.File.MoveFailed")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("historyId", next.getId())
+                                        .add("partId", part.getId())
+                                        .add("from", file.getPath())
+                                        .add("to", toDirPath + file.getName())
+                                        .addIfNotBlank("err", e.getMessage())
+                                        .add("ex", e.getClass().getSimpleName()), e);
                             }
                         }
                     }
@@ -256,9 +351,23 @@ public class videoSyncJob {
                             try {
                                 Files.copy(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
                                         StandardCopyOption.REPLACE_EXISTING);
-                                log.info("{}=>文件复制成功！！！", file.getName());
+                                log.info("[BLR] {}", LogKvs.event("VideoSync.File.CopySuccess")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("historyId", next.getId())
+                                        .add("partId", part.getId())
+                                        .add("from", file.getPath())
+                                        .add("to", toDirPath + file.getName()));
                             } catch (Exception e) {
-                                log.error("{}=>文件复制失败！！！", file.getName());
+                                log.error("[BLR] {}", LogKvs.event("VideoSync.File.CopyFailed")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("historyId", next.getId())
+                                        .add("partId", part.getId())
+                                        .add("from", file.getPath())
+                                        .add("to", toDirPath + file.getName())
+                                        .addIfNotBlank("err", e.getMessage())
+                                        .add("ex", e.getClass().getSimpleName()), e);
                             }
                         }
                     }

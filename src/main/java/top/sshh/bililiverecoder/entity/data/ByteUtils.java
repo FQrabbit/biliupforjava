@@ -3,6 +3,9 @@ package top.sshh.bililiverecoder.entity.data;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import top.sshh.bililiverecoder.util.LogKvs;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.InflaterOutputStream;
@@ -11,6 +14,8 @@ import java.util.zip.InflaterOutputStream;
  * @author BanqiJane
  */
 public class ByteUtils {
+	private static final Logger log = LoggerFactory.getLogger(ByteUtils.class);
+
 	public static final int UNICODE_LEN = 2;
 	/**
 	 * Hex字符串转byte
@@ -107,13 +112,20 @@ public class ByteUtils {
 			try {
 				baKeyword[i] = (byte) (0xff & Integer.parseInt(s.substring(i * 2, i * 2 + 2), 16));
 			} catch (Exception e) {
-				e.printStackTrace();
+				log.debug("[BLR] {}", LogKvs.event("ByteUtils.HexParseFailed")
+						.add("index", i)
+						.add("hexLen", s != null ? s.length() : null)
+						.addIfNotBlank("err", e.getMessage())
+						.add("ex", e.getClass().getSimpleName()));
 			}
 		}
 		try {
 			s = new String(baKeyword, StandardCharsets.UTF_8);
 		} catch (Exception e1) {
-			e1.printStackTrace();
+			log.debug("[BLR] {}", LogKvs.event("ByteUtils.HexToString.DecodeFailed")
+					.add("bytesLen", baKeyword != null ? baKeyword.length : null)
+					.addIfNotBlank("err", e1.getMessage())
+					.add("ex", e1.getClass().getSimpleName()));
 		}
 		return s;
 	}
@@ -131,7 +143,10 @@ public class ByteUtils {
             zos.close();  
             s = bos.toString("utf-8");
         } catch (Exception ex) {  
-            ex.printStackTrace();  
+			log.debug("[BLR] {}", LogKvs.event("ByteUtils.ZlibInflateString.Failed")
+					.add("bytesLen", bs != null ? bs.length : null)
+					.addIfNotBlank("err", ex.getMessage())
+					.add("ex", ex.getClass().getSimpleName()));
         }  
         return s;
     }
@@ -150,7 +165,10 @@ public class ByteUtils {
             zos.close();  
            b = bos.toByteArray();
         } catch (Exception ex) {  
-            ex.printStackTrace();  
+			log.debug("[BLR] {}", LogKvs.event("ByteUtils.ZlibInflateBytes.Failed")
+					.add("bytesLen", bs != null ? bs.length : null)
+					.addIfNotBlank("err", ex.getMessage())
+					.add("ex", ex.getClass().getSimpleName()));
         }  
         return b;
     }

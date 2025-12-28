@@ -11,6 +11,7 @@ import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -45,7 +46,11 @@ public class RecordEventRecordStartedService implements RecordEventService {
             synchronized (roomId.intern()) {
                 room = roomRepository.findByRoomId(eventData.getRoomId());
                 if (room == null) {
-                    log.error("房间不存在，重新创建房间保存数据库");
+                    log.warn("[BLR] {}", LogKvs.event("Room.AutoCreate")
+                            .add("roomId", eventData.getRoomId())
+                            .add("eventId", event.getEventId())
+                            .add("sessionId", eventData.getSessionId())
+                            .add("reason", "room_not_found"));
                     room = new RecordRoom();
                     room.setRoomId(eventData.getRoomId());
                     room.setCreateTime(now);
@@ -70,9 +75,15 @@ public class RecordEventRecordStartedService implements RecordEventService {
             history.setUpload(room.isUpload());
         } else {
             history = historyList.get(0);
-            log.info("开始录制事件重复/过近（可能是录播姬短时间内重复推送录制开始事件/重连导致），将复用已有录制历史: roomId={} sessionId={} eventId={} historyId={}",
-                roomId, eventData.getSessionId(), event.getEventId(), history.getId());
-            log.debug("复用已有history详情 ==> {}", JSON.toJSONString(history));
+            log.info("[BLR] {}", LogKvs.event("RecordStarted.ReuseHistory")
+                    .add("roomId", roomId)
+                    .add("sessionId", eventData.getSessionId())
+                    .add("eventId", event.getEventId())
+                    .add("historyId", history.getId()));
+            log.debug("[BLR] {}", LogKvs.event("RecordStarted.ReuseHistory.Detail")
+                    .add("roomId", roomId)
+                    .add("historyId", history.getId())
+                    .add("payload", JSON.toJSONString(history)));
         }
         history.setEventId(event.getEventId());
         history.setSessionId(eventData.getSessionId());
@@ -81,6 +92,14 @@ public class RecordEventRecordStartedService implements RecordEventService {
         historyRepository.save(history);
         room.setHistoryId(history.getId());
         roomRepository.save(room);
-        log.info("录制开始事件处理完成==>{}", JSON.toJSONString(history));
+        log.info("[BLR] {}", LogKvs.event("RecordStarted.Processed")
+            .add("roomId", roomId)
+            .add("uname", room.getUname())
+            .add("title", room.getTitle())
+            .add("sessionId", eventData.getSessionId())
+            .add("eventId", event.getEventId())
+            .add("historyId", history.getId())
+            .add("recording", eventData.isRecording())
+            .add("streaming", eventData.isStreaming()));
     }
 }

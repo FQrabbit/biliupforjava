@@ -11,6 +11,7 @@
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
+    <script src="../js/index.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -72,6 +73,9 @@
                 </button>
                 <button class="view-btn" :class="{ 'is-active': viewMode === 'table' }" @click="viewMode = 'table'" title="表格视图">
                     <i class="el-icon-s-grid"></i>
+                </button>
+                <button class="view-btn" :class="{ 'is-active': privacyMode }" @click="togglePrivacyMode()" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
+                    <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
                 </button>
             </div>
         </div>
@@ -139,10 +143,10 @@
                                 <el-option
                                         v-for="room in roomList"
                                         :key="room.roomId"
-                                        :label="room.roomId + ' - ' + room.uname"
+                                        :label="privacyMode ? '***' : (room.roomId + ' - ' + room.uname)"
                                         :value="room.roomId">
-                                    <span style="float: left">{{ room.uname }}</span>
-                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ room.roomId }}</span>
+                                    <span style="float: left">{{ maskText(room.uname) }}</span>
+                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ maskText(room.roomId) }}</span>
                                 </el-option>
                             </el-select>
                         </div>
@@ -265,9 +269,9 @@
                      v-for="item in tableData" :key="item.id" @click="showDetail(item)">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
-                            <div class="card-title">{{ item.title || '无标题' }}</div>
+                            <div class="card-title">{{ maskText(item.title || '无标题') }}</div>
                             <div class="card-bvid" :class="{ 'is-placeholder': !item.bvId }">
-                                <span v-if="item.bvId">BV: {{ item.bvId }}</span>
+                                <span v-if="item.bvId">BV: {{ maskText(item.bvId) }}</span>
                                 <span v-else>&nbsp;</span>
                             </div>
                             <div class="card-status-row">
@@ -276,7 +280,7 @@
                                 <span class="status-chip success" v-if="item.publish">已发布</span>
                                 <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
                                 <span class="status-chip warn" v-if="isActuallyRecording(item)">录制中</span>
-                                <el-tooltip v-if="item.giveUpPartCount && item.giveUpPartCount > 0" effect="dark" :content="formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
+                                <el-tooltip v-if="item.giveUpPartCount && item.giveUpPartCount > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
                                     <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ item.giveUpPartCount }}</span>
                                 </el-tooltip>
                             </div>
@@ -285,7 +289,7 @@
                             </div>
                         </div>
                         <div class="card-info-right">
-                            <el-tag size="mini" type="info">{{ item.roomName }}</el-tag>
+                            <el-tag size="mini" type="info">{{ maskText(item.roomName) }}</el-tag>
                             <el-tag size="mini" :type="getFileSizeColorType(item.fileSize)">{{ formatFileSize(item.fileSize) }}</el-tag>
                             <span class="card-info-text">时长: {{ formatDuration(item.partDuration) }}</span>
                             <span class="card-info-text">分P: {{ item.partCount }} / 已传: {{ item.uploadPartCount }}</span>
@@ -303,10 +307,18 @@
                         height="calc(100vh - 280px)"
                         style="width: 100%">
                     <el-table-column label="ID" prop="id" width="60"></el-table-column>
-                    <el-table-column label="房间号" prop="roomId" width="100"></el-table-column>
-                    <el-table-column label="主播" prop="roomName" width="100"></el-table-column>
-                    <el-table-column label="BV号" prop="bvId" width="120"></el-table-column>
-                    <el-table-column label="标题" prop="title" min-width="150" show-overflow-tooltip></el-table-column>
+                    <el-table-column label="房间号" width="100">
+                        <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
+                    </el-table-column>
+                    <el-table-column label="主播" width="100">
+                        <template slot-scope="scope">{{ maskText(scope.row.roomName) }}</template>
+                    </el-table-column>
+                    <el-table-column label="BV号" width="120">
+                        <template slot-scope="scope">{{ maskText(scope.row.bvId) }}</template>
+                    </el-table-column>
+                    <el-table-column label="标题" min-width="150" show-overflow-tooltip>
+                        <template slot-scope="scope">{{ maskText(scope.row.title) }}</template>
+                    </el-table-column>
                     <el-table-column label="文件大小" prop="fileSize" width="100">
                         <template slot-scope="scope">
                             <el-tag size="mini" :type="getFileSizeColorType(scope.row.fileSize)">{{ formatFileSize(scope.row.fileSize) }}</el-tag>
@@ -416,15 +428,15 @@
             <div class="detail-group">
                 <div class="detail-row full">
                     <label>标题</label>
-                    <span style="font-weight: bold; font-size: 15px;">{{ currentDetail.title }}</span>
+                    <span style="font-weight: bold; font-size: 15px;">{{ maskText(currentDetail.title) }}</span>
                 </div>
                 <div class="detail-row">
                     <label>主播</label>
-                    <el-tag size="small" type="info" effect="plain">{{ currentDetail.roomName }}</el-tag>
+                    <el-tag size="small" type="info" effect="plain">{{ maskText(currentDetail.roomName) }}</el-tag>
                 </div>
                 <div class="detail-row">
                     <label>BV号</label>
-                    <el-link type="primary" :href="'https://www.bilibili.com/video/' + currentDetail.bvId" target="_blank" v-if="currentDetail.bvId" :underline="false">{{ currentDetail.bvId }} <i class="el-icon-view el-icon--right"></i></el-link>
+                    <el-link type="primary" :href="'https://www.bilibili.com/video/' + currentDetail.bvId" target="_blank" v-if="currentDetail.bvId" :underline="false">{{ maskText(currentDetail.bvId) }} <i class="el-icon-view el-icon--right"></i></el-link>
                     <span v-else style="color: var(--text-disabled);">未生成</span>
                 </div>
                 <div class="detail-row">
@@ -475,8 +487,8 @@
                 <div class="detail-row full" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
                     <label>异常文件</label>
                     <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
-                        <el-tooltip v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx" effect="dark" :content="p" placement="top">
-                            <el-tag size="mini" type="danger" effect="plain">{{ (p || '').split('/').pop() || p }}</el-tag>
+                        <el-tooltip v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx" effect="dark" :content="maskTooltip(p)" placement="top">
+                            <el-tag size="mini" type="danger" effect="plain">{{ maskText(((p || '').split('/').pop() || p)) }}</el-tag>
                         </el-tooltip>
                     </div>
                 </div>

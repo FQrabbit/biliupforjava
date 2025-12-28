@@ -16,6 +16,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -54,7 +55,11 @@ public class RecordEventRecordEndService implements RecordEventService {
     @Override
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
-        log.info("录制结束事件==>{}=={}", eventData.getRoomId(), eventData.getTitle());
+        log.info("[BLR] {}", LogKvs.event("RecordEnd.Received")
+                .add("eventId", event.getEventId())
+                .add("roomId", eventData.getRoomId())
+                .add("title", eventData.getTitle())
+                .add("sessionId", eventData.getSessionId()));
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
         Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
         if (historyOptional.isPresent()) {
@@ -117,10 +122,17 @@ public class RecordEventRecordEndService implements RecordEventService {
                     }
                 }
                 if (healed > 0) {
-                    log.info("录制结束事件兜底纠偏分P完成 healed={} HistoryId={}", healed, history.getId());
+                    log.info("[BLR] {}", LogKvs.event("RecordEnd.PartHeal.Done")
+                            .add("roomId", eventData.getRoomId())
+                            .add("historyId", history.getId())
+                            .add("healed", healed));
                 }
             } catch (Exception e) {
-                log.warn("录制结束事件兜底纠偏分P失败 RoomId={} Err={}", eventData.getRoomId(), e.getMessage());
+                log.warn("[BLR] {}", LogKvs.event("RecordEnd.PartHeal.Failed")
+                        .add("roomId", eventData.getRoomId())
+                        .add("historyId", historyOptional.map(RecordHistory::getId).orElse(null))
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
             }
         }
         String wxuid = room.getWxuid();

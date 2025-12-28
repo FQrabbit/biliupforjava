@@ -18,6 +18,7 @@ import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -69,7 +70,7 @@ public class LiveMsgSendSync {
 
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
     public void sndMsgProcess() {
-        log.debug("发送弹幕定时任务开始");
+        log.debug("[BLR] {}", LogKvs.event("LiveMsgSendSync.Start"));
         long startTime = System.currentTimeMillis();
         List<RecordHistory> historyList = historyRepository.findByPublishIsTrueAndCodeIn(Arrays.asList(0, -50));
         if (CollectionUtils.isEmpty(historyList)) {
@@ -109,17 +110,40 @@ public class LiveMsgSendSync {
                         BiliVideoInfoResponse videoInfo = BiliApi.getVideoInfo(user, history.getBvId());
                         if (videoInfo != null && videoInfo.getData() != null && videoInfo.getData().getState() == -50) {
                             isPrivateFlow = true;
-                            log.info("检测到视频{}为仅自己可见，开始执行私有视频评论流程", history.getBvId());
+                            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.PrivateFlow.Detected")
+                                    .addIfNotBlank("bvid", history.getBvId())
+                                    .addIfNotBlank("avId", history.getAvId())
+                                    .addIfNotBlank("title", history.getTitle())
+                                    .add("state", -50));
 
                             // 使用轻量级接口切换为公开状态
                             String editRes = BiliApi.updateVideoVisibility(user, Long.parseLong(history.getAvId()), 0);
-                            log.info("切换视频{}为公开状态结果: {}", history.getBvId(), editRes);
+                            int editCode = -1;
+                            String editMsg = null;
+                            try {
+                                com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
+                                Integer c = jsonObject.getInteger("code");
+                                editCode = c == null ? -1 : c;
+                                editMsg = jsonObject.getString("message");
+                            } catch (Exception ignored) {
+                                // ignore
+                            }
+                            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPublic.Response")
+                                    .addIfNotBlank("bvid", history.getBvId())
+                                    .add("code", editCode)
+                                    .addIfNotBlank("message", editMsg)
+                                    .add("respLen", editRes == null ? 0 : editRes.length()));
                             
                             // 检查响应结果
                             try {
                                 com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
                                 if (jsonObject.getInteger("code") != 0) {
-                                    log.error("切换视频公开状态失败，停止后续操作。BVID: {}, 错误信息: {}", history.getBvId(), editRes);
+                                    log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPublic.Failed")
+                                            .addIfNotBlank("bvid", history.getBvId())
+                                            .addIfNotBlank("avId", history.getAvId())
+                                            .addIfNotBlank("title", history.getTitle())
+                                            .add("code", jsonObject.getInteger("code"))
+                                            .addIfNotBlank("message", jsonObject.getString("message")));
                                     // 抛出异常以中断当前视频的处理流程，避免继续发送评论或弹幕
                                     throw new RuntimeException("切换公开状态失败: " + editRes);
                                 }
@@ -127,7 +151,13 @@ public class LiveMsgSendSync {
                                 if (e instanceof RuntimeException) {
                                     throw e;
                                 }
-                                log.error("解析切换公开状态响应失败，停止后续操作。BVID: {}, 响应内容: {}", history.getBvId(), editRes);
+                                log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPublic.ResponseParseFailed")
+                                        .addIfNotBlank("bvid", history.getBvId())
+                                        .addIfNotBlank("avId", history.getAvId())
+                                        .addIfNotBlank("title", history.getTitle())
+                                        .add("respLen", editRes == null ? 0 : editRes.length())
+                                        .addIfNotBlank("err", e.getMessage())
+                                        .add("ex", e.getClass().getSimpleName()), e);
                                 throw new RuntimeException("解析响应失败", e);
                             }
 
@@ -136,7 +166,12 @@ public class LiveMsgSendSync {
                         }
                     }
                 } catch (Exception e) {
-                    log.error("检查视频状态或切换公开失败，跳过本视频处理。标题:{} bvid:{}", history.getTitle(), history.getBvId(), e);
+                    log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.PrivateFlow.SkipByError")
+                            .addIfNotBlank("title", history.getTitle())
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("avId", history.getAvId())
+                            .addIfNotBlank("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
                     // 如果切换公开失败，直接跳过当前视频的后续所有操作（评论、弹幕、切回私有）
                     continue;
                 }
@@ -181,7 +216,11 @@ public class LiveMsgSendSync {
                         reply.setParent(replId);
                         BiliReplyResponse replyResponse = BiliApi.sendVideoReply(user, reply);
                         if (replyResponse.getCode() == 0) {
-                            log.info("av{}发送评论成功：{}", reply.getOid(), reply.getMessage());
+                            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Success")
+                                    .addIfNotBlank("bvid", history.getBvId())
+                                    .addIfNotBlank("avId", reply.getOid())
+                                    .add("index", i)
+                                    .add("messageLen", reply.getMessage() == null ? 0 : reply.getMessage().length()));
                             //第一个评论进行置顶操作
                             if (i == 0) {
                                 replId = replyResponse.getData().getRpid();
@@ -191,7 +230,13 @@ public class LiveMsgSendSync {
                                 reply.setAction("1");
                                 BiliReplyResponse response = BiliApi.topVideoReply(user, reply);
                                 if (response.getCode() != 0) {
-                                    log.error("av{} 标题:{} 评论置顶失败：{}", reply.getOid(), history.getTitle(), JSON.toJSONString(response));
+                                    log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Top.Failed")
+                                            .addIfNotBlank("bvid", history.getBvId())
+                                            .addIfNotBlank("avId", reply.getOid())
+                                            .addIfNotBlank("title", history.getTitle())
+                                            .addIfNotBlank("rpid", reply.getRpid())
+                                            .add("code", response.getCode())
+                                            .addIfNotBlank("message", response.getMessage()));
                                 }
                                 if (response.getCode() == 404) {
                                     //等待一段时间，否则无法置顶
@@ -215,7 +260,11 @@ public class LiveMsgSendSync {
 
                             }
                         } else {
-                            log.error("发送评论失败: {}", JSON.toJSONString(replyResponse));
+                            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Failed")
+                                    .addIfNotBlank("bvid", history.getBvId())
+                                    .addIfNotBlank("avId", reply.getOid())
+                                    .add("code", replyResponse.getCode())
+                                    .addIfNotBlank("message", replyResponse.getMessage()));
                             throw new RuntimeException("发送评论失败: " + replyResponse.getMessage());
                         }
                         //等待一段时间在发送
@@ -225,7 +274,13 @@ public class LiveMsgSendSync {
                     history.setSendReply(true);
                     history = historyRepository.save(history);
                 } catch (Exception e) {
-                    log.error("发送sc评论失败 标题:{} bvid:{} 内容:{}", history.getTitle(), history.getBvId(), JSON.toJSONString(replies), e);
+                    log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.BatchFailed")
+                            .addIfNotBlank("title", history.getTitle())
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("avId", history.getAvId())
+                            .add("replyCount", replies.size())
+                            .addIfNotBlank("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
                     try {
                         if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("视频评论")) {
                             Message message = new Message();
@@ -242,12 +297,16 @@ public class LiveMsgSendSync {
                     }
                 }
                 } else {
-                    log.info("没有需要发送的评论数据(0条) 标题:{} bvid:{}", history.getTitle(), history.getBvId());
+                    log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.None")
+                            .addIfNotBlank("title", history.getTitle())
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("avId", history.getAvId()));
                     // 即使没有评论，也稍微等待一下，避免操作过快
                     try {
                         Thread.sleep(2000);
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.SleepInterrupted")
+                                .add("waitMs", 2000), e);
                     }
                     history.setSendReply(true);
                     historyRepository.save(history);
@@ -257,21 +316,46 @@ public class LiveMsgSendSync {
                     try {
                         // 使用轻量级接口切换回仅自己可见状态
                         String editRes = BiliApi.updateVideoVisibility(user, Long.parseLong(history.getAvId()), 1);
-                        log.info("切换视频{}回仅自己可见状态结果: {}", history.getBvId(), editRes);
+                        int editCode = -1;
+                        String editMsg = null;
+                        try {
+                            com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
+                            Integer c = jsonObject.getInteger("code");
+                            editCode = c == null ? -1 : c;
+                            editMsg = jsonObject.getString("message");
+                        } catch (Exception ignored) {
+                            // ignore
+                        }
+                        log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPrivate.Response")
+                                .addIfNotBlank("bvid", history.getBvId())
+                                .add("code", editCode)
+                                .addIfNotBlank("message", editMsg)
+                                .add("respLen", editRes == null ? 0 : editRes.length()));
                         
                         // 检查响应结果
                         com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
                         if (jsonObject.getInteger("code") != 0) {
-                            log.error("切换视频回仅自己可见失败。BVID: {}, 错误信息: {}", history.getBvId(), editRes);
+                            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPrivate.Failed")
+                                    .addIfNotBlank("bvid", history.getBvId())
+                                    .addIfNotBlank("avId", history.getAvId())
+                                    .addIfNotBlank("title", history.getTitle())
+                                    .add("code", jsonObject.getInteger("code"))
+                                    .addIfNotBlank("message", jsonObject.getString("message")));
                         }
                     } catch (Exception e) {
-                        log.error("切换视频回仅自己可见失败 标题:{} bvid:{}", history.getTitle(), history.getBvId(), e);
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPrivate.Error")
+                                .addIfNotBlank("title", history.getTitle())
+                                .addIfNotBlank("bvid", history.getBvId())
+                                .addIfNotBlank("avId", history.getAvId())
+                                .addIfNotBlank("err", e.getMessage())
+                                .add("ex", e.getClass().getSimpleName()), e);
                     }
                     // 操作完成后等待一段时间，避免频繁请求
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.SleepInterrupted")
+                                .add("waitMs", 5000), e);
                     }
                     continue;
                 }
@@ -308,11 +392,12 @@ public class LiveMsgSendSync {
         try {
             boolean tryLock = lock.tryLock();
             if (!tryLock) {
-                log.error("弹幕发获取锁失败！！！！");
+                log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Lock.Failed"));
                 return;
             }
             //高优先级弹幕，如sc,舰长，只能由视频发布账号发送
-            log.info("即将开始高级弹幕发送操作，剩余待发送弹幕{}条。", allHighLevelMsg.size());
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.Start")
+                    .add("pending", allHighLevelMsg.size()));
             for (LiveMsg msg : allHighLevelMsg) {
                 Long partId = msg.getPartId();
                 Optional<RecordHistoryPart> partOptional = partRepository.findById(partId);
@@ -332,7 +417,12 @@ public class LiveMsgSendSync {
                             }
                             int code = liveMsgService.sendMsg(user, msg);
                             if (code != 0) {
-                                log.error("{}用户，发送失败，错误代码{}，弹幕内容为。==>{}", user.getUname(), code, msg.getContext());
+                                log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.Send.Failed")
+                                        .addIfNotBlank("uname", user.getUname())
+                                        .add("code", code)
+                                        .addIfNotBlank("bvid", msg.getBvid())
+                                        .add("partId", msg.getPartId())
+                                        .add("contextLen", msg.getContext() == null ? 0 : msg.getContext().length()));
                                 try {
                                     if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("高级弹幕")) {
                                         Message message = new Message();
@@ -350,7 +440,10 @@ public class LiveMsgSendSync {
                             }
                             try {
                                 if (code == 36703) {
-                                    log.warn("{}用户，高级弹幕发送频率过快(36703)，将暂停120秒。", user.getUname());
+                                    log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.RateLimit.Pause")
+                                            .addIfNotBlank("uname", user.getUname())
+                                            .add("code", code)
+                                            .add("waitSec", 120));
                                     Thread.sleep(120 * 1000L);
                                 } else if (code == 0) {
                                     Thread.sleep(25 * 1000L);
@@ -359,7 +452,8 @@ public class LiveMsgSendSync {
                                     Thread.sleep(5000L);
                                 }
                             } catch (InterruptedException e) {
-                                e.printStackTrace();
+                                log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.SleepInterrupted")
+                                        .add("phase", "highLevelThrottle"), e);
                             }
                             continue;
                         }
@@ -371,13 +465,14 @@ public class LiveMsgSendSync {
 
             //普通弹幕发送
             if (msgAllList.size() == 0) {
-                log.info("剩余待发送弹幕0条,退出弹幕发送定时任务。");
+                log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.EmptyExit"));
                 return;
             }
             BlockingQueue<LiveMsg> msgQueue = new ArrayBlockingQueue<>(msgAllList.size());
             msgQueue.addAll(msgAllList);
             AtomicInteger count = new AtomicInteger(0);
-            log.info("即将开始普通弹幕发送操作，本次剩余待发送弹幕{}条。", msgQueue.size());
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.Start")
+                    .add("pending", msgQueue.size()));
             allUser.stream().parallel().forEach(user -> {
                 while (msgQueue.size() > 0) {
                     if (System.currentTimeMillis() - startTime > 2 * 3600 * 1000) {
@@ -392,9 +487,13 @@ public class LiveMsgSendSync {
                             } catch (Exception e) {
                                 // ignore
                             }
-                            log.info("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。涉及稿件 BVID: {} 标题: {}", peekMsg.getBvid(), title);
+                            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.TimeLimitStop")
+                                    .add("limitSec", 7200)
+                                    .addIfNotBlank("bvid", peekMsg.getBvid())
+                                    .addIfNotBlank("title", title));
                         } else {
-                            log.info("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。");
+                            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.TimeLimitStop")
+                                    .add("limitSec", 7200));
                         }
                         return;
                     }
@@ -402,7 +501,7 @@ public class LiveMsgSendSync {
                     try {
                         msg = msgQueue.poll(10, TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.QueuePollInterrupted"), e);
                     }
                     if (msg == null) {
                         return;
@@ -410,34 +509,62 @@ public class LiveMsgSendSync {
                     count.incrementAndGet();
                     user = userRepository.findByUid(user.getUid());
                     if (!(user.isLogin() && user.isEnable())) {
-                        log.error("弹幕发送：有用户状态为未登录或未启用状态，退出任务。");
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.User.InvalidState")
+                                .add("uid", user.getUid())
+                                .addIfNotBlank("uname", user.getUname())
+                                .add("login", user.isLogin())
+                                .add("enable", user.isEnable()));
                         return;
                     }
                     int code = liveMsgService.sendMsg(user, msg);
                     if (code == 36703) {
-                        log.warn("{}用户，发送弹幕频率过快(36703)，暂停5秒后重试...", user.getUname());
+                        log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.RateLimit.RetryOnce")
+                                .addIfNotBlank("uname", user.getUname())
+                                .add("code", code)
+                                .add("waitMs", 5000)
+                                .add("sent", count.get()));
                         try {
                             Thread.sleep(5000L);
                         } catch (InterruptedException e) {
-                            e.printStackTrace();
+                            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.SleepInterrupted")
+                                    .add("phase", "normalRateLimitRetry"), e);
                         }
                         user = userRepository.findByUid(user.getUid());
                         code = liveMsgService.sendMsg(user, msg);
                         if (code == 36703) {
-                            log.error("{}用户，发送失败，错误代码{}发送过于频繁，一共发送{}条弹幕。将暂停发送120秒。", user.getUname(), code, count.get());
+                            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.RateLimit.Pause")
+                                    .addIfNotBlank("uname", user.getUname())
+                                    .add("code", code)
+                                    .add("sent", count.get())
+                                    .add("waitSec", 120));
 
                         }
                     } else if (code == 36714) {
-                        log.error("{}用户，发送失败，错误代码{}时间不合法，一共发送{}条弹幕。", user.getUname(), code, count.get());
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.Send.InvalidTime")
+                                .addIfNotBlank("uname", user.getUname())
+                                .add("code", code)
+                                .add("sent", count.get()));
                     } else if (code == 36704) {
-                        log.error("{}用户，发送失败，错误代码{}视频未审核通过，一共发送{}条弹幕，等待重新同步视频状态", user.getUname(), code, count.get());
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.Send.VideoNotApproved")
+                                .addIfNotBlank("uname", user.getUname())
+                                .add("code", code)
+                                .add("sent", count.get())
+                                .addIfNotBlank("bvid", msg.getBvid()));
                         return;
                     }else if(code == -101 || code == -102 || code == -111 || code == -400 || code == -404 || code == -36700){
-                        log.error("{}用户，发送失败，错误代码{}，一共发送{}条弹幕。", user.getUname(), code, count.get());
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.Send.UserDisabled")
+                                .addIfNotBlank("uname", user.getUname())
+                                .add("uid", user.getUid())
+                                .add("code", code)
+                                .add("sent", count.get()));
                         user.setEnable(false);
                         user = userRepository.save(user);
                     }else if(code != 0){
-                        log.error("{}用户，发送失败，错误代码{}，一共发送{}条弹幕。", user.getUname(), code, count.get());
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.Send.Failed")
+                                .addIfNotBlank("uname", user.getUname())
+                                .add("code", code)
+                                .add("sent", count.get())
+                                .addIfNotBlank("bvid", msg.getBvid()));
                         return;
                     }
                     try {
@@ -450,7 +577,8 @@ public class LiveMsgSendSync {
                             Thread.sleep(5000L);
                         }
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.SleepInterrupted")
+                                .add("phase", "normalThrottle"), e);
                     }
                 }
             });
@@ -480,7 +608,10 @@ public class LiveMsgSendSync {
                     }
 
                 } catch (Exception e) {
-                    log.error("@用户模板失败：{}", uid, e);
+                    log.error("[BLR] {}", LogKvs.event("Template.AtUser.Failed")
+                            .add("uid", uid)
+                            .addIfNotBlank("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
                 }
             } else {
                 s = s.replace("${uname}", map.get("${uname}") != null ? map.get("${uname}").toString() : "")
@@ -496,7 +627,8 @@ public class LiveMsgSendSync {
                         String format = localDateTime.format(DateTimeFormatter.ofPattern(date.substring(2, date.length() - 1)));
                         s = s.replace(date, format);
                     } catch (Exception e) {
-                        log.error("时间格式模板失败：{}", template);
+                        log.error("[BLR] {}", LogKvs.event("Template.DateFormat.Failed")
+                                .addIfNotBlank("template", template));
                     }
                 }
                 s = s.replace(",,", ",");

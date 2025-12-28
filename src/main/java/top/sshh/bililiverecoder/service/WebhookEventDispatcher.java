@@ -18,6 +18,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import top.sshh.bililiverecoder.util.LogKvs;
+
 @Slf4j
 @Component
 public class WebhookEventDispatcher {
@@ -104,7 +106,9 @@ public class WebhookEventDispatcher {
                 }
             }
         } catch (Exception e) {
-            log.warn("[WEBHOOK] cleanup error: {}", e.getMessage());
+            log.warn("[BLR] {}", LogKvs.event("Webhook.CleanupError")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
         }
     }
 

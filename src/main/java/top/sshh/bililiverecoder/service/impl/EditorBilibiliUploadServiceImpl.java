@@ -20,6 +20,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
+import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.EditorChunkUploadRequest;
@@ -68,7 +69,12 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
-        log.info("partId={},异步上传任务开始==>{}", part.getId(), part.getFilePath());
+        log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
+                .add("os", OS)
+                .add("partId", part.getId())
+                .add("historyId", part.getHistoryId())
+                .add("roomId", part.getRoomId())
+                .add("filePath", part.getFilePath()));
         this.upload(part);
     }
 
@@ -76,7 +82,13 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
     public void upload(RecordHistoryPart part) {
         Thread thread = TaskUtil.partUploadTask.get(part.getId());
         if (thread != null && thread != Thread.currentThread()) {
-            log.info("当前线程为{} ,partId={}该文件正在被{}线程上传", Thread.currentThread(), part.getId(), thread.getName());
+            log.info("[BLR] {}", LogKvs.event("Upload.Part.AlreadyUploading")
+                    .add("os", OS)
+                    .add("partId", part.getId())
+                    .add("historyId", part.getHistoryId())
+                    .add("roomId", part.getRoomId())
+                    .add("ownerThread", thread.getName())
+                    .add("currentThread", Thread.currentThread().getName()));
             return;
         }
         TaskUtil.partUploadTask.put(part.getId(), Thread.currentThread());
@@ -91,31 +103,58 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                 String filePath = part.getFilePath().intern();
                 File uploadFile = new File(filePath);
                 if (!uploadFile.exists()) {
-                    log.error("分片上传失败，文件不存在==>{}", filePath);
+                    log.error("[BLR] {}", LogKvs.event("Upload.Part.FileMissing")
+                            .add("os", OS)
+                            .add("partId", part.getId())
+                            .add("historyId", part.getHistoryId())
+                            .add("roomId", part.getRoomId())
+                            .add("filePath", filePath));
                     return;
                 }
                 synchronized (filePath) {
                     Optional<RecordHistory> historyOptional = historyRepository.findById(part.getHistoryId());
                     if (!historyOptional.isPresent()) {
-                        log.error("分片上传失败，history不存在==>{}", JSON.toJSONString(part));
+                        log.error("[BLR] {}", LogKvs.event("Upload.Part.MissingHistory")
+                                .add("os", OS)
+                                .add("partId", part.getId())
+                                .add("historyId", part.getHistoryId())
+                                .add("roomId", part.getRoomId())
+                                .add("filePath", part.getFilePath()));
                         TaskUtil.partUploadTask.remove(part.getId());
                         return;
                     }
                     RecordHistory history = historyOptional.get();
                     if (room.getUploadUserId() == null) {
-                        log.info("分片上传事件，没有设置上传用户，无法上传 ==>{}", JSON.toJSONString(room));
+                        log.warn("[BLR] {}", LogKvs.event("Upload.Part.NoUploadUser")
+                                .add("os", OS)
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("partId", part.getId())
+                                .add("historyId", part.getHistoryId()));
                         TaskUtil.partUploadTask.remove(part.getId());
                         return;
                     } else {
                         Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
                         if (!userOptional.isPresent()) {
-                            log.error("分片上传事件，上传用户不存在，无法上传 ==>{}", JSON.toJSONString(room));
+                            log.error("[BLR] {}", LogKvs.event("Upload.Part.UploadUserMissing")
+                                    .add("os", OS)
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("uploadUserId", room.getUploadUserId())
+                                    .add("partId", part.getId())
+                                    .add("historyId", part.getHistoryId()));
                             TaskUtil.partUploadTask.remove(part.getId());
                             return;
                         }
                         BiliBiliUser biliBiliUser = userOptional.get();
                         if (!biliBiliUser.isLogin()) {
-                            log.error("分片上传事件，用户登录状态失效，无法上传，请重新登录 ==>{}", JSON.toJSONString(room));
+                            log.error("[BLR] {}", LogKvs.event("Upload.Part.LoginInvalid")
+                                    .add("os", OS)
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("uploadUserId", room.getUploadUserId())
+                                    .add("partId", part.getId())
+                                    .add("historyId", part.getHistoryId()));
                             TaskUtil.partUploadTask.remove(part.getId());
                             return;
                         }
@@ -157,6 +196,8 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                         int chunkNum = (int)Math.ceil((double)fileSize / chunkSize);
                         AtomicInteger upCount = new AtomicInteger(0);
                         AtomicInteger tryCount = new AtomicInteger(0);
+                        final Long partId = part.getId();
+                        final Long historyId = part.getHistoryId();
                         String[] etagArray = new String[chunkNum];
                         List<Runnable> runnableList = new ArrayList<>();
                         for (int i = 0; i < chunkNum; i++) {
@@ -183,23 +224,61 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                             String etag = chunkUploadRequest.getPage();
                                             etagArray[finalI]=etag;
                                             int count = upCount.incrementAndGet();
-                                            log.debug("{}==>[{}] 上传视频part {} 进度{}/{}", Thread.currentThread().getName(), room.getTitle(),
-                                                    filePath, count, chunkNum);
+                                                log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
+                                                    .add("os", OS)
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("title", room.getTitle())
+                                                    .add("partId", partId)
+                                                    .add("historyId", historyId)
+                                                    .add("chunkIndex", finalI)
+                                                    .add("done", count)
+                                                    .add("total", chunkNum)
+                                                    .add("thread", Thread.currentThread().getName()));
                                             break;
                                         } catch (Exception e) {
                                             tryCount.incrementAndGet();
-                                            log.info("{}==>[{}] 上传视频part {}, index {}, size {}, start {}, end {}, exception={}", Thread.currentThread().getName(), room.getTitle(),
-                                                    filePath, finalI, chunkSize, finalI * chunkSize, (finalI + 1) * chunkSize, ExceptionUtils.getStackTrace(e));
+                                                log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
+                                                    .add("os", OS)
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("title", room.getTitle())
+                                                    .add("partId", partId)
+                                                    .add("historyId", historyId)
+                                                    .add("chunkIndex", finalI)
+                                                    .add("chunkSize", chunkSize)
+                                                    .add("start", finalI * chunkSize)
+                                                    .add("end", (finalI + 1) * chunkSize)
+                                                    .add("err", e.getMessage())
+                                                    .add("ex", e.getClass().getSimpleName()));
                                             try {
                                                 //                                                log.info("上传失败等待十秒==>{}", uploadFile.getName());
                                                 Thread.sleep(10000L);
                                             } catch (InterruptedException ex) {
-                                                ex.printStackTrace();
+                                                log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.RetryWaitInterrupted")
+                                                        .add("os", OS)
+                                                        .add("roomId", room.getRoomId())
+                                                        .add("uname", room.getUname())
+                                                        .add("partId", partId)
+                                                        .add("historyId", historyId)
+                                                        .add("chunkIndex", finalI)
+                                                        .add("sleepMs", 10000)
+                                                        .addIfNotBlank("err", ex.getMessage())
+                                                        .add("ex", ex.getClass().getSimpleName()), ex);
+                                                tryCount.set(200);
+                                                Thread.currentThread().interrupt();
+                                                return;
                                             }
                                         }
                                     }
                                 } catch (Exception e) {
-                                    e.printStackTrace();
+                                    log.error("[BLR] {}", LogKvs.event("Upload.Chunk.ThreadFailed")
+                                            .add("os", OS)
+                                            .add("roomId", room.getRoomId())
+                                            .add("uname", room.getUname())
+                                            .add("partId", partId)
+                                            .add("historyId", historyId)
+                                            .add("chunkIndex", finalI)
+                                            .addIfNotBlank("err", e.getMessage())
+                                            .add("ex", e.getClass().getSimpleName()), e);
                                 }
                             };
 
@@ -250,14 +329,29 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                         completeParams.put("etags", String.join(",", etagArray));
                         EdtiorCompleteUploadRequest completeUploadRequest = new EdtiorCompleteUploadRequest(webCookie, preUploadBean, completeParams);
                         CompleteUploadBean completeUploadBean = completeUploadRequest.getPojo();
-                        log.info("{}，云剪辑上传完成，==>{}",part.getTitle(),JSON.toJSONString(completeUploadBean));
+                        log.info("[BLR] {}", LogKvs.event("Upload.Complete.Response")
+                            .add("os", OS)
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", partId)
+                            .add("historyId", historyId)
+                            .add("title", part.getTitle())
+                            .add("code", completeUploadBean.getCode())
+                            .add("payload", JSON.toJSONString(completeUploadBean)));
                         try {
                             //等待五秒在开始转码
                             Thread.sleep(5000L);
                         }catch (Exception ignored){}
                         EdtiorTranscodeRequest transcodeRequest = new EdtiorTranscodeRequest(webCookie, preUploadBean);
                         String page = transcodeRequest.getPage();
-                        log.info("{}，云剪辑转码请求完成，==>{}",part.getTitle(),page);
+                        log.info("[BLR] {}", LogKvs.event("Upload.Transcode.Response")
+                            .add("os", OS)
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("historyId", part.getHistoryId())
+                            .add("title", part.getTitle())
+                            .add("payload", page));
                         if (Integer.valueOf(0).equals(completeUploadBean.getCode())) {
                             if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("云剪辑")) {
                                 message.setAppToken(wxToken);
@@ -284,7 +378,10 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
             }
         } catch (Exception e) {
-            log.error("云剪辑上传发生错误", e);
+            log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
+                    .add("os", OS)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
         }

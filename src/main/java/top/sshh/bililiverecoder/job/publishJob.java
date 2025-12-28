@@ -12,6 +12,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
 
 import java.io.File;
@@ -60,7 +61,8 @@ public class publishJob {
             iterator.forEachRemaining(historyList::add);
         }
         if (!historyList.isEmpty()) {
-            log.info("视频发布定时任务 待发布视频数量 size=={}", historyList.size());
+            log.info("[BLR] {}", LogKvs.event("PublishJob.PendingCount")
+                    .add("size", historyList.size()));
         }
 
         for (RecordHistory history : historyList) {
@@ -70,7 +72,12 @@ public class publishJob {
             try {
                 actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
             } catch (Exception e) {
-                log.warn("视频发布定时任务 统计录制中分P失败，跳过投稿 HistoryId={} Err={}", history.getId(), e.getMessage());
+                log.warn("[BLR] {}", LogKvs.event("PublishJob.ActuallyRecordingParts.CountFailed")
+                        .add("historyId", history.getId())
+                        .add("roomId", history.getRoomId())
+                        .addIfNotBlank("title", history.getTitle())
+                        .addIfNotBlank("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
                 continue;
             }
 
@@ -115,9 +122,19 @@ public class publishJob {
                 if (healed > 0) {
                     try {
                         actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
-                        log.info("视频发布定时任务 已纠偏分P录制状态 healed={} HistoryId={} remain={}", healed, history.getId(), actuallyRecordingParts);
+                        log.info("[BLR] {}", LogKvs.event("PublishJob.PartRecording.Healed")
+                                .add("historyId", history.getId())
+                                .add("roomId", history.getRoomId())
+                                .addIfNotBlank("title", history.getTitle())
+                                .add("healed", healed)
+                                .add("remain", actuallyRecordingParts));
                     } catch (Exception e) {
-                        log.warn("视频发布定时任务 纠偏后再次统计失败，跳过投稿 HistoryId={} Err={}", history.getId(), e.getMessage());
+                        log.warn("[BLR] {}", LogKvs.event("PublishJob.PartRecording.RecountFailed")
+                                .add("historyId", history.getId())
+                                .add("roomId", history.getRoomId())
+                                .addIfNotBlank("title", history.getTitle())
+                                .addIfNotBlank("err", e.getMessage())
+                                .add("ex", e.getClass().getSimpleName()), e);
                         continue;
                     }
                 }
@@ -144,26 +161,40 @@ public class publishJob {
                                 }
                             } catch (Exception ignored) {
                             }
-                            log.debug("视频发布定时任务 录制中分P详情 HistoryId={} PartId={} recording={} endTimeNull={} lastModified={} filePath={}",
-                                history.getId(), p.getId(), p.isRecording(), p.getEndTime() == null, lm, fp);
+                                log.debug("[BLR] {}", LogKvs.event("PublishJob.PartRecording.SuspectPart")
+                                    .add("historyId", history.getId())
+                                    .add("roomId", history.getRoomId())
+                                    .add("partId", p.getId())
+                                    .add("recording", p.isRecording())
+                                    .add("endTimeNull", p.getEndTime() == null)
+                                    .add("lastModified", lm)
+                                    .add("filePath", fp));
                         });
                 } catch (Exception ignored) {
                 }
 
-                log.info("视频发布定时任务 检测到仍在录制的分P，跳过投稿 HistoryId={} recordPartCount={}", history.getId(), actuallyRecordingParts);
+                        log.info("[BLR] {}", LogKvs.event("PublishJob.Skip.HasRecordingParts")
+                            .add("historyId", history.getId())
+                            .add("roomId", history.getRoomId())
+                            .addIfNotBlank("title", history.getTitle())
+                            .add("recordPartCount", actuallyRecordingParts));
                 continue;
             }
             if (history.isStreaming()) {
-                log.info("视频发布定时任务 history.streaming=true，跳过投稿 HistoryId={}", history.getId());
+                        log.info("[BLR] {}", LogKvs.event("PublishJob.Skip.HistoryStreaming")
+                            .add("historyId", history.getId())
+                            .add("roomId", history.getRoomId())
+                            .addIfNotBlank("title", history.getTitle()));
                 continue;
             }
 
             publishService.publishRecordHistory(history);
             try {
-                log.info("单个视频发布流程结束，等待30秒继续下一个任务...");
+                log.info("[BLR] {}", LogKvs.event("PublishJob.WaitNext")
+                        .add("waitMs", 30000));
                 Thread.sleep(30000);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                log.warn("[BLR] {}", LogKvs.event("PublishJob.WaitNextInterrupted"), e);
             }
         }
     }
@@ -194,22 +225,34 @@ public class publishJob {
                 // 检查是否已经在上传队列中
                 Thread uploadThread = TaskUtil.partUploadTask.get(part.getId());
                 if (uploadThread != null && uploadThread.isAlive()) {
-                    log.debug("分P上传补偿任务 PartId={} 正在上传中，跳过", part.getId());
+                    log.debug("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.AlreadyUploading")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath()));
                     continue;
                 }
 
                 // 检查文件是否存在
                 File file = new File(part.getFilePath());
                 if (!file.exists()) {
-                    log.warn("分P上传补偿任务 跳过不存在的文件: {}", part.getFilePath());
+                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FileMissing")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath()));
                     continue;
                 }
 
                 // 以磁盘真实文件为准，避免历史数据 fileSize/duration 写入异常导致误判
                 long actualFileSize = file.length();
                 if (actualFileSize <= 0) {
-                    log.warn("分P上传补偿任务 无法读取文件大小(size={})，可能文件格式/挂载异常，放弃且不再重试 PartId={} File={}",
-                        actualFileSize, part.getId(), part.getFilePath());
+                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FileSizeUnreadableGiveUp")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath())
+                            .add("fileSizeBytes", actualFileSize));
                     part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
                     try {
                         partRepository.save(part);
@@ -236,8 +279,12 @@ public class publishJob {
                     }
                 }
                 if (actualDuration <= 0) {
-                    log.warn("分P上传补偿任务 无法读取文件时长(durationSec={})，可能文件格式/事件数据异常，放弃且不再重试 PartId={} File={}",
-                        actualDuration, part.getId(), part.getFilePath());
+                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.DurationUnreadableGiveUp")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath())
+                            .add("durationSec", actualDuration));
                     part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
                     try {
                         partRepository.save(part);
@@ -249,24 +296,44 @@ public class publishJob {
                 // 检查文件大小和时长是否符合要求
                 long minBytes = 1024L * 1024L * room.getFileSizeLimit();
                 if (actualFileSize < minBytes) {
-                    log.info("分P上传补偿任务 文件大小小于设置的忽略大小，跳过: {} (sizeMB={} < limitMB={})", part.getFilePath(),
-                        String.format("%.2f", actualFileSize / 1024.0 / 1024.0), room.getFileSizeLimit());
+                    log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipBelowSizeLimit")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath())
+                            .add("fileSizeBytes", actualFileSize)
+                            .add("limitMB", room.getFileSizeLimit()));
                     continue;
                 }
                 if (actualDuration < room.getDurationLimit()) {
-                    log.info("分P上传补偿任务 文件时长小于设置的忽略时间，跳过: {} (durationSec={} < limitSec={})", part.getFilePath(),
-                        actualDuration, room.getDurationLimit());
+                    log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipBelowDurationLimit")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath())
+                            .add("durationSec", actualDuration)
+                            .add("limitSec", room.getDurationLimit()));
                     continue;
                 }
                 
                 // 触发异步上传（使用新线程避免阻塞定时任务）
-                log.info("分P上传补偿任务 触发上传 PartId={} File={}", part.getId(), part.getFilePath());
+                log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.TriggerUpload")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("partId", part.getId())
+                        .add("filePath", part.getFilePath()));
                 triggeredCount++;
                 new Thread(() -> {
                     try {
                         uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
                     } catch (Exception e) {
-                        log.error("分P上传补偿任务 上传失败 PartId={} Error={}", part.getId(), e.getMessage());
+                        log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.UploadFailed")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("partId", part.getId())
+                                .add("filePath", part.getFilePath())
+                                .addIfNotBlank("err", e.getMessage())
+                                .add("ex", e.getClass().getSimpleName()), e);
                         // 失败后冷却20分钟
                         uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 20 * 60 * 1000);
                     }
@@ -276,12 +343,16 @@ public class publishJob {
                     // 避免同时触发过多线程
                     Thread.sleep(5000);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.ThrottleSleepInterrupted"), e);
                 }
             }
 
             if (triggeredCount > 0) {
-                log.info("分P上传补偿任务 房间[{}] 本轮触发 {} 个分P上传（待处理未上传分P总数={}）", room.getUname(), triggeredCount, pendingParts.size());
+                log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.TriggeredSummary")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("triggered", triggeredCount)
+                        .add("pending", pendingParts.size()));
             }
         }
     }

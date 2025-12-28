@@ -9,6 +9,7 @@ import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -37,14 +38,20 @@ public class RecordEventStreamEndService implements RecordEventService {
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         if (eventData == null || eventData.getRoomId() == null) {
-            log.warn("直播结束事件数据为空，忽略");
+            log.warn("[BLR] {}", LogKvs.event("StreamEnd.IgnoredEmpty")
+                    .add("eventId", event.getEventId()));
             return;
         }
 
-        log.info("直播结束事件==>{}=={}", eventData.getRoomId(), eventData.getTitle());
+        log.info("[BLR] {}", LogKvs.event("StreamEnd.Received")
+                .add("eventId", event.getEventId())
+                .add("roomId", eventData.getRoomId())
+                .add("title", eventData.getTitle()));
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
         if (room == null) {
-            log.warn("直播结束事件未找到房间 RoomId={}，忽略", eventData.getRoomId());
+            log.warn("[BLR] {}", LogKvs.event("StreamEnd.RoomMissing")
+                    .add("eventId", event.getEventId())
+                    .add("roomId", eventData.getRoomId()));
             return;
         }
 

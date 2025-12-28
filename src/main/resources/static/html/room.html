@@ -85,6 +85,9 @@
             <el-button class="neon-btn neon-btn-primary" @click="addRoomDialog = true" icon="el-icon-plus">
                 添加房间
             </el-button>
+            <el-tooltip effect="dark" :content="privacyMode ? '隐私模式：开' : '隐私模式：关'" placement="top">
+                <el-button class="neon-btn neon-btn-primary" @click="togglePrivacyMode" :icon="privacyMode ? 'el-icon-lock' : 'el-icon-view'">隐私</el-button>
+            </el-tooltip>
             <el-tooltip content="导出用户后若程序继续运行，则用户登录状态会失效" effect="dark" placement="top">
                 <el-button class="neon-btn neon-btn-primary" @click="exportConfigDialog=true" icon="el-icon-download">
                     导出配置
@@ -123,15 +126,15 @@
                 
                 <div class="room-card-header">
                     <div class="room-avatar">
-                        {{ (item.uname || 'R').charAt(0).toUpperCase() }}
+                        {{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}
                         <span v-if="item.streaming" class="live-indicator"></span>
                     </div>
                     <div class="room-info">
-                        <h3 class="room-name">{{ item.uname }}</h3>
-                        <p class="room-title">{{ item.title || '暂无直播标题' }}</p>
+                        <h3 class="room-name">{{ maskText(item.uname) }}</h3>
+                        <p class="room-title">{{ maskText(item.title || '暂无直播标题') }}</p>
                         <div class="room-id">
                             <i class="el-icon-house"></i>
-                            <span>{{ item.roomId }}</span>
+                            <span>{{ maskText(item.roomId) }}</span>
                         </div>
                     </div>
                 </div>
@@ -220,9 +223,15 @@
                     </el-form>
                 </template>
             </el-table-column>
-            <el-table-column label="直播间" prop="roomId" min-width="120"></el-table-column>
-            <el-table-column label="主播" prop="uname" min-width="100"></el-table-column>
-            <el-table-column label="标题" prop="title" min-width="150"></el-table-column>
+            <el-table-column label="直播间" min-width="120">
+                <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
+            </el-table-column>
+            <el-table-column label="主播" min-width="100">
+                <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
+            </el-table-column>
+            <el-table-column label="标题" min-width="150">
+                <template slot-scope="scope">{{ maskText(scope.row.title) }}</template>
+            </el-table-column>
             <el-table-column id="copyright" label="是否自制" prop="copyright" width="120">
                 <template slot-scope="scope">
                     <el-button circle class="el-icon-check" type="success" v-if="scope.row.copyright==1"></el-button>
@@ -272,7 +281,7 @@
             <el-table-column label="投稿用户" prop="uploadUserId" width="120">
                 <template slot-scope="scope">
                     <div v-for="item in users">
-                        <span type="primary" v-if="scope.row.uploadUserId == item.id">{{item.uname}}</span>
+                        <span type="primary" v-if="scope.row.uploadUserId == item.id">{{ maskText(item.uname) }}</span>
                     </div>
                 </template>
             </el-table-column>
@@ -300,7 +309,7 @@
             <div class="dialog-title-wrapper">
                 <i class="el-icon-setting"></i>
                 <span class="el-dialog__title">房间配置</span>
-                <span class="dialog-room-info" v-if="room.uname">{{ room.uname }}</span>
+                <span class="dialog-room-info" v-if="room.uname">{{ maskText(room.uname) }}</span>
             </div>
             <div class="dialog-header-actions">
                 <el-tooltip :content="allExpanded ? '全部收起' : '全部展开'" placement="bottom">
@@ -568,8 +577,8 @@
                     <div class="section-body" v-show="section.uploadUser">
                         <el-form-item :label-width="formLabelWidth" label="上传账号">
                             <el-select v-model="room.uploadUserId" placeholder="选择用于投稿的B站账号" class="full-width-select">
-                                <el-option :key="item.id" :label="item.uname" :value="item.id" v-for="item in users">
-                                    <span style="float: left">{{ item.uname }}</span>
+                                <el-option :key="item.id" :label="privacyMode ? '***' : item.uname" :value="item.id" v-for="item in users">
+                                    <span style="float: left">{{ maskText(item.uname) }}</span>
                                     <span style="float: right; color: #8492a6; font-size: 12px">UID: {{ item.id }}</span>
                                 </el-option>
                             </el-select>
@@ -617,15 +626,15 @@
             <div class="detail-group">
                 <div class="detail-row full">
                     <label>标题</label>
-                    <span>{{ currentDetail.title }}</span>
+                    <span>{{ maskText(currentDetail.title) }}</span>
                 </div>
                 <div class="detail-row">
                     <label>主播</label>
-                    <span>{{ currentDetail.uname }}</span>
+                    <span>{{ maskText(currentDetail.uname) }}</span>
                 </div>
                 <div class="detail-row">
                     <label>房间号</label>
-                    <span>{{ currentDetail.roomId }}</span>
+                    <span>{{ maskText(currentDetail.roomId) }}</span>
                 </div>
                 <div class="detail-row">
                     <label>分区</label>
@@ -742,7 +751,7 @@
             <div class="dialog-title-wrapper">
                 <i class="el-icon-chat-line-round"></i>
                 <span class="el-dialog__title">弹幕过滤设置</span>
-                <span class="dialog-room-info" v-if="room.uname">{{ room.uname }}</span>
+                <span class="dialog-room-info" v-if="room.uname">{{ maskText(room.uname) }}</span>
             </div>
         </div>
         

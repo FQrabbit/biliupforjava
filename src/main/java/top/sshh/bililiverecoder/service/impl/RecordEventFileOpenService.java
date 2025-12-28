@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -48,12 +49,20 @@ public class RecordEventFileOpenService implements RecordEventService {
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         String relativePath = eventData.getRelativePath();
-        log.info("[FILE_OPEN] 分P开始录制 | File: {}", relativePath);
+        log.info("[BLR] {}", LogKvs.event("FileOpen")
+                .add("roomId", eventData.getRoomId())
+                .add("title", eventData.getTitle())
+                .add("filePath", relativePath));
         String sessionId = eventData.getSessionId();
         try {
             Thread.sleep(5000L);
         } catch (Exception e) {
-            log.error("Thread sleep interrupted", e);
+            log.warn("[BLR] {}", LogKvs.event("FileOpen.SleepInterrupted")
+                    .add("roomId", eventData.getRoomId())
+                    .add("sessionId", eventData.getSessionId())
+                    .add("sleepMs", 5000)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
         }
         String roomId = eventData.getRoomId();
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
@@ -61,7 +70,10 @@ public class RecordEventFileOpenService implements RecordEventService {
             synchronized (roomId.intern()) {
                 room = roomRepository.findByRoomId(eventData.getRoomId());
                 if (room == null) {
-                    log.error("[RECORD_ERROR] 录制异常：房间未创建，可能 WebHook 顺序错误 | RoomId: {}", eventData.getRoomId());
+                    log.error("[BLR] {}", LogKvs.event("FileOpen.MissingRoom")
+                            .add("roomId", eventData.getRoomId())
+                            .add("title", eventData.getTitle())
+                            .add("sessionId", eventData.getSessionId()));
                     room = new RecordRoom();
                     room.setRoomId(eventData.getRoomId());
                     room.setCreateTime(LocalDateTime.now());
@@ -86,13 +98,18 @@ public class RecordEventFileOpenService implements RecordEventService {
         if (historyOptional.isPresent()) {
             history = historyOptional.get();
             if (!eventData.getRoomId().equals(history.getRoomId())) {
-                log.error("[RECORD_ERROR] 历史记录归属错误 | RoomId: {} | History: {}", eventData.getRoomId(), JSON.toJSONString(history));
+                log.error("[BLR] {}", LogKvs.event("FileOpen.HistoryRoomMismatch")
+                        .add("roomId", eventData.getRoomId())
+                        .add("history", JSON.toJSONString(history)));
                 history = null;
             }
         }
         //异常情况判断
         if (history == null || (!"blrec".equals(eventData.getSessionId()) && !eventData.getSessionId().equals(history.getSessionId()) && history.getEndTime().isBefore(LocalDateTime.now().minusMinutes(10L)))) {
-            log.error("[RECORD_ERROR] 录制异常：历史记录未创建，可能 WebHook 顺序错误");
+            log.error("[BLR] {}", LogKvs.event("FileOpen.MissingHistory")
+                    .add("roomId", eventData.getRoomId())
+                    .add("title", eventData.getTitle())
+                    .add("sessionId", eventData.getSessionId()));
 
             history = new RecordHistory();
             history.setEventId(event.getEventId());
@@ -111,7 +128,9 @@ public class RecordEventFileOpenService implements RecordEventService {
         int partCount = historyPartRepository.countByHistoryId(history.getId());
 
         if(partCount>99){
-            log.warn("[RECORD_WARN] 分P数量达到上限(100)，强制分次投稿 | HistoryId: {}", history.getId());
+            log.warn("[BLR] {}", LogKvs.event("FileOpen.PartLimitReached")
+                    .add("historyId", history.getId())
+                    .add("limit", 100));
             //更新唯一键,更新录制状态
             history.setEventId(history.getEventId()+1);
             history.setSessionId(history.getSessionId()+1);
@@ -137,7 +156,10 @@ public class RecordEventFileOpenService implements RecordEventService {
         // 正常逻辑
         boolean existsPart = historyPartRepository.existsByFilePath(filePath);
         if(existsPart){
-            log.warn("[RECORD_WARN] 分P已存在，跳过 | FilePath: {}", filePath);
+            log.warn("[BLR] {}", LogKvs.event("FileOpen.PartExists")
+                    .add("roomId", eventData.getRoomId())
+                    .add("historyId", history.getId())
+                    .add("filePath", filePath));
             return;
         }
         RecordHistoryPart part = new RecordHistoryPart();
@@ -154,8 +176,13 @@ public class RecordEventFileOpenService implements RecordEventService {
         part.setStartTime(LocalDateTime.now());
         part.setEndTime(LocalDateTime.now());
         part = historyPartRepository.save(part);
-        log.info("[FILE_OPEN] 分P已保存至数据库 | PartId: {} | Title: {}", part.getId(), part.getTitle());
-        log.debug("[FILE_OPEN_DEBUG] Part Details: {}", JSON.toJSONString(part));
+        log.info("[BLR] {}", LogKvs.event("FileOpen.Saved")
+            .add("roomId", eventData.getRoomId())
+            .add("historyId", history.getId())
+            .add("partDbId", part.getId())
+            .add("partTitle", part.getTitle()));
+        log.debug("[BLR] {}", LogKvs.event("FileOpen.DebugPart")
+            .add("part", JSON.toJSONString(part)));
         history.setTitle(eventData.getTitle());
         history.setSessionId(eventData.getSessionId());
         history.setRecording(eventData.isRecording());

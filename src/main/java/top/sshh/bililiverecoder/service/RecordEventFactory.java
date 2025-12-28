@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.service.impl.*;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -99,7 +100,11 @@ public class RecordEventFactory {
         }
         String eventType = eventDTO.getEventType();
         if (StringUtils.isBlank(eventType)) {
-            log.error("事件类型为空");
+            log.error("[BLR] {}", LogKvs.event("RecordEvent.TypeMissing")
+                    .add("eventId", eventDTO.getEventId())
+                    .add("type", eventDTO.getType())
+                    .add("hasData", eventDTO.getData() != null)
+                    .add("hasEventData", eventDTO.getEventData() != null));
             return;
         }
         RecordEventService eventService = this.getEventService(eventType);

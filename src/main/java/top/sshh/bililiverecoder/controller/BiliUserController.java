@@ -16,6 +16,7 @@ import top.sshh.bililiverecoder.entity.BiliBiliUser;
 import top.sshh.bililiverecoder.entity.data.BiliSessionDto;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -146,7 +147,9 @@ public class BiliUserController {
                 biliUser.setUpdateTime(LocalDateTime.now());
                 String userInfo = BiliApi.appMyInfo(biliUser);
                 biliUser.setUname(JsonPath.read(userInfo, "data.uname"));
-                log.info("{} 登录成功!!!", biliUser.getUname());
+                log.info("[BLR] {}", LogKvs.event("BiliUser.Login.Success")
+                    .add("uid", biliUser.getUid())
+                    .add("uname", biliUser.getUname()));
                 biliUserRepository.save(biliUser);
                 
                 session.status = "success";
@@ -180,7 +183,10 @@ public class BiliUserController {
             }
             
         } catch (Exception e) {
-            log.error("检查登录状态异常", e);
+            log.error("[BLR] {}", LogKvs.event("BiliUser.LoginCheck.Error")
+                    .add("keyLen", key == null ? 0 : key.length())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             result.put("status", "pending");
             result.put("message", "检查中...");
         }

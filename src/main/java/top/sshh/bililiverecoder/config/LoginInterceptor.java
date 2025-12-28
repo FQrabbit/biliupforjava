@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.util.Base64;
 
@@ -15,10 +16,10 @@ public class LoginInterceptor implements HandlerInterceptor {
         if(StringUtils.isNotBlank(userName) && StringUtils.isNotBlank(password)){
             Base64.Encoder encoder = Base64.getEncoder();
             this.authString = "Basic " + encoder.encodeToString((userName+":"+password).getBytes());
-            log.info("已启用 Basic 认证");
+            log.info("[BLR] {}", LogKvs.event("Auth.Basic.Enabled"));
         }else {
             this.authString = "";
-            log.warn("未配置用户名或密码，Basic 认证已禁用，系统存在安全风险！");
+            log.warn("[BLR] {}", LogKvs.event("Auth.Basic.DisabledByConfig"));
         }
     }
 
@@ -35,7 +36,9 @@ public class LoginInterceptor implements HandlerInterceptor {
             return true;
         }
         
-        log.warn("[AUTH_FAILED] 认证失败 | IP: {} | Path: {}", request.getRemoteAddr(), request.getRequestURI());
+        log.warn("[BLR] {}", LogKvs.event("Auth.Basic.Failed")
+            .add("ip", request.getRemoteAddr())
+            .add("path", request.getRequestURI()));
         
         response.setHeader("WWW-Authenticate", "Basic realm=\"Restricted\"");
         response.setStatus(401);

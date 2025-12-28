@@ -81,7 +81,9 @@ public class BiliApi {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to load/save device IDs", e);
+            log.error("[BLR] {}", LogKvs.event("BiliApi.DeviceIds.LoadOrSaveFailed")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             if (StringUtils.isBlank(BUVID)) BUVID = "XX" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
             if (StringUtils.isBlank(DEVICE_ID)) DEVICE_ID = UUID.randomUUID().toString().replace("-", "");
         }
@@ -122,8 +124,13 @@ public class BiliApi {
                     try {
                         return e.getKey() + "=" + URLEncoder.encode(e.getValue(), String.valueOf(StandardCharsets.UTF_8));
                     } catch (UnsupportedEncodingException ex) {
-                        ex.printStackTrace();
-                        return null;
+                        log.warn("[BLR] {}", LogKvs.event("BiliApi.Sign.UrlEncodeFailed")
+                                .add("key", e.getKey())
+                                .add("valueLen", e.getValue() == null ? 0 : e.getValue().length())
+                                .addIfNotBlank("err", ex.getMessage())
+                                .add("ex", ex.getClass().getSimpleName()), ex);
+                        // 理论上 UTF-8 不会失败；兜底返回空值避免 NPE
+                        return e.getKey() + "=";
                     }
                 })
                 .collect(Collectors.joining("&"));
@@ -146,7 +153,9 @@ public class BiliApi {
             byte[] encryptedMessageBytes = encryptCipher.doFinal(secretMessageBytes);
             return Base64.getEncoder().encodeToString(encryptedMessageBytes);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("[BLR] {}", LogKvs.event("BiliApi.Rsa.Failed")
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             throw new RuntimeException(e.getMessage());
         }
     }
@@ -556,8 +565,11 @@ public class BiliApi {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException(e.getMessage());
+            log.error("[BLR] {}", LogKvs.event("Login.WebQr.PollFailed")
+                    .add("qrcodeKey", qrcodeKey)
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            throw new RuntimeException("loginOnWeb failed", e);
         }
         return null;
     }
@@ -650,7 +662,8 @@ public class BiliApi {
     }
 
     public static void main(String[] args) {
-        log.info("QR URL: {}", generateQRUrlTV());
+        log.info("[BLR] {}", LogKvs.event("BiliApi.QrUrl.Generated")
+                .add("qrUrl", generateQRUrlTV()));
     }
 
 

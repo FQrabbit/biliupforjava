@@ -8,6 +8,7 @@ import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 @Slf4j
 @Component
@@ -19,7 +20,7 @@ public class RoomStatusSyncJob {
     // 启动后10秒执行一次，之后每隔60分钟执行一次
     @Scheduled(fixedDelay = 3600000, initialDelay = 10000)
     public void syncRoomStatus() {
-        log.info("开始执行直播间状态同步任务(兜底机制)...");
+        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Start"));
         for (RecordRoom room : roomRepository.findAll()) {
             try {
                 // 避免请求过快，每10秒请求一个房间，降低API请求压力
@@ -32,7 +33,10 @@ public class RoomStatusSyncJob {
                     if (room.isStreaming() != isLive) {
                         room.setStreaming(isLive);
                         changed = true;
-                        log.info("同步直播间状态: {} -> {}", room.getUname(), isLive ? "直播中" : "未直播");
+                        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.StreamingChanged")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("streaming", isLive));
                     }
 
                     // 如果直播结束，强制设置录制状态为false，防止状态卡死
@@ -40,23 +44,39 @@ public class RoomStatusSyncJob {
                     if (!isLive && room.isRecording()) {
                         room.setRecording(false);
                         changed = true;
-                        log.info("同步直播间状态: {} 直播已结束，强制重置录制状态为未录制", room.getUname());
+                        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetRecording")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname()));
                     }
                     
                     // 更新标题，方便查看
                     if(response.getData().getTitle() != null && !response.getData().getTitle().equals(room.getTitle())){
                          room.setTitle(response.getData().getTitle());
                          changed = true;
+                        log.debug("[BLR] {}", LogKvs.event("RoomStatusSyncJob.TitleChanged")
+                               .add("roomId", room.getRoomId())
+                               .add("uname", room.getUname()));
                     }
 
                     if (changed) {
                         roomRepository.save(room);
                     }
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("[BLR] {}", LogKvs.event("RoomStatusSyncJob.SleepInterrupted")
+                        .add("waitMs", 10000)
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname()), e);
+                break;
             } catch (Exception e) {
-                log.error("同步直播间状态失败: {}", room.getRoomId(), e);
+                log.error("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Failed")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .addIfNotBlank("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
             }
         }
-        log.info("直播间状态同步任务完成");
+        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Done"));
     }
 }
