@@ -39,6 +39,68 @@ html, body {
     gap: 16px;
 }
 
+.card-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+    flex-wrap: wrap;
+}
+
+.card-legend-compact {
+    display: none;
+    align-items: center;
+}
+
+.legend-compact-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: var(--radius-md);
+    background: rgba(144, 147, 153, 0.12);
+    border: 1px solid var(--border-light);
+    line-height: 1;
+    color: var(--text-secondary);
+}
+
+.legend-compact-text {
+    margin-left: 2px;
+    font-size: 12px;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: var(--radius-md);
+    background: rgba(144, 147, 153, 0.12);
+    border: 1px solid var(--border-light);
+    line-height: 1;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: 0 0 10px;
+}
+
+.legend-dot.legend-processing {
+    background: var(--warning-color);
+}
+
+.legend-dot.legend-failed {
+    background: var(--danger-color);
+}
+
+.legend-dot.legend-success {
+    background: var(--success-color);
+}
+
 .back-btn {
     display: flex;
     align-items: center;
@@ -79,6 +141,11 @@ html, body {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .card-legend { display: none; }
+    .card-legend-compact { display: inline-flex; }
 }
 
 .view-toggle {
@@ -640,6 +707,41 @@ html, body {
     color: var(--text-primary);
     flex: 1;
     word-break: break-all;
+}
+
+/* 详情弹窗：总时长分档颜色 */
+.detail-row .detail-duration {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+
+.detail-row .detail-duration.duration-short {
+    color: var(--success-color);
+}
+
+.detail-row .detail-duration.duration-medium {
+    color: var(--warning-color);
+}
+
+.detail-row .detail-duration.duration-long {
+    color: var(--warning-color);
+}
+
+.detail-row .detail-duration.duration-very-long {
+    color: var(--danger-color);
+}
+
+.detail-row .detail-duration .duration-badge {
+    margin-left: 4px;
+    transform-origin: center;
+    animation: duration-badge-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes duration-badge-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.06); opacity: 0.92; }
 }
 
 .detail-row .el-tag {

@@ -27,6 +27,43 @@
                 <i class="el-icon-time"></i>
                 <span>录制历史</span>
             </h1>
+
+            <div v-if="viewMode === 'card'" class="card-legend" aria-label="卡片颜色说明">
+                <el-tooltip effect="dark" content="审核中 / 转码中 / 已提交" placement="bottom">
+                    <div class="legend-item">
+                        <span class="legend-dot legend-processing"></span>
+                        <span>处理中</span>
+                    </div>
+                </el-tooltip>
+                <el-tooltip effect="dark" content="被退回 / 被锁定 / 已删除" placement="bottom">
+                    <div class="legend-item">
+                        <span class="legend-dot legend-failed"></span>
+                        <span>失败</span>
+                    </div>
+                </el-tooltip>
+                <el-tooltip effect="dark" content="通过 / 仅自己可见" placement="bottom">
+                    <div class="legend-item">
+                        <span class="legend-dot legend-success"></span>
+                        <span>成功</span>
+                    </div>
+                </el-tooltip>
+            </div>
+
+            <div v-if="viewMode === 'card'" class="card-legend-compact" aria-label="卡片颜色说明(移动端)">
+                <el-tooltip effect="dark" placement="bottom">
+                    <div slot="content">
+                        <div>处理中：审核中 / 转码中 / 已提交</div>
+                        <div>失败：被退回 / 被锁定 / 已删除</div>
+                        <div>成功：通过 / 仅自己可见</div>
+                    </div>
+                    <div class="legend-compact-pill">
+                        <span class="legend-dot legend-processing"></span>
+                        <span class="legend-dot legend-failed"></span>
+                        <span class="legend-dot legend-success"></span>
+                        <span class="legend-compact-text">颜色说明</span>
+                    </div>
+                </el-tooltip>
+            </div>
         </div>
         <div class="header-actions">
             <div class="view-toggle">
@@ -374,7 +411,7 @@
     </main>
 
     <!-- 详情弹窗 -->
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog">
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" :destroy-on-close="true" @closed="currentDetail = {}">
         <div class="detail-content" v-if="currentDetail.id">
             <div class="detail-group">
                 <div class="detail-row full">
@@ -408,7 +445,11 @@
                 </div>
                 <div class="detail-row">
                     <label>总时长</label>
-                    <span style="color: var(--warning-color); font-weight: 500;"><i class="el-icon-time"></i> {{ formatDuration(currentDetail.partDuration) }}</span>
+                    <span class="detail-duration" :class="getDurationClass(currentDetail.partDuration)">
+                        <i class="el-icon-time"></i>
+                        <span>{{ formatDuration(currentDetail.partDuration) }}</span>
+                        <el-tag v-if="isVeryLongDuration(currentDetail.partDuration)" size="mini" type="danger" effect="dark" class="duration-badge">铁人</el-tag>
+                    </span>
                 </div>
                 <div class="detail-row">
                     <label>分P数量</label>
@@ -597,6 +638,18 @@
             window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            getDurationClass: function(seconds) {
+                const sec = Number(seconds) || 0;
+                const hours = sec / 3600;
+                if (hours < 2) return 'duration-short';
+                if (hours < 6) return 'duration-medium';
+                if (hours < 10) return 'duration-long';
+                return 'duration-very-long';
+            },
+            isVeryLongDuration: function(seconds) {
+                const sec = Number(seconds) || 0;
+                return (sec / 3600) >= 10;
+            },
             formatGiveUpFilesTooltip: function(files) {
                 if (!files || !files.length) return '存在已放弃的分P（未返回文件列表）';
                 const names = files.map(p => {
@@ -752,8 +805,12 @@
                 }
             },
             showDetail: function(item) {
-                this.currentDetail = item;
+                // 先清空再赋值，避免 Element Dialog 复用导致的短暂残影
+                this.currentDetail = {};
                 this.detailDialogVisible = true;
+                this.$nextTick(() => {
+                    this.currentDetail = JSON.parse(JSON.stringify(item || {}));
+                });
             },
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;

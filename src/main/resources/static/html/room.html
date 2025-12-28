@@ -26,6 +26,45 @@
             <div class="room-header-title">
                 <i class="el-icon-video-camera icon"></i>
                 <h2>直播间监控</h2>
+
+                <transition name="room-legend-collapse">
+                    <div v-if="viewMode === 'card' && !legendCollapsed" class="room-card-legend" aria-label="卡片颜色说明">
+                        <el-tooltip effect="dark" content="直播中（未录制）" placement="bottom">
+                            <div class="room-legend-item">
+                                <span class="room-legend-dot legend-streaming"></span>
+                                <span>直播中</span>
+                            </div>
+                        </el-tooltip>
+                        <el-tooltip effect="dark" content="录制中（优先显示此状态）" placement="bottom">
+                            <div class="room-legend-item">
+                                <span class="room-legend-dot legend-recording"></span>
+                                <span>录制中</span>
+                            </div>
+                        </el-tooltip>
+                    </div>
+                </transition>
+
+                <transition name="room-legend-collapse">
+                    <div v-if="viewMode === 'card' && !legendCollapsed" class="room-card-legend-compact" aria-label="卡片颜色说明(移动端)">
+                        <el-tooltip effect="dark" placement="bottom">
+                            <div slot="content">
+                                <div>红色：直播中（未录制）</div>
+                                <div>绿色：录制中（优先）</div>
+                            </div>
+                            <div class="room-legend-compact-pill">
+                                <span class="room-legend-dot legend-streaming"></span>
+                                <span class="room-legend-dot legend-recording"></span>
+                                <span class="room-legend-compact-text">颜色说明</span>
+                            </div>
+                        </el-tooltip>
+                    </div>
+                </transition>
+
+                <el-tooltip v-if="viewMode === 'card'" effect="dark" :content="legendCollapsed ? '显示颜色说明' : '隐藏颜色说明'" placement="bottom">
+                    <el-button type="text" class="room-legend-toggle" @click.stop="legendCollapsed = !legendCollapsed">
+                        <i :class="legendCollapsed ? 'el-icon-arrow-right' : 'el-icon-arrow-left'"></i>
+                    </el-button>
+                </el-tooltip>
             </div>
             <div class="room-stats">
                 <div class="room-stat-item">
@@ -2403,6 +2442,7 @@
             users: [],
             isMobile: window.innerWidth <= 768,
             viewMode: 'card',
+            legendCollapsed: false,
             section: {
                 basic: false,
                 upload: false,
