@@ -423,154 +423,188 @@
     </main>
 
     <!-- 详情弹窗 -->
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" :destroy-on-close="true" @closed="onDetailClosed">
-        <div class="detail-content" v-if="currentDetail.id">
-            <div class="detail-group">
-                <div class="detail-row full">
-                    <label>标题</label>
-                    <span style="font-weight: bold; font-size: 15px;">{{ maskText(currentDetail.title) }}</span>
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" :destroy-on-close="true" @closed="onDetailClosed">
+        <div class="detail-content-modern" v-if="currentDetail.id">
+            <!-- 头部信息 -->
+            <div class="detail-header-modern">
+                <div class="detail-header-main">
+                    <h2 class="detail-title">{{ maskText(currentDetail.title) }}</h2>
+                    <div class="detail-meta-row">
+                        <el-tag size="small" type="info" effect="plain" class="meta-tag">
+                            <i class="el-icon-user"></i> {{ maskText(currentDetail.roomName) }}
+                        </el-tag>
+                        <span class="meta-divider"></span>
+                        <span class="meta-time">
+                            <i class="el-icon-time"></i> {{ formatDateTime(currentDetail.startTime) }}
+                            <span v-if="currentDetail.endTime"> - {{ formatDateTime(currentDetail.endTime) }}</span>
+                        </span>
+                    </div>
                 </div>
-                <div class="detail-row">
-                    <label>主播</label>
-                    <el-tag size="small" type="info" effect="plain">{{ maskText(currentDetail.roomName) }}</el-tag>
-                </div>
-                <div class="detail-row">
-                    <label>BV号</label>
-                    <el-link type="primary" :href="'https://www.bilibili.com/video/' + currentDetail.bvId" target="_blank" v-if="currentDetail.bvId" :underline="false">{{ maskText(currentDetail.bvId) }} <i class="el-icon-view el-icon--right"></i></el-link>
-                    <span v-else style="color: var(--text-disabled);">未生成</span>
-                </div>
-                <div class="detail-row">
-                    <label>开始时间</label>
-                    <span>{{ formatDateTime(currentDetail.startTime) }}</span>
-                </div>
-                <div class="detail-row">
-                    <label>结束时间</label>
-                    <span>{{ formatDateTime(currentDetail.endTime) }}</span>
-                </div>
-            </div>
-
-            <el-divider content-position="left">数据统计</el-divider>
-            <div class="detail-group">
-                <div class="detail-row">
-                    <label>文件大小</label>
-                    <el-tag size="small" :type="getFileSizeColorType(currentDetail.fileSize)" effect="light">{{ formatFileSize(currentDetail.fileSize) }}</el-tag>
-                </div>
-                <div class="detail-row">
-                    <label>总时长</label>
-                    <span class="detail-duration" :class="getDurationClass(currentDetail.partDuration)">
-                        <i class="el-icon-time"></i>
-                        <span>{{ formatDuration(currentDetail.partDuration) }}</span>
-                        <el-tag v-if="isVeryLongDuration(currentDetail.partDuration)" size="mini" type="danger" effect="dark" class="duration-badge">铁人</el-tag>
-                    </span>
-                </div>
-                <div class="detail-row">
-                    <label>分P数量</label>
-                    <span>
-                        <span style="font-weight: bold; font-size: 16px;">{{ currentDetail.partCount }}</span>
-                        <span style="font-size: 12px; color: var(--text-disabled);"> (录:{{currentDetail.recordPartCount}} / 传:{{currentDetail.uploadPartCount}})</span>
-                    </span>
-                </div>
-                <div class="detail-row">
-                    <label>弹幕数量</label>
-                    <span>
-                        <span style="font-weight: bold; font-size: 16px;">{{ currentDetail.msgCount }}</span>
-                        <span style="font-size: 12px; color: var(--success-color);"> (成功:{{currentDetail.successMsgCount}})</span>
-                    </span>
-                </div>
-                <div class="detail-row" v-if="currentDetail.giveUpPartCount && currentDetail.giveUpPartCount > 0">
-                    <label>异常分P</label>
-                    <span>
-                        <el-tag size="mini" type="danger" effect="dark">{{ currentDetail.giveUpPartCount }} 个已放弃</el-tag>
-                        <span style="font-size: 12px; color: var(--text-disabled); margin-left: 8px;">(转码失败/文件异常，已停止重试)</span>
-                    </span>
-                </div>
-                <div class="detail-row full" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
-                    <label>异常文件</label>
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
-                        <el-tooltip v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx" effect="dark" :content="maskTooltip(p)" placement="top">
-                            <el-tag size="mini" type="danger" effect="plain">{{ maskText(((p || '').split('/').pop() || p)) }}</el-tag>
-                        </el-tooltip>
+                <div class="detail-header-side">
+                    <div class="detail-bvid-box" v-if="currentDetail.bvId">
+                        <span class="bvid-label">BV号</span>
+                        <a :href="'https://www.bilibili.com/video/' + currentDetail.bvId" target="_blank" class="bvid-link">
+                            {{ maskText(currentDetail.bvId) }} <i class="el-icon-link"></i>
+                        </a>
+                    </div>
+                    <div class="detail-bvid-box empty" v-else>
+                        <span class="bvid-label">BV号</span>
+                        <span class="bvid-text">未生成</span>
                     </div>
                 </div>
             </div>
 
-            <el-divider content-position="left">状态</el-divider>
-            <div class="detail-group">
-                <div class="detail-row">
-                    <label>上传状态</label>
-                    <el-tag size="mini" type="success" effect="dark" v-if="currentDetail.upload">已上传</el-tag>
-                    <el-tag size="mini" type="info" effect="dark" v-else>未上传</el-tag>
+            <!-- 状态栏 -->
+            <div class="detail-status-bar">
+                <div class="status-item-modern" :class="{'active': currentDetail.upload}">
+                    <div class="status-icon"><i class="el-icon-upload2"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">上传状态</div>
+                        <div class="status-value">{{ currentDetail.upload ? '已上传' : '未上传' }}</div>
+                    </div>
                 </div>
-                <div class="detail-row">
-                    <label>发布状态</label>
-                    <el-tag size="mini" type="success" effect="dark" v-if="currentDetail.publish">已发布</el-tag>
-                    <el-tag size="mini" type="info" effect="dark" v-else>未发布</el-tag>
+                <div class="status-item-modern" :class="{'active': currentDetail.publish}">
+                    <div class="status-icon"><i class="el-icon-s-release"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">发布状态</div>
+                        <div class="status-value">{{ currentDetail.publish ? '已发布' : '未发布' }}</div>
+                    </div>
                 </div>
-                <div class="detail-row">
-                    <label>录制状态</label>
-                    <el-tag size="mini" :type="isActuallyRecording(currentDetail) ? 'warning' : 'info'" effect="dark">{{ isActuallyRecording(currentDetail) ? '录制中' : '未录制' }}</el-tag>
-                    <el-tag v-if="hasRecordingMismatch(currentDetail)" size="mini" type="warning" effect="plain" style="margin-left: 8px;">状态可能未同步</el-tag>
-                </div>
-                <div class="detail-row">
-                    <label>审核状态</label>
-                    <el-tag size="mini" type="info" effect="dark" v-if="!currentDetail.publish">未审核</el-tag>
-                    <el-tag size="mini" type="success" effect="dark" v-else-if="currentDetail.code == 0">通过</el-tag>
-                    <el-tag size="mini" type="success" effect="dark" v-else-if="currentDetail.code == -50">仅自己可见</el-tag>
-                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -1">审核中</el-tag>
-                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -2">被退回</el-tag>
-                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -4">被锁定</el-tag>
-                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -9">转码中</el-tag>
-                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -30">已提交</el-tag>
-                    <el-tag size="mini" type="warning" effect="dark" v-else-if="currentDetail.code == -40">定时发布</el-tag>
-                    <el-tag size="mini" type="danger" effect="dark" v-else-if="currentDetail.code == -100">已删除</el-tag>
-                    <el-tag size="mini" type="danger" effect="dark" v-else>未通过({{currentDetail.code}})</el-tag>
-                </div>
-            </div>
-
-            <el-divider content-position="left">上传进度</el-divider>
-            <div class="detail-group">
-                <div class="detail-row full">
-                    <label>整体</label>
-                    <div style="flex: 1; min-width: 0;">
-                        <el-progress
-                                :percentage="calcOverallUploadPercent()"
-                                :status="calcOverallUploadStatus()">
-                        </el-progress>
-                        <div style="font-size: 12px; color: var(--text-disabled); margin-top: 4px;" v-if="historyUploadProgress">
-                            <span>{{ calcOverallUploadText() }}</span>
+                <div class="status-item-modern" :class="{'active': isActuallyRecording(currentDetail), 'warning': isActuallyRecording(currentDetail)}">
+                    <div class="status-icon"><i class="el-icon-video-camera"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">录制状态</div>
+                        <div class="status-value">
+                            {{ isActuallyRecording(currentDetail) ? '录制中' : '已结束' }}
+                            <span v-if="hasRecordingMismatch(currentDetail)" class="status-badge-mini">未同步</span>
                         </div>
                     </div>
                 </div>
-
-                <div class="detail-row full" v-for="p in (historyUploadProgress ? historyUploadProgress.items : [])" :key="p.partId">
-                    <label>P{{ formatProgressPage(p.page) }}</label>
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="display:flex; gap: 8px; align-items: center; justify-content: space-between;">
-                            <el-tag size="mini" :type="progressTagType(p.state)" effect="plain">{{ p.state }}</el-tag>
-                            <span style="font-size: 12px; color: var(--text-disabled);">{{ p.chunkDone }}/{{ p.chunkTotal }}</span>
-                        </div>
-                        <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state, p.percent || 0)"></el-progress>
-                        <div v-if="p.stateMsg" style="font-size: 12px; color: var(--text-disabled); margin-top: 4px;">{{ p.stateMsg }}</div>
+                <div class="status-item-modern" :class="getAuditStatusClass(currentDetail)">
+                    <div class="status-icon"><i class="el-icon-s-check"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">审核状态</div>
+                        <div class="status-value">{{ getAuditStatusText(currentDetail) }}</div>
                     </div>
                 </div>
             </div>
-            
-            <el-divider content-position="left">操作</el-divider>
-            <div class="detail-actions">
-                <el-button @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
-                <el-button @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
-                <el-button @click="rePublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
-                <el-button @click="highEnergyCutPublish(currentDetail.id)" size="small" type="success" plain icon="el-icon-video-play">高能片段</el-button>
-                <el-button @click="updatePartStatus(currentDetail.id)" size="small" plain icon="el-icon-video-pause">结束录制</el-button>
-                <el-button @click="touchPublish(currentDetail.id)" size="small" plain icon="el-icon-s-promotion">触发发布</el-button>
-                <el-button @click="updatePublishStatus(currentDetail.id)" size="small" plain icon="el-icon-refresh-left">重置状态</el-button>
-                <el-button @click="reloadHistoryMsg(currentDetail.id)" size="small" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
-                <el-button @click="deleteHistoryMsg(currentDetail.id)" size="small" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
-                <el-button @click="deleteHistory(currentDetail.id)" size="small" type="danger" icon="el-icon-delete">删除记录</el-button>
+
+            <!-- 数据统计 -->
+            <div class="detail-section-title">数据统计</div>
+            <div class="detail-stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">文件大小</div>
+                    <div class="stat-value" :class="getFileSizeColorType(currentDetail.fileSize)">
+                        {{ formatFileSize(currentDetail.fileSize) }}
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">总时长</div>
+                    <div class="stat-value">
+                        {{ formatDuration(currentDetail.partDuration) }}
+                        <el-tag v-if="isVeryLongDuration(currentDetail.partDuration)" size="mini" type="danger" effect="dark" style="margin-left: 5px;">铁人</el-tag>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">分P数量</div>
+                    <div class="stat-value">
+                        {{ currentDetail.partCount }}
+                        <span class="stat-sub">录:{{currentDetail.recordPartCount}} / 传:{{currentDetail.uploadPartCount}}</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">弹幕数量</div>
+                    <div class="stat-value">
+                        {{ currentDetail.msgCount }}
+                        <span class="stat-sub success">成功:{{currentDetail.successMsgCount}}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 异常信息 -->
+            <div class="detail-exception-box" v-if="currentDetail.giveUpPartCount && currentDetail.giveUpPartCount > 0">
+                <div class="exception-header">
+                    <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartCount }})
+                </div>
+                <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
+                    <el-tooltip v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx" effect="dark" :content="maskTooltip(p)" placement="top">
+                        <span class="exception-item">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                    </el-tooltip>
+                </div>
+            </div>
+
+            <!-- 上传进度 -->
+            <div class="detail-section-title" style="margin-top: 20px;">上传进度</div>
+            <div class="detail-progress-container">
+                <!-- 整体进度 -->
+                <div class="progress-row-modern main">
+                    <div class="progress-info">
+                        <span class="progress-label">整体进度</span>
+                        <span class="progress-text" v-if="historyUploadProgress">{{ calcOverallUploadText() }}</span>
+                    </div>
+                    <div class="progress-bar-wrapper">
+                        <el-progress :percentage="calcOverallUploadPercent()" :status="calcOverallUploadStatus()" :stroke-width="10" :show-text="false"></el-progress>
+                    </div>
+                    <div class="progress-main-percent">{{ calcOverallUploadPercent() }}%</div>
+                </div>
+
+                <!-- 分P进度 -->
+                <div class="progress-list-modern">
+                    <div class="progress-row-modern item" v-for="p in (historyUploadProgress ? historyUploadProgress.items : [])" :key="p.partId">
+                        <div class="progress-info-mini">
+                            <span class="part-badge">P{{ formatProgressPage(p.page) }}</span>
+                            <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
+                            <span class="part-meta">{{ p.chunkDone }}/{{ p.chunkTotal }}</span>
+                        </div>
+                        <div class="progress-bar-mini">
+                            <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
+                        </div>
+                        <div class="progress-percent-text">{{ (p.percent || 0) }}%</div>
+                        <div v-if="p.stateMsg" class="progress-msg-mini">{{ p.stateMsg }}</div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div slot="footer" class="dialog-footer">
-            <el-button @click="detailDialogVisible = false">关 闭</el-button>
+        <div slot="footer" class="detail-footer">
+            <div class="detail-footer-actions" v-if="currentDetail.id">
+                <!-- 常用操作 -->
+                <div class="action-group-primary">
+                    <el-button @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
+                    <el-button @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
+                </div>
+
+                <!-- 更多操作开关 -->
+                <div class="action-group-more-toggle">
+                    <el-button @click="showMoreActions = !showMoreActions" size="small" plain :icon="showMoreActions ? 'el-icon-arrow-left' : 'el-icon-more'">
+                        {{ showMoreActions ? '收起' : '更多操作' }}
+                    </el-button>
+                </div>
+
+                <!-- 更多操作面板 (动画展开) -->
+                <transition name="actions-slide">
+                    <div class="action-group-secondary" v-show="showMoreActions">
+                        <div class="action-sub-group">
+                            <span class="action-group-label">发布管理</span>
+                            <el-button @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
+                            <el-button @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
+                            <el-button @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
+                            <el-button @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
+                        </div>
+                        <div class="action-divider"></div>
+                        <div class="action-sub-group">
+                            <span class="action-group-label">录制与数据</span>
+                            <el-button @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
+                            <el-button @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
+                            <el-button @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
+                        </div>
+                        <div class="action-divider"></div>
+                        <div class="action-sub-group">
+                            <el-button @click="deleteHistory(currentDetail.id)" size="mini" type="danger" icon="el-icon-delete">删除记录</el-button>
+                        </div>
+                    </div>
+                </transition>
+            </div>
+            <el-button @click="detailDialogVisible = false" class="close-btn">关 闭</el-button>
         </div>
     </el-dialog>
 
@@ -631,9 +665,10 @@
             userChangedPageSize: false,
             pageSizes: [5, 10, 25, 50, 100],
             filterExpanded: false,
-            quickFilter: null
-            ,historyUploadProgress: null
-            ,progressTimer: null
+            quickFilter: null,
+            historyUploadProgress: null,
+            progressTimer: null,
+            showMoreActions: false
         },
         computed: {
             isPublishLockedByCode: function() {
@@ -680,6 +715,25 @@
             window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            getAuditStatusClass: function(item) {
+                if (!item.publish) return '';
+                if (item.code == 0 || item.code == -50) return 'success';
+                if (item.code == -1 || item.code == -9 || item.code == -30 || item.code == -40) return 'warning';
+                return 'danger';
+            },
+            getAuditStatusText: function(item) {
+                if (!item.publish) return '未审核';
+                if (item.code == 0) return '通过';
+                if (item.code == -50) return '仅自己可见';
+                if (item.code == -1) return '审核中';
+                if (item.code == -2) return '被退回';
+                if (item.code == -4) return '被锁定';
+                if (item.code == -9) return '转码中';
+                if (item.code == -30) return '已提交';
+                if (item.code == -40) return '定时发布';
+                if (item.code == -100) return '已删除';
+                return '未通过(' + item.code + ')';
+            },
             getDurationClass: function(seconds) {
                 const sec = Number(seconds) || 0;
                 const hours = sec / 3600;
@@ -863,6 +917,7 @@
                 this.stopProgressPolling();
                 this.historyUploadProgress = null;
                 this.currentDetail = {};
+                this.showMoreActions = false;
             },
             startProgressPolling: function(historyId) {
                 const _this = this;
@@ -978,6 +1033,13 @@
                 if (state === 'SUCCESS') return 'success';
                 if (state === 'RETRY_WAIT') return 'warning';
                 return 'info';
+            },
+            formatProgressState: function(state) {
+                if (state === 'UPLOADING') return '分片上传中';
+                if (state === 'RETRY_WAIT') return '等待重试';
+                if (state === 'FAILED') return '失败';
+                if (state === 'SUCCESS') return '成功';
+                return state || '-';
             },
             progressBarStatus: function(state, percent) {
                 if (state === 'FAILED') return 'exception';
