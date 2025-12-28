@@ -6,6 +6,7 @@ public enum UploadEnums {
     CS_BDA2("CS_BDA2", "upos", "cs", "bda2", "ugcupos/bup"),
     CS_BLDSA("CS_BLDSA", "upos", "cs", "bldsa", "ugcupos/bup"),
     CS_TX("CS_TX", "upos", "cs", "tx", "ugcupos/bup"),
+    CS_ESTX("CS_ESTX(新增-腾讯云)", "upos", "cs", "estx", "ugcupos/bup"),
     CS_TXA("CS_TXA", "upos", "cs", "txa", "ugcupos/bup"),
     CS_ALIA("CS_ALIA", "upos", "cs", "alia", "ugcupos/bup"),
     JD_BD("JD_BD", "upos", "cs", "bd", "ugcupos/bup"),
