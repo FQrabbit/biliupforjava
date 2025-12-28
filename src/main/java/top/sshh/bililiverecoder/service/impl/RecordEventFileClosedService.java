@@ -188,8 +188,13 @@ public class RecordEventFileClosedService implements RecordEventService {
             if (fileSize > 1024 * 1024 * room.getFileSizeLimit() && part.getDuration() > room.getDurationLimit()) {
                 uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
             } else {
-                log.error("文件大小{}小于{},或时长{}小于{}，删除。historyId={} bvid={} partId={}",
-                        fileSize, room.getFileSizeLimit(), part.getDuration(), room.getDurationLimit(),
+                double fileSizeMb = fileSize / 1024d / 1024d;
+                double durationSec = part.getDuration();
+                log.error("文件未达到上传阈值，删除。size={}MB(limit={}MB) duration={}s(limit={}s) historyId={} bvid={} partId={}",
+                        String.format(java.util.Locale.ROOT, "%.3f", fileSizeMb),
+                        room.getFileSizeLimit(),
+                        String.format(java.util.Locale.ROOT, "%.3f", durationSec),
+                        room.getDurationLimit(),
                         history.getId(), history.getBvId(), part.getId());
                 historyPartRepository.delete(part);
                 return;

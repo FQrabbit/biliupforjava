@@ -239,7 +239,9 @@
                                 <span class="status-chip success" v-if="item.publish">已发布</span>
                                 <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
                                 <span class="status-chip warn" v-if="isActuallyRecording(item)">录制中</span>
-                                <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;" v-if="item.giveUpPartCount && item.giveUpPartCount > 0">异常分P {{ item.giveUpPartCount }}</span>
+                                <el-tooltip v-if="item.giveUpPartCount && item.giveUpPartCount > 0" effect="dark" :content="formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
+                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ item.giveUpPartCount }}</span>
+                                </el-tooltip>
                             </div>
                             <div class="card-meta">
                                 <span class="meta-chip">{{ formatDateTime(item.startTime) }}</span>
@@ -426,7 +428,7 @@
                     <label>异常分P</label>
                     <span>
                         <el-tag size="mini" type="danger" effect="dark">{{ currentDetail.giveUpPartCount }} 个已放弃</el-tag>
-                        <span style="font-size: 12px; color: var(--text-disabled); margin-left: 8px;">(无法读取大小/时长，已停止重试)</span>
+                        <span style="font-size: 12px; color: var(--text-disabled); margin-left: 8px;">(转码失败/文件异常，已停止重试)</span>
                     </span>
                 </div>
                 <div class="detail-row full" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
@@ -595,6 +597,17 @@
             window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            formatGiveUpFilesTooltip: function(files) {
+                if (!files || !files.length) return '存在已放弃的分P（未返回文件列表）';
+                const names = files.map(p => {
+                    if (!p) return '';
+                    const seg = String(p).split('/');
+                    return seg[seg.length - 1] || String(p);
+                }).filter(Boolean);
+                if (!names.length) return '存在已放弃的分P（未返回文件列表）';
+                if (names.length <= 5) return '异常文件：' + names.join('，');
+                return '异常文件：' + names.slice(0, 5).join('，') + ' … 等' + names.length + '个';
+            },
             formatDateTime: function(val) {
                 if (!val) return '';
                 // 兼容后端常见的 LocalDateTime 字符串（可能包含 'T' 和毫秒/纳秒）
