@@ -533,24 +533,23 @@
                     <label>整体</label>
                     <div style="flex: 1; min-width: 0;">
                         <el-progress
-                                :percentage="(historyUploadProgress && historyUploadProgress.overallPercent) ? historyUploadProgress.overallPercent : 0"
-                                :status="(historyUploadProgress && historyUploadProgress.activeCount > 0) ? null : 'success'">
+                                :percentage="calcOverallUploadPercent()"
+                                :status="calcOverallUploadStatus()">
                         </el-progress>
                         <div style="font-size: 12px; color: var(--text-disabled); margin-top: 4px;" v-if="historyUploadProgress">
-                            <span v-if="historyUploadProgress.activeCount > 0">上传中：{{ historyUploadProgress.activeCount }} 个分P</span>
-                            <span v-else>当前无上传中的分P</span>
+                            <span>{{ calcOverallUploadText() }}</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="detail-row full" v-for="p in (historyUploadProgress ? historyUploadProgress.items : [])" :key="p.partId">
-                    <label>P{{ p.page }}</label>
+                    <label>P{{ formatProgressPage(p.page) }}</label>
                     <div style="flex: 1; min-width: 0;">
                         <div style="display:flex; gap: 8px; align-items: center; justify-content: space-between;">
                             <el-tag size="mini" :type="progressTagType(p.state)" effect="plain">{{ p.state }}</el-tag>
                             <span style="font-size: 12px; color: var(--text-disabled);">{{ p.chunkDone }}/{{ p.chunkTotal }}</span>
                         </div>
-                        <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state)"></el-progress>
+                        <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state, p.percent || 0)"></el-progress>
                         <div v-if="p.stateMsg" style="font-size: 12px; color: var(--text-disabled); margin-top: 4px;">{{ p.stateMsg }}</div>
                     </div>
                 </div>
@@ -916,16 +915,78 @@
                     items: items
                 };
             },
+            formatProgressPage: function(page) {
+                const n = Number(page);
+                if (isFinite(n) && n > 0) return n;
+                return '?';
+            },
+            calcOverallUploadPercent: function() {
+                const total = Number(this.currentDetail && this.currentDetail.partCount) || 0;
+                if (total <= 0) return 0;
+
+                const uploaded = Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0;
+                const items = (this.historyUploadProgress && Array.isArray(this.historyUploadProgress.items)) ? this.historyUploadProgress.items : [];
+
+                // 将“正在上传/等待重试”的分P按百分比折算为 0~1 的完成度
+                let uploadingFraction = 0;
+                for (let i = 0; i < items.length; i++) {
+                    const p = items[i] || {};
+                    if (p.state === 'UPLOADING' || p.state === 'RETRY_WAIT') {
+                        const percent = Math.min(Math.max(Number(p.percent) || 0, 0), 100);
+                        uploadingFraction += (percent / 100.0);
+                    }
+                }
+
+                let overall = ((uploaded + uploadingFraction) * 100.0) / total;
+                if (!isFinite(overall)) overall = 0;
+                overall = Math.min(Math.max(overall, 0), 100);
+                return Math.floor(overall);
+            },
+            calcOverallUploadStatus: function() {
+                const total = Number(this.currentDetail && this.currentDetail.partCount) || 0;
+                if (total <= 0) return null;
+
+                const items = (this.historyUploadProgress && Array.isArray(this.historyUploadProgress.items)) ? this.historyUploadProgress.items : [];
+                for (let i = 0; i < items.length; i++) {
+                    const p = items[i] || {};
+                    if (p.state === 'FAILED') return 'exception';
+                }
+
+                const percent = this.calcOverallUploadPercent();
+                if (percent >= 90) return 'success';
+                if (percent >= 50) return 'warning';
+                return null;
+            },
+            calcOverallUploadText: function() {
+                const total = Number(this.currentDetail && this.currentDetail.partCount) || 0;
+                const uploaded = Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0;
+                const active = Number(this.historyUploadProgress && this.historyUploadProgress.activeCount) || 0;
+                const pending = Math.max(total - uploaded - active, 0);
+                if (total <= 0) {
+                    return active > 0 ? ('上传中：' + active + ' 个分P') : '当前无上传中的分P';
+                }
+                if (active > 0) {
+                    return '已上传：' + uploaded + '/' + total + '，上传中：' + active + '，待上传：' + pending;
+                }
+                if (uploaded >= total) {
+                    return '已上传：' + uploaded + '/' + total + '（全部完成）';
+                }
+                return '已上传：' + uploaded + '/' + total + '，当前无上传中的分P';
+            },
             progressTagType: function(state) {
                 if (state === 'FAILED') return 'danger';
                 if (state === 'SUCCESS') return 'success';
                 if (state === 'RETRY_WAIT') return 'warning';
                 return 'info';
             },
-            progressBarStatus: function(state) {
+            progressBarStatus: function(state, percent) {
                 if (state === 'FAILED') return 'exception';
                 if (state === 'SUCCESS') return 'success';
                 if (state === 'RETRY_WAIT') return 'warning';
+
+                const p = Math.min(Math.max(Number(percent) || 0, 0), 100);
+                if (p >= 90) return 'success';
+                if (p >= 50) return 'warning';
                 return null;
             },
             handleResize: function () {

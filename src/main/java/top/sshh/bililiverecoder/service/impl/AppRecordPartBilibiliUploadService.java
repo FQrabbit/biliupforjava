@@ -236,7 +236,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             AtomicInteger tryCount = new AtomicInteger(0);
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
-                            final Integer partPage = part.getPage();
+                            final Integer partPage = resolveProgressPage(part);
                             uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
@@ -532,5 +532,24 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
             uploadProgressTracker.remove(part.getId());
         }
 
+    }
+
+    private Integer resolveProgressPage(RecordHistoryPart part) {
+        if (part == null) return null;
+        int page = part.getPage();
+        if (page > 0) return page;
+        try {
+            List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(part.getHistoryId());
+            if (parts != null) {
+                for (int i = 0; i < parts.size(); i++) {
+                    RecordHistoryPart p = parts.get(i);
+                    if (p != null && p.getId() != null && p.getId().equals(part.getId())) {
+                        return i + 1;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }
