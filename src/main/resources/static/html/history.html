@@ -524,12 +524,21 @@
             <!-- 异常信息 -->
             <div class="detail-exception-box" v-if="currentDetail.giveUpPartCount && currentDetail.giveUpPartCount > 0">
                 <div class="exception-header">
-                    <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartCount }})
+                    <div class="exception-header-left">
+                        <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartCount }})
+                    </div>
+                    <div class="exception-header-right" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length > 0">
+                        <span v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="'reason-' + idx" class="exception-reason-badge">
+                            {{ getGiveUpReason(idx, p) }}
+                        </span>
+                    </div>
                 </div>
                 <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
-                    <el-tooltip v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx" effect="dark" :content="maskTooltip(p)" placement="top">
-                        <span class="exception-item">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
-                    </el-tooltip>
+                    <div class="exception-item" v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx">
+                        <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
+                            <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                        </el-tooltip>
+                    </div>
                 </div>
             </div>
 
@@ -561,6 +570,12 @@
                         </div>
                         <div class="progress-percent-text">{{ (p.percent || 0) }}%</div>
                         <div v-if="p.stateMsg" class="progress-msg-mini">{{ p.stateMsg }}</div>
+                        <div v-if="shouldShowPartFilePath(p)" class="progress-filepath-mini">
+                            <el-tooltip v-if="!privacyMode" effect="dark" :content="maskTooltip(getPartFilePath(p))" placement="top">
+                                <span class="filepath-text">{{ maskText(getPartFileName(p)) }}</span>
+                            </el-tooltip>
+                            <span v-else class="filepath-text">***</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -756,6 +771,39 @@
                 if (!names.length) return '存在已放弃的分P（未返回文件列表）';
                 if (names.length <= 5) return '异常文件：' + names.join('，');
                 return '异常文件：' + names.slice(0, 5).join('，') + ' … 等' + names.length + '个';
+            },
+            getGiveUpReason: function(idx, filePath) {
+                // 1) 优先使用后端返回的数组 giveUpPartReasons[idx]
+                const reasons = this.currentDetail.giveUpPartReasons;
+                if (Array.isArray(reasons) && reasons[idx]) return reasons[idx];
+
+                // 1.1) 兼容其它数组字段（如 giveUpReasonList）
+                const reasons2 = this.currentDetail.giveUpReasonList || this.currentDetail.giveUpPartReasonList;
+                if (Array.isArray(reasons2) && reasons2[idx]) return reasons2[idx];
+
+                // 2) 兼容单字段 giveUpPartReason / giveUpPartMsg / giveUpReason / giveUpReasonMsg
+                if (this.currentDetail.giveUpPartReason) return this.currentDetail.giveUpPartReason;
+                if (this.currentDetail.giveUpPartMsg) return this.currentDetail.giveUpPartMsg;
+                if (this.currentDetail.giveUpReason) return this.currentDetail.giveUpReason;
+                if (this.currentDetail.giveUpReasonMsg) return this.currentDetail.giveUpReasonMsg;
+
+                // 3) 尝试从上传进度 stateMsg 中匹配同一个文件/分P
+                const items = (this.historyUploadProgress && this.historyUploadProgress.items) || [];
+                if (items.length) {
+                    // 根据文件名或 partId/page 做模糊匹配
+                    const targetName = filePath ? String(filePath).split(/[/\\\\]/).pop() : '';
+                    const match = items.find(it => {
+                        if (!it) return false;
+                        const itName = it.filePath ? String(it.filePath).split(/[/\\\\]/).pop() : '';
+                        const sameName = targetName && itName && itName === targetName;
+                        const sameIndex = typeof idx === 'number' && it.page !== undefined ? (Number(it.page) === idx + 1) : false;
+                        return sameName || sameIndex;
+                    });
+                    if (match && match.stateMsg) return match.stateMsg;
+                }
+
+                // 4) 默认提示（占位，便于确认是后端未返回原因）
+                return '未返回异常原因';
             },
             formatDateTime: function(val) {
                 if (!val) return '';
@@ -1050,6 +1098,24 @@
                 if (p >= 90) return 'success';
                 if (p >= 50) return 'warning';
                 return null;
+            },
+            getPartFilePath: function(p) {
+                if (!p) return '';
+                return p.filePath || p.path || p.file || p.localPath || '';
+            },
+            getPartFileName: function(p) {
+                const fp = this.getPartFilePath(p);
+                if (!fp) return '';
+                const seg = String(fp).split(/[/\\\\]/);
+                return seg[seg.length - 1] || fp;
+            },
+            shouldShowPartFilePath: function(p) {
+                const fp = this.getPartFilePath(p);
+                if (!fp) return false;
+                const status = this.progressBarStatus(p.state, p.percent || 0);
+                const hasErrorState = status === 'exception' || p.state === 'FAILED';
+                const hasErrorMsg = p.stateMsg && (p.stateMsg.indexOf('损坏') !== -1 || p.stateMsg.indexOf('跳变') !== -1);
+                return hasErrorState || hasErrorMsg;
             },
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;

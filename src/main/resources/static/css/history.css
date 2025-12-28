@@ -1667,7 +1667,31 @@ html, body {
     margin-bottom: 8px;
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.exception-header-left {
+    display: flex;
+    align-items: center;
     gap: 6px;
+}
+
+.exception-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.exception-reason-badge {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--danger-color);
+    background: rgba(245, 108, 108, 0.12);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(245, 108, 108, 0.25);
 }
 
 .exception-list {
@@ -1793,6 +1817,43 @@ html, body {
     font-size: 11px;
     color: var(--danger-color);
     margin-left: 10px;
+}
+
+.progress-filepath-mini {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-left: 10px;
+    word-break: break-all;
+}
+
+.progress-filepath-mini .filepath-text {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    cursor: help;
+}
+
+.exception-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-right: 8px;
+    margin-bottom: 8px;
+}
+
+.exception-file {
+    color: var(--text-primary);
+}
+
+.exception-reason {
+    font-size: 12px;
+    color: var(--danger-color);
+    background: rgba(245, 108, 108, 0.12);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(245, 108, 108, 0.25);
 }
 
 /* Mobile Adaptations */
