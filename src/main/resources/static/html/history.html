@@ -423,7 +423,7 @@
     </main>
 
     <!-- 详情弹窗 -->
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" :destroy-on-close="true" @closed="currentDetail = {}">
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" :destroy-on-close="true" @closed="onDetailClosed">
         <div class="detail-content" v-if="currentDetail.id">
             <div class="detail-group">
                 <div class="detail-row full">
@@ -526,6 +526,35 @@
                     <el-tag size="mini" type="danger" effect="dark" v-else>未通过({{currentDetail.code}})</el-tag>
                 </div>
             </div>
+
+            <el-divider content-position="left">上传进度</el-divider>
+            <div class="detail-group">
+                <div class="detail-row full">
+                    <label>整体</label>
+                    <div style="flex: 1; min-width: 0;">
+                        <el-progress
+                                :percentage="(historyUploadProgress && historyUploadProgress.overallPercent) ? historyUploadProgress.overallPercent : 0"
+                                :status="(historyUploadProgress && historyUploadProgress.activeCount > 0) ? null : 'success'">
+                        </el-progress>
+                        <div style="font-size: 12px; color: var(--text-disabled); margin-top: 4px;" v-if="historyUploadProgress">
+                            <span v-if="historyUploadProgress.activeCount > 0">上传中：{{ historyUploadProgress.activeCount }} 个分P</span>
+                            <span v-else>当前无上传中的分P</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-row full" v-for="p in (historyUploadProgress ? historyUploadProgress.items : [])" :key="p.partId">
+                    <label>P{{ p.page }}</label>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display:flex; gap: 8px; align-items: center; justify-content: space-between;">
+                            <el-tag size="mini" :type="progressTagType(p.state)" effect="plain">{{ p.state }}</el-tag>
+                            <span style="font-size: 12px; color: var(--text-disabled);">{{ p.chunkDone }}/{{ p.chunkTotal }}</span>
+                        </div>
+                        <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state)"></el-progress>
+                        <div v-if="p.stateMsg" style="font-size: 12px; color: var(--text-disabled); margin-top: 4px;">{{ p.stateMsg }}</div>
+                    </div>
+                </div>
+            </div>
             
             <el-divider content-position="left">操作</el-divider>
             <div class="detail-actions">
@@ -604,6 +633,8 @@
             pageSizes: [5, 10, 25, 50, 100],
             filterExpanded: false,
             quickFilter: null
+            ,historyUploadProgress: null
+            ,progressTimer: null
         },
         computed: {
             isPublishLockedByCode: function() {
@@ -820,9 +851,82 @@
                 // 先清空再赋值，避免 Element Dialog 复用导致的短暂残影
                 this.currentDetail = {};
                 this.detailDialogVisible = true;
+                this.stopProgressPolling();
+                this.historyUploadProgress = null;
                 this.$nextTick(() => {
                     this.currentDetail = JSON.parse(JSON.stringify(item || {}));
+                    if (this.currentDetail && this.currentDetail.id) {
+                        this.startProgressPolling(this.currentDetail.id);
+                    }
                 });
+            },
+            onDetailClosed: function() {
+                this.stopProgressPolling();
+                this.historyUploadProgress = null;
+                this.currentDetail = {};
+            },
+            startProgressPolling: function(historyId) {
+                const _this = this;
+                if (!historyId) return;
+                _this.stopProgressPolling();
+
+                _this.fetchHistoryProgressOnce(historyId, true, function (resp) {
+                    _this.historyUploadProgress = resp;
+                    if (resp && resp.activeCount && resp.activeCount > 0) {
+                        _this.progressTimer = setInterval(function () {
+                            if (!_this.detailDialogVisible || !_this.currentDetail || _this.currentDetail.id !== historyId) {
+                                _this.stopProgressPolling();
+                                return;
+                            }
+                            _this.fetchHistoryProgressOnce(historyId, true, function (nextResp) {
+                                _this.historyUploadProgress = nextResp;
+                                if (!nextResp || !nextResp.activeCount || nextResp.activeCount <= 0) {
+                                    _this.stopProgressPolling();
+                                }
+                            });
+                        }, 2000);
+                    }
+                });
+            },
+            stopProgressPolling: function() {
+                if (this.progressTimer) {
+                    clearInterval(this.progressTimer);
+                    this.progressTimer = null;
+                }
+            },
+            fetchHistoryProgressOnce: function(historyId, silent, callback) {
+                const _this = this;
+                ApiUtil.get('/progress/history/' + historyId, function (data) {
+                    const resp = _this.normalizeHistoryProgress(data);
+                    if (callback) callback(resp);
+                }, function () {
+                    if (!silent) {
+                        _this.$message({ message: '获取上传进度失败', type: 'warning' });
+                    }
+                    if (callback) callback(_this.normalizeHistoryProgress(null));
+                });
+            },
+            normalizeHistoryProgress: function(data) {
+                if (!data) return { historyId: null, activeCount: 0, overallPercent: 0, items: [] };
+                const items = Array.isArray(data.items) ? data.items : [];
+                return {
+                    historyId: data.historyId || null,
+                    activeCount: Number(data.activeCount) || 0,
+                    overallPercent: Number(data.overallPercent) || 0,
+                    items: items
+                };
+            },
+            progressTagType: function(state) {
+                if (state === 'FAILED') return 'danger';
+                if (state === 'SUCCESS') return 'success';
+                if (state === 'RETRY_WAIT') return 'warning';
+                return 'info';
+            },
+            progressBarStatus: function(state) {
+                if (state === 'FAILED') return 'exception';
+                if (state === 'SUCCESS') return 'success';
+                if (state === 'RETRY_WAIT') return 'warning';
+                return null;
             },
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;

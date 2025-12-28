@@ -25,6 +25,7 @@ import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.KodoChunkUploadRequest;
@@ -97,6 +98,9 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Lazy
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
+
+    @Autowired
+    private UploadProgressTracker uploadProgressTracker;
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
@@ -322,6 +326,8 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                             AtomicInteger tryCount = new AtomicInteger(0);
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
+                            final Integer partPage = part.getPage();
+                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
                             List<KodoPart> parts = new CopyOnWriteArrayList<>();
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
@@ -361,6 +367,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     break;
                                                 }
                                                 int count = upCount.incrementAndGet();
+                                                uploadProgressTracker.updateChunkDone(partId, historyId, partPage, count, (int) chunkNum);
                                                 log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
@@ -374,6 +381,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 break;
                                             } catch (Exception e) {
                                                 tryCount.incrementAndGet();
+                                                uploadProgressTracker.markRetryWait(partId, e.getMessage());
                                                 log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
@@ -407,6 +415,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                             }
                                         }
                                     } catch (Exception e) {
+                                        uploadProgressTracker.markFailed(partId, e.getMessage());
                                         log.error("[BLR] {}", LogKvs.event("Upload.Chunk.ThreadFailed")
                                                 .add("os", OS)
                                                 .add("roomId", room.getRoomId())
@@ -440,6 +449,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 part.setUpload(false);
                                 part.setUploadRetryCount(part.getUploadRetryCount() + 1);
                                 part = partRepository.save(part);
+                                uploadProgressTracker.markFailed(partId, "chunk upload failed");
                                 if (part.getUploadRetryCount() < 2) {
                                     Thread.sleep(5000);
                                     uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
@@ -593,6 +603,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         part = partRepository.save(part);
                                     }
                                     TaskUtil.partUploadTask.remove(part.getId());
+                                    uploadProgressTracker.markSuccessAndRemove(part.getId());
                                         log.info("[BLR] {}", LogKvs.event("Upload.Part.Success")
                                             .add("os", OS)
                                             .add("roomId", room.getRoomId())
@@ -619,6 +630,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                             } catch (Exception e) {
                                 //存在异常
                                 TaskUtil.partUploadTask.remove(part.getId());
+                                uploadProgressTracker.markFailed(part.getId(), e.getMessage());
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.Failed")
                                         .add("os", OS)
                                         .add("roomId", room.getRoomId())
@@ -658,6 +670,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
+            uploadProgressTracker.remove(part.getId());
         }
 
     }

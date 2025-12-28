@@ -24,6 +24,7 @@ import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.ChunkUploadRequest;
@@ -93,6 +94,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Lazy
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
+
+    @Autowired
+    private UploadProgressTracker uploadProgressTracker;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -356,6 +360,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             AtomicInteger tryCount = new AtomicInteger(0);
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
+                            final Integer partPage = part.getPage();
+                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
                             java.util.concurrent.atomic.AtomicReference<String> gatewayError = new java.util.concurrent.atomic.AtomicReference<>(null);
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
@@ -402,6 +408,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     break;
                                                 }
                                                 int count = upCount.incrementAndGet();
+                                                uploadProgressTracker.updateChunkDone(partId, historyId, partPage, count, (int) chunkNum);
                                                 log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
                                                         .add("roomId", room.getRoomId())
                                                         .add("title", room.getTitle())
@@ -426,6 +433,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     break;
                                                 }
                                                 tryCount.incrementAndGet();
+                                                uploadProgressTracker.markRetryWait(partId, e.getMessage());
                                                 log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                         .add("roomId", room.getRoomId())
                                                         .add("title", room.getTitle())
@@ -457,6 +465,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                             }
                                         }
                                     } catch (Exception e) {
+                                        uploadProgressTracker.markFailed(partId, e.getMessage());
                                         log.error("[BLR] {}", LogKvs.event("Upload.Chunk.ThreadFailed")
                                                 .add("roomId", room.getRoomId())
                                                 .add("uname", room.getUname())
@@ -494,6 +503,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 part.setUpload(false);
                                 part.setUploadRetryCount(part.getUploadRetryCount() + 1);
                                 part = partRepository.save(part);
+                                uploadProgressTracker.markFailed(partId, "chunk upload failed");
                                 if (part.getUploadRetryCount() < 2) {
                                     Thread.sleep(5000);
                                     uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
@@ -633,6 +643,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         part = partRepository.save(part);
                                     }
                                     TaskUtil.partUploadTask.remove(part.getId());
+                                    uploadProgressTracker.markSuccessAndRemove(part.getId());
                                         log.info("[BLR] {}", LogKvs.event("Upload.Part.Success")
                                             .add("roomId", room.getRoomId())
                                             .add("uname", room.getUname())
@@ -658,6 +669,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             } catch (Exception e) {
                                 //存在异常
                                 TaskUtil.partUploadTask.remove(part.getId());
+                                uploadProgressTracker.markFailed(part.getId(), e.getMessage());
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.Failed")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
@@ -696,6 +708,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
+            uploadProgressTracker.remove(part.getId());
         }
 
 

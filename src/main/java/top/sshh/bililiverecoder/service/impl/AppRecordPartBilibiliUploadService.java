@@ -26,6 +26,7 @@ import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.user.UserMy;
@@ -84,6 +85,9 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
     @Lazy
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
+
+    @Autowired
+    private UploadProgressTracker uploadProgressTracker;
 
 
     @Override
@@ -232,6 +236,8 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             AtomicInteger tryCount = new AtomicInteger(0);
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
+                            final Integer partPage = part.getPage();
+                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
                                 int finalI = i;
@@ -246,6 +252,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                                     throw new RuntimeException("上传返回异常");
                                                 }
                                                 int count = upCount.incrementAndGet();
+                                                uploadProgressTracker.updateChunkDone(partId, historyId, partPage, count, (int) chunkNum);
                                                 log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
                                                         .add("os", OS)
                                                         .add("roomId", room.getRoomId())
@@ -260,6 +267,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                             } catch (Exception e) {
                                                 tryCount.incrementAndGet();
                                                 int count = upCount.get();
+                                                uploadProgressTracker.markRetryWait(partId, e.getMessage());
                                                 log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                         .add("os", OS)
                                                         .add("roomId", room.getRoomId())
@@ -275,6 +283,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                         }
                                     } catch (FileNotFoundException fileNotFoundException) {
                                         tryCount.set(200);
+                                        uploadProgressTracker.markFailed(partId, "file missing");
                                         log.error("[BLR] {}", LogKvs.event("Upload.Chunk.FileMissing")
                                                 .add("os", OS)
                                                 .add("roomId", room.getRoomId())
@@ -283,6 +292,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                                 .add("historyId", historyId)
                                                 .add("filePath", filePath));
                                     } catch (Exception e) {
+                                        uploadProgressTracker.markFailed(partId, e.getMessage());
                                         log.error("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                 .add("os", OS)
                                                 .add("roomId", room.getRoomId())
@@ -315,6 +325,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                 part.setUpload(false);
                                 part.setUploadRetryCount(part.getUploadRetryCount() + 1);
                                 part = partRepository.save(part);
+                                uploadProgressTracker.markFailed(part.getId(), "chunk upload failed");
                                 if (part.getUploadRetryCount() < 2) {
                                     Thread.sleep(5000);
                                     uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
@@ -442,6 +453,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                     part = partRepository.save(part);
                                 }
                                 TaskUtil.partUploadTask.remove(part.getId());
+                                uploadProgressTracker.markSuccessAndRemove(part.getId());
                                 log.info("[BLR] {}", LogKvs.event("Upload.Part.Success")
                                     .add("os", OS)
                                     .add("roomId", room.getRoomId())
@@ -477,6 +489,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                 }
                                 //存在异常
                                 TaskUtil.partUploadTask.remove(part.getId());
+                                uploadProgressTracker.markFailed(part.getId(), e.getMessage());
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.Failed")
                                     .add("os", OS)
                                     .add("roomId", room.getRoomId())
@@ -516,6 +529,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
+            uploadProgressTracker.remove(part.getId());
         }
 
     }
