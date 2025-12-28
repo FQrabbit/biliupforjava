@@ -30,6 +30,12 @@ html, body {
     background: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.log-toolbar-card:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
 }
 
 [data-theme="dark"] .log-toolbar-card {
@@ -37,40 +43,480 @@ html, body {
     border-color: rgba(63, 63, 70, 0.5);
 }
 
+[data-theme="dark"] .log-toolbar-card:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
 .log-toolbar-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+}
+
+.log-title-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .log-title {
     font-size: 16px;
     font-weight: 700;
-    color: var(--text-primary);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientShift 3s ease infinite;
 }
 
-.log-meta {
+[data-theme="dark"] .log-title {
+    background: linear-gradient(135deg, #8b9cfe 0%, #9d7bc9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+@keyframes gradientShift {
+    0%, 100% { filter: hue-rotate(0deg); }
+    50% { filter: hue-rotate(10deg); }
+}
+
+.log-actions {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.toolbar-row {
+.log-actions .el-button {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.log-actions .el-button:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.log-actions .el-button:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.log-actions .el-button i {
+    transition: transform 0.3s ease;
+}
+
+.log-actions .el-button:hover i {
+    transform: rotate(10deg) scale(1.1);
+}
+
+.log-actions .el-button--danger:hover {
+    box-shadow: 0 4px 16px rgba(244, 67, 54, 0.3);
+}
+
+.log-actions .el-button--warning:hover {
+    box-shadow: 0 4px 16px rgba(255, 152, 0, 0.3);
+}
+
+.alert-badge {
+    margin-left: 4px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* 搜索和筛选行 */
+.log-filter-row {
     display: flex;
     align-items: center;
     gap: 10px;
+    margin-bottom: 12px;
     flex-wrap: wrap;
 }
 
-.log-switches {
+.log-search-wrapper {
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+    position: relative;
+}
+
+.log-search-wrapper .el-input__inner {
+    border-radius: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding-left: 36px;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="dark"] .log-search-wrapper .el-input__inner {
+    background: rgba(39, 39, 42, 0.6);
+}
+
+.log-search-wrapper .el-input__inner:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.25);
+    border-color: #667eea;
+}
+
+.log-search-wrapper .el-input__prefix {
+    left: 12px;
+}
+
+.log-search-wrapper .el-input__icon {
+    transition: transform 0.3s ease;
+}
+
+.log-search-wrapper:hover .el-input__icon {
+    transform: rotate(90deg) scale(1.1);
+}
+
+.log-level-select {
+    width: 180px;
+}
+
+.log-level-select .el-input__inner {
+    border-radius: 20px;
+    transition: all 0.3s ease;
+}
+
+.log-level-select:hover .el-input__inner {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+/* 开关控制行 */
+.log-switches-row {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
+
+.log-switches-row .el-checkbox {
+    margin-right: 0;
+}
+
+.log-switches-row .el-checkbox.is-bordered {
+    padding: 6px 12px;
+    height: auto;
+    border-radius: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(249, 250, 251, 0.8));
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .log-switches-row .el-checkbox.is-bordered {
+    background: linear-gradient(135deg, rgba(39, 39, 42, 0.6), rgba(49, 49, 52, 0.6));
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.log-switches-row .el-checkbox.is-bordered:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    border-color: #667eea;
+}
+
+.log-switches-row .el-checkbox.is-bordered.is-checked {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border-color: #667eea;
+    color: white;
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+}
+
+.log-switches-row .el-checkbox.is-bordered.is-checked:hover {
+    transform: translateY(-2px) scale(1.02);
+}
+
+.log-switches-row .el-checkbox__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding-left: 6px;
+    font-weight: 500;
+}
+
+.log-switches-row .el-checkbox.is-bordered.is-checked .el-checkbox__label {
+    color: white;
+}
+
+.log-switches-row .el-checkbox__label i {
+    transition: transform 0.3s ease;
+}
+
+.log-switches-row .el-checkbox.is-bordered:hover .el-checkbox__label i {
+    transform: scale(1.2);
+}
+
+.log-switches-row .el-checkbox.is-bordered.is-checked .el-checkbox__label i {
+    animation: iconBounce 0.5s ease;
+}
+
+@keyframes iconBounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3) rotate(10deg); }
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+    .log-toolbar-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .log-title-section {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .log-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .log-filter-row {
+        flex-direction: column;
+    }
+    
+    .log-search-wrapper {
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    .log-level-select {
+        width: 100%;
+    }
+    
+    .log-switches-row {
+        justify-content: flex-start;
+    }
+}
+
+/* ========== 高级动画效果 ========== */
+
+/* 页面加载动画 */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.log-toolbar-card {
+    animation: fadeInUp 0.6s ease;
+}
+
+.log-console {
+    animation: fadeInUp 0.8s ease;
+}
+
+/* 按钮点击波纹效果 */
+.log-actions .el-button {
+    position: relative;
+    overflow: hidden;
+}
+
+.log-actions .el-button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.log-actions .el-button:active::after {
+    width: 300px;
+    height: 300px;
+}
+
+/* 复选框勾选动画增强 */
+.log-switches-row .el-checkbox__input.is-checked + .el-checkbox__label {
+    animation: labelGlow 0.5s ease;
+}
+
+@keyframes labelGlow {
+    0%, 100% { text-shadow: none; }
+    50% { text-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
+}
+
+/* 搜索框输入时的微动效果 */
+.log-search-wrapper .el-input__inner:not(:placeholder-shown) {
+    animation: subtleShake 0.5s ease;
+}
+
+@keyframes subtleShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+}
+
+/* 标签元素的呼吸效果 */
+.log-title-section .el-tag {
+    animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.85; transform: scale(0.98); }
+}
+
+/* 日志时间戳闪烁效果 */
+.log-time {
+    animation: timeFade 3s ease-in-out infinite;
+}
+
+@keyframes timeFade {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 0.5; }
+}
+
+/* 语法高亮元素的动画 */
+.log-url {
+    transition: all 0.3s ease;
+}
+
+.log-url:hover {
+    color: #8b9cfe;
+    text-decoration-style: wavy;
+    transform: translateX(2px);
+}
+
+.log-path {
+    transition: all 0.3s ease;
+}
+
+.log-path:hover {
+    color: #b4ddff;
+    text-shadow: 0 0 8px rgba(156, 220, 254, 0.5);
+}
+
+/* 异常对话框动画 */
+.el-dialog {
+    animation: dialogSlideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes dialogSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* 表格行悬停效果增强 */
+.el-table__row {
+    transition: all 0.3s ease;
+}
+
+.el-table__row:hover {
+    transform: translateX(4px);
+    box-shadow: -4px 0 8px rgba(102, 126, 234, 0.2);
+}
+
+/* Loading 状态动画 */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-icon {
+    animation: spin 1s linear infinite;
+}
+
+/* 日志级别选择器的下拉动画 */
+.log-level-popper {
+    animation: dropDown 0.3s ease;
+}
+
+@keyframes dropDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 鼠标悬停时的光晕效果 */
+.log-actions .el-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.log-actions .el-button:hover::before {
+    left: 100%;
+}
+
+/* 复选框边框动画 */
+.log-switches-row .el-checkbox.is-bordered {
+    position: relative;
+}
+
+.log-switches-row .el-checkbox.is-bordered::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 22px;
+    background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #4facfe);
+    background-size: 300% 300%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: -1;
+    animation: gradientMove 3s ease infinite;
+}
+
+@keyframes gradientMove {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.log-switches-row .el-checkbox.is-bordered:hover::before {
+    opacity: 0.6;
+}
+
+.log-switches-row .el-checkbox.is-bordered.is-checked::before {
+    opacity: 1;
+}
+
+/* 新日志到达时的闪光效果 */
+@keyframes newLogFlash {
+    0% {
+        background: linear-gradient(90deg, rgba(102, 126, 234, 0.3), transparent);
+    }
+    100% {
+        background: transparent;
+    }
+}
+
+.log-line.new-log {
+    animation: newLogFlash 0.8s ease;
+}
+
 
 .log-content {
     height: 100%;
@@ -92,6 +538,33 @@ html, body {
     border-radius: var(--radius-lg);
     font-size: 13px;
     line-height: 1.4;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.3s ease;
+}
+
+.log-console:hover {
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* 自定义滚动条 */
+.log-console::-webkit-scrollbar {
+    width: 10px;
+}
+
+.log-console::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+}
+
+.log-console::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #667eea, #764ba2);
+    border-radius: 5px;
+    transition: all 0.3s ease;
+}
+
+.log-console::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #8b9cfe, #9d7bc9);
+    box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
 }
 
 /* 日志行样式 */
@@ -99,22 +572,53 @@ html, body {
     white-space: pre-wrap;
     word-break: break-all;
     margin-bottom: 2px;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+    padding-left: 7px;
+    animation: slideIn 0.3s ease;
 }
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
 .log-line:hover {
     background-color: #2a2d2e;
+    border-left-color: #667eea;
+    transform: translateX(2px);
 }
+
 .log-line.nowrap {
     white-space: pre;
     overflow-x: hidden;
     word-break: normal;
 }
+
 .log-line.selection-mode {
     cursor: pointer;
 }
+
+.log-line.selection-mode:hover {
+    background: linear-gradient(90deg, #2a2d2e, #1e1e1e);
+}
+
 .log-line.selected {
-    background-color: #3a3d41;
-    border-left: 3px solid #007acc;
+    background: linear-gradient(90deg, rgba(102, 126, 234, 0.2), transparent);
+    border-left: 3px solid #667eea;
     padding-left: 7px;
+    animation: selectPulse 0.3s ease;
+}
+
+@keyframes selectPulse {
+    0% { background-color: rgba(102, 126, 234, 0.4); }
+    100% { background-color: transparent; }
 }
 
 /* 日志元素样式 */
@@ -132,17 +636,48 @@ html, body {
 }
 
 /* 日志级别颜色 */
+.log-level {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
 .level-INFO {
     color: #4caf50;
+    background: rgba(76, 175, 80, 0.1);
 }
+
+.level-INFO:hover {
+    background: rgba(76, 175, 80, 0.2);
+    transform: scale(1.05);
+}
+
 .level-WARN {
-    color: #ce9178;
+    color: #ff9800;
+    background: rgba(255, 152, 0, 0.1);
+    animation: warnPulse 2s ease-in-out infinite;
 }
+
+@keyframes warnPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 .level-ERROR {
     color: #f44747;
+    background: rgba(244, 67, 71, 0.1);
+    animation: errorBlink 1s ease-in-out infinite;
 }
+
+@keyframes errorBlink {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 rgba(244, 67, 71, 0); }
+    50% { opacity: 0.8; box-shadow: 0 0 8px rgba(244, 67, 71, 0.5); }
+}
+
 .level-DEBUG {
     color: #9cdcfe;
+    background: rgba(156, 220, 254, 0.1);
 }
 
 /* 日志等级下拉（更紧凑、更一致） */
@@ -150,17 +685,48 @@ html, body {
     display: inline-flex;
     align-items: center;
     gap: 10px;
+    transition: all 0.3s ease;
 }
+
 .log-level-dot {
     width: 8px;
     height: 8px;
     border-radius: 999px;
     display: inline-block;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 0 2px transparent;
 }
-.log-level-dot.level-INFO { background-color: #4caf50; }
-.log-level-dot.level-WARN { background-color: #ce9178; }
-.log-level-dot.level-ERROR { background-color: #f44747; }
-.log-level-dot.level-DEBUG { background-color: #9cdcfe; }
+
+.log-level-dot.level-INFO { 
+    background-color: #4caf50;
+    animation: dotPulse 2s ease-in-out infinite;
+}
+
+.log-level-dot.level-WARN { 
+    background-color: #ff9800;
+    animation: dotPulse 2s ease-in-out infinite 0.5s;
+}
+
+.log-level-dot.level-ERROR { 
+    background-color: #f44747;
+    animation: dotPulse 2s ease-in-out infinite 1s;
+}
+
+.log-level-dot.level-DEBUG { 
+    background-color: #9cdcfe;
+    animation: dotPulse 2s ease-in-out infinite 1.5s;
+}
+
+@keyframes dotPulse {
+    0%, 100% { 
+        transform: scale(1);
+        box-shadow: 0 0 0 0 currentColor;
+    }
+    50% { 
+        transform: scale(1.2);
+        box-shadow: 0 0 0 4px transparent;
+    }
+}
 
 .log-level-popper .el-select-dropdown__item {
     height: auto;
@@ -168,14 +734,34 @@ html, body {
     padding: 10px 14px;
     display: flex;
     align-items: center;
+    transition: all 0.3s ease;
+    border-radius: 4px;
+    margin: 2px 4px;
 }
+
+.log-level-popper .el-select-dropdown__item:hover {
+    transform: translateX(4px);
+    background: linear-gradient(90deg, rgba(102, 126, 234, 0.1), transparent);
+}
+
+.log-level-popper .el-select-dropdown__item.selected {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.1));
+}
+
 .log-level-popper .el-select-dropdown__item .log-level-text {
     font-weight: 600;
     letter-spacing: 0.2px;
 }
+
 .log-level-popper .el-select-dropdown__item i.el-icon-check {
     font-size: 14px;
     opacity: 0.75;
+    animation: checkBounce 0.4s ease;
+}
+
+@keyframes checkBounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3) rotate(10deg); }
 }
 
 /* 语法高亮 */

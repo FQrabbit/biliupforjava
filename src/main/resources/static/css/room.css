@@ -23,12 +23,24 @@ html, body {
     gap: 16px;
     margin-bottom: 24px;
     padding: 20px 24px;
-    background: var(--bg-primary);
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-light);
     position: relative;
     overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.room-header:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+[data-theme="dark"] .room-header {
+    background: rgba(39, 39, 42, 0.7);
 }
 
 /* 头部背景装饰 */
@@ -39,8 +51,14 @@ html, body {
     left: 0;
     right: 0;
     height: 3px;
-    background: linear-gradient(90deg, var(--primary-color), var(--primary-light), #00d4ff);
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #00d4ff 100%);
     opacity: 0.8;
+    animation: gradientShift 3s ease infinite;
+}
+
+@keyframes gradientShift {
+    0%, 100% { filter: hue-rotate(0deg); }
+    50% { filter: hue-rotate(10deg); }
 }
 
 .room-header-left {
@@ -228,14 +246,12 @@ html, body {
 }
 
 /* 头部按钮/视图切换的像素级对齐（避免 baseline/line-height 导致的细微偏移） */
-.room-header-actions .neon-btn,
 .room-header-actions .el-radio-button__inner {
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.room-header-actions .neon-btn [class^="el-icon-"],
 .room-header-actions .el-radio-button__inner [class^="el-icon-"] {
     line-height: 1;
 }
@@ -244,73 +260,6 @@ html, body {
 .room-header-actions .el-upload {
     display: inline-flex;
     align-items: center;
-}
-
-/* ========== 霓虹按钮样式 ========== */
-.neon-btn {
-    position: relative;
-    padding: 10px 20px !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
-    border: none !important;
-    border-radius: var(--radius-md) !important;
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    color: white !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.neon-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-    transition: left 0.5s ease;
-}
-
-.neon-btn:hover::before {
-    left: 100%;
-}
-
-.neon-btn:hover {
-    transform: translateY(-2px) scale(1.02);
-}
-
-.neon-btn:active {
-    transform: translateY(0) scale(0.98);
-}
-
-.neon-btn-primary {
-    background: linear-gradient(135deg, #4361ee, #3a56d4) !important;
-    box-shadow: 0 4px 15px rgba(67, 97, 238, 0.35);
-}
-
-.neon-btn-primary:hover {
-    background: linear-gradient(135deg, #3a56d4, #2d4bc4) !important;
-    box-shadow: 0 6px 20px rgba(67, 97, 238, 0.45);
-}
-
-.neon-btn-success {
-    background: linear-gradient(135deg, #10b981, #059669) !important;
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
-}
-
-.neon-btn-success:hover {
-    background: linear-gradient(135deg, #059669, #047857) !important;
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
-}
-
-.neon-btn-danger {
-    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
-    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.35);
-}
-
-.neon-btn-danger:hover {
-    background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
-    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);
 }
 
 /* ========== 直播间卡片网格 ========== */
@@ -800,45 +749,304 @@ html, body {
     transform: translateX(100%);
 }
 
-/* 详情弹窗样式 */
-.detail-group {
+/* ========== 现代详情对话框样式 ========== */
+.detail-dialog-modern {
+    max-width: 1400px;
+}
+
+.detail-dialog-modern .el-dialog__body {
+    padding: 16px;
+    background: var(--bg-secondary);
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+.detail-content-modern {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+/* 卡片容器 */
+.detail-card {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-card:nth-child(1) { animation-delay: 0.05s; }
+.detail-card:nth-child(2) { animation-delay: 0.1s; }
+.detail-card:nth-child(3) { animation-delay: 0.15s; }
+.detail-card:nth-child(4) { animation-delay: 0.2s; }
+
+.detail-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+[data-theme="dark"] .detail-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* 卡片头部 */
+.detail-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, rgba(103, 126, 234, 0.08), rgba(118, 75, 162, 0.08));
+    border-bottom: 1px solid var(--border-light);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.detail-card-header i {
+    font-size: 15px;
+    color: var(--primary-color);
+}
+
+[data-theme="dark"] .detail-card-header {
+    background: linear-gradient(135deg, rgba(103, 126, 234, 0.12), rgba(118, 75, 162, 0.12));
+}
+
+/* 卡片主体 */
+.detail-card-body {
+    padding: 14px 16px;
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-bottom: 10px;
 }
-.detail-row {
-    width: calc(50% - 5px);
+
+/* 详情项 */
+.detail-item-modern {
     display: flex;
-    align-items: flex-start;
-    font-size: 14px;
-    line-height: 1.5;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.2s ease;
 }
-.detail-row.full {
+
+.detail-item-modern.full {
     width: 100%;
 }
-.detail-row label {
+
+.detail-item-modern:not(.full) {
+    display: inline-flex;
+    width: calc(50% - 5px);
+    vertical-align: top;
+}
+
+.detail-item-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
     color: var(--text-secondary);
-    width: 80px;
-    flex-shrink: 0;
-    text-align: right;
-    margin-right: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
-.detail-row span {
+
+.detail-item-label i {
+    font-size: 13px;
+    opacity: 0.7;
+}
+
+.detail-item-value {
+    font-size: 13px;
     color: var(--text-primary);
+    line-height: 1.5;
+    word-break: break-word;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.detail-item-value:hover {
+    border-color: var(--border-light);
+    background: var(--bg-primary);
+}
+
+.detail-item-value.primary-text {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.detail-item-value.secondary-text {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.detail-item-value.template-text {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="dark"] .detail-item-value.template-text {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.detail-value-highlight {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+/* 状态网格 */
+.detail-status-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    width: 100%;
+}
+
+.detail-status-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 2px solid transparent;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: default;
+}
+
+.detail-status-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.detail-status-item.is-active {
+    border-color: var(--success-color);
+    background: rgba(82, 196, 26, 0.05);
+}
+
+[data-theme="dark"] .detail-status-item.is-active {
+    background: rgba(82, 196, 26, 0.1);
+}
+
+.detail-status-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    font-size: 16px;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.detail-status-icon.streaming {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.15), rgba(255, 165, 2, 0.15));
+    color: #ff6b6b;
+}
+
+.detail-status-item.is-active .detail-status-icon.streaming {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.detail-status-icon.recording {
+    background: linear-gradient(135deg, rgba(82, 196, 26, 0.15), rgba(115, 209, 61, 0.15));
+    color: var(--success-color);
+}
+
+.detail-status-item.is-active .detail-status-icon.recording {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.detail-status-icon.upload {
+    background: linear-gradient(135deg, rgba(103, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
+    color: var(--primary-color);
+}
+
+.detail-status-icon.danmaku {
+    background: linear-gradient(135deg, rgba(24, 144, 255, 0.15), rgba(0, 212, 255, 0.15));
+    color: #1890ff;
+}
+
+.detail-status-info {
     flex: 1;
-    word-break: break-all;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
-.detail-row .el-tag {
-    flex: none;
+
+.detail-status-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 500;
 }
+
+.detail-status-value {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.detail-status-value.success {
+    color: var(--success-color);
+}
+
+.detail-status-value.info {
+    color: var(--text-secondary);
+}
+
+/* 响应式布局 */
+@media (max-width: 1200px) {
+    .detail-content-modern {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 768px) {
-    .detail-row {
+    .detail-dialog-modern .el-dialog__body {
+        padding: 12px;
+    }
+    
+    .detail-content-modern {
+        gap: 10px;
+    }
+    
+    .detail-card-body {
+        padding: 12px;
+        gap: 8px;
+    }
+    
+    .detail-item-modern:not(.full) {
         width: 100%;
     }
-    .detail-row label {
-        text-align: left;
-        width: 70px;
+    
+    .detail-status-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .detail-status-item {
+        padding: 10px;
+        gap: 8px;
+    }
+    
+    .detail-status-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+    
+    .detail-card-header {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .detail-card-header i {
+        font-size: 14px;
     }
 }
 
@@ -1879,3 +2087,763 @@ html, body {
         text-align: left;
     }
 }
+/* ========== 房间编辑对话框 ========== */
+
+/* 房间编辑对话框 */
+.room-edit-dialog {
+    margin-top: 0 !important;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+}
+
+.el-dialog__wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 房间编辑对话框头部 */
+.room-edit-dialog .el-dialog__header {
+    padding: 20px 24px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.room-edit-dialog .dialog-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.room-edit-dialog .el-dialog__title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.room-edit-dialog .dialog-room-info {
+    padding: 2px 8px;
+    background: rgba(67, 97, 238, 0.1);
+    color: var(--primary-color);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* 房间编辑对话框主体 */
+.room-edit-dialog .el-dialog__body {
+    padding: 0;
+    background: var(--bg-secondary);
+    overflow-y: auto;
+    flex: 1;
+}
+
+.room-config-container {
+    padding: 20px;
+}
+
+.room-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 20px;
+    align-items: start;
+}
+
+/* 配置卡片 */
+.config-card {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.config-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-light);
+}
+
+.config-card-header {
+    padding: 16px 20px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.config-card-header i {
+    font-size: 18px;
+    color: var(--primary-color);
+}
+
+.config-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.config-card-body {
+    padding: 20px;
+}
+
+/* 配置表单项 */
+.config-form-item {
+    margin-bottom: 18px;
+}
+
+.config-form-item:last-child {
+    margin-bottom: 0;
+}
+
+.config-label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+/* 配置开关行 */
+.config-switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+
+.config-switch-row:hover {
+    border-color: var(--border-light);
+    background: var(--bg-secondary);
+}
+
+.config-switch-label {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* 底部按钮区 */
+.room-edit-dialog .el-dialog__footer {
+    padding: 16px 24px;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-light);
+}
+
+.dialog-footer-modern {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.footer-actions-left {
+    display: flex;
+    gap: 12px;
+}
+
+.footer-actions-right {
+    display: flex;
+    gap: 12px;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+    .room-config-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .dialog-footer-modern {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .footer-actions-left, .footer-actions-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .footer-actions-right button {
+        flex: 1;
+    }
+}
+
+
+/* ========== 房间编辑对话框 (现代科技风格) ========== */
+
+/* 房间编辑对话框 */
+.room-config-dialog {
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    background: var(--bg-secondary);
+    max-width: 900px;
+    width: 90%;
+    margin-top: 0 !important; /* 使用 flex 布局 */
+}
+
+/* 房间编辑对话框头部 */
+.dialog-header-modern {
+    padding: 20px 24px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.header-title-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.header-icon-box {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(67, 97, 238, 0.1), rgba(67, 97, 238, 0.05));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    font-size: 20px;
+    box-shadow: inset 0 0 0 1px rgba(67, 97, 238, 0.1);
+}
+
+.header-text-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dialog-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.room-name-tag {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    align-self: flex-start;
+}
+
+/* 房间编辑对话框主体 */
+.room-config-dialog .el-dialog__body {
+    padding: 24px;
+    background: var(--bg-secondary);
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.config-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+.config-column {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* 配置卡片 */
+.config-card {
+    background: var(--bg-primary);
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.config-card:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    border-color: rgba(67, 97, 238, 0.3);
+}
+
+.card-header {
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.card-header i {
+    color: var(--primary-color);
+}
+
+.card-body {
+    padding: 16px;
+}
+
+/* 配置表单项 */
+.room-config-form .el-form-item {
+    margin-bottom: 16px;
+}
+
+.room-config-form .el-form-item:last-child {
+    margin-bottom: 0;
+}
+
+.room-config-form .el-form-item__label {
+    padding-bottom: 4px;
+    line-height: 1.4;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* 配置样式输入框 */
+.room-config-form .el-input__inner,
+.room-config-form .el-textarea__inner {
+    background: var(--bg-tertiary);
+    border-color: transparent;
+    transition: all 0.3s;
+}
+
+.room-config-form .el-input__inner:focus,
+.room-config-form .el-textarea__inner:focus {
+    background: var(--bg-primary);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.1);
+}
+
+/* 配置开关行 */
+.switch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.switch-card {
+    background: var(--bg-tertiary);
+    padding: 10px 12px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid transparent;
+}
+
+.switch-card:hover {
+    border-color: var(--border-light);
+    background: var(--bg-primary);
+}
+
+.switch-label {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* 底部按钮区 */
+.dialog-footer-modern {
+    padding: 16px 24px;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.footer-actions-left,
+.footer-actions-right {
+    display: flex;
+    gap: 12px;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+    .config-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .room-config-dialog {
+        width: 95%;
+        margin: 10px auto;
+    }
+}
+
+/* 封面上传小组件 */
+.cover-uploader-mini .el-upload {
+    border: 1px dashed var(--border-light);
+    border-radius: 6px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    transition: all 0.3s;
+}
+
+.cover-uploader-mini .el-upload:hover {
+    border-color: var(--primary-color);
+    background: var(--bg-primary);
+}
+
+.cover-preview-mini {
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+}
+
+.cover-placeholder-mini i {
+    font-size: 24px;
+    color: var(--text-secondary);
+}
+
+
+/* 线路测试按钮组 */
+.line-test-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+.line-test-actions .el-button {
+    flex: 1;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    transition: all 0.3s;
+}
+
+.line-test-actions .el-button:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--bg-primary);
+}
+
+
+/* 版权按钮组样式 */
+.copyright-group {
+    display: flex;
+    width: 100%;
+}
+
+.copyright-group .el-radio-button {
+    flex: 1;
+}
+
+.copyright-group .el-radio-button__inner {
+    width: 100%;
+    padding: 10px 0;
+    border-radius: 0;
+}
+
+.copyright-group .el-radio-button:first-child .el-radio-button__inner {
+    border-radius: 4px 0 0 4px;
+}
+
+.copyright-group .el-radio-button:last-child .el-radio-button__inner {
+    border-radius: 0 4px 4px 0;
+}
+
+
+/* 配置输入框数字控件样式 */
+.room-config-form .el-input-number.is-controls-right .el-input__inner {
+    padding-left: 15px;
+    padding-right: 50px;
+}
+
+.room-config-form .el-input-number__decrease,
+.room-config-form .el-input-number__increase {
+    background: var(--bg-tertiary);
+    border-color: var(--border-light);
+    color: var(--text-secondary);
+}
+
+.room-config-form .el-input-number__decrease:hover,
+.room-config-form .el-input-number__increase:hover {
+    color: var(--primary-color);
+}
+
+/* 配置 mini 输入框宽度 */
+.room-config-form .el-input-number--mini {
+    width: 100px !important;
+}
+
+.room-config-form .el-input-number--mini .el-input__inner {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    padding-left: 5px;
+    padding-right: 5px;
+    text-align: center;
+}
+
+.room-config-form .el-input-number--mini .el-input-number__decrease,
+.room-config-form .el-input-number--mini .el-input-number__increase {
+    background: var(--bg-tertiary);
+    border-left: 1px solid var(--border-light);
+    border-right: 1px solid var(--border-light);
+}
+
+/* ========== 视觉体验优化 (Visual Polish) ========== */
+
+/* 1. 滚动条美化 */
+.room-config-dialog .el-dialog__body::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.room-config-dialog .el-dialog__body::-webkit-scrollbar-thumb {
+    background: rgba(144, 147, 153, 0.3);
+    border-radius: 3px;
+}
+
+.room-config-dialog .el-dialog__body::-webkit-scrollbar-thumb:hover {
+    background: rgba(144, 147, 153, 0.5);
+}
+
+.room-config-dialog .el-dialog__body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* 2. 输入框增强边界感 */
+.room-config-form .el-input__inner,
+.room-config-form .el-textarea__inner {
+    border: 1px solid var(--border-light) !important; /* 强制添加边框 */
+    background: #f5f7fa; /* 稍微调亮背景 */
+    color: var(--text-primary);
+    font-weight: 500; /* 增加输入文字的字重 */
+}
+
+.room-config-form .el-input__inner:focus,
+.room-config-form .el-textarea__inner:focus {
+    background: #ffffff;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.1);
+}
+
+/* 3. 标签可读性提升 */
+.room-config-form .el-form-item__label {
+    color: #606266; /* 加深颜色 */
+    font-weight: 600; /* 加粗 */
+    font-size: 13px;
+}
+
+/* 4. 卡片头部优化 */
+.config-card .card-header {
+    background: rgba(242, 246, 252, 0.5); /* 更通透的背景 */
+    border-bottom: 1px solid rgba(235, 238, 245, 0.8);
+}
+
+.config-card .card-header i {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.config-card .card-header span {
+    font-size: 14px;
+    font-weight: 700; /* 标题加粗 */
+    letter-spacing: 0.5px;
+}
+
+/* 5. 占位符颜色微调 */
+.room-config-form ::placeholder {
+    color: #c0c4cc;
+    font-weight: normal;
+}
+
+
+/* ========== 视觉模式支持 (Dark Mode Support) ========== */
+
+[data-theme='dark'] .room-config-dialog {
+    background: #1f1f1f;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .dialog-header-modern {
+    background: #141414;
+    border-bottom: 1px solid #303030;
+}
+
+[data-theme='dark'] .dialog-title {
+    color: #e5e5e5;
+}
+
+[data-theme='dark'] .room-name-tag {
+    background: #2b2b2b;
+    color: #a6a6a6;
+}
+
+[data-theme='dark'] .room-config-dialog .el-dialog__body {
+    background: #141414;
+}
+
+[data-theme='dark'] .config-card {
+    background: #1f1f1f;
+    border-color: #303030;
+}
+
+[data-theme='dark'] .config-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .card-header {
+    background: #2b2b2b;
+    border-bottom: 1px solid #303030;
+    color: #e5e5e5;
+}
+
+[data-theme='dark'] .room-config-form .el-form-item__label {
+    color: #a6a6a6;
+}
+
+/* 输入框暗模式 */
+[data-theme='dark'] .room-config-form .el-input__inner,
+[data-theme='dark'] .room-config-form .el-textarea__inner {
+    background: #141414 !important;
+    border-color: #434343 !important;
+    color: #e5e5e5;
+}
+
+[data-theme='dark'] .room-config-form .el-input__inner:focus,
+[data-theme='dark'] .room-config-form .el-textarea__inner:focus {
+    border-color: var(--primary-color) !important;
+    background: #000000 !important;
+}
+
+/* 开关卡片暗模式 */
+[data-theme='dark'] .switch-card {
+    background: #2b2b2b;
+}
+
+[data-theme='dark'] .switch-card:hover {
+    background: #333333;
+    border-color: #434343;
+}
+
+[data-theme='dark'] .switch-label {
+    color: #e5e5e5;
+}
+
+/* 底部按钮暗模式 */
+[data-theme='dark'] .dialog-footer-modern {
+    background: #141414;
+    border-top: 1px solid #303030;
+}
+
+/* 线路测试按钮暗模式 */
+[data-theme='dark'] .line-test-actions .el-button {
+    background: #2b2b2b;
+    border-color: #434343;
+    color: #e5e5e5;
+}
+
+[data-theme='dark'] .line-test-actions .el-button:hover {
+    background: #333333;
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* 封面上传器暗模式 */
+[data-theme='dark'] .cover-uploader-mini .el-upload {
+    background: #2b2b2b;
+    border-color: #434343;
+}
+
+[data-theme='dark'] .cover-uploader-mini .el-upload:hover {
+    background: #333333;
+    border-color: var(--primary-color);
+}
+
+/* 输入框暗模式 */
+[data-theme='dark'] .room-config-form .el-input-number__decrease,
+[data-theme='dark'] .room-config-form .el-input-number__increase {
+    background: #2b2b2b;
+    border-color: #434343;
+    color: #a6a6a6;
+}
+
+[data-theme='dark'] .room-config-form .el-input-number--mini .el-input-number__decrease,
+[data-theme='dark'] .room-config-form .el-input-number--mini .el-input-number__increase {
+    background: #2b2b2b;
+    border-color: #434343;
+}
+
+/* ========== 通用现代动画 ========== */
+
+/* 脉冲动画 */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+    }
+}
+
+/* 呼吸动画 */
+@keyframes breathe {
+    0%, 100% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+/* 图标弹跳动画 */
+@keyframes iconBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+/* 渐变滑入动画 */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 添加动画到按钮图标 */
+.modern-btn:hover [class^="el-icon-"],
+.modern-btn:hover [class*=" el-icon-"] {
+    animation: iconBounce 0.5s ease;
+}
+
+/* 卡片列表动画 */
+.room-card {
+    animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+
+.room-card:nth-child(1) { animation-delay: 0.05s; }
+.room-card:nth-child(2) { animation-delay: 0.1s; }
+.room-card:nth-child(3) { animation-delay: 0.15s; }
+.room-card:nth-child(4) { animation-delay: 0.2s; }
+.room-card:nth-child(5) { animation-delay: 0.25s; }
+.room-card:nth-child(6) { animation-delay: 0.3s; }
+

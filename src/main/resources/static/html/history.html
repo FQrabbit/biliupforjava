@@ -250,8 +250,8 @@
                     
                     <!-- 操作按钮 -->
                     <div class="filter-footer">
-                        <el-button type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading">查询</el-button>
-                        <el-button icon="el-icon-refresh" @click="resetFilters" size="small">重置</el-button>
+                        <el-button class="modern-btn" type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading">查询</el-button>
+                        <el-button class="modern-btn" icon="el-icon-refresh" @click="resetFilters" size="small">重置</el-button>
                     </div>
                 </div>
             </transition>
@@ -569,13 +569,13 @@
             <div class="detail-footer-actions" v-if="currentDetail.id">
                 <!-- 常用操作 -->
                 <div class="action-group-primary">
-                    <el-button @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
-                    <el-button @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
+                    <el-button class="modern-btn" @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
+                    <el-button class="modern-btn" @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
                 </div>
 
                 <!-- 更多操作开关 -->
                 <div class="action-group-more-toggle">
-                    <el-button @click="showMoreActions = !showMoreActions" size="small" plain :icon="showMoreActions ? 'el-icon-arrow-left' : 'el-icon-more'">
+                    <el-button class="modern-btn" @click="showMoreActions = !showMoreActions" size="small" plain :icon="showMoreActions ? 'el-icon-arrow-left' : 'el-icon-more'">
                         {{ showMoreActions ? '收起' : '更多操作' }}
                     </el-button>
                 </div>
@@ -585,26 +585,26 @@
                     <div class="action-group-secondary" v-show="showMoreActions">
                         <div class="action-sub-group">
                             <span class="action-group-label">发布管理</span>
-                            <el-button @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
-                            <el-button @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
-                            <el-button @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
-                            <el-button @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
+                            <el-button class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
+                            <el-button class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
+                            <el-button class="modern-btn" @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
+                            <el-button class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
                             <span class="action-group-label">录制与数据</span>
-                            <el-button @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
-                            <el-button @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
-                            <el-button @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
+                            <el-button class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
+                            <el-button class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
+                            <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
-                            <el-button @click="deleteHistory(currentDetail.id)" size="mini" type="danger" icon="el-icon-delete">删除记录</el-button>
+                            <el-button class="modern-btn" @click="deleteHistory(currentDetail.id)" size="mini" type="danger" icon="el-icon-delete">删除记录</el-button>
                         </div>
                     </div>
                 </transition>
             </div>
-            <el-button @click="detailDialogVisible = false" class="close-btn">关 闭</el-button>
+            <el-button class="modern-btn" @click="detailDialogVisible = false">关 闭</el-button>
         </div>
     </el-dialog>
 
@@ -625,8 +625,8 @@
             </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
-            <el-button @click="editDialogFormVisible = false">取 消</el-button>
-            <el-button @click="updateHistory()" type="primary">保 存</el-button>
+            <el-button class="modern-btn" @click="editDialogFormVisible = false">取 消</el-button>
+            <el-button class="modern-btn" @click="updateHistory()" type="primary">保 存</el-button>
         </div>
 </div>
 <script>

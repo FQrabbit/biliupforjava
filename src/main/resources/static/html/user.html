@@ -39,11 +39,11 @@
             </div>
         </div>
         <div class="user-header-actions">
-            <el-button class="neon-btn neon-btn-primary" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus" type="primary">
+            <el-button class="modern-btn" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus" type="primary">
                 添加账号
             </el-button>
             <el-tooltip effect="dark" :content="privacyMode ? '隐私模式：开' : '隐私模式：关'" placement="top">
-                <el-button class="neon-btn neon-btn-primary" type="primary" @click="togglePrivacyMode" :icon="privacyMode ? 'el-icon-lock' : 'el-icon-view'">隐私</el-button>
+                <el-button class="modern-btn" type="primary" @click="togglePrivacyMode" :icon="privacyMode ? 'el-icon-lock' : 'el-icon-view'">隐私</el-button>
             </el-tooltip>
             <el-radio-group v-model="viewMode" size="small">
                 <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
@@ -59,7 +59,7 @@
             <i class="el-icon-user empty-icon"></i>
             <h3 class="empty-title">还没有添加账号</h3>
             <p class="empty-desc">点击上方"添加账号"按钮，扫码登录您的B站账号</p>
-            <el-button type="primary" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus">
+            <el-button class="modern-btn" type="primary" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus">
                 立即添加
             </el-button>
         </div>

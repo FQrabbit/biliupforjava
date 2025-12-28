@@ -1362,3 +1362,191 @@ pre {
     display: inline-block;
 }
 
+/* ========== 统一按钮样式（现代化动画效果） ========== */
+.modern-btn {
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.modern-btn:hover {
+    transform: translateY(-2px) scale(1.05) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+}
+
+.modern-btn:active {
+    transform: translateY(0) scale(0.98) !important;
+}
+
+.modern-btn i {
+    transition: transform 0.3s ease;
+}
+
+.modern-btn:hover i {
+    transform: rotate(10deg) scale(1.1);
+}
+
+/* 按钮点击波纹效果 */
+.modern-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.modern-btn:active::after {
+    width: 300px;
+    height: 300px;
+}
+
+/* 按钮光晕扫过效果 */
+.modern-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.modern-btn:hover::before {
+    left: 100%;
+}
+
+/* 按钮颜色变体 */
+.modern-btn.el-button--danger:hover,
+.modern-btn.el-button--danger.is-plain:hover {
+    box-shadow: 0 4px 16px rgba(244, 67, 54, 0.3) !important;
+}
+
+.modern-btn.el-button--warning:hover,
+.modern-btn.el-button--warning.is-plain:hover {
+    box-shadow: 0 4px 16px rgba(255, 152, 0, 0.3) !important;
+}
+
+.modern-btn.el-button--success:hover,
+.modern-btn.el-button--success.is-plain:hover {
+    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.3) !important;
+}
+
+.modern-btn.el-button--primary:hover,
+.modern-btn.el-button--primary.is-plain:hover {
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3) !important;
+}
+
+.modern-btn.el-button--info:hover,
+.modern-btn.el-button--info.is-plain:hover {
+    box-shadow: 0 4px 16px rgba(144, 147, 153, 0.3) !important;
+}
+
+/* 徽章脉冲动画 */
+.modern-badge .el-badge__content {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* 现代化复选框样式 */
+.modern-checkbox.el-checkbox.is-bordered {
+    padding: 6px 12px !important;
+    height: auto !important;
+    border-radius: 20px !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(249, 250, 251, 0.8)) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    position: relative;
+}
+
+[data-theme="dark"] .modern-checkbox.el-checkbox.is-bordered {
+    background: linear-gradient(135deg, rgba(39, 39, 42, 0.6), rgba(49, 49, 52, 0.6)) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.modern-checkbox.el-checkbox.is-bordered:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+    border-color: #667eea !important;
+}
+
+.modern-checkbox.el-checkbox.is-bordered.is-checked {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    border-color: #667eea !important;
+    color: white !important;
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4) !important;
+}
+
+.modern-checkbox.el-checkbox.is-bordered.is-checked:hover {
+    transform: translateY(-2px) scale(1.02) !important;
+}
+
+.modern-checkbox .el-checkbox__label {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    padding-left: 6px !important;
+    font-weight: 500 !important;
+}
+
+.modern-checkbox.el-checkbox.is-bordered.is-checked .el-checkbox__label {
+    color: white !important;
+}
+
+.modern-checkbox .el-checkbox__label i {
+    transition: transform 0.3s ease;
+}
+
+.modern-checkbox.el-checkbox.is-bordered:hover .el-checkbox__label i {
+    transform: scale(1.2);
+}
+
+.modern-checkbox.el-checkbox.is-bordered.is-checked .el-checkbox__label i {
+    animation: iconBounce 0.5s ease;
+}
+
+@keyframes iconBounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3) rotate(10deg); }
+}
+
+/* 流动边框效果 */
+.modern-checkbox.el-checkbox.is-bordered::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 22px;
+    background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #4facfe);
+    background-size: 300% 300%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: -1;
+    animation: gradientMove 3s ease infinite;
+}
+
+@keyframes gradientMove {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.modern-checkbox.el-checkbox.is-bordered:hover::before {
+    opacity: 0.6;
+}
+
+.modern-checkbox.el-checkbox.is-bordered.is-checked::before {
+    opacity: 1;
+}
+
