@@ -55,6 +55,12 @@ public class RecordHistoryPart {
     @Column(name = "file_delete", columnDefinition = "bit default 0")
     private boolean fileDelete;
 
+    @Column(name = "delete_retry_count", columnDefinition = "int default 0")
+    private int deleteRetryCount;
+
+    @Column(name = "delete_fail_reason", length = 512)
+    private String deleteFailReason;
+
     private int uploadRetryCount;
 
     private LocalDateTime startTime;

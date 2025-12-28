@@ -25,6 +25,9 @@ public class DeletePartFileJob {
     @Value("${record.work-path}")
     private String workPath;
 
+    @Value("${record.delete.max-retry:72}")
+    private int maxDeleteRetry;
+
     @Autowired
     RecordRoomRepository roomRepository;
 
@@ -41,14 +44,49 @@ public class DeletePartFileJob {
                 log.info("定时删除文件任务，主播名称{}，待删除文件数量{}", room.getUname(), partList.size());
             }
             for (RecordHistoryPart part : partList) {
-                File file = new File(part.getFilePath());
-                boolean delete = file.delete();
-                if (delete) {
-                    log.info("定时删除文件任务，主播名称{}，{}=>文件删除成功！！！", room.getUname(), part.getFilePath());
-                } else {
-                    log.error("定时删除文件任务，主播名称{}，{}=>文件删除失败！！！", room.getUname(), part.getFilePath());
+                String filePath = part.getFilePath();
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    log.info("定时删除文件任务，主播名称{}，{}=>文件不存在，视为已删除", room.getUname(), filePath);
+                    part.setFileDelete(true);
+                    part.setDeleteRetryCount(0);
+                    part.setDeleteFailReason(null);
+                    partRepository.save(part);
+                    continue;
                 }
-                part.setFileDelete(true);
+
+                String failReason = null;
+                try {
+                    Files.deleteIfExists(file.toPath());
+                } catch (Exception e) {
+                    failReason = e.getClass().getSimpleName() + ":" + String.valueOf(e.getMessage());
+                }
+
+                if (!file.exists()) {
+                    log.info("定时删除文件任务，主播名称{}，{}=>文件删除成功！！！", room.getUname(), filePath);
+                    part.setFileDelete(true);
+                    part.setDeleteRetryCount(0);
+                    part.setDeleteFailReason(null);
+                } else {
+                    int nextRetry = part.getDeleteRetryCount() + 1;
+                    part.setDeleteRetryCount(nextRetry);
+
+                    if (failReason != null && failReason.length() > 512) {
+                        failReason = failReason.substring(0, 512);
+                    }
+                    part.setDeleteFailReason(failReason);
+
+                    if (nextRetry >= maxDeleteRetry) {
+                        log.error("定时删除文件任务，主播名称{}，{}=>文件删除失败(已达重试上限 {}/{} )，停止重试。原因:{}",
+                                room.getUname(), filePath, nextRetry, maxDeleteRetry, failReason);
+                        part.setFileDelete(true);
+                    } else {
+                        log.warn("定时删除文件任务，主播名称{}，{}=>文件删除失败(重试 {}/{} )，原因:{}",
+                                room.getUname(), filePath, nextRetry, maxDeleteRetry, failReason);
+                        part.setFileDelete(false);
+                    }
+                }
+
                 partRepository.save(part);
             }
         }
