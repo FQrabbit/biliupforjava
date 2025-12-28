@@ -190,7 +190,7 @@ public class RecordEventFileClosedService implements RecordEventService {
             } else {
                 double fileSizeMb = fileSize / 1024d / 1024d;
                 double durationSec = part.getDuration();
-                log.error("文件未达到上传阈值，删除。size={}MB(limit={}MB) duration={}s(limit={}s) historyId={} bvid={} partId={}",
+                log.info("文件未达到上传阈值，跳过上传（不删除磁盘文件，仅清理分P记录）。size={}MB(limit={}MB) duration={}s(limit={}s) historyId={} bvid={} partId={}",
                         String.format(java.util.Locale.ROOT, "%.3f", fileSizeMb),
                         room.getFileSizeLimit(),
                         String.format(java.util.Locale.ROOT, "%.3f", durationSec),

@@ -392,9 +392,9 @@ public class LiveMsgSendSync {
                             } catch (Exception e) {
                                 // ignore
                             }
-                            log.warn("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。涉及稿件 BVID: {} 标题: {}", peekMsg.getBvid(), title);
+                            log.info("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。涉及稿件 BVID: {} 标题: {}", peekMsg.getBvid(), title);
                         } else {
-                            log.warn("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。");
+                            log.info("弹幕发送任务执行时间过长（超过2小时），将自动停止本次任务并在下次调度中继续发送。");
                         }
                         return;
                     }
