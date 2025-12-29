@@ -456,20 +456,6 @@
 
             <!-- 状态栏 -->
             <div class="detail-status-bar">
-                <div class="status-item-modern" :class="{'active': currentDetail.upload}">
-                    <div class="status-icon"><i class="el-icon-upload2"></i></div>
-                    <div class="status-info">
-                        <div class="status-label">上传状态</div>
-                        <div class="status-value">{{ currentDetail.upload ? '已上传' : '未上传' }}</div>
-                    </div>
-                </div>
-                <div class="status-item-modern" :class="{'active': currentDetail.publish}">
-                    <div class="status-icon"><i class="el-icon-s-release"></i></div>
-                    <div class="status-info">
-                        <div class="status-label">发布状态</div>
-                        <div class="status-value">{{ currentDetail.publish ? '已发布' : '未发布' }}</div>
-                    </div>
-                </div>
                 <div class="status-item-modern" :class="{'active': isActuallyRecording(currentDetail), 'warning': isActuallyRecording(currentDetail)}">
                     <div class="status-icon"><i class="el-icon-video-camera"></i></div>
                     <div class="status-info">
@@ -480,6 +466,23 @@
                         </div>
                     </div>
                 </div>
+                <div class="status-connector" :class="{'active': currentDetail.upload}"></div>
+                <div class="status-item-modern" :class="{'active': currentDetail.upload}">
+                    <div class="status-icon"><i class="el-icon-upload2"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">上传状态</div>
+                        <div class="status-value">{{ currentDetail.upload ? '上传:开' : '上传:否' }}</div>
+                    </div>
+                </div>
+                <div class="status-connector" :class="{'active': currentDetail.publish}"></div>
+                <div class="status-item-modern" :class="{'active': currentDetail.publish}">
+                    <div class="status-icon"><i class="el-icon-s-release"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">发布状态</div>
+                        <div class="status-value">{{ currentDetail.publish ? '已发布' : '未发布' }}</div>
+                    </div>
+                </div>
+                <div class="status-connector" :class="getAuditStatusClass(currentDetail)"></div>
                 <div class="status-item-modern" :class="getAuditStatusClass(currentDetail)">
                     <div class="status-icon"><i class="el-icon-s-check"></i></div>
                     <div class="status-info">
@@ -564,6 +567,7 @@
                             <span class="part-badge">P{{ formatProgressPage(p.page) }}</span>
                             <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
                             <span class="part-meta">{{ p.chunkDone }}/{{ p.chunkTotal }}</span>
+                            <span v-if="calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
                         </div>
                         <div class="progress-bar-mini">
                             <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
@@ -683,7 +687,8 @@
             quickFilter: null,
             historyUploadProgress: null,
             progressTimer: null,
-            showMoreActions: false
+            showMoreActions: false,
+            progressSpeedTracking: {}
         },
         computed: {
             isPublishLockedByCode: function() {
@@ -971,9 +976,11 @@
                 const _this = this;
                 if (!historyId) return;
                 _this.stopProgressPolling();
+                _this.progressSpeedTracking = {};
 
                 _this.fetchHistoryProgressOnce(historyId, true, function (resp) {
                     _this.historyUploadProgress = resp;
+                    _this.updateSpeedTracking(resp);
                     if (resp && resp.activeCount && resp.activeCount > 0) {
                         _this.progressTimer = setInterval(function () {
                             if (!_this.detailDialogVisible || !_this.currentDetail || _this.currentDetail.id !== historyId) {
@@ -982,11 +989,12 @@
                             }
                             _this.fetchHistoryProgressOnce(historyId, true, function (nextResp) {
                                 _this.historyUploadProgress = nextResp;
+                                _this.updateSpeedTracking(nextResp);
                                 if (!nextResp || !nextResp.activeCount || nextResp.activeCount <= 0) {
                                     _this.stopProgressPolling();
                                 }
                             });
-                        }, 2000);
+                        }, 1500);
                     }
                 });
             },
@@ -995,6 +1003,7 @@
                     clearInterval(this.progressTimer);
                     this.progressTimer = null;
                 }
+                this.progressSpeedTracking = {};
             },
             fetchHistoryProgressOnce: function(historyId, silent, callback) {
                 const _this = this;
@@ -1116,6 +1125,101 @@
                 const hasErrorState = status === 'exception' || p.state === 'FAILED';
                 const hasErrorMsg = p.stateMsg && (p.stateMsg.indexOf('损坏') !== -1 || p.stateMsg.indexOf('跳变') !== -1);
                 return hasErrorState || hasErrorMsg;
+            },
+            updateSpeedTracking: function(progressData) {
+                if (!progressData || !progressData.items) return;
+                const now = Date.now();
+                
+                progressData.items.forEach(item => {
+                    const partId = item.partId || item.page;
+                    if (!partId) return;
+                    
+                    const chunkDone = Number(item.chunkDone) || 0;
+                    const chunkTotal = Number(item.chunkTotal) || 0;
+                    const state = item.state;
+                    
+                    if (state !== 'UPLOADING' || chunkTotal <= 0) return;
+                    
+                    if (!this.progressSpeedTracking[partId]) {
+                        this.progressSpeedTracking[partId] = {
+                            samples: [],
+                            lastChunkDone: chunkDone,
+                            lastTime: now,
+                            chunkTotal: chunkTotal
+                        };
+                    } else {
+                        const track = this.progressSpeedTracking[partId];
+                        const timeDiff = (now - track.lastTime) / 1000;
+                        const chunkDiff = chunkDone - track.lastChunkDone;
+                        
+                        if (timeDiff > 0 && chunkDiff > 0) {
+                            const speed = chunkDiff / timeDiff;
+                            track.samples.push({ speed: speed, time: now });
+                            
+                            if (track.samples.length > 10) {
+                                track.samples.shift();
+                            }
+                            
+                            track.lastChunkDone = chunkDone;
+                            track.lastTime = now;
+                            track.chunkTotal = chunkTotal;
+                        }
+                    }
+                });
+            },
+            calculateRemainingTime: function(p) {
+                if (!p || !p.partId && !p.page) return null;
+                const partId = p.partId || p.page;
+                const chunkDone = Number(p.chunkDone) || 0;
+                const chunkTotal = Number(p.chunkTotal) || 0;
+                const state = p.state;
+                
+                if (state !== 'UPLOADING' || chunkDone >= chunkTotal) return null;
+                
+                const track = this.progressSpeedTracking[partId];
+                if (!track || !track.samples || track.samples.length < 2) {
+                    return '正在计算...';
+                }
+                
+                const now = Date.now();
+                const recentSamples = track.samples.filter(s => (now - s.time) < 30000);
+                
+                if (recentSamples.length === 0) return null;
+                
+                const weights = recentSamples.map((s, i) => i + 1);
+                const totalWeight = weights.reduce((a, b) => a + b, 0);
+                const avgSpeed = recentSamples.reduce((sum, s, i) => sum + s.speed * weights[i], 0) / totalWeight;
+                
+                if (avgSpeed <= 0) return null;
+                
+                const remainingChunks = chunkTotal - chunkDone;
+                const remainingSeconds = remainingChunks / avgSpeed;
+                
+                const speedMBps = (avgSpeed * 5).toFixed(1);
+                
+                return this.formatRemainingTime(remainingSeconds, speedMBps);
+            },
+            formatRemainingTime: function(seconds, speedMBps) {
+                if (!isFinite(seconds) || seconds <= 0) return null;
+                
+                let timeStr = '';
+                if (seconds > 3600) {
+                    const hours = Math.floor(seconds / 3600);
+                    const mins = Math.floor((seconds % 3600) / 60);
+                    timeStr = `约${hours}小时${mins}分钟`;
+                } else if (seconds > 60) {
+                    const mins = Math.ceil(seconds / 60);
+                    timeStr = `约${mins}分钟`;
+                } else {
+                    const secs = Math.ceil(seconds);
+                    timeStr = `约${secs}秒`;
+                }
+                
+                if (speedMBps && Number(speedMBps) > 0) {
+                    timeStr += ` (${speedMBps}MB/s)`;
+                }
+                
+                return timeStr;
             },
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;

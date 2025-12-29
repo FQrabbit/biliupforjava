@@ -36,7 +36,7 @@ public class LoginInterceptor implements HandlerInterceptor {
             return true;
         }
         
-        log.warn("[BLR] {}", LogKvs.event("Auth.Basic.Failed")
+        log.info("[BLR] {}", LogKvs.event("Auth.Basic.Failed")
             .add("ip", request.getRemoteAddr())
             .add("path", request.getRequestURI()));
         
