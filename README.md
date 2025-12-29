@@ -37,7 +37,7 @@ BiliUpForJava 是一个全自动的 B站录播投稿工具，配合**录播姬**
 | 💾 **边录边传** | 支持录制一个文件后上传一个文件，减少硬盘占用 |
 | 🖼️ **智能封面** | 支持直播封面和自定义封面 |
 | 💬 **弹幕转移** | 可将直播弹幕转移到录播视频（非压制） |
-| ✂️ **云剪辑支持** | 上传到 B站云剪辑平台素材库进行二次创作 |
+| ✂️ ~~**云剪辑支持**~~| ~~上传到 B站云剪辑平台素材库进行二次创作~~ |
 | 📤 **云盘路径支持** | 支持文件处理后移动，配合 rclone/WebDAV 上传云盘 |
 | 🐳 **Docker 部署** | 提供 Docker 镜像，支持一键部署 |
 | 🖥️ **跨平台** | 支持 Windows、Linux、NAS 等多种环境 |
@@ -174,9 +174,14 @@ java -Dserver.port=12380 \
 #### Webhook 配置地址
 
 ```
-录播姬 WebHook v2: http://127.0.0.1:12380/recordWebHook
-blrec WebHook: http://127.0.0.1:12380/recordWebHook
+录播姬 WebHook v2: http://192.168.x.x:12380/recordWebHook
+blrec WebHook: http://192.168.x.x:12380/recordWebHook
 ```
+> **⚠️ 重要提示**
+> - ✅ 使用容器名称 `bup`（需配置网络）
+> - ✅ 或使用局域网 IP：`http://192.168.x.x:12380/recordWebHook`
+> - ❌ 不要使用 `localhost` 或 `127.0.0.1`
+> - ❌ 不要使用容器内部 IP
 
 
 </details>
@@ -289,11 +294,12 @@ docker network connect bili-net bup
 
 | 主页面 | 房间管理 |
 |:------:|:--------:|
-| [![主页面](https://s1.ax1x.com/2022/12/23/zjCFN6.md.png)](https://imgse.com/i/zjCFN6) | [![房间管理](https://s1.ax1x.com/2022/12/23/zjCiAx.md.png)](https://imgse.com/i/zjCiAx) |
+| [![主页面](https://i.ooxx.ooo/i/YmE1Y.png)](https://i.ooxx.ooo/i/YmE1Y.png) | [![用户管理](https://i.ooxx.ooo/i/ZGExN.png)](https://i.ooxx.ooo/i/ZGExN.png) |
 
 | 上传历史 |
 |:--------:|
-| [![上传历史](https://s1.ax1x.com/2022/12/23/zjCk4K.md.png)](https://imgse.com/i/zjCk4K) |
+| [![上传历史](https://i.ooxx.ooo/i/Zjg3M.png)](https://i.ooxx.ooo/i/Zjg3M.png)![详细信息]( https://i.ooxx.ooo/i/MGQ4M.png) |   
+
 
 </details>
 
@@ -358,8 +364,8 @@ docker network connect bili-net bup
 ## 💬 交流与支持
 
 - **QQ 群**：697605055 <a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=kBA4u6rVFe_n2XjyYGx94CgTh3-KWM5T&jump_from=webapi&authKey=nhTa8F4D31bovL/ZwEfX5Qt148AyzJKCD4cC0+6ew/Y8bJfcf6aJKxtqXPUjQpwx">
-  <img border="0" src="https://pub.idqqimg.com/wpa/images/group.png" alt="录播姬投稿插件交流群" title="录播姬投稿插件交流群">
-</a>
+  <img border="0" src="https://pub.idqqimg.com/wpa/images/group.png" alt="录播姬投稿插件交流群" title="录播姬投稿插件交流群"></a>
+
 - **问题反馈**：[GitHub Issues](https://github.com/FQrabbit/biliupforjava/issues)
 - ~~**下载地址**：[阿里云盘](https://www.aliyundrive.com/s/8n4waHuh5sA)~~
 
