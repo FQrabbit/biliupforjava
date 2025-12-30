@@ -342,6 +342,30 @@ public final class LogKvs {
         EVENT_ZH.put("ByteUtils.HexToString.DecodeFailed", "ByteUtils：Hex转字符串失败");
         EVENT_ZH.put("ByteUtils.ZlibInflateString.Failed", "ByteUtils：Zlib解压为字符串失败");
         EVENT_ZH.put("ByteUtils.ZlibInflateBytes.Failed", "ByteUtils：Zlib解压为字节失败");
+
+        // blrec Webhook
+        EVENT_ZH.put("BlrecWebhook.InvalidPayload", "blrec Webhook: 请求体无效");
+        EVENT_ZH.put("BlrecWebhook.DispatchError", "blrec Webhook: 事件分发失败(找不到对应Service)");
+        EVENT_ZH.put("Blrec.Room.AutoCreate", "blrec 事件: 房间不存在，自动创建");
+        EVENT_ZH.put("Blrec.RecordingStarted.Success", "blrec 事件: 录制开始，已创建新的录制历史");
+        EVENT_ZH.put("Blrec.RecordingFinished.RoomNotFound", "blrec 事件: 录制结束-未找到房间");
+        EVENT_ZH.put("Blrec.RecordingFinished.HistoryNotFound", "blrec 事件: 录制结束-未找到录制历史");
+        EVENT_ZH.put("Blrec.RecordingFinished.Success", "blrec 事件: 录制结束，已更新状态");
+        EVENT_ZH.put("Blrec.RecordingCancelled.RoomNotFound", "blrec 事件: 录制取消-未找到房间");
+        EVENT_ZH.put("Blrec.RecordingCancelled.HistoryNotFound", "blrec 事件: 录制取消-未找到录制历史");
+        EVENT_ZH.put("Blrec.RecordingCancelled.Success", "blrec 事件: 录制取消，已更新状态");
+        EVENT_ZH.put("Blrec.VideoFileCompleted.Skip", "blrec 事件: 视频文件完成-跳过(房间不存在或未在录制)");
+        EVENT_ZH.put("Blrec.VideoFileCompleted.HistoryNotFound", "blrec 事件: 视频文件完成-未找到录制历史");
+        EVENT_ZH.put("Blrec.VideoFileCompleted.PartExists", "blrec 事件: 视频文件完成-分P已存在，跳过");
+        EVENT_ZH.put("Blrec.VideoFileCompleted.PartSaved", "blrec 事件: 视频文件完成，已保存分P记录");
+        EVENT_ZH.put("Blrec.CoverDownloaded.Skip", "blrec 事件: 封面下载-跳过(房间不存在或未在录制)");
+        EVENT_ZH.put("Blrec.CoverDownloaded.HistoryNotFound", "blrec 事件: 封面下载-未找到录制历史");
+        EVENT_ZH.put("Blrec.CoverDownloaded.Success", "blrec 事件: 封面下载成功，已更新封面路径");
+        EVENT_ZH.put("Blrec.RoomChange.RoomNotFound", "blrec 事件: 房间信息变更-未找到房间");
+        EVENT_ZH.put("Blrec.RoomChange.Success", "blrec 事件: 房间信息变更成功");
+        EVENT_ZH.put("Blrec.DanmakuCompleted.Skip", "blrec 事件: 弹幕文件完成-跳过(房间不存在或未在录制)");
+        EVENT_ZH.put("Blrec.DanmakuCompleted.PartNotFound", "blrec 事件: 弹幕文件完成-未找到对应的视频分P");
+        EVENT_ZH.put("Blrec.DanmakuCompleted.Processed", "blrec 事件: 弹幕文件完成，已触发解析");
     }
 
     private LogKvs() {

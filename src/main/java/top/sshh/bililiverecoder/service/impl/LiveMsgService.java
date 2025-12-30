@@ -152,7 +152,7 @@ public class LiveMsgService {
                     String price = element.attribute("price").getValue();
 
                     //  blrec 弹幕的金额/1000
-                    if ("blrec".equals(part.getSessionId())) {
+                    if ("blrec".equals(part.getSourceType())) {
                         price = String.valueOf(Integer.parseInt(price) / 1000);
                     }
 
