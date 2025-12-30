@@ -48,148 +48,137 @@ public class RecordEventFileOpenService implements RecordEventService {
     @Override
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
-        String relativePath = eventData.getRelativePath();
-        log.info("[BLR] {}", LogKvs.event("FileOpen")
-                .add("roomId", eventData.getRoomId())
-                .add("title", eventData.getTitle())
-                .add("filePath", relativePath));
-        String sessionId = eventData.getSessionId();
-        try {
-            Thread.sleep(5000L);
-        } catch (Exception e) {
-            log.warn("[BLR] {}", LogKvs.event("FileOpen.SleepInterrupted")
-                    .add("roomId", eventData.getRoomId())
-                    .add("sessionId", eventData.getSessionId())
-                    .add("sleepMs", 5000)
-                    .add("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
-        }
         String roomId = eventData.getRoomId();
-        RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
-        if (room == null) {
-            synchronized (roomId.intern()) {
-                room = roomRepository.findByRoomId(eventData.getRoomId());
-                if (room == null) {
-                    log.error("[BLR] {}", LogKvs.event("FileOpen.MissingRoom")
-                            .add("roomId", eventData.getRoomId())
-                            .add("title", eventData.getTitle())
-                            .add("sessionId", eventData.getSessionId()));
-                    room = new RecordRoom();
-                    room.setRoomId(eventData.getRoomId());
-                    room.setCreateTime(LocalDateTime.now());
-                    if (eventData.getName() != null) {
-                        room.setUname(eventData.getName());
-                    }
-                    room.setTitle(eventData.getTitle());
-                    room.setHistoryId(-999L);
-                    room = roomRepository.save(room);
-                }
-            }
-        } else {
-            room.setUname(eventData.getName());
-            room.setTitle(eventData.getTitle());
-            room.setSessionId(eventData.getSessionId());
-            room.setRecording(eventData.isRecording());
-            room.setStreaming(eventData.isStreaming());
-            room = roomRepository.save(room);
-        }
-        Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
-        RecordHistory history = null;
-        if (historyOptional.isPresent()) {
-            history = historyOptional.get();
-            if (!eventData.getRoomId().equals(history.getRoomId())) {
-                log.error("[BLR] {}", LogKvs.event("FileOpen.HistoryRoomMismatch")
-                        .add("roomId", eventData.getRoomId())
-                        .add("history", JSON.toJSONString(history)));
-                history = null;
-            }
-        }
-        //异常情况判断
-        if (history == null || (!"blrec".equals(eventData.getSessionId()) && !eventData.getSessionId().equals(history.getSessionId()) && history.getEndTime().isBefore(LocalDateTime.now().minusMinutes(10L)))) {
-            log.error("[BLR] {}", LogKvs.event("FileOpen.MissingHistory")
-                    .add("roomId", eventData.getRoomId())
-                    .add("title", eventData.getTitle())
-                    .add("sessionId", eventData.getSessionId()));
-
-            history = new RecordHistory();
-            history.setEventId(event.getEventId());
-            history.setRoomId(room.getRoomId());
-            history.setStartTime(LocalDateTime.now());
-            history.setEndTime(LocalDateTime.now());
-            history.setTitle(eventData.getTitle());
-            history.setSessionId(eventData.getSessionId());
-            history.setRecording(eventData.isRecording());
-            history.setStreaming(eventData.isStreaming());
-            history.setUpload(room.isUpload());
-            history = historyRepository.save(history);
-            room.setHistoryId(history.getId());
-            room = roomRepository.save(room);
-        }
-        int partCount = historyPartRepository.countByHistoryId(history.getId());
-
-        if(partCount>99){
-            log.warn("[BLR] {}", LogKvs.event("FileOpen.PartLimitReached")
-                    .add("historyId", history.getId())
-                    .add("limit", 100));
-            //更新唯一键,更新录制状态
-            history.setEventId(history.getEventId()+1);
-            history.setSessionId(history.getSessionId()+1);
-            history.setRecording(false);
-            history.setStreaming(false);
-            history = historyRepository.save(history);
-            //创建新的录制历史
-            history = new RecordHistory();
-            history.setEventId(event.getEventId());
-            history.setRoomId(room.getRoomId());
-            history.setStartTime(LocalDateTime.now());
-            history.setEndTime(LocalDateTime.now());
-            history.setTitle(eventData.getTitle());
-            history.setSessionId(eventData.getSessionId());
-            history.setRecording(eventData.isRecording());
-            history.setStreaming(eventData.isStreaming());
-            history = historyRepository.save(history);
-        }
-        if ("blrec".equals(sessionId)) {
-            relativePath = relativePath.replace(workPath, "");
-        }
-        String filePath = workPath + File.separator + relativePath;
-        // 正常逻辑
-        boolean existsPart = historyPartRepository.existsByFilePath(filePath);
-        if(existsPart){
-            log.warn("[BLR] {}", LogKvs.event("FileOpen.PartExists")
-                    .add("roomId", eventData.getRoomId())
-                    .add("historyId", history.getId())
-                    .add("filePath", filePath));
+        if (roomId == null || roomId.isBlank()) {
+            log.error("[BLR] {}", LogKvs.event("Webhook.InvalidPayload").add("reason", "RoomId is null or blank"));
             return;
         }
-        RecordHistoryPart part = new RecordHistoryPart();
-        part.setEventId(event.getEventId());
-        part.setTitle(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM月dd日HH点mm分ss秒")));
-        part.setLiveTitle(eventData.getTitle());
-        part.setAreaName(eventData.getAreaNameChild());
-        part.setRoomId(history.getRoomId());
-        part.setHistoryId(history.getId());
-        part.setFilePath(filePath);
-        part.setFileSize(0L);
-        part.setSessionId(eventData.getSessionId());
-        part.setRecording(eventData.isRecording());
-        part.setStartTime(LocalDateTime.now());
-        part.setEndTime(LocalDateTime.now());
-        part = historyPartRepository.save(part);
-        log.info("[BLR] {}", LogKvs.event("FileOpen.Saved")
-            .add("roomId", eventData.getRoomId())
-            .add("historyId", history.getId())
-            .add("partDbId", part.getId())
-            .add("partTitle", part.getTitle()));
-        log.debug("[BLR] {}", LogKvs.event("FileOpen.DebugPart")
-            .add("part", JSON.toJSONString(part)));
-        history.setTitle(eventData.getTitle());
-        history.setSessionId(eventData.getSessionId());
-        history.setRecording(eventData.isRecording());
-        history.setStreaming(eventData.isStreaming());
-        history.setFilePath(workPath + File.separator + relativePath.substring(0, relativePath.lastIndexOf('/')));
-        history.setEndTime(LocalDateTime.now());
-        historyRepository.save(history);
 
+        // 使用 roomId 字符串的 intern() 方法作为锁对象
+        // 这能确保所有对同一个 roomId 的操作都是串行的，而不同 roomId 的操作可以并行
+        synchronized (roomId.intern()) {
+            try {
+                String relativePath = eventData.getRelativePath();
+                String incomingSessionId = eventData.getSessionId();
+
+                log.info("[BLR] {}", LogKvs.event("FileOpen.Received")
+                        .add("roomId", roomId)
+                        .add("sessionId", incomingSessionId)
+                        .add("filePath", relativePath));
+
+                RecordRoom room = roomRepository.findByRoomId(roomId);
+                if (room == null) {
+                    log.warn("[BLR] {}", LogKvs.event("FileOpen.RoomNotFound.AutoCreate")
+                            .add("roomId", roomId));
+                    room = new RecordRoom();
+                    room.setRoomId(roomId);
+                    room.setUname(eventData.getName());
+                    room.setTitle(eventData.getTitle());
+                    room.setCreateTime(LocalDateTime.now());
+                    room.setHistoryId(-1L); 
+                }
+
+                // --- 自愈式检查核心逻辑 ---
+                String currentSessionId = room.getSessionId();
+                if (incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
+                    log.warn("[BLR] {}", LogKvs.event("SessionMismatch.Detected")
+                            .add("roomId", roomId)
+                            .add("reason", "Missed RecordStarted event or session changed")
+                            .add("currentSessionId", currentSessionId)
+                            .add("incomingSessionId", incomingSessionId));
+
+                    RecordHistory newHistory = new RecordHistory();
+                    newHistory.setRoomId(roomId);
+                    newHistory.setStartTime(eventData.getFileOpenTime() != null ? eventData.getFileOpenTime().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() : LocalDateTime.now());
+                    newHistory.setEndTime(newHistory.getStartTime());
+                    newHistory.setEventId(event.getEventId());
+                    newHistory.setTitle(eventData.getTitle());
+                    newHistory.setSessionId(incomingSessionId);
+                    newHistory.setRecording(true); // 标记为正在录制
+                    newHistory.setStreaming(eventData.isStreaming());
+                    newHistory.setUpload(room.isUpload());
+                    newHistory = historyRepository.save(newHistory);
+
+                    room.setHistoryId(newHistory.getId());
+                    room.setSessionId(incomingSessionId);
+                    room.setRecording(true);
+                    room.setStreaming(eventData.isStreaming());
+                    room.setUname(eventData.getName());
+                    room.setTitle(eventData.getTitle());
+                    roomRepository.save(room);
+                    
+                    log.info("[BLR] {}", LogKvs.event("SessionMismatch.Recovered")
+                            .add("roomId", roomId)
+                            .add("newHistoryId", newHistory.getId())
+                            .add("newSessionId", incomingSessionId));
+                }
+                
+                Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
+                if (!historyOptional.isPresent()) {
+                    log.error("[BLR] {}", LogKvs.event("FileOpen.FATAL.HistoryStillNotFound")
+                            .add("roomId", roomId)
+                            .add("historyId", room.getHistoryId())
+                            .add("sessionId", incomingSessionId));
+                    return;
+                }
+                RecordHistory history = historyOptional.get();
+                
+                int partCount = historyPartRepository.countByHistoryId(history.getId());
+                if(partCount >= 99){
+                    log.warn("[BLR] {}", LogKvs.event("FileOpen.PartLimitReached")
+                            .add("historyId", history.getId())
+                            .add("limit", 100));
+                    return; 
+                }
+
+                if ("blrec".equals(incomingSessionId)) {
+                    relativePath = relativePath.replace(workPath, "");
+                }
+                String filePath = workPath + File.separator + relativePath;
+
+                if (historyPartRepository.existsByFilePath(filePath)) {
+                    log.warn("[BLR] {}", LogKvs.event("FileOpen.PartExists.Skip")
+                            .add("roomId", roomId)
+                            .add("historyId", history.getId())
+                            .add("filePath", filePath));
+                    return;
+                }
+
+                RecordHistoryPart part = new RecordHistoryPart();
+                part.setEventId(event.getEventId());
+                part.setTitle(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM月dd日HH点mm分ss秒")));
+                part.setLiveTitle(eventData.getTitle());
+                part.setAreaName(eventData.getAreaNameChild());
+                part.setRoomId(history.getRoomId());
+                part.setHistoryId(history.getId());
+                part.setFilePath(filePath);
+                part.setFileSize(0L);
+                part.setSessionId(incomingSessionId);
+                part.setRecording(true);
+                part.setStartTime(LocalDateTime.now());
+                part.setEndTime(LocalDateTime.now());
+                part = historyPartRepository.save(part);
+
+                log.info("[BLR] {}", LogKvs.event("FileOpen.PartSaved")
+                    .add("roomId", roomId)
+                    .add("historyId", history.getId())
+                    .add("partId", part.getId())
+                    .add("partTitle", part.getTitle()));
+
+                history.setTitle(eventData.getTitle());
+                history.setRecording(true);
+                history.setStreaming(eventData.isStreaming());
+                history.setFilePath(workPath + File.separator + relativePath.substring(0, relativePath.lastIndexOf('/')));
+                history.setEndTime(LocalDateTime.now());
+                historyRepository.save(history);
+
+            } catch (Exception e) {
+                log.error("[BLR] {}", LogKvs.event("FileOpen.UnhandledException")
+                        .add("roomId", eventData.getRoomId())
+                        .add("sessionId", eventData.getSessionId())
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
+            }
+        }
     }
 }

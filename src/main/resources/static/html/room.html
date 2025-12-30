@@ -532,6 +532,10 @@
                                 </el-select>
                             </el-form-item>
                             
+                            <el-form-item v-if="room.deleteType == 3" label="删除天数">
+                                <el-input type="number" v-model="room.deleteDay" placeholder="请输入天数"></el-input>
+                            </el-form-item>
+
                             <el-form-item v-if="[4,5,6,7,8,10,11].includes(room.deleteType)" label="目标目录">
                                 <el-input v-model="room.moveDir" placeholder="/path/to/dir"></el-input>
                             </el-form-item>
@@ -1429,6 +1433,7 @@
                                 "notice": "【UP主/节目名】+《游戏名》+主要标题+期号",
                                 "parent": 4,
                                 "max_video_count": 100
+
                             },
                             {
                                 "id": 172,
@@ -2735,12 +2740,12 @@
                     case 3: return (row.deleteDay||'') + '天后删除';
                     case 4: return '上传后移动';
                     case 5: return '审核后移动';
-                    case 6: return '录制后移动';
-                    case 7: return '录制后复制';
+                    case 6: return '录制结束后移动';
+                    case 7: return '录制结束后复制';
                     case 8: return (row.deleteDay||'') + '天后移动';
-                    case 9: return '投稿后删除';
-                    case 10: return '投稿后移动';
-                    case 11: return '审核后复制';
+                    case 9: return '投稿成功后删除';
+                    case 10: return '投稿成功后移动';
+                    case 11: return '审核通过后复制到{{scope.row.moveDir}}';
                     default: return '未设置';
                 }
             },

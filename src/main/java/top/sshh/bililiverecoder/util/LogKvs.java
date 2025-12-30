@@ -68,7 +68,13 @@ public final class LogKvs {
         EVENT_ZH.put("RecordEnd.Received", "收到录制结束事件");
         EVENT_ZH.put("RecordEnd.PartHeal.Done", "录制结束：分P纠偏/修复成功");
         EVENT_ZH.put("RecordEnd.PartHeal.Failed", "录制结束：分P纠偏/修复失败");
-        EVENT_ZH.put("FileOpen", "收到文件打开事件(开始写入分P文件)");
+        EVENT_ZH.put("FileOpen.Received", "收到文件打开事件");
+        EVENT_ZH.put("FileOpen.RoomNotFound.AutoCreate", "文件打开事件：房间不存在，自动创建");
+        EVENT_ZH.put("FileOpen.FATAL.HistoryStillNotFound", "文件打开事件：致命错误，自愈后仍未找到录制历史");
+        EVENT_ZH.put("FileOpen.PartSaved", "文件打开事件：成功创建并保存新的分P记录");
+        EVENT_ZH.put("FileOpen.PartExists.Skip", "文件打开事件：分P记录已存在，跳过重复创建");
+        EVENT_ZH.put("SessionMismatch.Detected", "检测到 Session ID 不匹配(可能错过了[录制开始]事件)");
+        EVENT_ZH.put("SessionMismatch.Recovered", "Session ID 不匹配：自愈成功，已创建新的录制历史");
         EVENT_ZH.put("FileOpen.MissingRoom", "文件打开事件：房间不存在");
         EVENT_ZH.put("FileOpen.HistoryRoomMismatch", "文件打开事件：history 与 room 不匹配");
         EVENT_ZH.put("FileOpen.MissingHistory", "文件打开事件：找不到录制历史");
@@ -153,6 +159,7 @@ public final class LogKvs {
         EVENT_ZH.put("Webhook.CleanupError", "Webhook 清理/回收发生异常");
         EVENT_ZH.put("Webhook.Payload.Debug", "Webhook payload 调试信息(不含全文)");
         EVENT_ZH.put("Webhook.LockKey.BuildFailed", "Webhook 构建锁 key 失败");
+        EVENT_ZH.put("Webhook.InvalidPayload", "Webhook 请求体无效(缺少关键字段)");
 
         // HTTP
         EVENT_ZH.put("Http.Request.Failed", "HTTP 请求失败(网络/超时/连接问题)");
