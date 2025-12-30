@@ -484,7 +484,7 @@
                                     :show-file-list="false"
                                     :on-success="handleCoverSuccess"
                                     :before-upload="beforeCoverUpload">
-                                    <div v-if="room.coverUrl" class="cover-preview-mini" :style="{backgroundImage: 'url(' + room.coverUrl + ')'}"></div>
+                                    <div v-if="room.coverUrl" class="cover-preview-mini" :style="{backgroundImage: 'url(/room/image-proxy?url=' + encodeURIComponent(room.coverUrl) + ')'}"></div>
                                     <div v-else class="cover-placeholder-mini"><i class="el-icon-plus"></i></div>
                                 </el-upload>
                             </el-form-item>

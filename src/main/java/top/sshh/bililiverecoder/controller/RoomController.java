@@ -7,6 +7,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import top.sshh.bililiverecoder.entity.*;
@@ -22,14 +27,16 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.URL;
+import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -529,5 +536,38 @@ public class RoomController {
             }
         }
         return null;
+    }
+
+    @GetMapping(value = "/image-proxy")
+    public ResponseEntity<byte[]> imageProxy(@RequestParam("url") String url) {
+        if (url == null || url.isBlank()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        try {
+            // 安全性检查：确保URL来自B站的官方图片域名
+            URI uri = new URI(url);
+            String host = uri.getHost();
+            if (host == null || (!host.endsWith(".hdslb.com") && !host.endsWith(".biliimg.com"))) {
+                log.warn("[BLR] {}", LogKvs.event("ImageProxy.InvalidHost").add("host", host));
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+
+            RestTemplate restTemplate = new RestTemplate();
+            byte[] imageBytes = restTemplate.getForObject(url, byte[].class);
+
+            HttpHeaders headers = new HttpHeaders();
+            // 根据URL猜测图片类型，如果失败则默认为JPEG
+            String contentType = Files.probeContentType(Paths.get(new URI(url).getPath()));
+            headers.setContentType(MediaType.valueOf(contentType != null ? contentType : MediaType.IMAGE_JPEG_VALUE));
+            // 指示浏览器缓存7天
+            headers.setCacheControl("public, max-age=604800");
+
+            return new ResponseEntity<>(imageBytes, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("ImageProxy.Failed")
+                    .add("url", url)
+                    .add("err", e.getMessage()));
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 }
