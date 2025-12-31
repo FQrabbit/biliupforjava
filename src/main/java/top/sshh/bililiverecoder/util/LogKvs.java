@@ -74,7 +74,9 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.PartSaved", "文件打开事件：成功创建并保存新的分P记录");
         EVENT_ZH.put("FileOpen.PartExists.Skip", "文件打开事件：分P记录已存在，跳过重复创建");
         EVENT_ZH.put("SessionMismatch.Detected", "检测到 Session ID 不匹配(可能错过了[录制开始]事件)");
-        EVENT_ZH.put("SessionMismatch.Recovered", "Session ID 不匹配：自愈成功，已创建新的录制历史");
+        EVENT_ZH.put("SessionMismatch.Merged", "Session ID 不匹配：检测到最近的直播记录，已自动合并");
+        EVENT_ZH.put("SessionMismatch.CreatedNew", "Session ID 不匹配：未找到最近记录，已创建新的录制历史");
+        EVENT_ZH.put("SessionMismatch.Recovered", "Session ID 不匹配：自愈成功，已更新状态");
         EVENT_ZH.put("FileOpen.MissingRoom", "文件打开事件：房间不存在");
         EVENT_ZH.put("FileOpen.HistoryRoomMismatch", "文件打开事件：history 与 room 不匹配");
         EVENT_ZH.put("FileOpen.MissingHistory", "文件打开事件：找不到录制历史");

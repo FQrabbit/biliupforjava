@@ -14,7 +14,9 @@ import top.sshh.bililiverecoder.util.LogKvs;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
+import org.springframework.util.CollectionUtils;
 
 @Slf4j
 @Component
@@ -87,19 +89,41 @@ public class RecordEventFileOpenService implements RecordEventService {
                             .add("currentSessionId", currentSessionId)
                             .add("incomingSessionId", incomingSessionId));
 
-                    RecordHistory newHistory = new RecordHistory();
-                    newHistory.setRoomId(roomId);
-                    newHistory.setStartTime(eventData.getFileOpenTime() != null ? eventData.getFileOpenTime().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() : LocalDateTime.now());
-                    newHistory.setEndTime(newHistory.getStartTime());
-                    newHistory.setEventId(event.getEventId());
-                    newHistory.setTitle(eventData.getTitle());
-                    newHistory.setSessionId(incomingSessionId);
-                    newHistory.setRecording(true); // 标记为正在录制
-                    newHistory.setStreaming(eventData.isStreaming());
-                    newHistory.setUpload(room.isUpload());
-                    newHistory = historyRepository.save(newHistory);
+                    // 尝试复用最近 20 分钟内的历史记录
+                    LocalDateTime now = LocalDateTime.now();
+                    List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes(20L), now);
+                    RecordHistory history;
 
-                    room.setHistoryId(newHistory.getId());
+                    if (!CollectionUtils.isEmpty(historyList)) {
+                        // 复用已有的历史记录（取最近一条）
+                        history = historyList.get(historyList.size() - 1);
+                        log.info("[BLR] {}", LogKvs.event("SessionMismatch.Merged")
+                                .add("roomId", roomId)
+                                .add("oldSessionId", history.getSessionId())
+                                .add("newSessionId", incomingSessionId)
+                                .add("historyId", history.getId()));
+                    } else {
+                        // 创建新的历史记录
+                        history = new RecordHistory();
+                        history.setRoomId(roomId);
+                        history.setStartTime(eventData.getFileOpenTime() != null ? eventData.getFileOpenTime().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() : LocalDateTime.now());
+                        history.setEndTime(history.getStartTime());
+                        history.setEventId(event.getEventId());
+                        history.setTitle(eventData.getTitle());
+                        history.setUpload(room.isUpload());
+                        
+                        log.info("[BLR] {}", LogKvs.event("SessionMismatch.CreatedNew")
+                                .add("roomId", roomId)
+                                .add("newSessionId", incomingSessionId));
+                    }
+                    
+                    // 更新 History 和 Room 信息
+                    history.setSessionId(incomingSessionId);
+                    history.setRecording(true);
+                    history.setStreaming(eventData.isStreaming());
+                    history = historyRepository.save(history);
+
+                    room.setHistoryId(history.getId());
                     room.setSessionId(incomingSessionId);
                     room.setRecording(true);
                     room.setStreaming(eventData.isStreaming());
@@ -109,7 +133,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                     
                     log.info("[BLR] {}", LogKvs.event("SessionMismatch.Recovered")
                             .add("roomId", roomId)
-                            .add("newHistoryId", newHistory.getId())
+                            .add("historyId", history.getId())
                             .add("newSessionId", incomingSessionId));
                 }
                 
