@@ -23,7 +23,7 @@
             <img src="img/icon.svg" alt="Logo" class="brand-logo">
             <div class="brand-info">
                 <h1 class="brand-title">录播姬上传插件</h1>
-                <span class="brand-version">v1.4.1-beta5.6</span>
+                <span class="brand-version">v1.4.1-beta5.7</span>
             </div>
         </div>
         <nav class="header-nav">
@@ -121,6 +121,7 @@
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2025-12-31', version: '1.4.1-beta5.7', content: '新增普通弹幕和高级弹幕(sc/上舰)单独开关、添加H2数据库自动备份功能。' },
                 { time: '2025-12-29', version: '1.4.1-beta5.6', content: '优化上传进度显示、添加新上传节点、优化录制历史卡片详细信息布局。' },
                 { time: '2025-12-29', version: '1.4.1-beta5.5', content: '录制历史详情页新增分P上传实时进度条展示（整体/单P进度与状态）；新增隐私模式，一键隐藏主播和用户信息，方便截图。' },
                 { time: '2025-12-24', version: '1.4.1-beta5.4', content: '增加未审核状态的筛选选项，并对一些log日志判断增加详细信息方便判断问题。' },

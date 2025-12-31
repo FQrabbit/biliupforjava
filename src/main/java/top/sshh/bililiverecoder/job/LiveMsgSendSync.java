@@ -406,13 +406,16 @@ public class LiveMsgSendSync {
                     String roomId = part.getRoomId();
                     RecordRoom room = roomRepository.findByRoomId(roomId);
                     if (room != null) {
+                        if (!Boolean.TRUE.equals(room.getSendSc())) {
+                            continue;
+                        }
                         String wxuid = room.getWxuid();
                         String pushMsgTags = room.getPushMsgTags();
                         Long uploadUserId = room.getUploadUserId();
                         Optional<BiliBiliUser> userOptional = userRepository.findById(uploadUserId);
                         if (userOptional.isPresent()) {
                             BiliBiliUser user = userOptional.get();
-                            if (!(user.isLogin() && user.isEnable())) {
+                            if (!user.isLogin()) {
                                 continue;
                             }
                             int code = liveMsgService.sendMsg(user, msg);

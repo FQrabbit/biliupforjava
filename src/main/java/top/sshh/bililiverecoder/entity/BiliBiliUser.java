@@ -34,4 +34,10 @@ public class BiliBiliUser {
      * 是否启用弹幕
      */
     private boolean enable;
+
+    /**
+     * 是否启用SC/上舰发送
+     */
+    @Column(columnDefinition = "bit default 0")
+    private boolean enableSc;
 }

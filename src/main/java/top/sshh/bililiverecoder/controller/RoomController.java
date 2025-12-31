@@ -10,7 +10,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -209,6 +213,7 @@ public class RoomController {
             dbRoom.setDeleteDay(room.getDeleteDay());
             dbRoom.setMoveDir(room.getMoveDir());
             dbRoom.setSendDm(room.getSendDm());
+            dbRoom.setSendSc(room.getSendSc());
             roomRepository.save(dbRoom);
             return true;
         }
@@ -544,22 +549,38 @@ public class RoomController {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
         try {
-            // 安全性检查：确保URL来自B站的官方图片域名
             URI uri = new URI(url);
             String host = uri.getHost();
+            String scheme = uri.getScheme();
             if (host == null || (!host.endsWith(".hdslb.com") && !host.endsWith(".biliimg.com"))) {
                 log.warn("[BLR] {}", LogKvs.event("ImageProxy.InvalidHost").add("host", host));
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
+            if (scheme == null || (!scheme.equalsIgnoreCase("https") && !scheme.equalsIgnoreCase("http"))) {
+                log.warn("[BLR] {}", LogKvs.event("ImageProxy.InvalidScheme").add("scheme", scheme));
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
 
-            RestTemplate restTemplate = new RestTemplate();
-            byte[] imageBytes = restTemplate.getForObject(url, byte[].class);
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(3000);
+            factory.setReadTimeout(5000);
+            RestTemplate restTemplate = new RestTemplate(factory);
+
+            HttpHeaders forwardHeaders = new HttpHeaders();
+            forwardHeaders.add("Referer", "https://www.bilibili.com/");
+            forwardHeaders.add("User-Agent", "Mozilla/5.0");
+            HttpEntity<Void> httpEntity = new HttpEntity<>(forwardHeaders);
+
+            ResponseEntity<byte[]> resp = restTemplate.exchange(url, HttpMethod.GET, httpEntity, byte[].class);
+            byte[] imageBytes = resp.getBody();
 
             HttpHeaders headers = new HttpHeaders();
-            // 根据URL猜测图片类型，如果失败则默认为JPEG
-            String contentType = Files.probeContentType(Paths.get(new URI(url).getPath()));
-            headers.setContentType(MediaType.valueOf(contentType != null ? contentType : MediaType.IMAGE_JPEG_VALUE));
-            // 指示浏览器缓存7天
+            MediaType ct = resp.getHeaders().getContentType();
+            if (ct == null) {
+                String path = uri.getPath();
+                ct = MediaTypeFactory.getMediaType(path).orElse(MediaType.IMAGE_JPEG);
+            }
+            headers.setContentType(ct);
             headers.setCacheControl("public, max-age=604800");
 
             return new ResponseEntity<>(imageBytes, headers, HttpStatus.OK);

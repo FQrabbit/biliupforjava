@@ -68,6 +68,7 @@ public class RecordHistoryPart {
 
     private LocalDateTime updateTime;
 
+    @Column(columnDefinition = "bit default 0")
     private boolean isPost;
 
     private String sourceType;

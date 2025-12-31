@@ -256,10 +256,36 @@
                     <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.upload"></el-button>
                 </template>
             </el-table-column>
-            <el-table-column label="是否发送弹幕" prop="sendDm" width="120">
+            <el-table-column prop="sendDm" width="200">
+                <template slot="header" slot-scope="scope">
+                    <span>普通弹幕</span>
+                    <el-tooltip effect="dark" placement="top">
+                        <div slot="content">
+                            房间级开关；控制投稿后普通弹幕任务是否执行。此列为状态展示，需点击“编辑”在配置中修改。
+                        </div>
+                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                    </el-tooltip>
+                </template>
                 <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.sendDm"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.sendDm"></el-button>
+                    <el-tag :type="scope.row.sendDm ? 'success' : 'info'" size="small">
+                        {{ scope.row.sendDm ? '已开启' : '已关闭' }}
+                    </el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column prop="sendSc" width="260">
+                <template slot="header" slot-scope="scope">
+                    <span>高级弹幕（SC/上舰）</span>
+                    <el-tooltip effect="dark" placement="top">
+                        <div slot="content">
+                            房间级开关；控制投稿后高级弹幕（SC/上舰）任务是否执行。仅由投稿账号发送。此列为状态展示，需点击“编辑”在配置中修改。
+                        </div>
+                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                    </el-tooltip>
+                </template>
+                <template slot-scope="scope">
+                    <el-tag :type="scope.row.sendSc ? 'success' : 'info'" size="small">
+                        {{ scope.row.sendSc ? '已开启' : '已关闭' }}
+                    </el-tag>
                 </template>
             </el-table-column>
             <el-table-column label="文件后处理" prop="deleteFile" width="120">
@@ -552,7 +578,23 @@
                             <div class="switch-grid">
                                 <div class="switch-card">
                                     <span class="switch-label">发送弹幕</span>
+                                    <el-tooltip effect="dark" placement="top">
+                                        <div slot="content">
+                                            控制投稿后普通弹幕任务是否执行；实际发送由已登录且开启“弹幕发送权限”的用户分摊执行。
+                                        </div>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                    </el-tooltip>
                                     <el-switch v-model="room.sendDm" active-color="#10b981"></el-switch>
+                                </div>
+                                <div class="switch-card">
+                                    <span class="switch-label">发送SC</span>
+                                    <el-tooltip effect="dark" placement="top">
+                                        <div slot="content">
+                                            控制投稿后高级弹幕（SC/上舰）任务是否执行；仅由投稿账号在登录状态下发送。
+                                        </div>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                    </el-tooltip>
+                                    <el-switch v-model="room.sendSc" active-color="#10b981"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">高能投稿</span>
@@ -2761,6 +2803,20 @@
             },
             updateRoom: function () {
                 let _this = this;
+
+                // 提交前强制同步封面状态
+                if (_this.room.coverType === 'live') {
+                    _this.room.coverUrl = 'live';
+                } else if (_this.room.coverType === 'default') {
+                    _this.room.coverUrl = '';
+                } else if (_this.room.coverType === 'diy') {
+                    // 校验自定义封面
+                    if (!_this.room.coverUrl || _this.room.coverUrl === 'live') {
+                        _this.$message.warning('请上传自定义封面图片，或选择其他封面类型');
+                        return;
+                    }
+                }
+
                 $.ajax({
                     url: '/room/update',
                     contentType: 'application/json;charset=utf-8',
@@ -2937,6 +2993,9 @@
                 if (change === 'live') {
                     this.room.coverUrl = 'live';
                 }
+                if (change === 'diy' && (this.room.coverUrl === 'live' || !this.room.coverUrl)) {
+                     this.room.coverUrl = '';
+                }
             },
             handleCoverSuccess(data, file) {
                 this.$message({
@@ -3028,14 +3087,14 @@
                 return 'el-icon-error';
             },
             beforeCoverUpload(file) {
-                const isLt2M = file.size / 1024 / 1024 < 2;
+                const isLt2M = file.size / 1024 / 1024 < 10;
                 const isImg = file.type === 'image/jpeg' || file.type === 'image/png';
                 if (!isImg) {
                     this.$message.error('上传图片只能是 JPG/PNG 格式!');
                 }
 
                 if (!isLt2M) {
-                    this.$message.error('上传图片大小不能超过 2MB!');
+                    this.$message.error('上传图片大小不能超过 10MB!');
                 }
                 return isImg && isLt2M;
             },

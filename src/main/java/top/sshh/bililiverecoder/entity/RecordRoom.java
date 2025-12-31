@@ -120,6 +120,11 @@ public class RecordRoom {
     private Boolean sendDm = false;
 
     /**
+     * 发送SC和上舰信息
+     */
+    private Boolean sendSc = false;
+
+    /**
      * 弹幕去除重复
      */
     private Boolean dmDistinct = false;
