@@ -83,6 +83,7 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.Saved", "分P记录已保存");
         EVENT_ZH.put("FileOpen.DebugPart", "分P调试信息");
         EVENT_ZH.put("FileOpen.SleepInterrupted", "文件打开事件等待被中断(通常不影响主流程)");
+        EVENT_ZH.put("FileOpen.UnhandledException", "文件打开事件：发生未捕获异常");
         EVENT_ZH.put("FileClosed", "收到文件关闭事件(分P文件写入结束)");
         EVENT_ZH.put("FileClosed.PartMissing", "文件关闭事件：找不到分P记录");
         EVENT_ZH.put("FileClosed.FileMissing", "文件关闭事件：文件不存在");
@@ -157,11 +158,17 @@ public final class LogKvs {
 
         // Webhook
         EVENT_ZH.put("Webhook.CleanupError", "Webhook 清理/回收发生异常");
+        EVENT_ZH.put("Webhook.Received", "收到 Webhook 事件");
+        EVENT_ZH.put("Webhook.ReceivedLegacy", "收到旧版 Webhook 事件");
+        EVENT_ZH.put("Webhook.ProcessFailed", "Webhook 处理失败");
         EVENT_ZH.put("Webhook.Payload.Debug", "Webhook payload 调试信息(不含全文)");
         EVENT_ZH.put("Webhook.LockKey.BuildFailed", "Webhook 构建锁 key 失败");
         EVENT_ZH.put("Webhook.InvalidPayload", "Webhook 请求体无效(缺少关键字段)");
 
         // HTTP
+        EVENT_ZH.put("ImageProxy.InvalidHost", "图片代理：Host不合法");
+        EVENT_ZH.put("ImageProxy.InvalidScheme", "图片代理：Scheme不合法");
+        EVENT_ZH.put("ImageProxy.Failed", "图片代理：请求失败");
         EVENT_ZH.put("Http.Request.Failed", "HTTP 请求失败(网络/超时/连接问题)");
         EVENT_ZH.put("Http.Response.Error", "HTTP 响应非 2xx(服务端错误/被拦截/参数异常)");
         EVENT_ZH.put("Http.RiskControl.Triggered", "检测到风控(-412)，可能需要降低频率或更换网络");
@@ -292,6 +299,12 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsgSendSync.Normal.Send.Failed", "普通弹幕发送失败");
 
         // 弹幕
+        EVENT_ZH.put("LiveMsg.Send.EmptyResponse", "弹幕发送：响应为空");
+        EVENT_ZH.put("LiveMsg.Send.Failed", "弹幕发送：请求失败");
+        EVENT_ZH.put("LiveMsg.Send.Error", "弹幕发送：发生异常");
+        EVENT_ZH.put("LiveMsg.Parse.BatchSaved", "弹幕解析：批量保存成功");
+        EVENT_ZH.put("LiveMsg.Parse.Saved", "弹幕解析：保存成功");
+        EVENT_ZH.put("LiveMsg.Parse.Failed", "弹幕解析：失败");
         EVENT_ZH.put("LiveMsg.Parse.CloseFailed", "弹幕解析：关闭文件流失败");
 
         // 验证码
