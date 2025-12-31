@@ -68,8 +68,13 @@ public class LiveMsgSendSync {
 
     private static final Lock lock = new ReentrantLock();
 
+    public static Set<Long> skipOrdinaryPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    public static Set<Long> skipAdvancedPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
     public void sndMsgProcess() {
+        skipOrdinaryPartIds.clear();
+        skipAdvancedPartIds.clear();
         log.debug("[BLR] {}", LogKvs.event("LiveMsgSendSync.Start"));
         long startTime = System.currentTimeMillis();
         List<RecordHistory> historyList = historyRepository.findByPublishIsTrueAndCodeIn(Arrays.asList(0, -50));
@@ -400,6 +405,9 @@ public class LiveMsgSendSync {
                     .add("pending", allHighLevelMsg.size()));
             for (LiveMsg msg : allHighLevelMsg) {
                 Long partId = msg.getPartId();
+                if (skipAdvancedPartIds.contains(partId)) {
+                    continue;
+                }
                 Optional<RecordHistoryPart> partOptional = partRepository.findById(partId);
                 if (partOptional.isPresent()) {
                     RecordHistoryPart part = partOptional.get();
@@ -508,6 +516,9 @@ public class LiveMsgSendSync {
                     }
                     if (msg == null) {
                         return;
+                    }
+                    if (skipOrdinaryPartIds.contains(msg.getPartId())) {
+                        continue;
                     }
                     count.incrementAndGet();
                     user = userRepository.findByUid(user.getUid());

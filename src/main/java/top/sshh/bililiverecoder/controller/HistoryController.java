@@ -237,7 +237,9 @@ public class HistoryController {
     }
 
     @GetMapping("/reloadMsg/{id}")
-    public Map<String, String> reloadMsg(@PathVariable("id") Long id) {
+    public Map<String, String> reloadMsg(@PathVariable("id") Long id,
+                                         @RequestParam(required = false, defaultValue = "false") boolean restartOrdinary,
+                                         @RequestParam(required = false, defaultValue = "false") boolean restartAdvanced) {
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -249,6 +251,12 @@ public class HistoryController {
             RecordHistory history = historyOptional.get();
             List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : parts) {
+                if (restartOrdinary) {
+                    top.sshh.bililiverecoder.job.LiveMsgSendSync.skipOrdinaryPartIds.add(part.getId());
+                }
+                if (restartAdvanced) {
+                    top.sshh.bililiverecoder.job.LiveMsgSendSync.skipAdvancedPartIds.add(part.getId());
+                }
                 String filePath = part.getFilePath();
                 filePath = filePath.substring(0, filePath.lastIndexOf(".")) + ".xml";
                 File file = new File(filePath);

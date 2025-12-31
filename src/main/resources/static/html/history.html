@@ -647,6 +647,31 @@
             <el-button class="modern-btn" @click="editDialogFormVisible = false">取 消</el-button>
             <el-button class="modern-btn" @click="updateHistory()" type="primary">保 存</el-button>
         </div>
+    </el-dialog>
+
+    <!-- 重载弹幕确认弹窗 -->
+    <el-dialog title="重载弹幕确认" :visible.sync="reloadDialogVisible" width="500px" append-to-body>
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 15px;">此操作将重新解析并加载弹幕文件到数据库。</p>
+            <div style="background-color: #fef0f0; color: #f56c6c; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
+                <i class="el-icon-warning"></i> 警告：如果您开启了以下开关，可能会导致任务被强制中断并重置，从而引起弹幕重复发送等问题，请务必确认当前没有正在进行的重要发送任务！
+            </div>
+            <el-form label-width="200px">
+                <el-form-item label="重置普通弹幕任务">
+                    <el-switch v-model="reloadOptions.restartOrdinary" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前普通弹幕发送线程并从头开始</div>
+                </el-form-item>
+                <el-form-item label="重置高级弹幕任务">
+                    <el-switch v-model="reloadOptions.restartAdvanced" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前SC/上舰发送线程并从头开始</div>
+                </el-form-item>
+            </el-form>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="reloadDialogVisible = false" size="small">取 消</el-button>
+            <el-button type="primary" @click="handleReloadConfirm" size="small">确 定</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script>
     new Vue({
@@ -688,7 +713,13 @@
             historyUploadProgress: null,
             progressTimer: null,
             showMoreActions: false,
-            progressSpeedTracking: {}
+            progressSpeedTracking: {},
+            reloadDialogVisible: false,
+            currentReloadId: null,
+            reloadOptions: {
+                restartOrdinary: false,
+                restartAdvanced: false
+            }
         },
         computed: {
             isPublishLockedByCode: function() {
@@ -1535,27 +1566,57 @@
                 }).catch(() => {});
             },
             reloadHistoryMsg: function (id) {
+                this.currentReloadId = id;
+                this.reloadOptions.restartOrdinary = false;
+                this.reloadOptions.restartAdvanced = false;
+                this.reloadDialogVisible = true;
+            },
+            handleReloadConfirm: function() {
                 let _this = this;
-                this.$confirm('此操作将重新解析并加载弹幕文件到数据库。<br/><br/>确定要重新加载弹幕吗？', '重载弹幕确认', {
-                    dangerouslyUseHTMLString: true,
-                    confirmButtonText: '重新加载',
-                    cancelButtonText: '取消',
-                    type: 'warning'
-                }).then(() => {
+                let doReload = function() {
+                    _this.reloadDialogVisible = false;
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在重载弹幕...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
-                        url: '/history/reloadMsg/' + id,
+                        url: '/history/reloadMsg/' + _this.currentReloadId,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
+                        data: {
+                            restartOrdinary: _this.reloadOptions.restartOrdinary,
+                            restartAdvanced: _this.reloadOptions.restartAdvanced
+                        },
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('请求失败');
                         }
                     });
-                }).catch(() => {});
+                };
+
+                if (this.reloadOptions.restartOrdinary || this.reloadOptions.restartAdvanced) {
+                     this.$confirm('您开启了强制终止并重置任务的开关。<br/><br/><b>这可能导致严重的弹幕重复发送事故！</b><br/><br/>请再次确认您清楚自己在做什么！', '高风险操作确认', {
+                        dangerouslyUseHTMLString: true,
+                        confirmButtonText: '我已知晓风险，确认执行',
+                        cancelButtonText: '取消',
+                        type: 'error'
+                    }).then(() => {
+                        doReload();
+                    }).catch(() => {});
+                } else {
+                    doReload();
+                }
             },
             formatFileSize: function (size) {
                 return (size / 1024 / 1024 / 1024).toFixed(2) + 'GB';
