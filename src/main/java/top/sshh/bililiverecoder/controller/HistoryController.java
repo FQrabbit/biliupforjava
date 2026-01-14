@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.impl.HighEnergyCutPublishService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 import java.io.IOException;
@@ -140,6 +141,65 @@ public class HistoryController {
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
         result.put("total",total);
+
+        if (StringUtils.isNotBlank(request.getViewType())) {
+            try {
+                CriteriaQuery<Long> badgeQuery = criteriaBuilder.createQuery(Long.class);
+                Root<RecordHistory> badgeRoot = badgeQuery.from(RecordHistory.class);
+                badgeQuery.select(criteriaBuilder.count(badgeRoot));
+
+                Subquery<Long> partExists = badgeQuery.subquery(Long.class);
+                Root<RecordHistoryPart> partRoot = partExists.from(RecordHistoryPart.class);
+                partExists.select(criteriaBuilder.literal(1L));
+                partExists.where(
+                        criteriaBuilder.and(
+                                criteriaBuilder.equal(partRoot.get("historyId"), badgeRoot.get("id")),
+                                criteriaBuilder.or(
+                                        criteriaBuilder.isTrue(partRoot.get("recording")),
+                                        criteriaBuilder.isNull(partRoot.get("endTime"))
+                                )
+                        )
+                );
+                Predicate isRecording = criteriaBuilder.exists(partExists);
+
+                Predicate isUploading = criteriaBuilder.and(
+                        criteriaBuilder.equal(badgeRoot.get("upload"), true),
+                        criteriaBuilder.equal(badgeRoot.get("publish"), false)
+                );
+
+                Predicate isProcessing = criteriaBuilder.and(
+                        criteriaBuilder.equal(badgeRoot.get("publish"), true),
+                        badgeRoot.get("code").in(-1, -9, -30, -40)
+                );
+
+                Predicate isSendingDanmaku = criteriaBuilder.and(
+                        criteriaBuilder.equal(badgeRoot.get("publish"), true),
+                        badgeRoot.get("code").in(0, -50),
+                        criteriaBuilder.equal(badgeRoot.get("sendReply"), false)
+                );
+
+                Predicate workingPredicate = criteriaBuilder.or(isRecording, isUploading, isProcessing, isSendingDanmaku);
+
+                Predicate isFailed = criteriaBuilder.and(
+                        criteriaBuilder.equal(badgeRoot.get("publish"), true),
+                        criteriaBuilder.not(badgeRoot.get("code").in(0, -50, -1, -9, -30, -40))
+                );
+
+                badgeQuery.where(
+                        criteriaBuilder.not(workingPredicate),
+                        isFailed
+                );
+
+                Long badgeCount = entityManager.createQuery(badgeQuery).getSingleResult();
+                result.put("badgeCount", badgeCount);
+            } catch (Exception e) {
+                log.error("[BLR] {}", LogKvs.event("History.BadgeCount.CalcFailed")
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
+                result.put("badgeCount", 0);
+            }
+        }
+
         return result;
     }
 
@@ -422,6 +482,62 @@ public class HistoryController {
         }
     }
 
+    @GetMapping("/forceArchive/{id}")
+    public Map<String, String> forceArchive(@PathVariable("id") Long id) {
+        Map<String, String> result = new HashMap<>();
+        if (id == null) {
+            result.put("type", "info");
+            result.put("msg", "请输入id");
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(id);
+        if (historyOptional.isPresent()) {
+            RecordHistory history = historyOptional.get();
+            boolean changed = false;
+
+            // 如果正在发弹幕 -> 强制标记为已发完
+            if (history.isPublish() && (history.getCode() == 0 || history.getCode() == -50) && !history.isSendReply()) {
+                history.setSendReply(true);
+                changed = true;
+            }
+
+            // 如果正在录制 -> 强制停止录制状态
+            if (history.isRecording()) {
+                history.setRecording(false);
+                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+                for (RecordHistoryPart part : parts) {
+                    if (part.isRecording()) {
+                        part.setRecording(false);
+                        partRepository.save(part);
+                    }
+                }
+                changed = true;
+            }
+
+            // 如果正在上传/处理中 -> 强制关闭上传
+            // 定义处理中: upload=true 且 (publish=false 或 code是处理中状态)
+            boolean isProcessing = history.isUpload() && (!history.isPublish() || Arrays.asList(-1, -9, -30).contains(history.getCode()));
+            if (isProcessing) {
+                history.setUpload(false);
+                changed = true;
+            }
+
+            if (changed) {
+                historyRepository.save(history);
+                result.put("type", "success");
+                result.put("msg", "已强制归档");
+            } else {
+                result.put("type", "info");
+                result.put("msg", "该稿件不满足强制归档条件（可能已归档）");
+            }
+            return result;
+        } else {
+            result.put("type", "warning");
+            result.put("msg", "录制历史不存在");
+            return result;
+        }
+    }
+
 
      // 动态查询条件（复用于列表查询和总数统计）
     private List<Predicate> getPredicates(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root, RecordHistoryDTO request) {
@@ -482,6 +598,48 @@ public class HistoryController {
         if (request.getFrom() != null && request.getTo() != null) {
             predicatesList.add(criteriaBuilder.and(criteriaBuilder.between(root.get("endTime"), request.getFrom(), request.getTo())));
         }
+
+        if (StringUtils.isNotBlank(request.getViewType())) {
+            // 复用子查询逻辑进行记录检查
+            Subquery<Long> partExists = criteriaBuilder.createQuery().subquery(Long.class);
+            Root<RecordHistoryPart> partRoot = partExists.from(RecordHistoryPart.class);
+            partExists.select(criteriaBuilder.literal(1L));
+            partExists.where(
+                    criteriaBuilder.and(
+                            criteriaBuilder.equal(partRoot.get("historyId"), root.get("id")),
+                            criteriaBuilder.or(
+                                    criteriaBuilder.isTrue(partRoot.get("recording")),
+                                    criteriaBuilder.isNull(partRoot.get("endTime"))
+                            )
+                    )
+            );
+            Predicate isRecording = criteriaBuilder.exists(partExists);
+
+            Predicate isUploading = criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get("upload"), true),
+                    criteriaBuilder.equal(root.get("publish"), false)
+            );
+
+            Predicate isProcessing = criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get("publish"), true),
+                    root.get("code").in(-1, -9, -30, -40)
+            );
+
+            Predicate isSendingDanmaku = criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get("publish"), true),
+                    root.get("code").in(0, -50),
+                    criteriaBuilder.equal(root.get("sendReply"), false)
+            );
+
+            Predicate workingPredicate = criteriaBuilder.or(isRecording, isUploading, isProcessing, isSendingDanmaku);
+
+            if ("working".equals(request.getViewType())) {
+                predicatesList.add(workingPredicate);
+            } else if ("archived".equals(request.getViewType())) {
+                predicatesList.add(criteriaBuilder.not(workingPredicate));
+            }
+        }
+
         return predicatesList;
     }
 }

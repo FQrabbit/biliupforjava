@@ -84,6 +84,19 @@
     <!-- 主内容区域 -->
     <main class="history-main">
         
+        <!-- 分类标签页 -->
+        <div class="category-tabs-container" style="padding: 0 24px; background: rgba(255,255,255,0.5);">
+            <el-tabs v-model="form.viewType" @tab-click="handleViewTypeChange">
+                <el-tab-pane label="工作中的稿件" name="working"></el-tab-pane>
+                <el-tab-pane name="archived">
+                    <span slot="label">
+                        已归档的稿件
+                        <el-badge v-if="archivedBadgeCount > 0" :value="archivedBadgeCount" class="item" type="danger" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
+                    </span>
+                </el-tab-pane>
+            </el-tabs>
+        </div>
+
         <!-- 现代化筛选面板 -->
         <div class="filter-panel" :class="{ 'is-expanded': filterExpanded }">
             <div class="filter-header" @click="filterExpanded = !filterExpanded">
@@ -613,6 +626,9 @@
                         <div class="action-sub-group">
                             <span class="action-group-label">录制与数据</span>
                             <el-button class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
+                            <el-tooltip effect="dark" content="强制停止所有未完成操作并归档（适用于卡住的任务）" placement="top">
+                                <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button">强制归档</el-button>
+                            </el-tooltip>
                             <el-button class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
                             <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
                         </div>
@@ -685,6 +701,7 @@
             editDialogFormVisible: false,
             uploadEditDialogFormVisible: false,
             form: {
+                viewType: 'working',
                 roomId: '',
                 bvId: '',
                 upload: null,
@@ -694,6 +711,7 @@
                 from: null,
                 to: null
             },
+            archivedBadgeCount: 0,
             history:{},
             uploadEditPartId:null,
             loading: false,
@@ -766,6 +784,44 @@
             window.removeEventListener('resize', this.handleResize);
         },
         methods: {
+            handleViewTypeChange: function() {
+                this.form.current = 1;
+                this.initTable();
+            },
+            forceArchive: function(id) {
+                let _this = this;
+                this.$confirm('此操作将强制停止所有未完成的操作（录制、上传、弹幕发送）并将稿件归档。<br/><br/><b>请注意：此操作不可撤销，且可能会导致正在进行的数据不完整（如录制中断、弹幕缺失）。</b><br/><br/>确定要强制归档吗？', '强制归档确认', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '强制归档',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在强制归档...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    $.ajax({
+                        url: '/history/forceArchive/' + id,
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            loading.close();
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.detailDialogVisible = false;
+                            _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('强制归档请求失败');
+                        }
+                    });
+                }).catch(() => {});
+            },
             getAuditStatusClass: function(item) {
                 if (!item.publish) return '';
                 if (item.code == 0 || item.code == -50) return 'success';
@@ -1324,6 +1380,9 @@
                         _this.tableData = data.data;
                         _this.total = data.total;
                         _this.loading = false;
+                        if (data.badgeCount !== undefined) {
+                            _this.archivedBadgeCount = data.badgeCount;
+                        }
                     },
                     error: function () {
                         _this.loading = false;

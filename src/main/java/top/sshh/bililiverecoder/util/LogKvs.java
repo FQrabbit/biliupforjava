@@ -22,6 +22,8 @@ public final class LogKvs {
 
     private static final Map<String, String> EVENT_ZH = new HashMap<>();
     static {
+        EVENT_ZH.put("History.BadgeCount.CalcFailed", "计算历史记录角标数失败");
+
         // 上传
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");
         EVENT_ZH.put("Upload.Part.AlreadyUploading", "分P正在上传中，跳过重复触发");

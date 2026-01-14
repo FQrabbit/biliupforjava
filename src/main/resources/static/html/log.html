@@ -35,11 +35,11 @@
                         </transition>
                     </div>
                     <div class="log-actions">
-                        <el-button size="mini" type="danger" plain icon="el-icon-delete" @click="clearLogs">
+                        <el-button size="mini" class="modern-btn" type="danger" plain icon="el-icon-delete" @click="clearLogs">
                             清空
                         </el-button>
                         <transition name="el-zoom-in-center">
-                            <el-button v-if="alerts.length > 0" size="mini" type="warning" plain icon="el-icon-warning" @click="showAlerts = true">
+                            <el-button v-if="alerts.length > 0" size="mini" class="modern-btn" type="warning" plain icon="el-icon-warning" @click="showAlerts = true">
                                 异常 <el-badge :value="alerts.length" class="alert-badge"></el-badge>
                             </el-button>
                         </transition>
@@ -194,8 +194,8 @@
             </el-table-column>
         </el-table>
         <span slot="footer" class="dialog-footer">
-            <el-button type="danger" @click="clearAlerts">清除所有</el-button>
-            <el-button @click="showAlerts = false">关 闭</el-button>
+            <el-button class="modern-btn" type="danger" @click="clearAlerts">清除所有</el-button>
+            <el-button class="modern-btn" @click="showAlerts = false">关 闭</el-button>
         </span>
     </el-dialog>
 

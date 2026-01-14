@@ -23,7 +23,15 @@
             <img src="img/icon.svg" alt="Logo" class="brand-logo">
             <div class="brand-info">
                 <h1 class="brand-title">录播姬上传插件</h1>
-                <span class="brand-version">v1.4.1-beta5.7</span>
+                <a v-if="hasNewVersion" 
+                   :href="releaseUrl" 
+                   target="_blank" 
+                   class="brand-version link-type"
+                   title="发现新版本，点击查看">
+                    {{ currentVersion }}
+                    <span class="new-badge">NEW</span>
+                </a>
+                <span v-else class="brand-version">{{ currentVersion }}</span>
             </div>
         </div>
         <nav class="header-nav">
@@ -118,9 +126,13 @@
         el: '#app',
         data: {
             activeName: 'home',
+            currentVersion: 'v1.4.1-beta5.8',
+            hasNewVersion: false,
+            releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2026-01-14', version: '1.4.1-beta5.8', content: '录制历史页面增加`工作中`和`归档`分类；新增版本更新检查提示。' },
                 { time: '2025-12-31', version: '1.4.1-beta5.7', content: '新增普通弹幕和高级弹幕(sc/上舰)单独开关、添加H2数据库自动备份功能。' },
                 { time: '2025-12-29', version: '1.4.1-beta5.6', content: '优化上传进度显示、添加新上传节点、优化录制历史卡片详细信息布局。' },
                 { time: '2025-12-29', version: '1.4.1-beta5.5', content: '录制历史详情页新增分P上传实时进度条展示（整体/单P进度与状态）；新增隐私模式，一键隐藏主播和用户信息，方便截图。' },
@@ -201,8 +213,103 @@
             this.applyTheme(this.theme);
             this.checkAlerts();
             setInterval(this.checkAlerts, 30000);
+            this.checkUpdate();
         },
         methods: {
+            checkUpdate: function() {
+                var self = this;
+                var CACHE_KEY = 'biliup_update_cache';
+                var CACHE_DURATION = 3600 * 1000; // 1 hour
+
+                var processData = function(data) {
+                    if (data && data.length > 0 && data[0].tag_name) {
+                        var newVer = data[0].tag_name;
+                        var v1 = self.currentVersion.replace(/^v/, '');
+                        var v2 = newVer.replace(/^v/, '');
+                        
+                        if (v1 !== v2 && self.compareVersions(v1, v2) < 0) {
+                            self.hasNewVersion = true;
+                            self.releaseUrl = data[0].html_url;
+                        }
+                    }
+                };
+
+                // 先尝试缓存
+                try {
+                    var cache = JSON.parse(localStorage.getItem(CACHE_KEY));
+                    if (cache && (Date.now() - cache.timestamp < CACHE_DURATION)) {
+                        console.log('[Update] 使用缓存信息');
+                        processData(cache.data);
+                        return;
+                    }
+                } catch (e) { console.error(e); }
+
+                // 从API获取版本
+                $.ajax({
+                    url: 'https://api.github.com/repos/FQrabbit/biliupforjava/releases?per_page=1',
+                    type: 'GET',
+                    timeout: 5000,
+                    success: function(data) {
+                        localStorage.setItem(CACHE_KEY, JSON.stringify({
+                            timestamp: Date.now(),
+                            data: data
+                        }));
+                        processData(data);
+                    },
+                    error: function(xhr) {
+                        console.warn('[Update] 检查失败:', xhr.status);
+                        // 如果可用，尝试使用过期的缓存
+                        try {
+                            var cache = JSON.parse(localStorage.getItem(CACHE_KEY));
+                            if (cache && cache.data) {
+                                console.log('[Update] 使用过时缓存回退');
+                                processData(cache.data);
+                            }
+                        } catch (e) {}
+                    }
+                });
+            },
+            compareVersions: function(v1, v2) {
+                var tokenize = function(v) {
+                    return v.split(/([0-9]+)/).filter(function(s){ return s && s.length > 0; });
+                };
+                
+                var parts1 = v1.split(/[-.]/);
+                var parts2 = v2.split(/[-.]/);
+                
+                var len = Math.max(parts1.length, parts2.length);
+                for (var i = 0; i < len; i++) {
+                    var p1 = parts1[i];
+                    var p2 = parts2[i];
+                    
+                    if (p1 === p2) continue;
+                    if (p1 === undefined) return /^\d/.test(p2) ? -1 : 1;
+                    if (p2 === undefined) return /^\d/.test(p1) ? 1 : -1;
+                    
+                    var t1 = tokenize(p1);
+                    var t2 = tokenize(p2);
+                    
+                    for (var j = 0; j < Math.max(t1.length, t2.length); j++) {
+                        var sub1 = t1[j];
+                        var sub2 = t2[j];
+                        
+                        if (sub1 === sub2) continue;
+                        if (sub1 === undefined) return -1;
+                        if (sub2 === undefined) return 1;
+                        
+                        var n1 = parseInt(sub1);
+                        var n2 = parseInt(sub2);
+                        
+                        if (!isNaN(n1) && !isNaN(n2)) {
+                            if (n1 !== n2) return n1 - n2;
+                        } else {
+                            if (sub1 < sub2) return -1;
+                            if (sub1 > sub2) return 1;
+                        }
+                    }
+                }
+                return 0;
+            },
             checkAlerts: function() {
                 fetch('/log/alerts')
                     .then(res => res.json())

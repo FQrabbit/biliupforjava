@@ -63,4 +63,6 @@ public class RecordHistoryDTO {
     private int current = 1;
     private int pageSize = 5;
     private int total;
+
+    private String viewType; // "working" | "archived"
 }
