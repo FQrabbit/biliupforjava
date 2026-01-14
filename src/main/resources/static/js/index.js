@@ -122,7 +122,7 @@ const COMMON_BOOL_OPTIONS = [
         // 1.1) 非JSON的 key/value 形式（避免遗漏）
         // 例：[BLR] event=FileOpen | roomId=18597 | title=xxx | filePath=... | payload={...}
         // 注意：这里只掩码敏感字段，不掩码 event 等分类字段。
-        text = text.replace(/\b(title|liveTitle|roomName|uname|filePath|fileName|toDir|location|key|payload|history|part|room|uploadUserId)\s*[:=]\s*([^,，|\r\n]+)/g, '$1=***');
+        text = text.replace(/\b(title|liveTitle|roomName|uname|filePath|fileName|toDir|location|key|payload|history|part|room|uploadUserId)\s*[:=]\s*([^|\r\n]+)/g, '$1=***');
 
         // 2) 日志中常见的普通模式
         // ==>[Title]

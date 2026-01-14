@@ -161,70 +161,11 @@ html, body {
     flex-wrap: wrap;
 }
 
-.log-switches-row .el-checkbox {
-    margin-right: 0;
+.log-switches-row .el-button,
+.log-actions .el-button {
+    margin-left: 0;
 }
 
-.log-switches-row .el-checkbox.is-bordered {
-    padding: 6px 12px;
-    height: auto;
-    border-radius: 20px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(249, 250, 251, 0.8));
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-[data-theme="dark"] .log-switches-row .el-checkbox.is-bordered {
-    background: linear-gradient(135deg, rgba(39, 39, 42, 0.6), rgba(49, 49, 52, 0.6));
-    border-color: rgba(255, 255, 255, 0.1);
-}
-
-.log-switches-row .el-checkbox.is-bordered:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-    border-color: var(--primary-color);
-}
-
-.log-switches-row .el-checkbox.is-bordered.is-checked {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
-    border-color: var(--primary-color);
-    color: white;
-    box-shadow: 0 4px 16px rgba(91, 108, 255, 0.4);
-}
-
-.log-switches-row .el-checkbox.is-bordered.is-checked:hover {
-    transform: translateY(-2px) scale(1.02);
-}
-
-.log-switches-row .el-checkbox__label {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding-left: 6px;
-    font-weight: 500;
-}
-
-.log-switches-row .el-checkbox.is-bordered.is-checked .el-checkbox__label {
-    color: white;
-}
-
-.log-switches-row .el-checkbox__label i {
-    transition: transform 0.3s ease;
-}
-
-.log-switches-row .el-checkbox.is-bordered:hover .el-checkbox__label i {
-    transform: scale(1.2);
-}
-
-.log-switches-row .el-checkbox.is-bordered.is-checked .el-checkbox__label i {
-    animation: iconBounce 0.5s ease;
-}
-
-@keyframes iconBounce {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.3) rotate(10deg); }
-}
 
 /* 响应式布局 */
 @media (max-width: 768px) {
@@ -307,15 +248,7 @@ html, body {
     height: 300px;
 }
 
-/* 复选框勾选动画增强 */
-.log-switches-row .el-checkbox__input.is-checked + .el-checkbox__label {
-    animation: labelGlow 0.5s ease;
-}
 
-@keyframes labelGlow {
-    0%, 100% { text-shadow: none; }
-    50% { text-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
-}
 
 /* 搜索框输入时的微动效果 */
 .log-search-wrapper .el-input__inner:not(:placeholder-shown) {
@@ -435,36 +368,7 @@ html, body {
     left: 100%;
 }
 
-/* 复选框边框动画 */
-.log-switches-row .el-checkbox.is-bordered {
-    position: relative;
-}
 
-.log-switches-row .el-checkbox.is-bordered::before {
-    content: '';
-    position: absolute;
-    inset: -2px;
-    border-radius: 22px;
-    background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #4facfe);
-    background-size: 300% 300%;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: -1;
-    animation: gradientMove 3s ease infinite;
-}
-
-@keyframes gradientMove {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-}
-
-.log-switches-row .el-checkbox.is-bordered:hover::before {
-    opacity: 0.6;
-}
-
-.log-switches-row .el-checkbox.is-bordered.is-checked::before {
-    opacity: 1;
-}
 
 /* 新日志到达时的闪光效果 */
 @keyframes newLogFlash {

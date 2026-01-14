@@ -109,6 +109,9 @@ public class HttpClientUtil {
     }
 
     private static String execute(OkHttpClient client, Request request) throws IOException {
+        if (top.sshh.bililiverecoder.service.RateLimiterService.getInstance() != null) {
+            top.sshh.bililiverecoder.service.RateLimiterService.getInstance().getApiRateLimiter().acquire();
+        }
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 log.warn("[BLR] {}", LogKvs.event("Http.Response.Error")

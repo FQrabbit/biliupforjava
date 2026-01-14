@@ -462,6 +462,9 @@ public class HttpClientUtils {
     public static HttpClientResult getHttpClientResult(CloseableHttpResponse httpResponse,
                                                        CloseableHttpClient httpClient,
                                                        HttpRequestBase httpMethod) throws IOException {
+        if (top.sshh.bililiverecoder.service.RateLimiterService.getInstance() != null) {
+            top.sshh.bililiverecoder.service.RateLimiterService.getInstance().getApiRateLimiter().acquire();
+        }
         boolean isRelease = false;
         try {
             // 执行请求

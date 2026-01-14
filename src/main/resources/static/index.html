@@ -79,6 +79,67 @@
         <transition name="fade-slide" mode="out-in">
             <!-- 更新日志页面 -->
             <div v-if="activeName === 'home'" class="changelog-container" key="home">
+                <!-- 系统配置面板 -->
+                <div class="config-panel" :class="{ 'is-expanded': configExpanded }">
+                    <div class="config-header" @click="configExpanded = !configExpanded">
+                        <div class="config-title">
+                            <i class="el-icon-setting"></i>
+                            <span>系统配置</span>
+                            <el-badge v-if="hasConfigChanges" is-dot class="config-badge"></el-badge>
+                        </div>
+                        <div class="config-actions">
+                            <el-button v-if="hasConfigChanges" type="text" size="mini" @click.stop="resetConfig" class="reset-btn">
+                                <i class="el-icon-refresh-left"></i> 重置
+                            </el-button>
+                            <i :class="configExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="expand-icon"></i>
+                        </div>
+                    </div>
+                    
+                    <transition name="filter-slide">
+                        <div class="config-body" v-show="configExpanded">
+                            <div class="config-grid">
+                                <div class="config-item">
+                                    <label class="config-label">
+                                        <i class="el-icon-s-promotion"></i>
+                                        API请求限速
+                                        <span class="config-unit">QPS</span>
+                                    </label>
+                                    <el-input 
+                                        v-model="systemConfig.apiQps" 
+                                        @input="validateNumber($event, 'apiQps', true)" 
+                                        placeholder="请输入数字" 
+                                        size="small"
+                                        class="config-input">
+                                    </el-input>
+                                    <div class="config-help">限制每秒请求B站API的次数，防止风控。系统本身已对各项请求增加合理延迟，此配置为全局限制以防意外频繁请求，无需设置过低。</div>
+                                </div>
+                                
+                                <div class="config-item">
+                                    <label class="config-label">
+                                        <i class="el-icon-upload"></i>
+                                        上传带宽限速
+                                        <span class="config-unit">MB/s</span>
+                                    </label>
+                                    <el-input 
+                                        v-model="systemConfig.uploadMb" 
+                                        @input="validateNumber($event, 'uploadMb', false)" 
+                                        placeholder="请输入数字" 
+                                        size="small"
+                                        class="config-input">
+                                    </el-input>
+                                    <div class="config-help">限制上传视频时的最大带宽，0为不限速</div>
+                                </div>
+                            </div>
+                            
+                            <div class="config-footer">
+                                <el-button class="modern-btn" type="primary" @click="saveSystemConfig" :loading="configLoading" icon="el-icon-check" size="small">
+                                    保存配置
+                                </el-button>
+                            </div>
+                        </div>
+                    </transition>
+                </div>
+
                 <div class="changelog-header">
                     <div class="changelog-title">
                         <i class="el-icon-document"></i>
@@ -126,13 +187,21 @@
         el: '#app',
         data: {
             activeName: 'home',
-            currentVersion: 'v1.4.1-beta5.8',
+            systemConfig: {
+                apiQps: 5.0,
+                uploadMb: 0
+            },
+            configLoading: false,
+            configExpanded: false,
+            hasConfigChanges: false,
+            currentVersion: 'v1.4.1-beta5.9',
             hasNewVersion: false,
             releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
-                { time: '2026-01-14', version: '1.4.1-beta5.8', content: '录制历史页面增加`工作中`和`归档`分类；新增版本更新检查提示。' },
+                { time: '2026-01-15', version: '1.4.1-beta5.9', content: '添加限速功能。' },
+                { time: '2026-01-14', version: '1.4.1-beta5.8', content: '录制历史页面增加"工作中"和"归档"分类；新增版本更新检查提示。' },
                 { time: '2025-12-31', version: '1.4.1-beta5.7', content: '新增普通弹幕和高级弹幕(sc/上舰)单独开关、添加H2数据库自动备份功能。' },
                 { time: '2025-12-29', version: '1.4.1-beta5.6', content: '优化上传进度显示、添加新上传节点、优化录制历史卡片详细信息布局。' },
                 { time: '2025-12-29', version: '1.4.1-beta5.5', content: '录制历史详情页新增分P上传实时进度条展示（整体/单P进度与状态）；新增隐私模式，一键隐藏主播和用户信息，方便截图。' },
@@ -212,10 +281,116 @@
         mounted: function() {
             this.applyTheme(this.theme);
             this.checkAlerts();
+            this.loadSystemConfig();
             setInterval(this.checkAlerts, 30000);
             this.checkUpdate();
         },
         methods: {
+            validateNumber: function(value, field, allowDecimal) {
+                // 验证输入是否为数字
+                var self = this;
+                var cleanValue = value.replace(/[^0-9.]/g, '');
+                
+                // 如果允许小数，确保只有一个小数点
+                if (allowDecimal) {
+                    var parts = cleanValue.split('.');
+                    if (parts.length > 2) {
+                        cleanValue = parts[0] + '.' + parts.slice(1).join('');
+                    }
+                } else {
+                    // 不允许小数，移除所有小数点
+                    cleanValue = cleanValue.replace(/\./g, '');
+                }
+                
+                // 更新数据
+                self.systemConfig[field] = cleanValue;
+                
+                // 检查是否有更改
+                self.checkConfigChanges();
+            },
+            checkConfigChanges: function() {
+                // 检查配置是否有更改
+                var self = this;
+                var originalApiQps = parseFloat(self.originalConfig.apiQps) || 0;
+                var originalUploadMb = parseInt(self.originalConfig.uploadMb) || 0;
+                var currentApiQps = parseFloat(self.systemConfig.apiQps) || 0;
+                var currentUploadMb = parseInt(self.systemConfig.uploadMb) || 0;
+                
+                self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb);
+            },
+            resetConfig: function() {
+                // 重置配置
+                var self = this;
+                self.systemConfig.apiQps = self.originalConfig.apiQps;
+                self.systemConfig.uploadMb = self.originalConfig.uploadMb;
+                self.hasConfigChanges = false;
+            },
+            loadSystemConfig: function() {
+                var self = this;
+                $.ajax({
+                    url: '/system-config/list',
+                    type: 'GET',
+                    success: function(data) {
+                        if (data && data.length > 0) {
+                            data.forEach(function(item) {
+                                if (item.configKey === 'bili.limit.api-qps') {
+                                    self.systemConfig.apiQps = parseFloat(item.configValue);
+                                } else if (item.configKey === 'bili.limit.upload-mb') {
+                                    self.systemConfig.uploadMb = parseFloat(item.configValue);
+                                }
+                            });
+                        }
+                        // 保存原始配置用于重置
+                        self.originalConfig = {
+                            apiQps: self.systemConfig.apiQps,
+                            uploadMb: self.systemConfig.uploadMb
+                        };
+                    },
+                    error: function(e) {
+                        console.error('Failed to load system config', e);
+                    }
+                });
+            },
+            saveSystemConfig: function() {
+                var self = this;
+                this.configLoading = true;
+                
+                // 确保值为有效的数字
+                var apiQps = parseFloat(self.systemConfig.apiQps) || 0;
+                var uploadMb = parseInt(self.systemConfig.uploadMb) || 0;
+                
+                var updates = [
+                    { key: 'bili.limit.api-qps', value: String(apiQps) },
+                    { key: 'bili.limit.upload-mb', value: String(uploadMb) }
+                ];
+                
+                var promises = updates.map(function(item) {
+                    return new Promise(function(resolve, reject) {
+                        $.ajax({
+                            url: '/system-config/update',
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(item),
+                            success: resolve,
+                            error: reject
+                        });
+                    });
+                });
+
+                Promise.all(promises).then(function() {
+                    // 保存成功后更新原始配置
+                    self.originalConfig = {
+                        apiQps: self.systemConfig.apiQps,
+                        uploadMb: self.systemConfig.uploadMb
+                    };
+                    self.hasConfigChanges = false;
+                    self.$message.success('系统配置已保存并生效');
+                }).catch(function() {
+                    self.$message.error('保存配置失败');
+                }).finally(function() {
+                    self.configLoading = false;
+                });
+            },
             checkUpdate: function() {
                 var self = this;
                 var CACHE_KEY = 'biliup_update_cache';
@@ -336,4 +511,251 @@
         }
     });
 </script>
+
+<style>
+    /* 配置面板样式 - 参考历史页面的筛选条件 */
+    .config-panel {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(16px);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        margin-bottom: 20px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    [data-theme="dark"] .config-panel {
+        background: rgba(30, 30, 40, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .config-header {
+        padding: 16px 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        transition: all 0.3s ease;
+    }
+    
+    [data-theme="dark"] .config-header {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    
+    .config-header:hover {
+        background: rgba(91, 108, 255, 0.05);
+    }
+    
+    [data-theme="dark"] .config-header:hover {
+        background: rgba(91, 108, 255, 0.1);
+    }
+    
+    .config-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-color-primary);
+    }
+    
+    .config-title i {
+        font-size: 18px;
+        color: #5b6cff;
+    }
+    
+    .config-badge {
+        margin-left: 8px;
+        transform: translateY(-2px);
+    }
+    
+    .config-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+    
+    .config-actions .reset-btn {
+        color: #5b6cff;
+        padding: 4px 12px;
+        font-size: 13px;
+    }
+    
+    .config-actions .reset-btn:hover {
+        color: #4558e8;
+        background: rgba(91, 108, 255, 0.1);
+    }
+    
+    .config-actions .expand-icon {
+        font-size: 16px;
+        color: var(--text-color-regular);
+        transition: transform 0.3s ease;
+    }
+    
+    .config-body {
+        padding: 20px;
+        background: transparent;
+    }
+    
+    .config-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 300px));
+        gap: 20px;
+        margin-bottom: 16px;
+    }
+    
+    .config-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .config-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-color-regular);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .config-label i {
+        font-size: 14px;
+        color: #5b6cff;
+    }
+    
+    .config-unit {
+        margin-left: auto;
+        padding: 2px 8px;
+        background: linear-gradient(135deg, rgba(91, 108, 255, 0.1), rgba(91, 108, 255, 0.15));
+        border: 1px solid rgba(91, 108, 255, 0.25);
+        border-radius: 6px;
+        color: #5b6cff;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        line-height: 1;
+    }
+    
+    [data-theme="dark"] .config-unit {
+        background: linear-gradient(135deg, rgba(91, 108, 255, 0.2), rgba(91, 108, 255, 0.25));
+        border-color: rgba(91, 108, 255, 0.35);
+        color: #7b8fff;
+    }
+    
+    .config-input {
+        width: 100%;
+    }
+    
+    .config-input .el-input__inner {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1.5px solid rgba(91, 108, 255, 0.2);
+        border-radius: 8px;
+        color: var(--text-color-primary);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        font-size: 14px;
+        height: 36px;
+        line-height: 36px;
+        padding: 0 12px;
+    }
+    
+    [data-theme="dark"] .config-input .el-input__inner {
+        background: rgba(40, 40, 50, 0.8);
+        border-color: rgba(91, 108, 255, 0.3);
+    }
+    
+    .config-input .el-input__inner:hover {
+        border-color: rgba(91, 108, 255, 0.5);
+        background: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 2px 8px rgba(91, 108, 255, 0.08);
+    }
+    
+    [data-theme="dark"] .config-input .el-input__inner:hover {
+        background: rgba(40, 40, 50, 0.95);
+        border-color: rgba(91, 108, 255, 0.5);
+    }
+    
+    .config-input .el-input__inner:focus {
+        border-color: #5b6cff;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.12), 0 4px 12px rgba(91, 108, 255, 0.15);
+        transform: translateY(-1px);
+    }
+    
+    [data-theme="dark"] .config-input .el-input__inner:focus {
+        background: rgba(45, 45, 55, 1);
+        box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.2), 0 4px 12px rgba(91, 108, 255, 0.25);
+    }
+    
+    .config-help {
+        font-size: 12px;
+        color: var(--text-color-placeholder);
+        line-height: 1.5;
+        margin-top: 4px;
+    }
+    
+    .config-footer {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 16px;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    
+    [data-theme="dark"] .config-footer {
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    
+    /* 动画效果 - 从上至下展开 */
+    .filter-slide-enter-active {
+        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        overflow: hidden;
+    }
+    
+    .filter-slide-leave-active {
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+    }
+    
+    .filter-slide-enter,
+    .filter-slide-leave-to {
+        opacity: 0;
+        transform: scaleY(0);
+        transform-origin: top center;
+    }
+    
+    .filter-slide-enter-to,
+    .filter-slide-leave {
+        opacity: 1;
+        transform: scaleY(1);
+        transform-origin: top center;
+    }
+    
+    /* 响应式设计 */
+    @media (max-width: 768px) {
+        .config-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+        
+        .config-header {
+            padding: 14px 16px;
+        }
+        
+        .config-body {
+            padding: 16px;
+        }
+        
+        .config-title {
+            font-size: 14px;
+        }
+        
+        .config-actions .reset-btn {
+            padding: 3px 10px;
+            font-size: 12px;
+        }
+    }
+</style>
 </html>

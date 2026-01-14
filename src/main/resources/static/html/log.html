@@ -101,33 +101,33 @@
                             开启后会加载/保留更多日志（最多2000行）<br/>
                             关闭时仅保留较少日志（默认500行），保证浏览器更流畅
                         </div>
-                        <el-checkbox v-model="detailedMode" @change="handleDetailedModeChange" border size="mini">
+                        <el-button class="modern-btn" :type="detailedMode ? 'primary' : ''" size="mini" @click="detailedMode = !detailedMode; handleDetailedModeChange()">
                             <i class="el-icon-tickets"></i> 详细模式
-                        </el-checkbox>
+                        </el-button>
                     </el-tooltip>
 
                     <el-tooltip effect="dark" placement="top" content="开启后点击日志行可多选，并自动复制到剪贴板">
-                        <el-checkbox v-model="selectionMode" @change="handleSelectionModeChange" border size="mini">
+                        <el-button class="modern-btn" :type="selectionMode ? 'primary' : ''" size="mini" @click="selectionMode = !selectionMode; handleSelectionModeChange(selectionMode)">
                             <i class="el-icon-document-checked"></i> 多选
-                        </el-checkbox>
+                        </el-button>
                     </el-tooltip>
 
                     <el-tooltip effect="dark" placement="top" content="开启后日志自动换行；关闭后单行不换行，便于对齐查看">
-                        <el-checkbox v-model="autoWrap" border size="mini">
+                        <el-button class="modern-btn" :type="autoWrap ? 'primary' : ''" size="mini" @click="autoWrap = !autoWrap">
                             <i class="el-icon-sort"></i> 自动换行
-                        </el-checkbox>
+                        </el-button>
                     </el-tooltip>
 
                     <el-tooltip effect="dark" placement="top" content="开启后新日志到来会自动滚动到底部">
-                        <el-checkbox v-model="autoScroll" border size="mini">
+                        <el-button class="modern-btn" :type="autoScroll ? 'primary' : ''" size="mini" @click="autoScroll = !autoScroll">
                             <i class="el-icon-bottom"></i> 自动滚动
-                        </el-checkbox>
+                        </el-button>
                     </el-tooltip>
 
                     <el-tooltip effect="dark" placement="top" content="开启后通过 WebSocket 实时接收日志">
-                        <el-checkbox v-model="realtime" @change="toggleRealtime" border size="mini">
+                        <el-button class="modern-btn" :type="realtime ? 'primary' : ''" size="mini" @click="realtime = !realtime; toggleRealtime()">
                             <i class="el-icon-connection"></i> 实时推送
-                        </el-checkbox>
+                        </el-button>
                     </el-tooltip>
 
                     <el-tooltip effect="dark" placement="top">
@@ -135,9 +135,9 @@
                             开启后将 BV 号、文件路径、标题/房间名/主播名<br/>
                             等敏感信息显示为 ***，便于截图分享
                         </div>
-                        <el-checkbox v-model="privacyMode" border size="mini">
+                        <el-button class="modern-btn" :type="privacyMode ? 'primary' : ''" size="mini" @click="togglePrivacyMode">
                             <i class="el-icon-view"></i> 隐私模式
-                        </el-checkbox>
+                        </el-button>
                     </el-tooltip>
                 </div>
             </el-card>
