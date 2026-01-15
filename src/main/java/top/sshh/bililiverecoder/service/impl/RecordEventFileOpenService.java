@@ -91,18 +91,34 @@ public class RecordEventFileOpenService implements RecordEventService {
 
                     // 尝试复用最近 20 分钟内的历史记录
                     LocalDateTime now = LocalDateTime.now();
-                    List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes(20L), now);
-                    RecordHistory history;
+                    RecordHistory history = null;
 
-                    if (!CollectionUtils.isEmpty(historyList)) {
-                        // 复用已有的历史记录（取最近一条）
-                        history = historyList.get(historyList.size() - 1);
+                    // 优先复用正在录制中的记录
+                    List<RecordHistory> activeHistoryList = historyRepository.findByRoomIdAndRecordingTrueOrderByStartTimeDesc(roomId);
+                    if (!CollectionUtils.isEmpty(activeHistoryList)) {
+                        history = activeHistoryList.get(0);
                         log.info("[BLR] {}", LogKvs.event("SessionMismatch.Merged")
+                                .add("type", "ActiveHistory")
                                 .add("roomId", roomId)
                                 .add("oldSessionId", history.getSessionId())
                                 .add("newSessionId", incomingSessionId)
                                 .add("historyId", history.getId()));
                     } else {
+                        // 其次复用最近结束的记录
+                        List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes(20L), now);
+                        if (!CollectionUtils.isEmpty(historyList)) {
+                            // 复用已有的历史记录（取最近一条）
+                            history = historyList.get(historyList.size() - 1);
+                            log.info("[BLR] {}", LogKvs.event("SessionMismatch.Merged")
+                                    .add("type", "RecentHistory")
+                                    .add("roomId", roomId)
+                                    .add("oldSessionId", history.getSessionId())
+                                    .add("newSessionId", incomingSessionId)
+                                    .add("historyId", history.getId()));
+                        }
+                    }
+
+                    if (history == null) {
                         // 创建新的历史记录
                         history = new RecordHistory();
                         history.setRoomId(roomId);

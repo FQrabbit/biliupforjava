@@ -63,9 +63,32 @@ public class RecordEventRecordStartedService implements RecordEventService {
             room.setSessionId(eventData.getSessionId());
             room.setRecording(eventData.isRecording());
             room.setStreaming(eventData.isStreaming());
-            List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(eventData.getRoomId(), now.minusMinutes(20L), now);
-            RecordHistory history;
-            if (CollectionUtils.isEmpty(historyList)) {
+
+            RecordHistory history = null;
+            // 优先复用正在录制中的记录（解决长直播过程中因网络抖动/重连导致的 session 变更被切分问题）
+            List<RecordHistory> activeHistoryList = historyRepository.findByRoomIdAndRecordingTrueOrderByStartTimeDesc(eventData.getRoomId());
+            if (!CollectionUtils.isEmpty(activeHistoryList)) {
+                history = activeHistoryList.get(0);
+                log.info("[BLR] {}", LogKvs.event("RecordStarted.ReuseActiveHistory")
+                        .add("roomId", roomId)
+                        .add("sessionId", eventData.getSessionId())
+                        .add("eventId", event.getEventId())
+                        .add("historyId", history.getId()));
+            } else {
+                // 其次复用最近结束的记录（解决短时间内的重连）
+                List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(eventData.getRoomId(), now.minusMinutes(20L), now);
+                if (!CollectionUtils.isEmpty(historyList)) {
+                    // 复用最近的一条记录（取列表的最后一条，即 EndTime 最大的）
+                    history = historyList.get(historyList.size() - 1);
+                    log.info("[BLR] {}", LogKvs.event("RecordStarted.ReuseRecentHistory")
+                            .add("roomId", roomId)
+                            .add("sessionId", eventData.getSessionId())
+                            .add("eventId", event.getEventId())
+                            .add("historyId", history.getId()));
+                }
+            }
+
+            if (history == null) {
                 history = new RecordHistory();
                 history.setRoomId(room.getRoomId());
                 history.setStartTime(now);
@@ -74,13 +97,6 @@ public class RecordEventRecordStartedService implements RecordEventService {
                 history.setTitle(eventData.getTitle());
                 history.setUpload(room.isUpload());
             } else {
-                // 复用最近的一条记录（取列表的最后一条，即 EndTime 最大的）
-                history = historyList.get(historyList.size() - 1);
-                log.info("[BLR] {}", LogKvs.event("RecordStarted.ReuseHistory")
-                        .add("roomId", roomId)
-                        .add("sessionId", eventData.getSessionId())
-                        .add("eventId", event.getEventId())
-                        .add("historyId", history.getId()));
                 log.debug("[BLR] {}", LogKvs.event("RecordStarted.ReuseHistory.Detail")
                         .add("roomId", roomId)
                         .add("historyId", history.getId())
