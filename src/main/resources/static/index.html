@@ -312,9 +312,9 @@
                 // 检查配置是否有更改
                 var self = this;
                 var originalApiQps = parseFloat(self.originalConfig.apiQps) || 0;
-                var originalUploadMb = parseInt(self.originalConfig.uploadMb) || 0;
+                var originalUploadMb = parseFloat(self.originalConfig.uploadMb) || 0;
                 var currentApiQps = parseFloat(self.systemConfig.apiQps) || 0;
-                var currentUploadMb = parseInt(self.systemConfig.uploadMb) || 0;
+                var currentUploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
                 
                 self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb);
             },

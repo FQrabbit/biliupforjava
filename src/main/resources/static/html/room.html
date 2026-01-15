@@ -395,6 +395,13 @@
                                 </span>
                                 <el-input v-model="room.tags" placeholder="多个标签用逗号分隔"></el-input>
                             </el-form-item>
+                            <el-form-item label="加入合集">
+                                <el-select v-model="room.seasonId" placeholder="选择合集" style="width: 100%" clearable filterable>
+                                    <el-option :key="item.id" :label="item.title" :value="item.id" v-for="item in seasonsList">
+                                        <span style="float: left">{{ item.title }}</span>
+                                    </el-option>
+                                </el-select>
+                            </el-form-item>
                         </div>
                     </div>
 
@@ -2566,6 +2573,7 @@
             room: {},
             addRoom: {},
             exportConfig: {},
+            seasonsList: [],
             tableData: [],
             lines: [],
             lineStats: {},
