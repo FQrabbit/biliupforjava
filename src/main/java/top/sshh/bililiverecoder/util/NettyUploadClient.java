@@ -11,6 +11,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.handler.stream.ChunkedFile;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.handler.traffic.ChannelTrafficShapingHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.utils.URIBuilder;
@@ -32,6 +33,16 @@ public class NettyUploadClient {
     // checkInterval = 1000ms (默认), maxTime = 15000ms
     // 我们将其设为 checkInterval = 100ms 以获得更平滑的效果
     private static final GlobalTrafficShapingHandler trafficHandler = new GlobalTrafficShapingHandler(group, 0, 0, 100);
+
+    /**
+     * 获取全局写入吞吐量 (bytes/s)
+     */
+    public static long getGlobalWriteThroughput() {
+        if (trafficHandler != null && trafficHandler.trafficCounter() != null) {
+            return trafficHandler.trafficCounter().lastWriteThroughput();
+        }
+        return 0;
+    }
 
     /**
      * 更新全局写入限速
@@ -111,6 +122,32 @@ public class NettyUploadClient {
                             
                             // 关键：添加流量整形处理器
                             p.addLast(trafficHandler);
+
+                            // 单连接流量整形与监控 (用于低速切断)
+                            // checkInterval = 1000ms
+                            ChannelTrafficShapingHandler channelTrafficHandler = new ChannelTrafficShapingHandler(0, 0, 1000);
+                            p.addLast(channelTrafficHandler);
+
+                            // 低速检测: 5秒后开始，每3秒检查一次
+                            java.util.concurrent.atomic.AtomicInteger lowSpeedStrikes = new java.util.concurrent.atomic.AtomicInteger(0);
+                            ch.eventLoop().scheduleAtFixedRate(() -> {
+                                if (!ch.isActive()) return;
+
+                                long speed = channelTrafficHandler.trafficCounter().lastWriteThroughput();
+                                // 阈值: 10KB/s
+                                if (speed < 10 * 1024) {
+                                    if (lowSpeedStrikes.incrementAndGet() >= 2) {
+                                        log.info(LogKvs.event("Netty.Upload.LowSpeed")
+                                                .add("speed", speed)
+                                                .add("channelId", ch.id())
+                                                .toString());
+                                        ch.close();
+                                        future.completeExceptionally(new RuntimeException("Low upload speed: " + speed + " B/s"));
+                                    }
+                                } else {
+                                    lowSpeedStrikes.set(0);
+                                }
+                            }, 5, 3, TimeUnit.SECONDS);
                             
                             p.addLast(new HttpClientCodec());
                             p.addLast(new HttpObjectAggregator(65536)); // 聚合响应

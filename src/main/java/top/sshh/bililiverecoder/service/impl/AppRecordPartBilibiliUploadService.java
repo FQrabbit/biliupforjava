@@ -89,6 +89,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
     @Autowired
     private UploadProgressTracker uploadProgressTracker;
 
+    private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
@@ -216,6 +217,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                 throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                             }
                             // 登录验证结束
+                            synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
                             String preRes = BiliApi.preUpload(biliBiliUser, "ugcfr/pc3");
                                 log.debug("[BLR] {}", LogKvs.event("Upload.PreUpload.Response")
                                     .add("os", OS)
@@ -508,6 +510,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                     message.setUid(wxuid);
                                     WxPusher.send(message);
                                 }
+                            }
                             }
                         }
                     } else {

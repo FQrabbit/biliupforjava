@@ -49,6 +49,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import java.util.concurrent.ForkJoinPool;
+import top.sshh.bililiverecoder.service.RateLimiterService;
+import top.sshh.bililiverecoder.util.NettyUploadClient;
+
 @Slf4j
 @Service("uposRecordPartBilibiliUploadService")
 public class UposRecordPartBilibiliUploadService implements RecordPartUploadService {
@@ -394,8 +398,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     chunkParams.put("size", String.valueOf(finalChunkSize));
                                                     chunkParams.put("end", String.valueOf(endSize));
                                                 }
-                                                try {
-                                                    ChunkUploadRequest chunkUploadRequest = new ChunkUploadRequest(finalPreUploadBean, chunkParams, new RandomAccessFile(filePath, "r"));
+                                                try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath, "r")) {
+                                                    ChunkUploadRequest chunkUploadRequest = new ChunkUploadRequest(finalPreUploadBean, chunkParams, randomAccessFile);
                                                     chunkUploadRequest.getPage();
                                                 } catch (FileNotFoundException fileNotFoundException) {
                                                     tryCount.set(200);
@@ -492,7 +496,47 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             message.setUid(wxuid);
                             WxPusher.send(message);
 
-                            runnableList.stream().parallel().forEach(Runnable::run);
+                            // 动态并发计算
+                            int concurrency = 3; // 默认
+                            if (RateLimiterService.getInstance() != null) {
+                                long limitRate = (long) RateLimiterService.getInstance().getUploadBandwidthLimiter().getRate();
+                                // NettyUploadClient.getGlobalWriteThroughput() returns bytes/s
+                                long realRate = NettyUploadClient.getGlobalWriteThroughput();
+
+                                if (limitRate < 100L * 1024 * 1024 * 1024) {
+                                    if (limitRate < 2 * 1024 * 1024) concurrency = 1;
+                                    else if (limitRate < 5 * 1024 * 1024) concurrency = 2;
+                                    else if (limitRate < 10 * 1024 * 1024) concurrency = 3;
+                                    else if (limitRate < 20 * 1024 * 1024) concurrency = 5;
+                                    else concurrency = 8;
+                                } else {
+                                    // 无限制时，适应真实速度
+                                    if (realRate > 0) {
+                                        if (realRate < 2 * 1024 * 1024) concurrency = 2; // 除非用户设置极低限速，否则保底2并发
+                                        else if (realRate < 5 * 1024 * 1024) concurrency = 3;
+                                        else if (realRate < 10 * 1024 * 1024) concurrency = 4;
+                                        else if (realRate < 20 * 1024 * 1024) concurrency = 6;
+                                        else concurrency = 8;
+                                    }
+                                }
+                            }
+                            // 限制在安全范围内（最多8并发）
+                            concurrency = Math.min(concurrency, 8);
+                            concurrency = Math.max(concurrency, 1);
+                            
+                            log.info("[BLR] {}", LogKvs.event("Upload.Concurrency")
+                                    .add("concurrency", concurrency));
+
+                            ForkJoinPool customThreadPool = new ForkJoinPool(concurrency);
+                            try {
+                                customThreadPool.submit(() ->
+                                        runnableList.stream().parallel().forEach(Runnable::run)
+                                ).get();
+                            } catch (Exception e) {
+                                throw new RuntimeException("Concurrency Upload Failed", e);
+                            } finally {
+                                customThreadPool.shutdown();
+                            }
 
                             if (gatewayError.get() != null) {
                                 throw new RuntimeException("UPLOAD_GATEWAY_ERROR:" + gatewayError.get());

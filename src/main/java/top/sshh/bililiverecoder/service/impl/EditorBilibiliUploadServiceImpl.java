@@ -67,6 +67,8 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
     @Autowired
     private RecordRoomRepository roomRepository;
 
+    private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public void asyncUpload(RecordHistoryPart part) {
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
@@ -180,6 +182,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                         }
                         // 登录验证结束
+                        synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
                         long fileSize = uploadFile.length();
                         Map<String, String> preParams = new HashMap<>();
                         if(StringUtils.isNotBlank(part.getTitle())){
@@ -372,6 +375,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                 message.setUid(wxuid);
                                 WxPusher.send(message);
                             }
+                        }
                         }
                     }
                 }

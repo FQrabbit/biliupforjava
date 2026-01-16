@@ -58,11 +58,14 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.SkipNotNeeded", "未开启上传或无需上传，跳过");
         EVENT_ZH.put("Upload.SkipBelowThreshold", "文件低于阈值(大小/时长)不上传，按策略处理");
         EVENT_ZH.put("Upload.ServiceError", "上传服务发生异常");
+        EVENT_ZH.put("Upload.Concurrency", "分P上传：动态调整并发数");
 
         // 录制事件
         EVENT_ZH.put("Room.AutoCreate", "房间不存在，自动创建房间配置");
         EVENT_ZH.put("RecordStarted.ReuseHistory", "录制开始：复用历史记录(继续录制)");
         EVENT_ZH.put("RecordStarted.ReuseHistory.Detail", "录制开始：复用历史记录明细(调试)");
+        EVENT_ZH.put("RecordStarted.ReuseActiveHistory", "录制开始：复用活跃的历史记录");
+        EVENT_ZH.put("RecordStarted.ReuseRecentHistory", "录制开始：复用最近的历史记录");
         EVENT_ZH.put("RecordStarted.Processed", "录制开始事件处理完成");
         EVENT_ZH.put("StreamEnd.IgnoredEmpty", "收到空的下播事件，忽略");
         EVENT_ZH.put("StreamEnd.Received", "收到下播事件");
@@ -353,6 +356,7 @@ public final class LogKvs {
         EVENT_ZH.put("HighEnergyCut.Upload.Chunk.ThreadFailed", "高能剪辑：分片线程执行异常");
         EVENT_ZH.put("UploadLine.TestAll.Failed", "上传线路测速：批量测试失败");
         EVENT_ZH.put("UploadLine.TestSpeed.Failed", "上传线路测速：单线路测试失败");
+        EVENT_ZH.put("Netty.Upload.LowSpeed", "Netty上传：检测到低速连接，已断开");
 
         // ByteUtils
         EVENT_ZH.put("ByteUtils.HexParseFailed", "ByteUtils：Hex解析失败");
@@ -383,6 +387,16 @@ public final class LogKvs {
         EVENT_ZH.put("Blrec.DanmakuCompleted.Skip", "blrec 事件: 弹幕文件完成-跳过(房间不存在或未在录制)");
         EVENT_ZH.put("Blrec.DanmakuCompleted.PartNotFound", "blrec 事件: 弹幕文件完成-未找到对应的视频分P");
         EVENT_ZH.put("Blrec.DanmakuCompleted.Processed", "blrec 事件: 弹幕文件完成，已触发解析");
+        
+        // 系统配置
+        EVENT_ZH.put("SystemConfig.Init", "系统配置：初始化");
+        EVENT_ZH.put("SystemConfig.CreateDefault", "系统配置：创建默认配置");
+        EVENT_ZH.put("SystemConfig.Updated", "系统配置：配置已更新");
+        EVENT_ZH.put("SystemConfig.ApplyFailed", "系统配置：应用配置失败");
+
+        // 限流器
+        EVENT_ZH.put("RateLimiter.Init", "全局限流器：初始化");
+        EVENT_ZH.put("RateLimiter.Update", "全局限流器：更新带宽限制");
     }
 
     private LogKvs() {
