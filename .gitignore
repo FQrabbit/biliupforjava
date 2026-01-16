@@ -14,3 +14,9 @@ target/
 
 # Runtime generated files
 device.properties
+
+
+.*/
+# Whitelist necessary directories
+!.git/
+!.github/

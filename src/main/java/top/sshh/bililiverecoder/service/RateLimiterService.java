@@ -5,6 +5,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.NettyUploadClient;
 
 @Slf4j
 @Service
@@ -54,6 +55,8 @@ public class RateLimiterService {
     public void setUploadSpeedLimit(double mbPerSecond) {
         if (mbPerSecond <= 0) {
             uploadBandwidthLimiter.setRate(Double.MAX_VALUE);
+            // 同时更新 Netty 的全局限速器
+            NettyUploadClient.updateWriteLimit(0);
             log.info(LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
                     .add("newLimitMB", "Unlimited")
@@ -61,6 +64,8 @@ public class RateLimiterService {
         } else {
             double bytesPerSecond = mbPerSecond * 1024 * 1024;
             uploadBandwidthLimiter.setRate(bytesPerSecond);
+            // 同时更新 Netty 的全局限速器
+            NettyUploadClient.updateWriteLimit((long) bytesPerSecond);
             log.info(LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
                     .add("newLimitMB", mbPerSecond)

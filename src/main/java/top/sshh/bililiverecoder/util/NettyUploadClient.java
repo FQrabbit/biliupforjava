@@ -34,6 +34,16 @@ public class NettyUploadClient {
     private static final GlobalTrafficShapingHandler trafficHandler = new GlobalTrafficShapingHandler(group, 0, 0, 100);
 
     /**
+     * 更新全局写入限速
+     * @param writeLimit 写入限速 (bytes/s)，0 表示不限速
+     */
+    public static void updateWriteLimit(long writeLimit) {
+        if (trafficHandler != null) {
+            trafficHandler.setWriteLimit(writeLimit);
+        }
+    }
+
+    /**
      * 使用 Netty 进行带限速的 PUT 上传
      * @param url 上传 URL
      * @param headers 请求头
