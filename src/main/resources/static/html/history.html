@@ -152,6 +152,12 @@
                     </div>
                     
                     <!-- 详细筛选 -->
+                    <div class="filter-section-header">
+                        <span class="filter-section-title"><i class="el-icon-set-up"></i> 详细筛选</span>
+                        <el-link v-if="activeFilterCount > 0" type="primary" :underline="false" size="mini" @click="resetFilters" class="filter-reset-link">
+                            <i class="el-icon-refresh-left"></i> 重置所有
+                        </el-link>
+                    </div>
                     <div class="filter-grid">
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-house"></i> 房间号</label>
@@ -241,7 +247,15 @@
                         </div>
                         
                         <div class="filter-item filter-item-wide">
-                            <label class="filter-label" title="按结束时间(endTime)筛选"><i class="el-icon-date"></i> 结束时间</label>
+                            <div class="filter-label-row">
+                                <label class="filter-label" title="按结束时间(endTime)筛选"><i class="el-icon-date"></i> 结束时间</label>
+                                <div class="date-shortcuts">
+                                    <el-link type="primary" :underline="false" @click="setDateRange(0)">今天</el-link>
+                                    <el-link type="primary" :underline="false" @click="setDateRange(1)">最近24h</el-link>
+                                    <el-link type="primary" :underline="false" @click="setDateRange(3)">3天</el-link>
+                                    <el-link type="primary" :underline="false" @click="setDateRange(7)">7天</el-link>
+                                </div>
+                            </div>
                             <div class="date-range">
                                 <el-date-picker
                                         v-model="form.from"
@@ -274,11 +288,26 @@
         </div>
 
         <!-- 数据内容区域 -->
-        <transition :name="transitionName" mode="out-in">
+        <transition :name="transitionName">
             <!-- 空状态 -->
-            <el-empty v-if="!loading && tableData.length === 0" description="暂无历史记录" style="margin-top: 10vh;">
-                <el-button v-if="activeFilterCount > 0" type="primary" size="small" @click="resetFilters">重置筛选</el-button>
-            </el-empty>
+            <div v-if="!loading && tableData.length === 0" key="empty" class="empty-container">
+                <el-empty style="margin-top: 10vh;">
+                    <template #description>
+                        <div class="empty-desc">
+                            <p v-if="activeFilterCount > 0" class="empty-main-text">没有找到符合条件的记录</p>
+                            <p v-else class="empty-main-text">暂无历史记录</p>
+                            <span class="empty-hint" v-if="activeFilterCount > 0">您可以尝试调整筛选条件或重置筛选</span>
+                        </div>
+                    </template>
+                    <template #image>
+                        <div class="empty-image-modern">
+                            <i :class="activeFilterCount > 0 ? 'el-icon-search' : 'el-icon-folder-opened'"></i>
+                        </div>
+                    </template>
+                    <el-button v-if="activeFilterCount > 0" type="primary" size="small" @click="resetFilters" icon="el-icon-refresh-left" round>重置所有筛选</el-button>
+                </el-empty>
+            </div>
+            
             <!-- 卡片视图 -->
             <div v-else-if="viewMode === 'card'" class="data-card-grid" :key="form.current" v-loading="loading" element-loading-text="加载中...">
                 <div class="data-card" 
@@ -321,11 +350,6 @@
             </div>
 
             <!-- 表格视图 -->
-            <div v-else-if="!loading && tableData.length === 0" class="table-container" key="empty-table" style="padding-top: 10vh;">
-                <el-empty description="暂无历史记录">
-                    <el-button v-if="activeFilterCount > 0" type="primary" size="small" @click="resetFilters">重置筛选</el-button>
-                </el-empty>
-            </div>
             <div v-else class="table-container" key="table">
                 <el-table
                         v-loading="loading"
@@ -755,6 +779,41 @@
             reloadOptions: {
                 restartOrdinary: false,
                 restartAdvanced: false
+            },
+            pickerOptions: {
+                shortcuts: [{
+                    text: '最近24小时',
+                    onClick(picker) {
+                        const end = new Date();
+                        const start = new Date();
+                        start.setTime(start.getTime() - 3600 * 1000 * 24);
+                        picker.$emit('pick', [start, end]);
+                    }
+                }, {
+                    text: '最近三天',
+                    onClick(picker) {
+                        const end = new Date();
+                        const start = new Date();
+                        start.setTime(start.getTime() - 3600 * 1000 * 24 * 3);
+                        picker.$emit('pick', [start, end]);
+                    }
+                }, {
+                    text: '最近一周',
+                    onClick(picker) {
+                        const end = new Date();
+                        const start = new Date();
+                        start.setTime(start.getTime() - 3600 * 1000 * 24 * 7);
+                        picker.$emit('pick', [start, end]);
+                    }
+                }, {
+                    text: '最近一月',
+                    onClick(picker) {
+                        const end = new Date();
+                        const start = new Date();
+                        start.setTime(start.getTime() - 3600 * 1000 * 24 * 30);
+                        picker.$emit('pick', [start, end]);
+                    }
+                }]
             }
         },
         computed: {
@@ -1037,6 +1096,32 @@
             },
             onFilterChange: function() {
                 this.quickFilter = null;
+            },
+            setDateRange: function(days) {
+                const end = new Date();
+                const start = new Date();
+                if (days === 0) {
+                    // 今天
+                    start.setHours(0, 0, 0, 0);
+                } else {
+                    start.setTime(start.getTime() - 3600 * 1000 * 24 * days);
+                }
+                
+                const formatDate = function(date) {
+                    const y = date.getFullYear();
+                    const m = String(date.getMonth() + 1).padStart(2, '0');
+                    const d = String(date.getDate()).padStart(2, '0');
+                    const hh = String(date.getHours()).padStart(2, '0');
+                    const mm = String(date.getMinutes()).padStart(2, '0');
+                    const ss = String(date.getSeconds()).padStart(2, '0');
+                    const sss = String(date.getMilliseconds()).padStart(3, '0');
+                    return `${y}-${m}-${d} ${hh}:${mm}:${ss}.${sss}`;
+                };
+                
+                this.form.from = formatDate(start);
+                this.form.to = formatDate(end);
+                this.onFilterChange();
+                this.initTable();
             },
             getCodeIcon: function(code) {
                 const iconMap = {
@@ -1723,18 +1808,28 @@
                 }
             },
             formatFileSize: function (size) {
-                return (size / 1024 / 1024 / 1024).toFixed(2) + 'GB';
+                if (!size || size <= 0) return '0B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(size) / Math.log(k));
+                return (size / Math.pow(k, i)).toFixed(2) + sizes[i];
             },
             getFileSizeColorType: function (size) {
+                if (!size) return 'info';
                 const gb = size / 1024 / 1024 / 1024;
+                if (gb <= 2) return 'info';
                 if (gb <= 16) return 'success';
                 if (gb <= 64) return 'warning';
                 return 'danger';
             },
             formatDuration: function (seconds) {
+                if (!seconds || seconds <= 0) return '0秒';
                 const h = Math.floor(seconds / 3600);
                 const m = Math.floor((seconds % 3600) / 60);
-                return h + '小时' + m + '分钟';
+                const s = Math.floor(seconds % 60);
+                if (h > 0) return h + '小时' + m + '分钟';
+                if (m > 0) return m + '分钟' + s + '秒';
+                return s + '秒';
             },
         },
         created: function created() {

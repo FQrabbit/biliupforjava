@@ -76,7 +76,7 @@
     
     <!-- 主内容区域 -->
     <main class="app-main">
-        <transition name="fade-slide" mode="out-in">
+        <transition name="fade-slide">
             <!-- 更新日志页面 -->
             <div v-if="activeName === 'home'" class="changelog-container" key="home">
                 <!-- 系统配置面板 -->
@@ -533,18 +533,18 @@
     .config-panel {
         background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(16px);
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-light);
+        box-shadow: var(--shadow-sm);
         margin-bottom: 20px;
         overflow: hidden;
-        transition: all 0.3s ease;
+        transition: var(--transition-base);
     }
     
     [data-theme="dark"] .config-panel {
         background: rgba(30, 30, 40, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-md);
     }
     
     .config-header {
@@ -553,19 +553,19 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-        transition: all 0.3s ease;
+        border-bottom: 1px solid var(--border-light);
+        transition: var(--transition-fast);
     }
     
     [data-theme="dark"] .config-header {
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid var(--border-color);
     }
     
     .config-header:hover {
         background: rgba(91, 108, 255, 0.05);
     }
     
-    [data-theme="dark"] .config-header:hover {
+    .config-header:active {
         background: rgba(91, 108, 255, 0.1);
     }
     
@@ -575,12 +575,17 @@
         gap: 8px;
         font-size: 15px;
         font-weight: 600;
-        color: var(--text-color-primary);
+        color: var(--text-primary);
     }
     
     .config-title i {
         font-size: 18px;
-        color: #5b6cff;
+        color: var(--primary-color);
+        transition: transform var(--transition-base);
+    }
+    
+    .config-header:hover .config-title i {
+        transform: rotate(15deg) scale(1.1);
     }
     
     .config-badge {
@@ -595,20 +600,16 @@
     }
     
     .config-actions .reset-btn {
-        color: #5b6cff;
+        color: var(--primary-color);
         padding: 4px 12px;
         font-size: 13px;
-    }
-    
-    .config-actions .reset-btn:hover {
-        color: #4558e8;
-        background: rgba(91, 108, 255, 0.1);
+        transition: var(--transition-fast);
     }
     
     .config-actions .expand-icon {
         font-size: 16px;
-        color: var(--text-color-regular);
-        transition: transform 0.3s ease;
+        color: var(--text-secondary);
+        transition: transform var(--transition-base);
     }
     
     .config-body {
@@ -632,7 +633,7 @@
     .config-label {
         font-size: 13px;
         font-weight: 500;
-        color: var(--text-color-regular);
+        color: var(--text-secondary);
         display: flex;
         align-items: center;
         gap: 6px;
@@ -640,16 +641,16 @@
     
     .config-label i {
         font-size: 14px;
-        color: #5b6cff;
+        color: var(--primary-color);
     }
     
     .config-unit {
         margin-left: auto;
         padding: 2px 8px;
-        background: linear-gradient(135deg, rgba(91, 108, 255, 0.1), rgba(91, 108, 255, 0.15));
-        border: 1px solid rgba(91, 108, 255, 0.25);
-        border-radius: 6px;
-        color: #5b6cff;
+        background: rgba(91, 108, 255, 0.1);
+        border: 1px solid rgba(91, 108, 255, 0.2);
+        border-radius: var(--radius-sm);
+        color: var(--primary-color);
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.5px;
@@ -657,9 +658,9 @@
     }
     
     [data-theme="dark"] .config-unit {
-        background: linear-gradient(135deg, rgba(91, 108, 255, 0.2), rgba(91, 108, 255, 0.25));
-        border-color: rgba(91, 108, 255, 0.35);
-        color: #7b8fff;
+        background: rgba(123, 143, 255, 0.15);
+        border-color: rgba(123, 143, 255, 0.3);
+        color: var(--primary-light);
     }
     
     .config-input {
@@ -667,48 +668,31 @@
     }
     
     .config-input .el-input__inner {
-        background: rgba(255, 255, 255, 0.8);
-        border: 1.5px solid rgba(91, 108, 255, 0.2);
-        border-radius: 8px;
-        color: var(--text-color-primary);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        transition: var(--transition-fast);
         font-size: 14px;
         height: 36px;
         line-height: 36px;
         padding: 0 12px;
     }
     
-    [data-theme="dark"] .config-input .el-input__inner {
-        background: rgba(40, 40, 50, 0.8);
-        border-color: rgba(91, 108, 255, 0.3);
-    }
-    
     .config-input .el-input__inner:hover {
-        border-color: rgba(91, 108, 255, 0.5);
-        background: rgba(255, 255, 255, 0.95);
-        box-shadow: 0 2px 8px rgba(91, 108, 255, 0.08);
-    }
-    
-    [data-theme="dark"] .config-input .el-input__inner:hover {
-        background: rgba(40, 40, 50, 0.95);
-        border-color: rgba(91, 108, 255, 0.5);
+        border-color: var(--primary-light);
+        box-shadow: var(--shadow-sm);
     }
     
     .config-input .el-input__inner:focus {
-        border-color: #5b6cff;
-        background: #fff;
-        box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.12), 0 4px 12px rgba(91, 108, 255, 0.15);
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.1);
         transform: translateY(-1px);
-    }
-    
-    [data-theme="dark"] .config-input .el-input__inner:focus {
-        background: rgba(45, 45, 55, 1);
-        box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.2), 0 4px 12px rgba(91, 108, 255, 0.25);
     }
     
     .config-help {
         font-size: 12px;
-        color: var(--text-color-placeholder);
+        color: var(--text-disabled);
         line-height: 1.5;
         margin-top: 4px;
     }
@@ -717,29 +701,28 @@
         display: flex;
         justify-content: flex-end;
         padding-top: 16px;
-        border-top: 1px solid rgba(0, 0, 0, 0.06);
+        border-top: 1px solid var(--border-light);
     }
     
     [data-theme="dark"] .config-footer {
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        border-top: 1px solid var(--border-color);
     }
     
-    /* 动画效果 - 从上至下展开 */
-    .filter-slide-enter-active {
-        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-        overflow: hidden;
-    }
-    
+    /* 动画效果 - 丝滑滑动过渡 (同步 history 页面风格) */
+    .filter-slide-enter-active,
     .filter-slide-leave-active {
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all var(--transition-base);
+        max-height: 800px; /* 增加最大高度确保内容不被截断 */
         overflow: hidden;
+        opacity: 1;
     }
     
     .filter-slide-enter,
     .filter-slide-leave-to {
+        max-height: 0;
         opacity: 0;
-        transform: scaleY(0);
-        transform-origin: top center;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
     }
     
     .filter-slide-enter-to,

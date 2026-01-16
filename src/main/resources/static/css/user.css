@@ -31,12 +31,12 @@ html, body {
     border: 1px solid var(--border-light);
     position: relative;
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all var(--transition-base);
 }
 
 .user-header:hover {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
 }
 
 [data-theme="dark"] .user-header {
@@ -54,12 +54,12 @@ html, body {
     height: 3px;
     background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #00d4ff 100%);
     opacity: 0.8;
-    animation: gradientShift 3s ease infinite;
+    animation: gradientShift 4s linear infinite;
 }
 
 @keyframes gradientShift {
-    0%, 100% { filter: hue-rotate(0deg); }
-    50% { filter: hue-rotate(10deg); }
+    0%, 100% { filter: hue-rotate(0deg); opacity: 0.8; }
+    50% { filter: hue-rotate(20deg); opacity: 1; }
 }
 
 .user-header-left {
@@ -84,6 +84,11 @@ html, body {
 .user-header-title .icon {
     font-size: 24px;
     color: var(--primary-color);
+    transition: transform var(--transition-base);
+}
+
+.user-header:hover .user-header-title .icon {
+    transform: rotate(10deg) scale(1.1);
 }
 
 .user-stats {
@@ -95,6 +100,11 @@ html, body {
 
 .user-stat-item {
     text-align: center;
+    transition: transform var(--transition-base);
+}
+
+.user-header:hover .user-stat-item {
+    transform: translateY(-2px);
 }
 
 .user-stat-value {
@@ -115,26 +125,8 @@ html, body {
     gap: 12px;
 }
 
-/* 头部视图切换：与现代按钮同高对齐 */
-.user-header-actions .el-radio-group {
-    display: inline-flex;
-    align-items: center;
-}
-
-.user-header-actions .el-radio-button__inner {
-    padding: 10px 14px !important;
-    line-height: 1 !important;
-}
-
-/* 头部按钮/视图切换的像素级对齐（避免 baseline/line-height 导致的细微偏移） */
-.user-header-actions .el-radio-button__inner {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.user-header-actions .el-radio-button__inner [class^="el-icon-"] {
-    line-height: 1;
+.user-header-actions .el-button {
+    transition: all var(--transition-fast) !important;
 }
 
 /* 登录按钮特殊样式 */
@@ -145,7 +137,7 @@ html, body {
     font-size: 15px !important;
     border-radius: var(--radius-md) !important;
     box-shadow: 0 4px 15px rgba(91, 108, 255, 0.3);
-    transition: all 0.3s ease !important;
+    transition: all var(--transition-base) !important;
 }
 
 .login-btn:hover {
@@ -153,6 +145,9 @@ html, body {
     box-shadow: 0 6px 20px rgba(91, 108, 255, 0.4);
 }
 
+.login-btn:active {
+    transform: translateY(0) scale(0.96);
+}
 
 /* ========== 用户卡片网格 ========== */
 .user-card-grid {
@@ -167,15 +162,19 @@ html, body {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all var(--transition-base);
     border: 1px solid var(--border-light);
     position: relative;
 }
 
 .user-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-6px);
+    box-shadow: var(--shadow-lg);
     border-color: var(--primary-light);
+}
+
+.user-card:active {
+    transform: translateY(-3px) scale(0.985);
 }
 
 /* 卡片顶部装饰条 */
@@ -188,7 +187,7 @@ html, body {
     height: 4px;
     background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--transition-base);
 }
 
 .user-card:hover::before {

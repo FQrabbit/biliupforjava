@@ -225,11 +225,11 @@ html, body {
     flex: 1;
     overflow-y: auto;
     padding: 20px 24px;
-    animation: fadeSlideUp 0.4s ease-out;
+    animation: fadeSlideUp var(--transition-base);
 }
 
 @keyframes fadeSlideUp {
-    from { opacity: 0; transform: translateY(16px); }
+    from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
@@ -243,12 +243,12 @@ html, body {
     box-shadow: var(--shadow-sm);
     margin-bottom: 20px;
     overflow: hidden;
-    transition: var(--transition);
+    transition: all var(--transition-base);
 }
 
 .filter-panel:hover {
     box-shadow: var(--shadow-md);
-    border-color: rgba(91, 108, 255, 0.2);
+    border-color: var(--primary-light);
 }
 
 .filter-header {
@@ -257,7 +257,7 @@ html, body {
     align-items: center;
     padding: 16px 20px;
     cursor: pointer;
-    transition: var(--transition);
+    transition: background var(--transition-base);
     position: relative;
 }
 
@@ -270,7 +270,7 @@ html, body {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--border-color), transparent);
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--transition-base);
 }
 
 .filter-panel.is-expanded .filter-header::after {
@@ -293,6 +293,11 @@ html, body {
 .filter-title i {
     font-size: 18px;
     color: var(--primary-color);
+    transition: transform var(--transition-base);
+}
+
+.filter-header:hover .filter-title i {
+    transform: rotate(15deg) scale(1.1);
 }
 
 .filter-badge .el-badge__content {
@@ -309,7 +314,7 @@ html, body {
     color: var(--text-secondary);
     padding: 4px 12px;
     border-radius: var(--radius-md);
-    transition: var(--transition);
+    transition: all var(--transition-fast);
 }
 
 .reset-btn:hover {
@@ -319,7 +324,7 @@ html, body {
 
 .expand-icon {
     color: var(--text-secondary);
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-base);
     font-size: 14px;
 }
 
@@ -346,15 +351,19 @@ html, body {
 
 .quick-tag {
     cursor: pointer;
-    transition: var(--transition);
+    transition: all var(--transition-fast);
     border-radius: 20px;
     padding: 0 14px;
     font-weight: 500;
 }
 
 .quick-tag:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.quick-tag:active {
+    transform: translateY(0) scale(0.96);
 }
 
 .quick-tag i {
@@ -392,6 +401,26 @@ html, body {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+
+.filter-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.filter-label-row .filter-label {
+    margin-bottom: 0;
+}
+
+.date-shortcuts {
+    display: flex;
+    gap: 12px;
+}
+
+.date-shortcuts .el-link {
+    font-size: 12px;
 }
 
 .filter-label i {
@@ -463,6 +492,72 @@ html, body {
     padding-bottom: 0;
 }
 
+/* 筛选面板分区头部 */
+.filter-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 15px 0 10px;
+    padding: 0 5px;
+}
+
+.filter-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.filter-reset-link {
+    font-size: 12px;
+    font-weight: normal;
+}
+
+/* 现代化空状态样式 */
+.empty-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+}
+
+.empty-image-modern {
+    width: 80px;
+    height: 80px;
+    background: var(--bg-secondary);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto;
+    color: var(--text-disabled);
+    font-size: 40px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
+}
+
+.empty-desc {
+    text-align: center;
+}
+
+.empty-main-text {
+    font-size: 16px;
+    color: var(--text-primary);
+    font-weight: 500;
+    margin: 10px 0 5px;
+}
+
+.empty-hint {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.el-empty__image {
+    width: auto !important;
+}
+
 /* ========== 数据卡片网格 ========== */
 .data-card-grid {
     display: grid;
@@ -478,7 +573,7 @@ html, body {
     border: 1px solid var(--border-light);
     padding: 20px;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all var(--transition-base);
     position: relative;
     overflow: hidden;
 }
@@ -492,14 +587,18 @@ html, body {
     height: 3px;
     background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--transition-base);
 }
 
 .data-card:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-lg);
-    border-color: rgba(91, 108, 255, 0.3);
+    border-color: var(--primary-light);
     background: rgba(255, 255, 255, 0.95);
+}
+
+.data-card:active {
+    transform: translateY(-2px) scale(0.98);
 }
 
 .data-card:hover::before {
@@ -1066,40 +1165,40 @@ html, body {
 /* ========== 页面切换动画 ========== */
 .fade-transform-enter-active,
 .fade-transform-leave-active {
-    transition: all 0.3s ease;
+    transition: all var(--transition-base);
 }
 
 .fade-transform-enter,
 .fade-transform-leave-to {
     opacity: 0;
-    transform: scale(0.98);
+    transform: scale(0.99);
 }
 
 .slide-left-enter-active,
 .slide-left-leave-active,
 .slide-right-enter-active,
 .slide-right-leave-active {
-    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all var(--transition-base);
 }
 
 .slide-left-enter {
     opacity: 0;
-    transform: translateX(30px);
+    transform: translateX(16px);
 }
 
 .slide-left-leave-to {
     opacity: 0;
-    transform: translateX(-30px);
+    transform: translateX(-16px);
 }
 
 .slide-right-enter {
     opacity: 0;
-    transform: translateX(-30px);
+    transform: translateX(-16px);
 }
 
 .slide-right-leave-to {
     opacity: 0;
-    transform: translateX(30px);
+    transform: translateX(16px);
 }
 
 /* ========== 带图标的下拉框 ========== */
@@ -1116,7 +1215,7 @@ html, body {
     z-index: 1;
     font-size: 14px;
     pointer-events: none;
-    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: iconFadeIn var(--transition-base);
 }
 
 .select-with-icon .el-select {
@@ -1127,16 +1226,15 @@ html, body {
     padding-left: 30px;
 }
 
-/* 图标动画 */
-@keyframes iconBounceIn {
-    0% { opacity: 0; transform: translateY(-50%) scale(0); }
-    50% { transform: translateY(-50%) scale(1.2); }
-    100% { opacity: 1; transform: translateY(-50%) scale(1); }
+/* 图标动画 - 扁平化 */
+@keyframes iconFadeIn {
+    from { opacity: 0; transform: translateY(-50%) scale(0.95); }
+    to { opacity: 1; transform: translateY(-50%) scale(1); }
 }
 
 @keyframes iconPulse {
-    0%, 100% { transform: translateY(-50%) scale(1); opacity: 1; }
-    50% { transform: translateY(-50%) scale(1.15); opacity: 0.85; }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
 
 @keyframes iconSpin {
@@ -1146,7 +1244,7 @@ html, body {
 
 .select-prefix-icon.el-icon-success,
 .select-prefix-icon.el-icon-circle-check {
-    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), iconPulse 2s ease-in-out infinite 0.4s;
+    animation: iconFadeIn var(--transition-base), iconPulse 2s ease-in-out infinite var(--transition-base);
 }
 
 .select-prefix-icon.el-icon-refresh,
@@ -1156,13 +1254,13 @@ html, body {
 
 .select-prefix-icon.el-icon-time,
 .select-prefix-icon.el-icon-video-camera {
-    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), iconPulse 2.5s ease-in-out infinite 0.4s;
+    animation: iconFadeIn var(--transition-base), iconPulse 2.5s ease-in-out infinite var(--transition-base);
 }
 
 .select-prefix-icon.el-icon-circle-close,
 .select-prefix-icon.el-icon-warning,
 .select-prefix-icon.el-icon-lock {
-    animation: iconBounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), iconPulse 1.5s ease-in-out infinite 0.4s;
+    animation: iconFadeIn var(--transition-base), iconPulse 1.5s ease-in-out infinite var(--transition-base);
 }
 
 /* ========== 暗色主题 ========== */

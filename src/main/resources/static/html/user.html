@@ -53,14 +53,14 @@
     </div>
 
     <!-- 内容区域 -->
-    <transition name="fade-transform" mode="out-in">
+    <transition name="fade-transform">
         <!-- 空状态 -->
         <div v-if="tableData.length === 0 && !loading" class="empty-state" key="empty">
             <i class="el-icon-user empty-icon"></i>
-            <h3 class="empty-title">还没有添加账号</h3>
-            <p class="empty-desc">点击上方"添加账号"按钮，扫码登录您的B站账号</p>
+            <h3 class="empty-title">暂无关联账号</h3>
+            <p class="empty-desc">添加 Bilibili 账号后，程序将自动使用该账号进行弹幕发送与互动。</p>
             <el-button class="modern-btn" type="primary" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus">
-                立即添加
+                立即添加账号
             </el-button>
         </div>
 
@@ -78,38 +78,42 @@
                 </div>
                 <div class="user-card-body">
                     <div class="user-status-grid">
-                        <div class="status-item">
-                            <div class="status-icon" :class="item.login ? 'success' : 'danger'">
-                                <i :class="item.login ? 'el-icon-check' : 'el-icon-close'"></i>
-                            </div>
-                            <div class="status-text">
-                                <div class="status-label">登录状态</div>
-                                <div class="status-value" :class="item.login ? 'success' : 'danger'">
-                                    {{ item.login ? '已登录' : '未登录' }}
+                        <el-tooltip :content="item.login ? '账号已登录，Token 有效' : '账号未登录或 Token 已过期'" placement="top">
+                            <div class="status-item">
+                                <div class="status-icon" :class="item.login ? 'success' : 'danger'">
+                                    <i :class="item.login ? 'el-icon-check' : 'el-icon-close'"></i>
+                                </div>
+                                <div class="status-text">
+                                    <div class="status-label">登录状态</div>
+                                    <div class="status-value" :class="item.login ? 'success' : 'danger'">
+                                        {{ item.login ? '已登录' : '未登录' }}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="status-item">
-                            <div class="status-icon" :class="item.enable ? 'success' : 'danger'">
-                                <i :class="item.enable ? 'el-icon-chat-dot-round' : 'el-icon-turn-off'"></i>
-                            </div>
-                            <div class="status-text">
-                                <div class="status-label">弹幕发送</div>
-                                <div class="status-value" :class="item.enable ? 'success' : 'danger'">
-                                    {{ item.enable ? '已开启' : '已关闭' }}
+                        </el-tooltip>
+                        <el-tooltip :content="item.enable ? '已开启自动分摊弹幕任务' : '已关闭弹幕任务分摊'" placement="top">
+                            <div class="status-item">
+                                <div class="status-icon" :class="item.enable ? 'success' : 'danger'">
+                                    <i :class="item.enable ? 'el-icon-chat-dot-round' : 'el-icon-turn-off'"></i>
+                                </div>
+                                <div class="status-text">
+                                    <div class="status-label">弹幕发送</div>
+                                    <div class="status-value" :class="item.enable ? 'success' : 'danger'">
+                                        {{ item.enable ? '已开启' : '已关闭' }}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </el-tooltip>
                     </div>
                     <div class="user-update-time">
                         <i class="el-icon-time"></i>
-                        <span>更新于 {{ item.updateTime }}</span>
+                        <span>最后活跃：{{ item.updateTime }}</span>
                     </div>
                 </div>
                 <div class="user-card-footer">
-                    <el-button size="small" icon="el-icon-edit" @click="handleEdit(0, item)">编辑</el-button>
-                    <el-popconfirm @confirm="deleteUser(item.id)" title="确定删除该账号吗？" confirm-button-text="删除" cancel-button-text="取消" confirm-button-type="danger">
-                        <el-button slot="reference" size="small" type="danger" icon="el-icon-delete">删除</el-button>
+                    <el-button size="small" icon="el-icon-edit" @click="handleEdit(0, item)">设置</el-button>
+                    <el-popconfirm @confirm="deleteUser(item.id)" title="确定移除该账号吗？" confirm-button-text="移除" cancel-button-text="取消" confirm-button-type="danger">
+                        <el-button slot="reference" size="small" type="danger" icon="el-icon-delete">移除</el-button>
                     </el-popconfirm>
                 </div>
             </div>
@@ -176,21 +180,23 @@
     </el-dialog>
 
     <!-- 编辑弹窗 -->
-    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="编辑用户设置" width="500px">
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="用户账号设置" width="500px">
         <el-form :model="user" label-width="120px">
-            <el-form-item label="用户昵称">
-                <el-input :value="maskText(user.uname)" disabled></el-input>
+            <el-form-item label="当前账号">
+                <el-tag type="info" size="medium">{{ maskText(user.uname) }}</el-tag>
+                <span style="margin-left: 10px; color: var(--text-disabled); font-size: 12px;">UID: {{ maskText(user.uid) }}</span>
             </el-form-item>
-            <el-form-item label="弹幕发送权限">
+            <el-form-item label="弹幕分摊">
                 <el-switch v-model="user.enable" active-text="开启" inactive-text="关闭"></el-switch>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-                    开启后，该账号参与投稿后的普通弹幕任务分摊发送；不包含高级弹幕（SC/上舰）
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.6;">
+                    开启后，该账号将参与全站投稿的普通弹幕任务分摊。<br/>
+                    <i class="el-icon-info"></i> 不会发送高级弹幕（SC/上舰等）。
                 </div>
             </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
             <el-button @click="dialogFormVisible = false">取消</el-button>
-            <el-button @click="updateUser()" type="primary">保存设置</el-button>
+            <el-button @click="updateUser()" type="primary" :loading="saveLoading">保存设置</el-button>
         </div>
     </el-dialog>
 </div>
@@ -198,7 +204,6 @@
     new Vue({
         el: '#userTable',
         data: {
-            formLabelWidth: '150px',
             dialogFormVisible: false,
             dialogLoginVisible: false,
             tableData: [],
@@ -207,6 +212,7 @@
             loginKey: '',
             loginCheckTimer: null,
             loginLoading: false,
+            saveLoading: false,
             loginStatus: 'pending', // pending, scanned, success, expired, failed
             loading: false,
             isMobile: window.innerWidth <= 768,
@@ -253,79 +259,59 @@
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;
             },
-            initTable: function () {
-                let _this = this;
-                _this.loading = true;
-                $.ajax({
-                    url: '/biliUser/list',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.tableData = data;
-                        _this.loading = false;
-                    },
-                    error:function () {
-                        _this.loading = false;
-                    }
+            fetchUserList: function () {
+                var self = this;
+                self.loading = true;
+                ApiUtil.get('/biliUser/list', function (data) {
+                    self.tableData = data;
+                    self.loading = false;
+                }, function() {
+                    self.loading = false;
+                    self.$message.error('获取用户列表失败');
                 });
             },
             getLoginImage: function () {
-                let _this = this;
+                var self = this;
                 // 停止之前的轮询
-                _this.stopLoginCheck();
-                _this.loginLoading = true;
-                _this.loginStatus = 'pending';
+                self.stopLoginCheck();
+                self.loginLoading = true;
+                self.loginStatus = 'pending';
 
-                $.ajax({
-                    url: '/biliUser/login',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.loginLoading = false;
-                        if (data.error) {
-                            _this.$message.error(data.error);
-                            return;
-                        }
-                        _this.image = data.image;
-                        _this.loginKey = data.key;
-                        _this.loginStatus = 'pending';
-                        // 开始轮询检查登录状态
-                        _this.startLoginCheck();
-                    },
-                    error: function() {
-                        _this.loginLoading = false;
-                        _this.$message.error('获取二维码失败');
+                ApiUtil.get('/biliUser/login', function (data) {
+                    self.loginLoading = false;
+                    if (data.error) {
+                        self.$message.error(data.error);
+                        return;
                     }
+                    self.image = data.image;
+                    self.loginKey = data.key;
+                    self.loginStatus = 'pending';
+                    // 开始轮询检查登录状态
+                    self.startLoginCheck();
+                }, function() {
+                    self.loginLoading = false;
+                    self.$message.error('获取登录二维码失败');
                 });
             },
             startLoginCheck: function() {
-                let _this = this;
+                var self = this;
                 // 每2秒检查一次登录状态
-                _this.loginCheckTimer = setInterval(function() {
-                    if (!_this.loginKey) return;
+                self.loginCheckTimer = setInterval(function() {
+                    if (!self.loginKey) return;
                     
-                    $.ajax({
-                        url: '/biliUser/loginCheck',
-                        type: 'get',
-                        data: { key: _this.loginKey },
-                        dataType: 'json',
-                        success: function(data) {
-                            _this.loginStatus = data.status;
-                            
-                            if (data.status === 'success') {
-                                _this.stopLoginCheck();
-                                _this.$message.success(data.message);
-                                _this.initTable();
-                                _this.dialogLoginVisible = false;
-                            } else if (data.status === 'expired' || data.status === 'failed') {
-                                _this.stopLoginCheck();
-                                _this.$message.warning(data.message);
-                            }
-                            // scanned 和 pending 状态继续轮询
-                        },
-                        error: function() {
-                            // 网络错误时不停止轮询，继续尝试
+                    ApiUtil.get('/biliUser/loginCheck?key=' + self.loginKey, function(data) {
+                        self.loginStatus = data.status;
+                        
+                        if (data.status === 'success') {
+                            self.stopLoginCheck();
+                            self.$message.success(data.message || '登录成功');
+                            self.fetchUserList();
+                            self.dialogLoginVisible = false;
+                        } else if (data.status === 'expired' || data.status === 'failed') {
+                            self.stopLoginCheck();
+                            self.$message.warning(data.message || '登录失效，请重新刷新二维码');
                         }
+                        // scanned 和 pending 状态继续轮询
                     });
                 }, 2000);
             },
@@ -336,57 +322,48 @@
                 }
             },
             cancelLogin: function() {
-                let _this = this;
-                _this.stopLoginCheck();
+                var self = this;
+                self.stopLoginCheck();
                 // 通知后端取消登录会话
-                if (_this.loginKey) {
-                    $.ajax({
-                        url: '/biliUser/loginCancel',
-                        type: 'get',
-                        data: { key: _this.loginKey }
-                    });
-                    _this.loginKey = '';
+                if (self.loginKey) {
+                    ApiUtil.get('/biliUser/loginCancel?key=' + self.loginKey);
+                    self.loginKey = '';
                 }
-                _this.dialogLoginVisible = false;
-                _this.initTable();
+                self.dialogLoginVisible = false;
+                self.fetchUserList();
             },
             handleEdit: function (index, row) {
                 this.user = JSON.parse(JSON.stringify(row));
                 this.dialogFormVisible = true;
             },
             updateUser: function () {
-                let _this = this;
-                $.ajax({
-                    url: '/biliUser/update',
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'post',
-                    data: JSON.stringify(_this.user),
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.initTable();
-                        _this.dialogFormVisible = false;
-                    }
+                var self = this;
+                self.saveLoading = true;
+                ApiUtil.post('/biliUser/update', self.user, function (data) {
+                    self.saveLoading = false;
+                    self.$message.success('设置已保存');
+                    self.fetchUserList();
+                    self.dialogFormVisible = false;
+                }, function() {
+                    self.saveLoading = false;
+                    self.$message.error('保存设置失败');
                 });
             },
             deleteUser: function (id) {
-                let _this = this;
-                $.ajax({
-                    url: '/biliUser/delete/' + id,
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'get',
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }
+                var self = this;
+                ApiUtil.get('/biliUser/delete/' + id, function (data) {
+                    self.$message({
+                        message: data.msg || '移除成功',
+                        type: data.type || 'success'
+                    });
+                    self.fetchUserList();
+                }, function() {
+                    self.$message.error('移除用户失败');
                 });
             },
         },
         created: function created() {
-            this.initTable();
+            this.fetchUserList();
             this.handleResize();
             window.addEventListener('resize', this.handleResize);
             var cached = localStorage.getItem('user-view-mode');

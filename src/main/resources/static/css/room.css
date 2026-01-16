@@ -31,12 +31,12 @@ html, body {
     border: 1px solid var(--border-light);
     position: relative;
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all var(--transition-base);
 }
 
 .room-header:hover {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
 }
 
 [data-theme="dark"] .room-header {
@@ -53,12 +53,12 @@ html, body {
     height: 3px;
     background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #00d4ff 100%);
     opacity: 0.8;
-    animation: gradientShift 3s ease infinite;
+    animation: gradientShift 4s linear infinite;
 }
 
 @keyframes gradientShift {
-    0%, 100% { filter: hue-rotate(0deg); }
-    50% { filter: hue-rotate(10deg); }
+    0%, 100% { filter: hue-rotate(0deg); opacity: 0.8; }
+    50% { filter: hue-rotate(20deg); opacity: 1; }
 }
 
 .room-header-left {
@@ -94,6 +94,7 @@ html, body {
     padding: 4px 6px;
     border-radius: var(--radius-md);
     color: var(--text-secondary);
+    transition: all var(--transition-fast);
 }
 
 .room-legend-toggle:hover {
@@ -104,14 +105,14 @@ html, body {
 /* 图例收缩动画 */
 .room-legend-collapse-enter-active,
 .room-legend-collapse-leave-active {
-    transition: max-width 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
+    transition: all var(--transition-base);
 }
 
 .room-legend-collapse-enter,
 .room-legend-collapse-leave-to {
     max-width: 0;
     opacity: 0;
-    transform: scaleX(0.9);
+    transform: scaleX(0.95);
 }
 
 .room-legend-collapse-enter-to,
@@ -136,6 +137,13 @@ html, body {
     background: rgba(144, 147, 153, 0.12);
     border: 1px solid var(--border-light);
     line-height: 1;
+    transition: all var(--transition-fast);
+    cursor: default;
+}
+
+.room-legend-item:hover {
+    background: rgba(144, 147, 153, 0.2);
+    transform: translateY(-1px);
 }
 
 .room-legend-dot {
@@ -185,6 +193,11 @@ html, body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    transition: transform var(--transition-base);
+}
+
+.room-header:hover .room-header-title .icon {
+    transform: rotate(10deg) scale(1.1);
 }
 
 .room-stats {
@@ -197,6 +210,12 @@ html, body {
 .room-stat-item {
     text-align: center;
     position: relative;
+    transition: transform var(--transition-base);
+    cursor: default;
+}
+
+.room-stat-item:hover {
+    transform: translateY(-2px);
 }
 
 .room-stat-value {
@@ -275,7 +294,7 @@ html, body {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all var(--transition-base);
     border: 1px solid var(--border-light);
     position: relative;
     cursor: pointer;
@@ -294,7 +313,7 @@ html, body {
 }
 
 .room-card:hover {
-    transform: translateY(-6px);
+    transform: translateY(-4px);
     box-shadow: var(--shadow-md);
     border-color: var(--primary-light);
 }
@@ -375,6 +394,12 @@ html, body {
     box-shadow: 0 4px 15px rgba(91, 108, 255, 0.3);
     position: relative;
     overflow: hidden;
+    transition: all var(--transition-base);
+}
+
+.room-card:hover .room-avatar {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(91, 108, 255, 0.4);
 }
 
 .room-avatar img {
@@ -463,7 +488,7 @@ html, body {
     border-radius: 20px;
     font-size: 12px;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
 }
 
 .room-tag.live {
@@ -696,7 +721,7 @@ html, body {
     cursor: pointer;
     font-size: 16px;
     color: var(--text-primary);
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
 }
 .partition-item:hover {
     background: rgba(91, 108, 255, 0.05);
@@ -773,8 +798,8 @@ html, body {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-light);
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+    transition: all var(--transition-base);
+    animation: slideIn var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1) backwards;
     display: flex;
     flex-direction: column;
 }
