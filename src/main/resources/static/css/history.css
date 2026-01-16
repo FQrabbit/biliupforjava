@@ -39,6 +39,25 @@ html, body {
     gap: 16px;
 }
 
+/* ========== 分类标签页容器 ========== */
+.category-tabs-container {
+    padding: 0 24px;
+    padding-top: 8px; /* 增加顶部间距，让标签页更有呼吸感 */
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-light);
+    transition: all 0.3s ease;
+}
+
+.category-tabs-container .el-tabs__header {
+    margin: 0;
+}
+
+.category-tabs-container .el-tabs__nav-wrap::after {
+    display: none; /* 移除 Element UI 默认的底边线，使用容器的 border-bottom */
+}
+
 .card-legend {
     display: flex;
     align-items: center;
@@ -350,6 +369,12 @@ html, body {
     margin-bottom: 16px;
 }
 
+@media (max-width: 1024px) and (min-width: 769px) {
+    .filter-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 .filter-item {
     display: flex;
     flex-direction: column;
@@ -474,6 +499,7 @@ html, body {
     transform: translateY(-4px);
     box-shadow: var(--shadow-lg);
     border-color: rgba(91, 108, 255, 0.3);
+    background: rgba(255, 255, 255, 0.95);
 }
 
 .data-card:hover::before {
@@ -642,6 +668,49 @@ html, body {
     -webkit-backdrop-filter: blur(8px);
     border-radius: var(--radius-xl);
     margin-top: 16px;
+}
+
+/* PC端页码样式优化 - 应用移动端效果 */
+.pagination-container .el-pagination .btn-prev,
+.pagination-container .el-pagination .btn-next {
+    min-width: 36px;
+    height: 36px;
+    line-height: 36px;
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    margin: 0 4px;
+    transition: all 0.2s ease;
+}
+
+.pagination-container .el-pagination .btn-prev:hover,
+.pagination-container .el-pagination .btn-next:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.pagination-container .el-pagination .el-pager li {
+    min-width: 36px;
+    height: 36px;
+    line-height: 36px;
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    margin: 0 2px;
+    transition: all 0.2s ease;
+}
+
+.pagination-container .el-pagination .el-pager li:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary-light);
+    color: var(--primary-color);
+}
+
+.pagination-container .el-pagination .el-pager li.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
 }
 
 .swipe-hint {
@@ -1958,6 +2027,54 @@ html, body {
         padding: 12px;
     }
     
+    /* 移动端分页优化 */
+    .pagination-container {
+        padding: 0 16px;
+        margin-top: 16px;
+    }
+    
+    .pagination-container .el-pagination {
+        display: flex;
+        justify-content: center;
+        padding: 8px 0;
+    }
+    
+    .pagination-container .el-pagination .btn-prev,
+    .pagination-container .el-pagination .btn-next {
+        min-width: 36px;
+        height: 36px;
+        line-height: 36px;
+        border-radius: var(--radius-md);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-light);
+        margin: 0 4px;
+    }
+    
+    .pagination-container .el-pagination .el-pager li {
+        min-width: 36px;
+        height: 36px;
+        line-height: 36px;
+        border-radius: var(--radius-md);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-light);
+        margin: 0 2px;
+    }
+    
+    .pagination-container .el-pagination .el-pager li.active {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+        color: #fff;
+    }
+    
+    .swipe-hint {
+        font-size: 12px;
+        padding: 6px 12px;
+        margin-bottom: 8px;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+    }
+    
     .status-connector {
         width: 3px;
         height: 40px;
@@ -1969,6 +2086,51 @@ html, body {
     
     .status-connector::before {
         display: none;
+    }
+    
+    /* 移动端状态显示优化 */
+    .status-item-modern {
+        flex-direction: column;
+        text-align: center;
+        padding: 12px 8px;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: var(--radius-md);
+        margin: 4px 0;
+        min-height: 80px;
+        justify-content: center;
+    }
+    
+    .status-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+        margin: 0 auto;
+        flex-shrink: 0;
+    }
+    
+    .status-info {
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .status-label {
+        font-size: 12px;
+        margin-bottom: 2px;
+        font-weight: 500;
+    }
+    
+    .status-value {
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+    
+    .status-badge-mini {
+        font-size: 9px;
+        padding: 1px 3px;
+        margin-left: 2px;
+        margin-top: 2px;
     }
     
     @keyframes progressFillVertical {
@@ -2176,29 +2338,76 @@ html, body {
     backdrop-filter: blur(10px);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
-    padding: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-width: 300px;
-    z-index: 100;
+    gap: 16px;
+    min-width: 480px;
+    z-index: 1000;
+    /* 现代化滚动条样式 */
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) transparent;
+    
+    /* 底部边缘渐变遮罩，提示还有更多内容 */
+    mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent 100%);
+}
+
+/* Webkit 滚动条优化 */
+.action-group-secondary::-webkit-scrollbar {
+    width: 5px;
+}
+
+.action-group-secondary::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 8px 0;
+}
+
+.action-group-secondary::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    transition: all 0.3s;
+}
+
+.action-group-secondary:hover::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.action-group-secondary::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
 }
 
 .action-sub-group {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
 }
 
 .action-group-label {
     font-size: 12px;
     color: var(--text-secondary);
-    margin-right: 4px;
     font-weight: 600;
     width: 100%;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    opacity: 0.8;
+}
+
+.action-sub-group .modern-btn {
+    margin: 0 !important;
+}
+
+/* 确保 PC 端 Tooltip 包装的按钮不撑满 */
+.action-sub-group .el-tooltip,
+.action-sub-group > span:not(.action-group-label) {
+    width: auto;
+    display: inline-block;
+}
+
+.action-sub-group .modern-btn i {
+    margin-right: 10px;
+    font-size: 16px;
 }
 
 .action-divider {
@@ -2208,19 +2417,39 @@ html, body {
 }
 
 /* Animation for secondary actions */
+.fade-enter-active, .fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter, .fade-leave-to {
+    opacity: 0;
+}
+
 .actions-slide-enter-active, .actions-slide-leave-active {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: bottom center;
 }
 
 .actions-slide-enter, .actions-slide-leave-to {
     opacity: 0;
-    transform: translateY(10px) scale(0.95);
+    transform: translateY(20px) scale(0.9);
 }
 
 .close-btn {
     margin-left: auto;
     padding: 9px 20px;
     font-weight: 500;
+}
+
+/* 操作菜单遮罩层 */
+.action-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+    background: transparent;
 }
 
 /* Mobile adaptation for footer */
@@ -2230,12 +2459,75 @@ html, body {
     }
     
     .action-group-secondary {
-        position: fixed;
-        bottom: 70px;
-        left: 10px;
-        right: 10px;
+        position: absolute;
+        /* 降低位置：相对于操作栏底部定位，避开按钮高度即可 */
+        bottom: 50px;
+        left: 0;
+        right: 0;
         width: auto;
         margin-bottom: 0;
+        z-index: 1004;
+        /* 缩减最大高度，防止顶部溢出屏幕 */
+        max-height: calc(100vh - 300px);
+        overflow-y: auto;
+        min-width: unset;
+        padding: 12px;
+        /* 修复阴影被切割问题 */
+        margin-left: 6px;
+        margin-right: 6px;
+        
+        /* 底部边缘渐变遮罩，提示还有更多内容 */
+        mask-image: linear-gradient(to bottom, black calc(100% - 20px), transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 20px), transparent 100%);
+    }
+
+    .action-sub-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .action-sub-group .modern-btn {
+        width: 100%;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 12px 16px !important;
+        height: auto !important;
+    }
+
+    .action-sub-group .el-tooltip,
+    .action-sub-group > span:not(.action-group-label) {
+        width: 100%;
+        display: block;
+    }
+
+    .action-group-label {
+        text-align: right;
+        padding-right: 4px;
+        margin-bottom: 4px;
+    }
+    
+    .action-group-more-toggle {
+        position: static;
+        z-index: 1005;
+        /* 确保按钮也向右平移一点，以对齐带外边距的菜单 */
+        padding-left: 6px;
+    }
+    
+    .action-group-more-toggle .modern-btn {
+        background: #fff;
+        border: 1px solid var(--border-light);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .action-group-more-toggle .modern-btn:hover {
+        background: var(--bg-secondary);
+    }
+    
+    /* 移动端遮罩层需要半透明背景 */
+    .action-backdrop {
+        background: rgba(0, 0, 0, 0.5);
     }
 }
 
@@ -2409,6 +2701,46 @@ html, body {
     background: rgba(31, 31, 31, 0.95);
     border-color: #303030;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .action-group-secondary::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .action-group-secondary:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+[data-theme='dark'] .action-backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+[data-theme='dark'] .action-group-more-toggle .modern-btn {
+    background: #1f1f1f;
+    border-color: #303030;
+    color: #e8e8e8;
+}
+
+[data-theme='dark'] .action-group-more-toggle .modern-btn:hover {
+    background: #2b2b2b;
+}
+
+/* 黑暗模式：分类标签页容器 */
+[data-theme='dark'] .category-tabs-container {
+    background: rgba(10, 10, 12, 0.6);
+    border-color: var(--border-light);
+}
+
+[data-theme='dark'] .category-tabs-container .el-tabs__item {
+    color: var(--text-secondary);
+}
+
+[data-theme='dark'] .category-tabs-container .el-tabs__item.is-active {
+    color: var(--primary-color);
+}
+
+[data-theme='dark'] .category-tabs-container .el-tabs__active-bar {
+    background-color: var(--primary-color);
 }
 
 [data-theme='dark'] .action-group-label {

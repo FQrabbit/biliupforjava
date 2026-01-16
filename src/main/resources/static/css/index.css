@@ -1,4 +1,4 @@
-﻿:root {
+:root {
     --primary-color: #5b6cff;
     --primary-light: #7b8fff;
     --primary-dark: #4a5ae8;
@@ -261,6 +261,24 @@ html, body {
     padding: 8px 16px;
     background: rgba(91, 108, 255, 0.08);
     border-radius: var(--radius-md);
+    transition: all 0.3s ease;
+}
+
+.stat-item.is-clickable {
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.stat-item.is-clickable:hover {
+    background: rgba(91, 108, 255, 0.15);
+    transform: translateY(-2px);
+    border-color: rgba(91, 108, 255, 0.3);
+    box-shadow: 0 4px 12px rgba(91, 108, 255, 0.1);
+}
+
+.stat-item.is-clickable:active {
+    transform: translateY(0);
+    background: rgba(91, 108, 255, 0.2);
 }
 
 .stat-value {

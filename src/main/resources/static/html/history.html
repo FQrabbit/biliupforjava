@@ -85,7 +85,7 @@
     <main class="history-main">
         
         <!-- 分类标签页 -->
-        <div class="category-tabs-container" style="padding: 0 24px; background: rgba(255,255,255,0.5);">
+        <div class="category-tabs-container">
             <el-tabs v-model="form.viewType" @tab-click="handleViewTypeChange">
                 <el-tab-pane label="工作中的稿件" name="working"></el-tab-pane>
                 <el-tab-pane name="archived">
@@ -106,6 +106,9 @@
                     <el-badge :value="activeFilterCount" :hidden="activeFilterCount === 0" class="filter-badge"></el-badge>
                 </div>
                 <div class="filter-actions">
+                    <el-button v-if="activeFilterCount > 0" type="text" size="mini" @click.stop="resetFilters" class="reset-btn" circle title="清除所有筛选">
+                        <i class="el-icon-close"></i>
+                    </el-button>
                     <el-button v-if="activeFilterCount > 0" type="text" size="mini" @click.stop="resetFilters" class="reset-btn">
                         <i class="el-icon-refresh-left"></i> 重置
                     </el-button>
@@ -272,7 +275,12 @@
 
         <!-- 数据内容区域 -->
         <transition :name="transitionName" mode="out-in">
-            <div v-if="viewMode === 'card'" class="data-card-grid" :key="form.current" v-loading="loading" element-loading-text="加载中...">
+            <!-- 空状态 -->
+            <el-empty v-if="!loading && tableData.length === 0" description="暂无历史记录" style="margin-top: 10vh;">
+                <el-button v-if="activeFilterCount > 0" type="primary" size="small" @click="resetFilters">重置筛选</el-button>
+            </el-empty>
+            <!-- 卡片视图 -->
+            <div v-else-if="viewMode === 'card'" class="data-card-grid" :key="form.current" v-loading="loading" element-loading-text="加载中...">
                 <div class="data-card" 
                      :class="{ 
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
@@ -313,6 +321,11 @@
             </div>
 
             <!-- 表格视图 -->
+            <div v-else-if="!loading && tableData.length === 0" class="table-container" key="empty-table" style="padding-top: 10vh;">
+                <el-empty description="暂无历史记录">
+                    <el-button v-if="activeFilterCount > 0" type="primary" size="small" @click="resetFilters">重置筛选</el-button>
+                </el-empty>
+            </div>
             <div v-else class="table-container" key="table">
                 <el-table
                         v-loading="loading"
@@ -429,7 +442,8 @@
                     :page-sizes="pageSizes"
                     :page-size="form.pageSize || 10"
                     :layout="isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
-                    :pager-count="isMobile ? 5 : 7"
+                    :pager-count="isMobile ? 3 : 7"
+                    :small="isMobile"
                     :total="total">
             </el-pagination>
         </div>
@@ -613,6 +627,9 @@
                 </div>
 
                 <!-- 更多操作面板 (动画展开) -->
+                <transition name="fade">
+                    <div class="action-backdrop" v-show="showMoreActions" @click="showMoreActions = false"></div>
+                </transition>
                 <transition name="actions-slide">
                     <div class="action-group-secondary" v-show="showMoreActions">
                         <div class="action-sub-group">
@@ -693,6 +710,7 @@
     new Vue({
         el: '#historyApp',
         data: {
+            resizeHandler: null,
             formLabelWidth: '150px',
             tableData: [],
             total: 0,
@@ -777,13 +795,38 @@
             if (this.isMobile && !localStorage.getItem('hasShownSwipeHint')) {
                 this.showSwipeHint = true;
             }
+            
+            // 页面可见性变化监听，优化进度轮询
+            document.addEventListener('visibilitychange', this.handleVisibilityChange);
         },
         beforeDestroy() {
             this.$el.removeEventListener('touchstart', this.handleTouchStart);
             this.$el.removeEventListener('touchend', this.handleTouchEnd);
-            window.removeEventListener('resize', this.handleResize);
+            window.removeEventListener('resize', this.resizeHandler);
+            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         },
         methods: {
+            // 防抖函数工具
+            debounce: function(func, delay) {
+                let timeoutId;
+                return function() {
+                    const context = this;
+                    const args = arguments;
+                    clearTimeout(timeoutId);
+                    timeoutId = setTimeout(function() {
+                        func.apply(context, args);
+                    }, delay);
+                };
+            },
+            handleVisibilityChange: function() {
+                if (document.hidden) {
+                    // 页面不可见时停止轮询
+                    this.stopProgressPolling();
+                } else if (this.detailDialogVisible && this.currentDetail && this.currentDetail.id) {
+                    // 页面可见且详情弹窗打开时恢复轮询
+                    this.startProgressPolling(this.currentDetail.id);
+                }
+            },
             handleViewTypeChange: function() {
                 this.form.current = 1;
                 this.initTable();
@@ -1070,6 +1113,8 @@
                     _this.updateSpeedTracking(resp);
                     if (resp && resp.activeCount && resp.activeCount > 0) {
                         _this.progressTimer = setInterval(function () {
+                            // 页面不可见时暂停轮询
+                            if (document.hidden) return;
                             if (!_this.detailDialogVisible || !_this.currentDetail || _this.currentDetail.id !== historyId) {
                                 _this.stopProgressPolling();
                                 return;
@@ -1713,7 +1758,8 @@
             this.initTable();
             this.loadRoomList();
             this.handleResize();
-            window.addEventListener('resize', this.handleResize);
+            this.resizeHandler = this.debounce(this.handleResize, 300);
+            window.addEventListener('resize', this.resizeHandler);
             var cached = localStorage.getItem('history-view-mode');
             if (cached === 'table' || cached === 'card') {
                 this.viewMode = cached;

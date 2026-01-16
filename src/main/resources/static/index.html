@@ -146,7 +146,7 @@
                         <h2>更新日志</h2>
                     </div>
                     <div class="changelog-stats">
-                        <span class="stat-item">
+                        <span class="stat-item is-clickable" @click="goToRelease" title="点击查看 GitHub Release">
                             <span class="stat-value">{{ versions.length }}</span>
                             <span class="stat-label">版本更新</span>
                         </span>
@@ -194,12 +194,13 @@
             configLoading: false,
             configExpanded: false,
             hasConfigChanges: false,
-            currentVersion: 'v1.4.1-beta5.9',
+            currentVersion: 'v1.4.1-beta6',
             hasNewVersion: false,
             releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
             versions: [
+                { time: '2026-01-17', version: '1.4.1-beta6', content: '修复特定情况下稿件被拆分的问题；修复限速功能在某些情况下失效的问题；添加基于宽带限制的动态并发控制功能。' },
                 { time: '2026-01-15', version: '1.4.1-beta5.9', content: '添加限速功能。' },
                 { time: '2026-01-14', version: '1.4.1-beta5.8', content: '录制历史页面增加"工作中"和"归档"分类；新增版本更新检查提示。' },
                 { time: '2025-12-31', version: '1.4.1-beta5.7', content: '新增普通弹幕和高级弹幕(sc/上舰)单独开关、添加H2数据库自动备份功能。' },
@@ -496,6 +497,21 @@
             toggleTheme: function() {
                 this.theme = this.theme === 'dark' ? 'light' : 'dark';
                 this.applyTheme(this.theme);
+            },
+            goToRelease: function() {
+                var self = this;
+                this.$confirm('即将跳转到 GitHub Release 页面查看最新版本及更新日志，是否继续？', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'info',
+                    center: true,
+                    roundButton: true,
+                    customClass: 'modern-confirm'
+                }).then(function() {
+                    window.open(self.releaseUrl, '_blank');
+                }).catch(function() {
+                    // 用户取消跳转
+                });
             },
             applyTheme: function(theme) {
                 document.documentElement.setAttribute('data-theme', theme);
