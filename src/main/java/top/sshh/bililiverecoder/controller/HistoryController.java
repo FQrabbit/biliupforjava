@@ -162,6 +162,8 @@ public class HistoryController {
                 );
                 Predicate isRecording = criteriaBuilder.exists(partExists);
 
+                Predicate isStreaming = criteriaBuilder.equal(badgeRoot.get("streaming"), true);
+
                 Predicate isUploading = criteriaBuilder.and(
                         criteriaBuilder.equal(badgeRoot.get("upload"), true),
                         criteriaBuilder.equal(badgeRoot.get("publish"), false)
@@ -178,7 +180,7 @@ public class HistoryController {
                         criteriaBuilder.equal(badgeRoot.get("sendReply"), false)
                 );
 
-                Predicate workingPredicate = criteriaBuilder.or(isRecording, isUploading, isProcessing, isSendingDanmaku);
+                Predicate workingPredicate = criteriaBuilder.or(isRecording, isStreaming, isUploading, isProcessing, isSendingDanmaku);
 
                 Predicate isFailed = criteriaBuilder.and(
                         criteriaBuilder.equal(badgeRoot.get("publish"), true),
@@ -501,6 +503,12 @@ public class HistoryController {
                 changed = true;
             }
 
+            // 如果正在直播中 -> 强制停止直播状态
+            if (history.isStreaming()) {
+                history.setStreaming(false);
+                changed = true;
+            }
+
             // 如果正在录制 -> 强制停止录制状态
             if (history.isRecording()) {
                 history.setRecording(false);
@@ -615,6 +623,8 @@ public class HistoryController {
             );
             Predicate isRecording = criteriaBuilder.exists(partExists);
 
+            Predicate isStreaming = criteriaBuilder.equal(root.get("streaming"), true);
+
             Predicate isUploading = criteriaBuilder.and(
                     criteriaBuilder.equal(root.get("upload"), true),
                     criteriaBuilder.equal(root.get("publish"), false)
@@ -631,7 +641,7 @@ public class HistoryController {
                     criteriaBuilder.equal(root.get("sendReply"), false)
             );
 
-            Predicate workingPredicate = criteriaBuilder.or(isRecording, isUploading, isProcessing, isSendingDanmaku);
+            Predicate workingPredicate = criteriaBuilder.or(isRecording, isStreaming, isUploading, isProcessing, isSendingDanmaku);
 
             if ("working".equals(request.getViewType())) {
                 predicatesList.add(workingPredicate);

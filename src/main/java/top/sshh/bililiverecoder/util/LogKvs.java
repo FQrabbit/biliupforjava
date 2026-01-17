@@ -66,6 +66,7 @@ public final class LogKvs {
         EVENT_ZH.put("RecordStarted.ReuseHistory.Detail", "录制开始：复用历史记录明细(调试)");
         EVENT_ZH.put("RecordStarted.ReuseActiveHistory", "录制开始：复用活跃的历史记录");
         EVENT_ZH.put("RecordStarted.ReuseRecentHistory", "录制开始：复用最近的历史记录");
+        EVENT_ZH.put("RecordStarted.ActiveHistoryStale", "录制开始：检测到过时的录制中记录(24小时无活动)");
         EVENT_ZH.put("RecordStarted.Processed", "录制开始事件处理完成");
         EVENT_ZH.put("StreamEnd.IgnoredEmpty", "收到空的下播事件，忽略");
         EVENT_ZH.put("StreamEnd.Received", "收到下播事件");
@@ -80,6 +81,7 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.PartExists.Skip", "文件打开事件：分P记录已存在，跳过重复创建");
         EVENT_ZH.put("SessionMismatch.Detected", "检测到 Session ID 不匹配(可能错过了[录制开始]事件)");
         EVENT_ZH.put("SessionMismatch.Merged", "Session ID 不匹配：检测到最近的直播记录，已自动合并");
+        EVENT_ZH.put("SessionMismatch.ActiveHistoryStale", "Session ID 不匹配：检测到过时的录制中记录(24小时无活动)");
         EVENT_ZH.put("SessionMismatch.CreatedNew", "Session ID 不匹配：未找到最近记录，已创建新的录制历史");
         EVENT_ZH.put("SessionMismatch.Recovered", "Session ID 不匹配：自愈成功，已更新状态");
         EVENT_ZH.put("FileOpen.MissingRoom", "文件打开事件：房间不存在");
@@ -220,6 +222,7 @@ public final class LogKvs {
         EVENT_ZH.put("RoomStatusSyncJob.Start", "定时任务：直播间状态同步开始(兜底机制)");
         EVENT_ZH.put("RoomStatusSyncJob.StreamingChanged", "定时任务：直播间直播状态发生变化");
         EVENT_ZH.put("RoomStatusSyncJob.ForceResetRecording", "定时任务：直播结束，强制重置录制状态");
+        EVENT_ZH.put("RoomStatusSyncJob.ForceResetHistory", "定时任务：直播结束，强制重置历史记录状态");
         EVENT_ZH.put("RoomStatusSyncJob.TitleChanged", "定时任务：直播间标题发生变化(调试)");
         EVENT_ZH.put("RoomStatusSyncJob.SleepInterrupted", "定时任务：直播间状态同步-等待被中断");
         EVENT_ZH.put("RoomStatusSyncJob.Failed", "定时任务：直播间状态同步失败");

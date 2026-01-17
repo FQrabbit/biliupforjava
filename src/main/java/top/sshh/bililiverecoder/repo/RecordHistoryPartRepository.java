@@ -15,6 +15,8 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     RecordHistoryPart findByFilePathStartingWith(String path);
 
+    List<RecordHistoryPart> findByHistoryId(Long historyId);
+
     RecordHistoryPart findByHistoryIdAndTitle(Long historyId, String title);
 
     List<RecordHistoryPart> findByHistoryIdOrderByStartTimeAsc(Long historyId);

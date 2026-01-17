@@ -32,9 +32,6 @@ public class RecordEventFileOpenService implements RecordEventService {
     }
 
     @Autowired
-    private BiliUserRepository biliUserRepository;
-
-    @Autowired
     private RecordRoomRepository roomRepository;
 
     @Autowired
@@ -42,9 +39,6 @@ public class RecordEventFileOpenService implements RecordEventService {
 
     @Autowired
     private RecordHistoryPartRepository historyPartRepository;
-
-    @Autowired
-    private LiveMsgRepository liveMsgRepository;
 
 
     @Override
@@ -96,14 +90,44 @@ public class RecordEventFileOpenService implements RecordEventService {
                     // 优先复用正在录制中的记录
                     List<RecordHistory> activeHistoryList = historyRepository.findByRoomIdAndRecordingTrueOrderByStartTimeDesc(roomId);
                     if (!CollectionUtils.isEmpty(activeHistoryList)) {
-                        history = activeHistoryList.get(0);
-                        log.info("[BLR] {}", LogKvs.event("SessionMismatch.Merged")
-                                .add("type", "ActiveHistory")
-                                .add("roomId", roomId)
-                                .add("oldSessionId", history.getSessionId())
-                                .add("newSessionId", incomingSessionId)
-                                .add("historyId", history.getId()));
-                    } else {
+                        RecordHistory activeHistory = activeHistoryList.get(0);
+                        // 增加活跃度检查：如果录制中的记录在过去 24 小时内没有任何更新（以 endTime 为准），则视为过时记录
+                        if (activeHistory.getEndTime() != null && activeHistory.getEndTime().isAfter(now.minusHours(24))) {
+                            history = activeHistory;
+                            log.info("[BLR] {}", LogKvs.event("SessionMismatch.Merged")
+                                    .add("type", "ActiveHistory")
+                                    .add("roomId", roomId)
+                                    .add("oldSessionId", history.getSessionId())
+                                    .add("newSessionId", incomingSessionId)
+                                    .add("historyId", history.getId()));
+                        } else {
+                            log.warn("[BLR] {}", LogKvs.event("SessionMismatch.ActiveHistoryStale")
+                            .add("roomId", roomId)
+                            .add("historyId", activeHistory.getId())
+                            .add("lastActivity", activeHistory.getEndTime())
+                            .add("reason", "Recording marked true but no activity for 24h"));
+                    // 如果是过时记录，级联清理其所有状态
+                    activeHistory.setRecording(false);
+                    activeHistory.setStreaming(false);
+                    if (activeHistory.getEndTime() == null) {
+                        activeHistory.setEndTime(now);
+                    }
+                    historyRepository.save(activeHistory);
+
+                    // 同步清理该历史下的所有僵尸分P
+                    historyPartRepository.findByHistoryId(activeHistory.getId()).stream()
+                            .filter(p -> p.isRecording() || p.getEndTime() == null)
+                            .forEach(p -> {
+                                p.setRecording(false);
+                                if (p.getEndTime() == null) {
+                                    p.setEndTime(now);
+                                }
+                                historyPartRepository.save(p);
+                            });
+                        }
+                    }
+
+                    if (history == null) {
                         // 其次复用最近结束的记录
                         List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes(20L), now);
                         if (!CollectionUtils.isEmpty(historyList)) {

@@ -6,9 +6,16 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse;
+import top.sshh.bililiverecoder.entity.RecordHistory;
+import top.sshh.bililiverecoder.entity.RecordHistoryPart;
+import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
+import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -16,6 +23,12 @@ public class RoomStatusSyncJob {
 
     @Autowired
     private RecordRoomRepository roomRepository;
+
+    @Autowired
+    private RecordHistoryRepository historyRepository;
+
+    @Autowired
+    private RecordHistoryPartRepository partRepository;
 
     // 启动后10秒执行一次，之后每隔60分钟执行一次
     @Scheduled(fixedDelay = 3600000, initialDelay = 10000)
@@ -41,12 +54,42 @@ public class RoomStatusSyncJob {
 
                     // 如果直播结束，强制设置录制状态为false，防止状态卡死
                     // 注意：如果直播中，我们不强制设置录制为true，因为录制可能还没开始或失败
-                    if (!isLive && room.isRecording()) {
-                        room.setRecording(false);
-                        changed = true;
-                        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetRecording")
-                                .add("roomId", room.getRoomId())
-                                .add("uname", room.getUname()));
+                    if (!isLive) {
+                        if (room.isRecording() || room.getHistoryId() != -1) {
+                            room.setRecording(false);
+                            // 同时清理关联的历史记录状态
+                            if (room.getHistoryId() != -1) {
+                                Optional<RecordHistory> historyOpt = historyRepository.findById(room.getHistoryId());
+                                if (historyOpt.isPresent()) {
+                                    RecordHistory history = historyOpt.get();
+                                    if (history.isRecording() || history.isStreaming()) {
+                                        history.setRecording(false);
+                                        history.setStreaming(false);
+                                        history.setEndTime(LocalDateTime.now());
+                                        historyRepository.save(history);
+
+                                        // 严谨起见，同时清理该稿件下所有未结束的分P
+                                        partRepository.findByHistoryId(history.getId()).stream()
+                                                .filter(RecordHistoryPart::isRecording)
+                                                .forEach(part -> {
+                                                    part.setRecording(false);
+                                                    if (part.getEndTime() == null) {
+                                                        part.setEndTime(LocalDateTime.now());
+                                                    }
+                                                    partRepository.save(part);
+                                                });
+
+                                        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetHistory")
+                                                .add("roomId", room.getRoomId())
+                                                .add("historyId", history.getId()));
+                                    }
+                                }
+                            }
+                            changed = true;
+                            log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetRecording")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname()));
+                        }
                     }
                     
                     // 更新标题，方便查看

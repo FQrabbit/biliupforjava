@@ -81,65 +81,6 @@ public class publishJob {
                 continue;
             }
 
-            // 兜底纠偏：有时录制结束事件丢失/顺序异常会导致分P长期残留 recording=true 或 endTime=null。
-            // 若对应文件已超过10分钟未修改，按“录制已结束”处理，避免定时任务长期卡住。
-            if (actuallyRecordingParts > 0) {
-                long thresholdMs = 10L * 60L * 1000L;
-                long nowMs = System.currentTimeMillis();
-                int healed = 0;
-                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
-                for (RecordHistoryPart part : parts) {
-                    if (!part.isRecording() && part.getEndTime() != null) {
-                        continue;
-                    }
-                    String filePath = part.getFilePath();
-                    if (filePath == null) {
-                        continue;
-                    }
-                    File file = new File(filePath);
-                    if (!file.exists()) {
-                        continue;
-                    }
-                    if (file.lastModified() <= nowMs - thresholdMs) {
-                        boolean changed = false;
-                        if (part.isRecording()) {
-                            part.setRecording(false);
-                            changed = true;
-                        }
-                        if (part.getEndTime() == null) {
-                            part.setEndTime(LocalDateTime.now());
-                            changed = true;
-                        }
-                        if (changed) {
-                            try {
-                                partRepository.save(part);
-                                healed++;
-                            } catch (Exception ignored) {
-                            }
-                        }
-                    }
-                }
-                if (healed > 0) {
-                    try {
-                        actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
-                        log.info("[BLR] {}", LogKvs.event("PublishJob.PartRecording.Healed")
-                                .add("historyId", history.getId())
-                                .add("roomId", history.getRoomId())
-                                .addIfNotBlank("title", history.getTitle())
-                                .add("healed", healed)
-                                .add("remain", actuallyRecordingParts));
-                    } catch (Exception e) {
-                        log.warn("[BLR] {}", LogKvs.event("PublishJob.PartRecording.RecountFailed")
-                                .add("historyId", history.getId())
-                                .add("roomId", history.getRoomId())
-                                .addIfNotBlank("title", history.getTitle())
-                                .addIfNotBlank("err", e.getMessage())
-                                .add("ex", e.getClass().getSimpleName()), e);
-                        continue;
-                    }
-                }
-            }
-
             if (actuallyRecordingParts > 0) {
                 // 打印最“可疑”的几个分P便于排查（优先 endTime=null / recording=true）
                 try {
