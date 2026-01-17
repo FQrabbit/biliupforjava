@@ -736,7 +736,7 @@ html, body {
     font-weight: bold;
     cursor: pointer;
     border-bottom: 1px solid var(--border-light);
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
 }
 .partition-header:hover {
     background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
@@ -799,15 +799,9 @@ html, body {
     border: 1px solid var(--border-light);
     overflow: hidden;
     transition: all var(--transition-base);
-    animation: slideIn var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1) backwards;
     display: flex;
     flex-direction: column;
 }
-
-.detail-card:nth-child(1) { animation-delay: 0.05s; }
-.detail-card:nth-child(2) { animation-delay: 0.1s; }
-.detail-card:nth-child(3) { animation-delay: 0.15s; }
-.detail-card:nth-child(4) { animation-delay: 0.2s; }
 
 .detail-card:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
@@ -853,7 +847,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
 }
 
 .detail-item-modern.full {
@@ -891,7 +885,7 @@ html, body {
     background: var(--bg-secondary);
     border-radius: var(--radius-md);
     border: 1px solid transparent;
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
 }
 
 .detail-item-value:hover {
@@ -2243,7 +2237,7 @@ html, body {
     border-radius: var(--radius-md);
     margin-bottom: 12px;
     border: 1px solid transparent;
-    transition: all 0.2s;
+    transition: all var(--transition-fast);
 }
 
 .config-switch-row:hover {
@@ -2627,25 +2621,6 @@ html, body {
 
 /* ========== 视觉体验优化 (Visual Polish) ========== */
 
-/* 1. 滚动条美化 */
-.room-config-dialog .el-dialog__body::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-.room-config-dialog .el-dialog__body::-webkit-scrollbar-thumb {
-    background: rgba(144, 147, 153, 0.3);
-    border-radius: 3px;
-}
-
-.room-config-dialog .el-dialog__body::-webkit-scrollbar-thumb:hover {
-    background: rgba(144, 147, 153, 0.5);
-}
-
-.room-config-dialog .el-dialog__body::-webkit-scrollbar-track {
-    background: transparent;
-}
-
 /* 2. 输入框增强边界感 */
 .room-config-form .el-input__inner,
 .room-config-form .el-textarea__inner {
@@ -2836,10 +2811,10 @@ html, body {
     }
 }
 
-/* 图标弹跳动画 */
-@keyframes iconBounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
+@keyframes iconPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
 }
 
 /* 渐变滑入动画 */
@@ -2857,18 +2832,11 @@ html, body {
 /* 添加动画到按钮图标 */
 .modern-btn:hover [class^="el-icon-"],
 .modern-btn:hover [class*=" el-icon-"] {
-    animation: iconBounce 0.5s ease;
+    animation: iconPop var(--transition-base);
 }
 
 /* 卡片列表动画 */
 .room-card {
-    animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+    transition: all var(--transition-base);
 }
-
-.room-card:nth-child(1) { animation-delay: 0.05s; }
-.room-card:nth-child(2) { animation-delay: 0.1s; }
-.room-card:nth-child(3) { animation-delay: 0.15s; }
-.room-card:nth-child(4) { animation-delay: 0.2s; }
-.room-card:nth-child(5) { animation-delay: 0.25s; }
-.room-card:nth-child(6) { animation-delay: 0.3s; }
 

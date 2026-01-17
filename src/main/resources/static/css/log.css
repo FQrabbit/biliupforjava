@@ -204,26 +204,6 @@ html, body {
 
 /* ========== 高级动画效果 ========== */
 
-/* 页面加载动画 */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.log-toolbar-card {
-    animation: fadeInUp var(--transition-base) ease;
-}
-
-.log-console {
-    animation: fadeInUp var(--transition-slow) ease;
-}
-
 /* 按钮点击波纹效果 */
 .log-actions .el-button {
     position: relative;
@@ -395,43 +375,25 @@ html, body {
 }
 
 /* 日志控制台 */
-.log-console { 
-    height: 100%;
-    background-color: #1e1e1e; 
-    color: #d4d4d4; 
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
-    padding: 10px; 
-    overflow-y: auto; 
+.log-console {
+    flex: 1;
+    background: #1e1e1e;
     border-radius: var(--radius-lg);
+    border: 1px solid #333;
+    padding: 16px;
+    overflow-y: auto;
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
     font-size: 13px;
-    line-height: 1.4;
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: box-shadow 0.3s ease;
+    line-height: 1.6;
+    color: #d4d4d4;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .log-console:hover {
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.4);
-}
-
-/* 自定义滚动条 */
-.log-console::-webkit-scrollbar {
-    width: 10px;
-}
-
-.log-console::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 5px;
-}
-
-.log-console::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #667eea, #764ba2);
-    border-radius: 5px;
-    transition: all 0.3s ease;
-}
-
-.log-console::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #8b9cfe, #9d7bc9);
-    box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
 }
 
 /* 日志行样式 */

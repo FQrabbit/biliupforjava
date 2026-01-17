@@ -144,9 +144,12 @@
         </el-header>
 
         <el-main class="log-content">
-            <div class="log-console" ref="console">
-                <transition-group name="log-list" tag="div">
-                    <div v-for="(log, index) in filteredLogs" :key="log.__id" 
+            <div class="log-console" ref="console" v-loading="rendering" 
+                 element-loading-text="正在处理大量日志..."
+                 element-loading-spinner="el-icon-loading"
+                 element-loading-background="rgba(0, 0, 0, 0.7)">
+                <div class="log-list">
+                    <div v-for="(log, index) in displayedLogs" :key="log.__id" 
                          class="log-line" 
                          :class="{ 
                              'nowrap': !autoWrap, 
@@ -159,9 +162,9 @@
                         <span class="log-time">{{ log.timestamp }}</span>
                         <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
                         <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
-                        <span class="log-message" v-html="formatLogMessage(log.message)"></span>
+                        <span class="log-message" v-html="getFormattedMessage(log)"></span>
                     </div>
-                </transition-group>
+                </div>
             </div>
         </el-main>
     </el-container>
@@ -216,6 +219,7 @@
         el: '#app',
         data: {
             logs: [],
+            displayedLogs: [],
             visibleLevels: ['INFO', 'WARN', 'ERROR'],
             autoWrap: true,
             autoScroll: true,
@@ -226,6 +230,10 @@
             selectionMode: false,
             selectedLogs: new Set(),
             loadingHistory: false,
+            rendering: false,
+            renderTimer: null,
+            filterTimer: null,
+            isAutoScrolling: false,
             ws: null,
             statusText: '未连接',
             maxLogs: 500,
@@ -268,8 +276,59 @@
                 return 'info';
             }
         },
-        mounted() {
-            window.addEventListener('resize', this.handleResize);
+        watch: {
+            visibleLevels: {
+                handler() {
+                    this.startProgressiveRender(this.filteredLogs);
+                },
+                deep: true
+            },
+            searchKeyword() {
+                // 搜索框自带防抖在 onSearchInput，这里直接触发渲染
+                this.startProgressiveRender(this.filteredLogs);
+            },
+            privacyMode() {
+                // 隐私模式变化时，强制重新生成所有缓存的格式化消息
+                this.logs.forEach(log => log.__formatted = null);
+                this.$forceUpdate();
+            },
+            autoScroll(val) {
+                 if (val) {
+                     this.$nextTick(() => {
+                         const container = this.$refs.console;
+                         if (container) {
+                             this.isAutoScrolling = true;
+                             container.scrollTop = container.scrollHeight;
+                             // 延迟一帧重置标记，确保滚动事件处理完成
+                             setTimeout(() => { this.isAutoScrolling = false; }, 50);
+                         }
+                     });
+                 }
+             }
+         },
+         mounted() {
+             window.addEventListener('resize', this.handleResize);
+             
+             // 监听滚动事件，用于手动滚动时自动取消“自动滚动”状态
+             const container = this.$refs.console;
+             if (container) {
+                 container.addEventListener('scroll', () => {
+                     // 如果是程序触发的滚动，则忽略
+                     if (this.isAutoScrolling) return;
+
+                     const threshold = 15; // 允许 15px 的误差
+                     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+                     
+                     if (this.autoScroll && !isAtBottom) {
+                         // 开启状态下，向上滚动 -> 关闭
+                         this.autoScroll = false;
+                     } else if (!this.autoScroll && isAtBottom) {
+                         // 关闭状态下，滚到底部 -> 开启
+                         this.autoScroll = true;
+                     }
+                 });
+             }
+
             this.connectWs();
             this.fetchAlerts();
             setInterval(this.fetchAlerts, 30000);
@@ -436,9 +495,41 @@
 
                 this.logs.push(log);
 
+                // 如果当前正在进行大批量渲染，新日志只进入总列表，等分片渲染完成后会自动包含
+                // 如果没有在渲染，则同步更新 displayedLogs，保证实时性
+                if (!this.rendering) {
+                    const matchLevel = this.visibleLevels.includes(log.level);
+                    let matchSearch = true;
+                    if (this.searchKeyword && this.searchKeyword.trim()) {
+                        const keyword = this.searchKeyword.trim().toLowerCase();
+                        const message = (log.message || '').toLowerCase();
+                        const timestamp = (log.timestamp || '').toLowerCase();
+                        const thread = (log.thread || '').toLowerCase();
+                        matchSearch = message.includes(keyword) || 
+                                     timestamp.includes(keyword) || 
+                                     thread.includes(keyword);
+                    }
+
+                    if (matchLevel && matchSearch) {
+                        this.displayedLogs.push(log);
+                        if (this.displayedLogs.length > this.maxLogs) {
+                            this.displayedLogs.shift();
+                        }
+                        
+                        if (this.autoScroll) {
+                            this.$nextTick(() => {
+                                const container = this.$refs.console;
+                                if (container) {
+                                    this.isAutoScrolling = true;
+                                    container.scrollTop = container.scrollHeight;
+                                    setTimeout(() => { this.isAutoScrolling = false; }, 50);
+                                }
+                            });
+                        }
+                    }
+                }
+
                 // 前端日志数量限制：避免 logs 无限增长导致浏览器内存/渲染压力过大。
-                // 为解决“关闭自动滚动时，因删除旧日志导致滚动跳动”的问题：
-                // 在裁剪前记录滚动高度与 scrollTop，裁剪后按高度变化补偿 scrollTop。
                 if (willTrim) {
                     const removeCount = this.logs.length - this.maxLogs;
                     if (removeCount > 0) {
@@ -448,13 +539,63 @@
                 if (willTrim && !this.autoScroll && container) {
                     this.restoreScrollAnchor(anchor, beforeScrollHeight);
                 }
-                
-                if (this.autoScroll) {
-                    this.$nextTick(() => {
-                        const container = this.$refs.console;
-                        if (container) container.scrollTop = container.scrollHeight;
-                    });
+            },
+            startProgressiveRender(allLogs) {
+                if (this.renderTimer) {
+                    cancelAnimationFrame(this.renderTimer);
                 }
+                
+                // 立即清空当前显示，准备重新分片加载
+                this.displayedLogs = [];
+                
+                // 如果日志量较多，显示加载动画
+                if (allLogs.length > 200) {
+                    this.rendering = true;
+                }
+                
+                let index = 0;
+                const chunkSize = this.isMobile ? 50 : 100;
+                
+                const render = () => {
+                    const nextBatch = allLogs.slice(index, index + chunkSize);
+                    this.displayedLogs.push(...nextBatch);
+                    index += chunkSize;
+                    
+                    if (index < allLogs.length) {
+                        this.renderTimer = requestAnimationFrame(render);
+                    } else {
+                        // 渲染结束，进行最后一次同步，确保渲染期间新收到的实时日志也能显示
+                        const finalLogs = this.filteredLogs;
+                        if (this.displayedLogs.length < finalLogs.length) {
+                            const remaining = finalLogs.slice(this.displayedLogs.length);
+                            this.displayedLogs.push(...remaining);
+                        }
+                        this.rendering = false;
+                        this.renderTimer = null;
+                        this.$nextTick(() => {
+                            if (this.autoScroll) {
+                                const container = this.$refs.console;
+                                if (container) {
+                                    this.isAutoScrolling = true;
+                                    container.scrollTop = container.scrollHeight;
+                                    setTimeout(() => { this.isAutoScrolling = false; }, 50);
+                                }
+                            }
+                        });
+                    }
+                };
+                
+                // 使用 requestAnimationFrame 避免阻塞主线程
+                this.renderTimer = requestAnimationFrame(render);
+            },
+            getFormattedMessage(log) {
+                // 性能优化：缓存格式化后的HTML，避免每次渲染都运行复杂的正则
+                if (log.__formatted && log.__privacyMode === this.privacyMode) {
+                    return log.__formatted;
+                }
+                log.__formatted = this.formatLogMessage(log.message);
+                log.__privacyMode = this.privacyMode;
+                return log.__formatted;
             },
             loadHistory() {
                 this.loadingHistory = true;
@@ -489,10 +630,7 @@
                         this.nextLogId = base + parsedLogs.length;
                         this.logs = parsedLogs;
                         this.loadingHistory = false;
-                        this.$nextTick(() => {
-                            const container = this.$refs.console;
-                            if (container) container.scrollTop = container.scrollHeight;
-                        });
+                        this.startProgressiveRender(this.filteredLogs);
                     })
                     .catch(err => {
                         console.error(err);
@@ -502,6 +640,12 @@
             },
             clearLogs() {
                 this.logs = [];
+                this.displayedLogs = [];
+                if (this.renderTimer) {
+                    cancelAnimationFrame(this.renderTimer);
+                    this.renderTimer = null;
+                }
+                this.rendering = false;
             },
             fetchAlerts() {
                 fetch('/log/alerts')

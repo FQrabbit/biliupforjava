@@ -27,10 +27,96 @@
     --radius-xl: 16px;
     --glow-primary: 0 0 20px rgba(91, 108, 255, 0.3);
     --glow-success: 0 0 20px rgba(82, 196, 26, 0.3);
+    /* 现代化滚动条变量 */
+    --scrollbar-width: 6px;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
 }
 
+[data-theme="dark"] {
+    --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+}
+
+/* ========== Modern Scrollbar Global Styles ========== */
+::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background-clip: content-box;
+    transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+
+/* 针对需要防止跳动的容器进行优化，并通过 padding 补偿消除“留白”感 */
+.room-container,
+.user-container,
+.history-main,
+.log-console,
+.detail-content-modern,
+.action-group-secondary,
+.changelog-container,
+.el-table__body-wrapper,
+.el-drawer__body,
+.el-dialog__body {
+    scrollbar-gutter: stable;
+}
+
+/* 具体的 padding 补偿逻辑 */
+.room-container, 
+.user-container {
+    padding-right: calc(20px - var(--scrollbar-width)) !important;
+}
+
+.history-main,
+.changelog-container {
+    padding-right: calc(24px - var(--scrollbar-width)) !important;
+}
+
+.log-console,
+.action-group-secondary {
+    padding-right: calc(16px - var(--scrollbar-width)) !important;
+}
+
+.detail-content-modern {
+    padding-right: calc(10px - var(--scrollbar-width)) !important;
+}
+
+/* Firefox 兼容性 */
 * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
     box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .room-container,
+    .user-container {
+        scrollbar-gutter: auto;
+        padding-right: 20px !important;
+    }
+    .history-main,
+    .changelog-container {
+        scrollbar-gutter: auto;
+        padding-right: 24px !important;
+    }
+    .log-console {
+        scrollbar-gutter: auto;
+        padding-right: 16px !important;
+    }
 }
 
 html, body {
@@ -220,7 +306,6 @@ html, body {
     flex: 1;
     padding: 24px;
     overflow-y: auto;
-    animation: fadeSlideUp var(--transition-base);
 }
 
 @keyframes fadeSlideUp {
@@ -499,19 +584,42 @@ html, body {
 }
 
 /* ========== Page Transitions ========== */
+.app-main {
+    position: relative;
+    overflow: hidden; /* 确保动画不溢出 */
+}
+
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-    transition: all var(--transition-base);
+    transition: opacity var(--transition-base), transform var(--transition-base);
+    position: absolute;
+    /* 不要强制 width/height 100%，让元素保持原有盒模型 */
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    backface-visibility: hidden;
+    will-change: opacity, transform;
+    z-index: 1;
+}
+
+/* 确保 iframe 在动画期间也能保持宽高 */
+.fade-slide-enter-active.tab-frame,
+.fade-slide-leave-active.tab-frame {
+    width: calc(100% - 32px);
+    margin: 16px;
+    margin-top: 0;
 }
 
 .fade-slide-enter {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(15px);
 }
 
 .fade-slide-leave-to {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-15px);
 }
 
 .fade-transform-enter-active,
@@ -650,11 +758,12 @@ html, body {
 }
 
 .filter-body {
-    transition: max-height 0.2s ease;
+    transition: max-height var(--transition-fast);
 }
 
 .filter-card.collapsed .filter-body {
-    display: none;
+    max-height: 0;
+    overflow: hidden;
 }
 
 .filter-card .el-form-item {
@@ -1134,6 +1243,20 @@ pre {
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
     --glow-primary: 0 0 25px rgba(123, 143, 255, 0.4);
     --glow-success: 0 0 25px rgba(82, 196, 26, 0.4);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+}
+
+/* 移动端滚动条适配 */
+@media (max-width: 768px) {
+    :root {
+        --scrollbar-width: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        border: 1px solid transparent;
+        background-clip: content-box;
+    }
 }
 
 [data-theme="dark"] body {
@@ -1633,12 +1756,13 @@ pre {
 }
 
 .modern-checkbox.el-checkbox.is-bordered.is-checked .el-checkbox__label i {
-    animation: iconBounce 0.5s ease;
+    animation: iconPop var(--transition-base);
 }
 
-@keyframes iconBounce {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.3) rotate(10deg); }
+@keyframes iconPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
 }
 
 /* 流动边框效果 */

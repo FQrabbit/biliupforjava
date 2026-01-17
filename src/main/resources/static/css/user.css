@@ -310,7 +310,7 @@ html, body {
     padding: 12px 14px;
     background: var(--bg-secondary);
     border-radius: var(--radius-md);
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
 }
 
 .status-item:hover {
@@ -649,10 +649,10 @@ html, body {
     }
 }
 
-/* 图标弹跳动画 */
-@keyframes iconBounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
+@keyframes iconPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
 }
 
 /* 渐变滑入动画 */
@@ -670,17 +670,10 @@ html, body {
 /* 添加动画到按钮图标 */
 .modern-btn:hover [class^="el-icon-"],
 .modern-btn:hover [class*=" el-icon-"] {
-    animation: iconBounce 0.5s ease;
+    animation: iconPop var(--transition-base);
 }
 
 /* 卡片列表动画 */
 .user-card {
-    animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+    transition: all var(--transition-base);
 }
-
-.user-card:nth-child(1) { animation-delay: 0.05s; }
-.user-card:nth-child(2) { animation-delay: 0.1s; }
-.user-card:nth-child(3) { animation-delay: 0.15s; }
-.user-card:nth-child(4) { animation-delay: 0.2s; }
-.user-card:nth-child(5) { animation-delay: 0.25s; }
-.user-card:nth-child(6) { animation-delay: 0.3s; }

@@ -1205,10 +1205,40 @@
                                 return;
                             }
                             _this.fetchHistoryProgressOnce(historyId, true, function (nextResp) {
+                                // 检查是否有分P进度达到 100% 或从活跃列表消失，触发静默刷新以同步整体进度
+                                var shouldRefresh = false;
+                                if (_this.historyUploadProgress && _this.historyUploadProgress.items && nextResp) {
+                                    // 1. 检查是否有分P新达到 100%
+                                    if (nextResp.items && Array.isArray(nextResp.items)) {
+                                        nextResp.items.forEach(function(newItem) {
+                                            var oldItem = _this.historyUploadProgress.items.find(function(i) { return (i.partId || i.page) === (newItem.partId || newItem.page); });
+                                            if (newItem.percent >= 100 && (!oldItem || oldItem.percent < 100)) {
+                                                shouldRefresh = true;
+                                            }
+                                        });
+                                    }
+                                    // 2. 检查是否有分P从列表中消失（通常意味着上传完成并从内存 Tracker 移除）
+                                    if (_this.historyUploadProgress.items && Array.isArray(_this.historyUploadProgress.items)) {
+                                        _this.historyUploadProgress.items.forEach(function(oldItem) {
+                                            var newItem = nextResp.items ? nextResp.items.find(function(i) { return (i.partId || i.page) === (oldItem.partId || oldItem.page); }) : null;
+                                            if (!newItem && oldItem.state !== 'FAILED') {
+                                                shouldRefresh = true;
+                                            }
+                                        });
+                                    }
+                                }
+
                                 _this.historyUploadProgress = nextResp;
                                 _this.updateSpeedTracking(nextResp);
+
+                                if (shouldRefresh) {
+                                    _this.initTable(true);
+                                }
+
                                 if (!nextResp || !nextResp.activeCount || nextResp.activeCount <= 0) {
                                     _this.stopProgressPolling();
+                                    // 最后再刷一次确保状态最终一致
+                                    _this.initTable(true);
                                 }
                             });
                         }, 1500);
@@ -1497,8 +1527,8 @@
                 this.form.current=val;
                 this.initTable();
             },
-            initTable: function () {
-                this.loading = true;
+            initTable: function (silent) {
+                if (!silent) this.loading = true;
                 let _this = this;
                 $.ajax({
                     url: '/history/list',
@@ -1509,13 +1539,27 @@
                     success: function (data) {
                         _this.tableData = data.data;
                         _this.total = data.total;
-                        _this.loading = false;
+                        if (!silent) _this.loading = false;
+                        
+                        // 如果详情弹窗打开，同步更新 currentDetail
+                        if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id) {
+                            var updatedItem = _this.tableData.find(function(item) {
+                                return item.id === _this.currentDetail.id;
+                            });
+                            if (updatedItem) {
+                                // 深度合并或替换，确保响应式
+                                Object.keys(updatedItem).forEach(function(key) {
+                                    _this.$set(_this.currentDetail, key, updatedItem[key]);
+                                });
+                            }
+                        }
+
                         if (data.badgeCount !== undefined) {
                             _this.archivedBadgeCount = data.badgeCount;
                         }
                     },
                     error: function () {
-                        _this.loading = false;
+                        if (!silent) _this.loading = false;
                     }
                 });
             },
@@ -1853,7 +1897,7 @@
             this.initTable();
             this.loadRoomList();
             this.handleResize();
-            this.resizeHandler = this.debounce(this.handleResize, 300);
+            this.resizeHandler = this.debounce(this.handleResize, 100);
             window.addEventListener('resize', this.resizeHandler);
             var cached = localStorage.getItem('history-view-mode');
             if (cached === 'table' || cached === 'card') {

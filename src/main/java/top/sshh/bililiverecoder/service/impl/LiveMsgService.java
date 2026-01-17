@@ -147,7 +147,11 @@ public class LiveMsgService {
                 for (Node node : scNodes) {
                     DefaultElement element = (DefaultElement) node;
                     String time = element.attribute("ts").getValue();
-                    long sendTime = Double.valueOf(time).longValue() * 1000;
+                    long sendTime = Math.round(Double.parseDouble(time) * 1000);
+                    // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
+                    if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
+                        continue;
+                    }
                     String userName = element.attribute("user").getValue();
                     String price = element.attribute("price").getValue();
 
@@ -182,7 +186,11 @@ public class LiveMsgService {
                 for (Node node : guardNodes) {
                     DefaultElement element = (DefaultElement) node;
                     String time = element.attribute("ts").getValue();
-                    long sendTime = Double.valueOf(time).longValue() * 1000;
+                    long sendTime = Math.round(Double.parseDouble(time) * 1000);
+                    // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
+                    if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
+                        continue;
+                    }
                     String userName = element.attribute("user").getValue();
                     String level = element.attribute("level").getValue();
                     String count = element.attribute("count").getValue();
@@ -280,8 +288,12 @@ public class LiveMsgService {
 
                     String value = element.attribute("p").getValue();
                     String[] values = value.split(",");
-                    long sendTime = Double.valueOf(values[0]).longValue() * 1000;
+                    long sendTime = Math.round(Double.parseDouble(values[0]) * 1000);
                     if (sendTime < 0) {
+                        continue;
+                    }
+                    // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
+                    if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
                         continue;
                     }
                     int fontsize = Integer.parseInt(values[2]);
