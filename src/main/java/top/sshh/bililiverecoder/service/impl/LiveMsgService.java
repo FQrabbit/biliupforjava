@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.dom4j.Document;
 import org.dom4j.Element;
+import org.dom4j.ElementHandler;
+import org.dom4j.ElementPath;
 import org.dom4j.Node;
 import org.dom4j.io.SAXReader;
 import org.dom4j.tree.DefaultElement;
@@ -31,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 @Slf4j
 @Transactional
@@ -107,246 +110,302 @@ public class LiveMsgService {
 
     public void processing(RecordHistoryPart part) {
         Optional<RecordHistory> historyOptional = recordHistoryRepository.findById(part.getHistoryId());
-        String bvid = "";
-        if (historyOptional.isPresent()) {
-            RecordHistory history = historyOptional.get();
-            bvid = history.getBvId();
-        }
+        String bvid = historyOptional.map(RecordHistory::getBvId).orElse("");
+
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
         String dmKeywordBlacklist = room.getDmKeywordBlacklist();
         String[] EXCLUSION_DM;
         if (StringUtils.isNotBlank(dmKeywordBlacklist)) {
-            EXCLUSION_DM = dmKeywordBlacklist.split("\n");
+            EXCLUSION_DM = dmKeywordBlacklist.split("\\r?\\n");
+            // 清理每一项的空白字符
+            for (int i = 0; i < EXCLUSION_DM.length; i++) {
+                EXCLUSION_DM[i] = EXCLUSION_DM[i].trim();
+            }
         } else {
             EXCLUSION_DM = new String[0];
         }
         String filePath = part.getFilePath();
-        filePath = filePath.substring(0, filePath.lastIndexOf(".")) + ".xml";
-        File file = new File(filePath);
+        String xmlFilePath = filePath.substring(0, filePath.lastIndexOf(".")) + ".xml";
+        File file = new File(xmlFilePath);
         boolean exists = file.exists();
         if (exists) {
+            // 解析前先清理可能存在的旧数据（幂等性保证）
+            liveMsgRepository.deleteByPartId(part.getId());
+
             FileInputStream stream = null;
             try {
                 stream = new FileInputStream(file);
 
-                //2.创建org.dom4j.io包中的SAXReader对象
+                // 创建SAXReader对象
                 SAXReader saxReader = new SAXReader();
-
-                Document document = null;
-
-                document = saxReader.read(stream);
-
-                //4.拿到根元素
-                Element rootElement = document.getRootElement();
+                // 禁用安全限制以支持大文件
+                try {
+                    saxReader.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", false);
+                } catch (Exception e) {
+                    log.warn("Failed to disable secure-processing feature", e);
+                }
 
                 List<LiveMsg> liveMsgs = new ArrayList<>();
-
-
-                // sc弹幕处理
-                List<Node> scNodes = rootElement.selectNodes("/i/sc");
-                for (Node node : scNodes) {
-                    DefaultElement element = (DefaultElement) node;
-                    String time = element.attribute("ts").getValue();
-                    long sendTime = Math.round(Double.parseDouble(time) * 1000);
-                    // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
-                    if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
-                        continue;
-                    }
-                    String userName = element.attribute("user").getValue();
-                    String price = element.attribute("price").getValue();
-
-                    //  blrec 弹幕的金额/1000
-                    if ("blrec".equals(part.getSourceType())) {
-                        price = String.valueOf(Integer.parseInt(price) / 1000);
-                    }
-
-                    String text = element.getText();
-                    LiveMsg msg = new LiveMsg();
-                    msg.setPartId(part.getId());
-                    msg.setBvid(bvid);
-                    msg.setCid(part.getCid());
-                    msg.setSendTime(sendTime);
-                    msg.setMode(5);
-                    msg.setPool(1);
-                    msg.setFontsize(64);
-                    msg.setColor(16776960);
-                    StringBuilder builder = new StringBuilder();
-                    builder.append("SC [").append(price).append("] ").append(userName).append(": ").append(text);
-                    if (builder.length() > 100) {
-                        text = builder.substring(0, 99);
-                    } else {
-                        text = builder.toString();
-                    }
-                    msg.setContext(text);
-                    liveMsgs.add(msg);
-                }
-
-                // sc弹幕处理
-                List<Node> guardNodes = rootElement.selectNodes("/i/guard");
-                for (Node node : guardNodes) {
-                    DefaultElement element = (DefaultElement) node;
-                    String time = element.attribute("ts").getValue();
-                    long sendTime = Math.round(Double.parseDouble(time) * 1000);
-                    // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
-                    if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
-                        continue;
-                    }
-                    String userName = element.attribute("user").getValue();
-                    String level = element.attribute("level").getValue();
-                    String count = element.attribute("count").getValue();
-                    LiveMsg msg = new LiveMsg();
-                    msg.setPartId(part.getId());
-                    msg.setBvid(bvid);
-                    msg.setCid(part.getCid());
-                    msg.setSendTime(sendTime);
-                    msg.setMode(5);
-                    msg.setPool(1);
-                    msg.setColor(16776960);
-                    StringBuilder builder = new StringBuilder();
-                    builder.append("⚓").append(userName).append(": 开通了");
-                    if (Integer.parseInt(count) > 1) {
-                        builder.append(count).append("个月");
-                    }
-                    if ("1".equals(level)) {
-                        msg.setFontsize(64);
-                        builder.append("总督");
-                    } else if ("2".equals(level)) {
-                        msg.setFontsize(64);
-                        builder.append("提督");
-                    } else if ("3".equals(level)) {
-                        msg.setFontsize(64);
-                        builder.append("舰长");
-                    } else {
-                        builder.append("舰长");
-                    }
-                    String text;
-                    if (builder.length() > 100) {
-                        text = builder.substring(0, 99);
-                    } else {
-                        text = builder.toString();
-                    }
-                    msg.setContext(text);
-                    liveMsgs.add(msg);
-                }
-
-                // 普通弹幕处理
-                List<Node> nodes = rootElement.selectNodes("/i/d");
                 BloomFilter<CharSequence> bloomFilter = BloomFilter.create(Funnels.stringFunnel(StandardCharsets.UTF_8), 1000000, 0.01);
-                for (Node node : nodes) {
-                    DefaultElement element = (DefaultElement) node;
+                
+                // 进度计数器
+                final int[] totalCount = {0};
 
-                    String text = element.getText().trim().replace("\n", ",").replace("\r", ",").toLowerCase();
-                    text = StringUtils.deleteWhitespace(text);
-                    //过滤utf8字符大小为4的
-                    if (checkUtf8Size(text)) {
-                        continue;
+                Consumer<LiveMsg> msgSaver = msg -> {
+                    // 确保内容不超长（数据库字段通常限制在255或更小）
+                    if (msg.getContext() != null && msg.getContext().length() > 200) {
+                        msg.setContext(msg.getContext().substring(0, 199));
                     }
-                    //排除垃圾弹幕
-                    boolean isContinue = false;
-                    for (String s : EXCLUSION_DM) {
-                        if (text.contains(s.toLowerCase())) {
-                            isContinue = true;
-                            break;
-                        }
-                    }
-                    if (isContinue) {
-                        continue;
-                    }
-                    if (element.attribute("raw") != null) {
-                        String raw = element.attribute("raw").getValue();
-                        JSONArray array = JSON.parseArray(raw);
-
-                        // 判断是否抽奖弹幕
-                        boolean lottery = (Integer)((JSONArray)array.get(0)).get(9) != 0;
-                        if(lottery){
-                            continue;
-                        }
-
-                        JSONArray dmFanMedalObjects = (JSONArray) array.get(3);
-                        // 0-不做处理，1-必须佩戴粉丝勋章。2-必须佩戴主播的粉丝勋章
-                        if (room.getDmFanMedal() == 1) {
-                            if (dmFanMedalObjects.size() == 0) {
-                                continue;
-                            }
-                        } else if (room.getDmFanMedal() == 2) {
-                            if (dmFanMedalObjects.size() == 0) {
-                                continue;
-                            }
-                            String roomId = dmFanMedalObjects.get(3).toString();
-                            if (!part.getRoomId().equals(roomId)) {
-                                continue;
-                            }
-                        }
-                        Integer ulLive = (Integer) ((JSONArray) array.get(4)).get(0);
-                        //排除低级用户
-                        if (ulLive < room.getDmUlLevel()) {
-                            if (dmFanMedalObjects.size() == 0) {
-                                continue;
-                            }
-                        }
-                    }
-
-                    String value = element.attribute("p").getValue();
-                    String[] values = value.split(",");
-                    long sendTime = Math.round(Double.parseDouble(values[0]) * 1000);
-                    if (sendTime < 0) {
-                        continue;
-                    }
-                    // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
-                    if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
-                        continue;
-                    }
-                    int fontsize = Integer.parseInt(values[2]);
-                    int color = Integer.parseInt(values[3]);
-                    //弹幕重复过滤
-                    if (room.getDmDistinct() != null && room.getDmDistinct()) {
-                        if (!bloomFilter.put(text)) {
-                            continue;
-                        }
-                    }
-                    LiveMsg msg = new LiveMsg();
-                    msg.setPartId(part.getId());
-                    msg.setBvid(bvid);
-                    msg.setCid(part.getCid());
-                    msg.setSendTime(sendTime);
-                    msg.setFontsize(fontsize);
-                    msg.setMode(1);
-                    msg.setPool(0);
-                    msg.setColor(color);
-                    msg.setContext(text);
                     liveMsgs.add(msg);
-                    if (liveMsgs.size() > 500) {
+                    totalCount[0]++;
+                    
+                    if (liveMsgs.size() >= 500) {
                         jdbcService.saveLiveMsgList(liveMsgs);
-                        log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.BatchSaved")
-                                .add("filePath", filePath)
-                                .add("count", liveMsgs.size())
-                                .add("roomId", part.getRoomId())
-                                .add("partId", part.getId())
-                                .add("historyId", part.getHistoryId()));
+                        if (totalCount[0] % 10000 == 0) {
+                            log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.Progress")
+                                    .add("filePath", xmlFilePath)
+                                    .add("total", totalCount[0])
+                                    .add("partId", part.getId()));
+                        }
                         liveMsgs.clear();
                     }
+                };
+
+                // sc弹幕处理
+                saxReader.addHandler("/i/sc", new ElementHandler() {
+                    @Override
+                    public void onStart(ElementPath path) {
+                    }
+
+                    @Override
+                    public void onEnd(ElementPath path) {
+                        Element element = path.getCurrent();
+                        String time = element.attribute("ts").getValue();
+                        long sendTime = Math.round(Double.parseDouble(time) * 1000);
+                        // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
+                        if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
+                            element.detach();
+                            return;
+                        }
+                        String userName = element.attribute("user").getValue();
+                        String price = element.attribute("price").getValue();
+
+                        //  blrec 弹幕的金额/1000
+                        if ("blrec".equals(part.getSourceType())) {
+                            price = String.valueOf(Integer.parseInt(price) / 1000);
+                        }
+
+                        String text = element.getText();
+                        LiveMsg msg = new LiveMsg();
+                        msg.setPartId(part.getId());
+                        msg.setBvid(bvid);
+                        msg.setCid(part.getCid());
+                        msg.setSendTime(sendTime);
+                        msg.setMode(5);
+                        msg.setPool(1);
+                        msg.setFontsize(64);
+                        msg.setColor(16776960);
+                        StringBuilder builder = new StringBuilder();
+                        builder.append("SC [").append(price).append("] ").append(userName).append(": ").append(text);
+                        if (builder.length() > 100) {
+                            text = builder.substring(0, 99);
+                        } else {
+                            text = builder.toString();
+                        }
+                        msg.setContext(text);
+                        msgSaver.accept(msg);
+                        element.detach();
+                    }
+                });
+
+                // sc弹幕处理(Guard)
+                saxReader.addHandler("/i/guard", new ElementHandler() {
+                    @Override
+                    public void onStart(ElementPath path) {
+                    }
+
+                    @Override
+                    public void onEnd(ElementPath path) {
+                        Element element = path.getCurrent();
+                        String time = element.attribute("ts").getValue();
+                        long sendTime = Math.round(Double.parseDouble(time) * 1000);
+                        // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
+                        if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
+                            element.detach();
+                            return;
+                        }
+                        String userName = element.attribute("user").getValue();
+                        String level = element.attribute("level").getValue();
+                        String count = element.attribute("count").getValue();
+                        LiveMsg msg = new LiveMsg();
+                        msg.setPartId(part.getId());
+                        msg.setBvid(bvid);
+                        msg.setCid(part.getCid());
+                        msg.setSendTime(sendTime);
+                        msg.setMode(5);
+                        msg.setPool(1);
+                        msg.setColor(16776960);
+                        StringBuilder builder = new StringBuilder();
+                        builder.append("⚓").append(userName).append(": 开通了");
+                        if (Integer.parseInt(count) > 1) {
+                            builder.append(count).append("个月");
+                        }
+                        if ("1".equals(level)) {
+                            msg.setFontsize(64);
+                            builder.append("总督");
+                        } else if ("2".equals(level)) {
+                            msg.setFontsize(64);
+                            builder.append("提督");
+                        } else if ("3".equals(level)) {
+                            msg.setFontsize(64);
+                            builder.append("舰长");
+                        } else {
+                            builder.append("舰长");
+                        }
+                        String text;
+                        if (builder.length() > 100) {
+                            text = builder.substring(0, 99);
+                        } else {
+                            text = builder.toString();
+                        }
+                        msg.setContext(text);
+                        msgSaver.accept(msg);
+                        element.detach();
+                    }
+                });
+
+                // 普通弹幕处理
+                saxReader.addHandler("/i/d", new ElementHandler() {
+                    @Override
+                    public void onStart(ElementPath path) {
+                    }
+
+                    @Override
+                    public void onEnd(ElementPath path) {
+                        Element element = path.getCurrent();
+                        String text = element.getText().trim().replace("\n", ",").replace("\r", ",").toLowerCase();
+                        text = StringUtils.deleteWhitespace(text);
+                        //过滤utf8字符大小为4的
+                        if (checkUtf8Size(text)) {
+                            element.detach();
+                            return;
+                        }
+                        //排除垃圾弹幕
+                        boolean isContinue = false;
+                        for (String s : EXCLUSION_DM) {
+                            if (text.contains(s.toLowerCase())) {
+                                isContinue = true;
+                                break;
+                            }
+                        }
+                        if (isContinue) {
+                            element.detach();
+                            return;
+                        }
+                        if (element.attribute("raw") != null) {
+                            String raw = element.attribute("raw").getValue();
+                            JSONArray array = JSON.parseArray(raw);
+
+                            // 判断是否抽奖弹幕
+                            boolean lottery = (Integer) ((JSONArray) array.get(0)).get(9) != 0;
+                            if (lottery) {
+                                element.detach();
+                                return;
+                            }
+
+                            JSONArray dmFanMedalObjects = (JSONArray) array.get(3);
+                            // 0-不做处理，1-必须佩戴粉丝勋章。2-必须佩戴主播的粉丝勋章
+                            if (room.getDmFanMedal() == 1) {
+                                if (dmFanMedalObjects.size() == 0) {
+                                    element.detach();
+                                    return;
+                                }
+                            } else if (room.getDmFanMedal() == 2) {
+                                if (dmFanMedalObjects.size() == 0) {
+                                    element.detach();
+                                    return;
+                                }
+                                String roomId = dmFanMedalObjects.get(3).toString();
+                                if (!part.getRoomId().equals(roomId)) {
+                                    element.detach();
+                                    return;
+                                }
+                            }
+                            Integer ulLive = (Integer) ((JSONArray) array.get(4)).get(0);
+                            //排除低级用户
+                            if (ulLive < room.getDmUlLevel()) {
+                                if (dmFanMedalObjects.size() == 0) {
+                                    element.detach();
+                                    return;
+                                }
+                            }
+                        }
+
+                        String value = element.attribute("p").getValue();
+                        String[] values = value.split(",");
+                        long sendTime = Math.round(Double.parseDouble(values[0]) * 1000);
+                        if (sendTime < 0) {
+                            element.detach();
+                            return;
+                        }
+                        // 边界检查：如果弹幕时间超过视频时长，跳过（仅在时长已知时执行）
+                        if (part.getDuration() > 0 && sendTime > (long) (part.getDuration() * 1000)) {
+                            element.detach();
+                            return;
+                        }
+                        int fontsize = Integer.parseInt(values[2]);
+                        int color = Integer.parseInt(values[3]);
+                        //弹幕重复过滤
+                        if (room.getDmDistinct() != null && room.getDmDistinct()) {
+                            if (!bloomFilter.put(text)) {
+                                element.detach();
+                                return;
+                            }
+                        }
+                        LiveMsg msg = new LiveMsg();
+                        msg.setPartId(part.getId());
+                        msg.setBvid(bvid);
+                        msg.setCid(part.getCid());
+                        msg.setSendTime(sendTime);
+                        msg.setFontsize(fontsize);
+                        msg.setMode(1);
+                        msg.setPool(0);
+                        msg.setColor(color);
+                        msg.setContext(text);
+                        msgSaver.accept(msg);
+                        element.detach();
+                    }
+                });
+
+                saxReader.read(stream);
+
+                if (!liveMsgs.isEmpty()) {
+                    jdbcService.saveLiveMsgList(liveMsgs);
+                    log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.Saved")
+                            .add("filePath", xmlFilePath)
+                            .add("count", liveMsgs.size())
+                            .add("roomId", part.getRoomId())
+                            .add("partId", part.getId())
+                            .add("historyId", part.getHistoryId()));
                 }
-                jdbcService.saveLiveMsgList(liveMsgs);
-                log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.Saved")
-                        .add("filePath", filePath)
-                        .add("count", liveMsgs.size())
-                        .add("roomId", part.getRoomId())
-                        .add("partId", part.getId())
-                        .add("historyId", part.getHistoryId()));
             } catch (Exception e) {
                 log.error("[BLR] {}", LogKvs.event("LiveMsg.Parse.Failed")
-                        .add("filePath", filePath)
+                        .add("filePath", xmlFilePath)
                         .add("roomId", part.getRoomId())
                         .add("partId", part.getId())
                         .add("historyId", part.getHistoryId())
                         .add("err", e.getMessage())
                         .add("ex", e.getClass().getSimpleName()), e);
+                // 抛出异常以触发事务回滚，避免数据不一致（如：旧数据已删但新数据只入库一半）
+                throw new RuntimeException("LiveMsg parse failed", e);
             } finally {
                 try {
-                    stream.close();
+                    if (stream != null) {
+                        stream.close();
+                    }
                 } catch (IOException e) {
                     log.warn("[BLR] {}", LogKvs.event("LiveMsg.Parse.CloseFailed")
-                            .add("filePath", filePath)
+                            .add("filePath", xmlFilePath)
                             .add("roomId", part.getRoomId())
                             .add("partId", part.getId())
                             .add("historyId", part.getHistoryId())

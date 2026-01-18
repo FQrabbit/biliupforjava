@@ -30,6 +30,8 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     int countByBvidAndCode(String bvId, Integer code);
 
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from LiveMsg where partId = ?1")
     void deleteByPartId(Long partId);
 
     List<LiveMsg> queryByBvid(String bvid);
