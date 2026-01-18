@@ -315,6 +315,7 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsg.Send.Failed", "弹幕发送：请求失败");
         EVENT_ZH.put("LiveMsg.Send.Error", "弹幕发送：发生异常");
         EVENT_ZH.put("LiveMsg.Parse.BatchSaved", "弹幕解析：批量保存成功");
+        EVENT_ZH.put("LiveMsg.Parse.Progress", "弹幕解析：进度更新");
         EVENT_ZH.put("LiveMsg.Parse.Saved", "弹幕解析：保存成功");
         EVENT_ZH.put("LiveMsg.Parse.Failed", "弹幕解析：失败");
         EVENT_ZH.put("LiveMsg.Parse.CloseFailed", "弹幕解析：关闭文件流失败");
