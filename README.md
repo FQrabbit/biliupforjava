@@ -5,8 +5,10 @@
 **📺 基于 Webhook 的 B站录播自动投稿工具**
 
 [![GitHub Release](https://img.shields.io/github/v/release/FQrabbit/biliupforjava?style=flat-square)](https://github.com/FQrabbit/biliupforjava/releases)
-[![Docker Pulls](https://img.shields.io/docker/pulls/FQrabbit/biliupforjava?style=flat-square)](https://hub.docker.com/r/FQrabbit/biliupforjava)
+[![Docker Pulls](https://img.shields.io/docker/pulls/fqrabbit/biliupforjava?style=flat-square)](https://hub.docker.com/r/FQrabbit/biliupforjava)
+![GitHub all releases](https://img.shields.io/github/downloads/FQrabbit/biliupforjava/total?style=flat-square)
 [![GitHub Stars](https://img.shields.io/github/stars/FQrabbit/biliupforjava?style=flat-square)](https://github.com/FQrabbit/biliupforjava/stargazers)
+![GitHub last commit](https://img.shields.io/github/last-commit/FQrabbit/biliupforjava?style=flat-square)
 [![License](https://img.shields.io/github/license/FQrabbit/biliupforjava?style=flat-square)](LICENSE)
 
 [功能特性](#-功能特性) • [快速开始](#-快速开始) • [详细配置](#-详细配置) • [系统截图](#-系统截图) • [常见问题](#-常见问题)

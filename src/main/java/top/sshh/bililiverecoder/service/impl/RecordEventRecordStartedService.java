@@ -64,13 +64,19 @@ public class RecordEventRecordStartedService implements RecordEventService {
             if (!CollectionUtils.isEmpty(activeHistoryList)) {
                 RecordHistory activeHistory = activeHistoryList.get(0);
                 // 增加活跃度检查：如果录制中的记录在过去 24 小时内没有任何更新（以 endTime 为准），则视为过时记录
-                if (activeHistory.getEndTime() != null && activeHistory.getEndTime().isAfter(now.minusHours(24))) {
+                // 额外检查：如果稿件已经发布（publish=true），说明已经提交审核，无法再通过投稿接口增加分P，必须拆分新稿件
+                if (activeHistory.getEndTime() != null && activeHistory.getEndTime().isAfter(now.minusHours(24)) && !activeHistory.isPublish()) {
                     history = activeHistory;
                     log.info("[BLR] {}", LogKvs.event("RecordStarted.ReuseActiveHistory")
                             .add("roomId", roomId)
                             .add("sessionId", eventData.getSessionId())
                             .add("eventId", event.getEventId())
                             .add("historyId", history.getId()));
+                } else if (activeHistory.isPublish()) {
+                    log.info("[BLR] {}", LogKvs.event("RecordStarted.SkipPublished")
+                            .add("roomId", roomId)
+                            .add("sessionId", eventData.getSessionId())
+                            .add("historyId", activeHistory.getId()));
                 } else {
                     log.warn("[BLR] {}", LogKvs.event("RecordStarted.ActiveHistoryStale")
                             .add("roomId", roomId)
@@ -100,15 +106,20 @@ public class RecordEventRecordStartedService implements RecordEventService {
 
             if (history == null) {
                 // 其次复用最近结束的记录（解决短时间内的重连）
+                // 同样需要检查 publish 状态，已发布的稿件无法追加分P
                 List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(eventData.getRoomId(), now.minusMinutes(20L), now);
                 if (!CollectionUtils.isEmpty(historyList)) {
-                    // 复用最近的一条记录（取列表的最后一条，即 EndTime 最大的）
-                    history = historyList.get(historyList.size() - 1);
-                    log.info("[BLR] {}", LogKvs.event("RecordStarted.ReuseRecentHistory")
-                            .add("roomId", roomId)
-                            .add("sessionId", eventData.getSessionId())
-                            .add("eventId", event.getEventId())
-                            .add("historyId", history.getId()));
+                    // 过滤掉已经发布的稿件
+                    historyList = historyList.stream().filter(h -> !h.isPublish()).collect(java.util.stream.Collectors.toList());
+                    if (!historyList.isEmpty()) {
+                        // 复用最近的一条记录（取列表的最后一条，即 EndTime 最大的）
+                        history = historyList.get(historyList.size() - 1);
+                        log.info("[BLR] {}", LogKvs.event("RecordStarted.ReuseRecentHistory")
+                                .add("roomId", roomId)
+                                .add("sessionId", eventData.getSessionId())
+                                .add("eventId", event.getEventId())
+                                .add("historyId", history.getId()));
+                    }
                 }
             }
 
