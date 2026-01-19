@@ -61,6 +61,9 @@ public class RecordHistoryPart {
     @Column(name = "delete_fail_reason", length = 512)
     private String deleteFailReason;
 
+    @Column(name = "delete_fail_type", length = 64)
+    private String deleteFailType;
+
     private int uploadRetryCount;
 
     private LocalDateTime startTime;
@@ -223,6 +226,14 @@ public class RecordHistoryPart {
 
     public void setDeleteFailReason(String deleteFailReason) {
         this.deleteFailReason = deleteFailReason;
+    }
+
+    public String getDeleteFailType() {
+        return deleteFailType;
+    }
+
+    public void setDeleteFailType(String deleteFailType) {
+        this.deleteFailType = deleteFailType;
     }
 
     public int getUploadRetryCount() {

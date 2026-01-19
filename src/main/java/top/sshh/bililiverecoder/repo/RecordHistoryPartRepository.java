@@ -39,11 +39,14 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     @Query("select ifnull(sum(duration),0) from RecordHistoryPart where historyId = ?1")
     float sumHistoryDurationByHistoryId(Long historyId);
 
-    @Query("select count(p) from RecordHistoryPart p where p.historyId = ?1 and p.upload = false and p.uploadRetryCount >= 9999")
+    @Query("select count(p) from RecordHistoryPart p where p.historyId = ?1 and p.upload = false and (p.uploadRetryCount >= 9999 or (p.deleteFailType is not null and trim(p.deleteFailType) <> ''))")
     int countGiveUpPartsByHistoryId(Long historyId);
 
-    @Query("select p.filePath from RecordHistoryPart p where p.historyId = ?1 and p.upload = false and p.uploadRetryCount >= 9999 order by p.endTime asc")
+    @Query("select p.filePath from RecordHistoryPart p where p.historyId = ?1 and p.upload = false and (p.uploadRetryCount >= 9999 or (p.deleteFailType is not null and trim(p.deleteFailType) <> '')) order by p.endTime asc")
     List<String> findGiveUpPartFilePathsByHistoryId(Long historyId);
+
+    @Query("select p from RecordHistoryPart p where p.historyId = ?1 and p.upload = false and (p.uploadRetryCount >= 9999 or (p.deleteFailType is not null and trim(p.deleteFailType) <> '')) order by p.endTime asc")
+    List<RecordHistoryPart> findGiveUpPartsByHistoryId(Long historyId);
 
     boolean existsByFilePath(String filePath);
 

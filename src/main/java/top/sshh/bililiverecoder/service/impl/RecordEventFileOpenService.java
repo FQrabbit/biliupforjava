@@ -77,7 +77,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                 // --- 自愈式检查核心逻辑 ---
                 String currentSessionId = room.getSessionId();
                 if (incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
-                    log.warn("[BLR] {}", LogKvs.event("SessionMismatch.Detected")
+                    log.debug("[BLR] {}", LogKvs.event("SessionMismatch.Detected")
                             .add("roomId", roomId)
                             .add("reason", "Missed RecordStarted event or session changed")
                             .add("currentSessionId", currentSessionId)

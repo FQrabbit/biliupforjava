@@ -255,6 +255,18 @@ public class videoSyncJob {
                 part.setCid(page.getCid());
                 part.setPage(page.getPage());
                 part.setDuration(page.getDuration());
+
+                // 如果CID已恢复，且之前标记为异常，则清除异常状态
+                if (part.getCid() != null && part.getCid() != 0 && part.getUploadRetryCount() >= 9999) {
+                    part.setUploadRetryCount(0);
+                    part.setUpload(true);
+                    part.setDeleteFailReason("");
+                    log.info("[BLR] {}", LogKvs.event("VideoSync.Part.ExceptionCleared")
+                            .add("historyId", next.getId())
+                            .add("partId", part.getId())
+                            .add("msg", "CID已获取，清除异常状态"));
+                }
+
                 part = partRepository.save(part);
 
                 if (doPostPublishProcessing || needReparse) {

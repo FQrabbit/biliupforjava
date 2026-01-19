@@ -17,7 +17,9 @@ import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
+import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -66,8 +68,12 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
     private RecordHistoryRepository historyRepository;
     @Autowired
     private RecordRoomRepository roomRepository;
+    @Autowired
+    private UploadServiceFactory uploadServiceFactory;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final Integer UPLOAD_RETRY_GIVE_UP = 9999;
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
@@ -111,6 +117,19 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             .add("historyId", part.getHistoryId())
                             .add("roomId", part.getRoomId())
                             .add("filePath", filePath));
+                    if (part.getUploadRetryCount() < 2) {
+                        part.setUploadRetryCount(part.getUploadRetryCount() + 1);
+                        partRepository.save(part);
+                        uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                    } else {
+                        part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                        String errorMsg = "稿件分P文件不存在，已放弃上传(云剪辑): " + filePath;
+                        part.setDeleteFailReason(errorMsg);
+                        part.setDeleteFailType("FILE_MISSING");
+                        partRepository.save(part);
+                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
+                        TaskUtil.partUploadTask.remove(part.getId());
+                    }
                     return;
                 }
                 synchronized (filePath) {
@@ -304,7 +323,17 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                         runnableList.stream().parallel().forEach(Runnable::run);
                         if (tryCount.get() >= 200) {
                             part.setUpload(false);
-                            part = partRepository.save(part);
+                            if (part.getUploadRetryCount() < 2) {
+                                part.setUploadRetryCount(part.getUploadRetryCount() + 1);
+                                partRepository.save(part);
+                            } else {
+                                part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                                String errorMsg = "稿件分P上传失败次数过多，已放弃(云剪辑): " + filePath;
+                                part.setDeleteFailReason(errorMsg);
+                                part.setDeleteFailType("UPLOAD_FAILED");
+                                partRepository.save(part);
+                                LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
+                            }
                             historyOptional = historyRepository.findById(history.getId());
                             if (historyOptional.isPresent()) {
                                 history = historyOptional.get();

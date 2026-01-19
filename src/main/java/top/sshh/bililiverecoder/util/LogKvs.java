@@ -80,7 +80,7 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.FATAL.HistoryStillNotFound", "文件打开事件：致命错误，自愈后仍未找到录制历史");
         EVENT_ZH.put("FileOpen.PartSaved", "文件打开事件：成功创建并保存新的分P记录");
         EVENT_ZH.put("FileOpen.PartExists.Skip", "文件打开事件：分P记录已存在，跳过重复创建");
-        EVENT_ZH.put("SessionMismatch.Detected", "检测到 Session ID 不匹配(可能错过了[录制开始]事件)");
+        EVENT_ZH.put("SessionMismatch.Detected", "检测到 Session ID 不匹配(可能错过了[录制开始]事件)(调试)");
         EVENT_ZH.put("SessionMismatch.Merged", "Session ID 不匹配：检测到最近的直播记录，已自动合并");
         EVENT_ZH.put("SessionMismatch.SkipPublished", "Session ID 不匹配：发现最近记录已发布/审核中，跳过合并并创建新稿件");
         EVENT_ZH.put("SessionMismatch.ActiveHistoryStale", "Session ID 不匹配：检测到过时的录制中记录(24小时无活动)");
@@ -277,6 +277,7 @@ public final class LogKvs {
         EVENT_ZH.put("VideoSync.File.MoveFailed", "视频状态同步：移动文件失败");
         EVENT_ZH.put("VideoSync.File.CopySuccess", "视频状态同步：复制文件成功");
         EVENT_ZH.put("VideoSync.File.CopyFailed", "视频状态同步：复制文件失败");
+        EVENT_ZH.put("VideoSync.Part.ExceptionCleared", "视频状态同步：分P缺失CID异常已清除");
 
         // 弹幕发送同步
         EVENT_ZH.put("LiveMsgSendSync.Start", "定时任务：弹幕/评论发送开始");

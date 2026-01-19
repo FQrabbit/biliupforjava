@@ -21,6 +21,7 @@ import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -89,6 +90,8 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
     @Autowired
     private UploadProgressTracker uploadProgressTracker;
 
+    private static final int UPLOAD_RETRY_GIVE_UP = 9999;
+
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
@@ -153,10 +156,18 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                 .add("historyId", part.getHistoryId())
                                 .add("roomId", part.getRoomId())
                                 .add("filePath", filePath));
-                        if (history.getUploadRetryCount() < 2) {
-                            history.setRecordPartCount(history.getRecordPartCount());
-                            history = historyRepository.save(history);
+                        if (part.getUploadRetryCount() < 2) {
+                            part.setUploadRetryCount(part.getUploadRetryCount() + 1);
+                            partRepository.save(part);
                             uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                        } else {
+                            part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                            String errorMsg = "稿件分P文件不存在，已放弃上传: " + filePath;
+                            part.setDeleteFailReason(errorMsg);
+                            part.setDeleteFailType("FILE_MISSING");
+                            partRepository.save(part);
+                            LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
+                            TaskUtil.partUploadTask.remove(part.getId());
                         }
                         return;
                     }
@@ -340,6 +351,13 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                             .add("retry", part.getUploadRetryCount())
                                             .add("maxRetry", 2)
                                             .add("filePath", filePath));
+                                } else {
+                                    part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                                    String errorMsg = "稿件分P上传失败次数过多，已放弃: " + filePath;
+                                    part.setDeleteFailReason(errorMsg);
+                                    part.setDeleteFailType("UPLOAD_FAILED");
+                                    partRepository.save(part);
+                                    LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
                                 }
                                 //存在异常
                                 TaskUtil.partUploadTask.remove(part.getId());

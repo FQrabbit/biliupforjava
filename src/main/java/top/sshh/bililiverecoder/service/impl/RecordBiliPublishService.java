@@ -179,6 +179,8 @@ public class RecordBiliPublishService {
                     uploadPart.setFileName(null);
                     if (isTimestampError) {
                         uploadPart.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                        uploadPart.setDeleteFailType("TIMESTAMP_JUMP");
+                        uploadPart.setDeleteFailReason("分P转码失败(时间戳跳变-文件损坏)，已放弃重新上传");
                     }
                     uploadPart = partRepository.save(uploadPart);
                     // 时间戳跳变错误表示文件损坏，不再重试上传

@@ -87,11 +87,16 @@
         <!-- 分类标签页 -->
         <div class="category-tabs-container">
             <el-tabs v-model="form.viewType" @tab-click="handleViewTypeChange">
-                <el-tab-pane label="工作中的稿件" name="working"></el-tab-pane>
+                <el-tab-pane name="working">
+                    <span slot="label">
+                        工作中的稿件
+                        <el-badge v-if="workingCount > 0" :value="workingCount" class="item" type="success" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
+                    </span>
+                </el-tab-pane>
                 <el-tab-pane name="archived">
                     <span slot="label">
                         已归档的稿件
-                        <el-badge v-if="archivedBadgeCount > 0" :value="archivedBadgeCount" class="item" type="danger" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
+                        <el-badge v-if="archivedCount > 0" :value="archivedCount" class="item" type="info" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
                     </span>
                 </el-tab-pane>
             </el-tabs>
@@ -106,12 +111,6 @@
                     <el-badge :value="activeFilterCount" :hidden="activeFilterCount === 0" class="filter-badge"></el-badge>
                 </div>
                 <div class="filter-actions">
-                    <el-button v-if="activeFilterCount > 0" type="text" size="mini" @click.stop="resetFilters" class="reset-btn" circle title="清除所有筛选">
-                        <i class="el-icon-close"></i>
-                    </el-button>
-                    <el-button v-if="activeFilterCount > 0" type="text" size="mini" @click.stop="resetFilters" class="reset-btn">
-                        <i class="el-icon-refresh-left"></i> 重置
-                    </el-button>
                     <i :class="filterExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="expand-icon"></i>
                 </div>
             </div>
@@ -154,9 +153,6 @@
                     <!-- 详细筛选 -->
                     <div class="filter-section-header">
                         <span class="filter-section-title"><i class="el-icon-set-up"></i> 详细筛选</span>
-                        <el-link v-if="activeFilterCount > 0" type="primary" :underline="false" size="mini" @click="resetFilters" class="filter-reset-link">
-                            <i class="el-icon-refresh-left"></i> 重置所有
-                        </el-link>
                     </div>
                     <div class="filter-grid">
                         <div class="filter-item">
@@ -325,11 +321,9 @@
                                 <span v-else>&nbsp;</span>
                             </div>
                             <div class="card-status-row">
-                                <span class="status-chip success" v-if="item.upload">开启上传</span>
-                                <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>关闭上传</span>
-                                <span class="status-chip success" v-if="item.publish">已发布</span>
-                                <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
-                                <span class="status-chip warn" v-if="isActuallyRecording(item)">录制中</span>
+                                <!-- 统一状态显示 -->
+                                <span class="status-chip" :class="getStatusColor(item.status)">{{ item.status }}</span>
+                                
                                 <el-tooltip v-if="item.giveUpPartCount && item.giveUpPartCount > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
                                     <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ item.giveUpPartCount }}</span>
                                 </el-tooltip>
@@ -343,7 +337,7 @@
                             <el-tag size="mini" :type="getFileSizeColorType(item.fileSize)">{{ formatFileSize(item.fileSize) }}</el-tag>
                             <span class="card-info-text">时长: {{ formatDuration(item.partDuration) }}</span>
                             <span class="card-info-text">分P: {{ item.partCount }} / 已传: {{ item.uploadPartCount }}</span>
-                            <span class="card-info-text">弹幕: {{ item.msgCount }}</span>
+                            <span class="card-info-text">弹幕: {{ item.successMsgCount }}/{{ item.msgCount }}</span>
                         </div>
                     </div>
                 </div>
@@ -388,12 +382,12 @@
                     </el-table-column>
                     <el-table-column label="弹幕" prop="msgCount" width="70"></el-table-column>
                     <el-table-column label="成功弹幕" prop="successMsgCount" width="80"></el-table-column>
-                    <el-table-column label="录制" prop="recording" width="80">
+                    <el-table-column label="状态" prop="status" width="100">
                         <template slot-scope="scope">
-                            <span v-if="isActuallyRecording(scope.row)" class="status-chip warn">录制中</span>
-                            <span v-else class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;">未录制</span>
+                            <span class="status-chip" :class="getStatusColor(scope.row.status)">{{ scope.row.status }}</span>
                         </template>
                     </el-table-column>
+
                     <el-table-column label="是否上传" prop="upload" width="90">
                         <template slot-scope="scope">
                             <span class="status-chip success" v-if="scope.row.upload">是</span>
@@ -541,6 +535,14 @@
                         <div class="status-value">{{ getAuditStatusText(currentDetail) }}</div>
                     </div>
                 </div>
+                <div class="status-connector" :class="getDanmakuStatusClass(currentDetail)"></div>
+                <div class="status-item-modern" :class="getDanmakuStatusClass(currentDetail)">
+                    <div class="status-icon"><i class="el-icon-chat-dot-round"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">弹幕状态</div>
+                        <div class="status-value">{{ getDanmakuStatusText(currentDetail) }}</div>
+                    </div>
+                </div>
             </div>
 
             <!-- 数据统计 -->
@@ -570,7 +572,11 @@
                     <div class="stat-label">弹幕数量</div>
                     <div class="stat-value">
                         {{ currentDetail.msgCount }}
-                        <span class="stat-sub success">成功:{{currentDetail.successMsgCount}}</span>
+                        <div style="display: flex; gap: 8px; font-size: 12px; color: #909399; margin-top: 4px; flex-wrap: wrap;">
+                            <span>普通:{{currentDetail.normalMsgCount || 0}}</span>
+                            <span>SC:{{currentDetail.scMsgCount || 0}}</span>
+                            <span>上舰:{{currentDetail.guardMsgCount || 0}}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -583,7 +589,7 @@
                     </div>
                     <div class="exception-header-right" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length > 0">
                         <span v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="'reason-' + idx" class="exception-reason-badge">
-                            {{ getGiveUpReason(idx, p) }}
+                            {{ formatGiveUpType(idx) }}：{{ getGiveUpReason(idx, p) }}
                         </span>
                     </div>
                 </div>
@@ -753,7 +759,8 @@
                 from: null,
                 to: null
             },
-            archivedBadgeCount: 0,
+            workingCount: 0,
+            archivedCount: 0,
             history:{},
             uploadEditPartId:null,
             loading: false,
@@ -924,6 +931,15 @@
                     });
                 }).catch(() => {});
             },
+            getStatusColor: function(status) {
+                if (!status) return '';
+                if (status === '已完成' || status === '发送弹幕中') return 'success';
+                if (status.indexOf('上传中') > -1 || status === '等待上传') return 'primary';
+                if (status === '正在录制' || status === '审核中' || status === '等待转码' || status === '已提交' || status === '定时发布') return 'warn';
+                if (status === '转码失败' || status === '审核不通过' || status === '审核被锁定' || status === '被退回' || status === '已删除' || status.indexOf('投稿中') > -1) return 'danger';
+                // 默认使用 info 样式 (灰色)
+                return 'info';
+            },
             getAuditStatusClass: function(item) {
                 if (!item.publish) return '';
                 if (item.code == 0 || item.code == -50) return 'success';
@@ -942,6 +958,16 @@
                 if (item.code == -40) return '定时发布';
                 if (item.code == -100) return '已删除';
                 return '未通过(' + item.code + ')';
+            },
+            getDanmakuStatusClass: function(item) {
+                if (!item.publish || (item.code !== 0 && item.code !== -50)) return '';
+                if (item.sendReply) return 'success';
+                return 'warning';
+            },
+            getDanmakuStatusText: function(item) {
+                if (!item.publish || (item.code !== 0 && item.code !== -50)) return '待发布';
+                if (item.sendReply) return '已完成';
+                return '发送中';
             },
             getDurationClass: function(seconds) {
                 const sec = Number(seconds) || 0;
@@ -998,6 +1024,18 @@
 
                 // 4) 默认提示（占位，便于确认是后端未返回原因）
                 return '未返回异常原因';
+            },
+            formatGiveUpType: function(idx) {
+                const types = this.currentDetail.giveUpPartTypes;
+                const t = Array.isArray(types) ? types[idx] : null;
+                if (!t) return '异常';
+                if (t === 'FILE_MISSING') return '找不到文件';
+                if (t === 'CID_MISSING') return 'CID缺失';
+                if (t === 'TIMESTAMP_JUMP') return '时间戳跳变';
+                if (t === 'FILE_SIZE_INVALID') return '文件大小异常';
+                if (t === 'DURATION_INVALID') return '时长异常';
+                if (t === 'UPLOAD_FAILED') return '上传失败';
+                return t;
             },
             formatDateTime: function(val) {
                 if (!val) return '';
@@ -1554,9 +1592,8 @@
                             }
                         }
 
-                        if (data.badgeCount !== undefined) {
-                            _this.archivedBadgeCount = data.badgeCount;
-                        }
+                        if (data.workingCount !== undefined) _this.workingCount = data.workingCount;
+                        if (data.archivedCount !== undefined) _this.archivedCount = data.archivedCount;
                     },
                     error: function () {
                         if (!silent) _this.loading = false;
@@ -1565,6 +1602,12 @@
             },
             updateHistory: function () {
                 let _this = this;
+                const loading = _this.$loading({
+                    lock: true,
+                    text: '正在保存更改...',
+                    spinner: 'el-icon-loading',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
                 $.ajax({
                     url: '/history/update',
                     contentType: 'application/json;charset=utf-8',
@@ -1572,11 +1615,17 @@
                     data: JSON.stringify(_this.history),
                     dataType: 'json',
                     success: function (data) {
+                        loading.close();
                         _this.$message({
                             message: data.msg,
                             type: data.type
                         });
+                        _this.editDialogFormVisible = false;
                         _this.initTable();
+                    },
+                    error: function() {
+                        loading.close();
+                        _this.$message.error('保存失败');
                     }
                 });
             },
@@ -1620,16 +1669,27 @@
             },
             uploadEditPart: function () {
                 let _this = this;
+                const loading = _this.$loading({
+                    lock: true,
+                    text: '正在处理上传...',
+                    spinner: 'el-icon-loading',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
                 $.ajax({
                     url: '/part/uploadEditor/' + this.uploadEditPartId,
                     contentType: 'application/json;charset=utf-8',
                     type: 'get',
                     success: function (data) {
+                        loading.close();
                         _this.$message({
                             message: data.msg,
                             type: data.type
                         });
                         _this.initTable();
+                    },
+                    error: function() {
+                        loading.close();
+                        _this.$message.error('操作失败');
                     }
                 });
             },
@@ -1641,17 +1701,28 @@
                     cancelButtonText: '取消',
                     type: 'warning'
                 }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在结束录制状态...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
                         url: '/history/updatePartStatus/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('操作失败');
                         }
                     });
                 }).catch(() => {});
@@ -1664,17 +1735,28 @@
                     cancelButtonText: '取消',
                     type: 'warning'
                 }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在重置发布状态...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
                         url: '/history/updatePublishStatus/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('操作失败');
                         }
                     });
                 }).catch(() => {});
@@ -1687,17 +1769,28 @@
                     cancelButtonText: '取消',
                     type: 'warning'
                 }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在触发发布...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
                         url: '/history/touchPublish/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('操作失败');
                         }
                     });
                 }).catch(() => {});
@@ -1710,17 +1803,28 @@
                     cancelButtonText: '取消',
                     type: 'warning'
                 }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在执行转码修复...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
                         url: '/history/rePublish/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('操作失败');
                         }
                     });
                 }).catch(() => {});
@@ -1733,17 +1837,28 @@
                     cancelButtonText: '取消',
                     type: 'success'
                 }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在生成高能片段...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
                         url: '/history/highEnergyCutPublish/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('操作失败');
                         }
                     });
                 }).catch(() => {});
@@ -1758,17 +1873,28 @@
                     cancelButtonClass: 'el-button--success',
                     type: 'warning'
                 }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在删除记录...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
                         url: '/history/delete/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('删除失败');
                         }
                     });
                 }).catch(() => {});
@@ -1783,17 +1909,28 @@
                     cancelButtonClass: 'el-button--success',
                     type: 'warning'
                 }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在删除弹幕数据...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
                     $.ajax({
                         url: '/history/deleteMsg/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',
                         success: function (data) {
+                            loading.close();
                             _this.$message({
                                 message: data.msg,
                                 type: data.type
                             });
                             _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('删除失败');
                         }
                     });
                 }).catch(() => {});

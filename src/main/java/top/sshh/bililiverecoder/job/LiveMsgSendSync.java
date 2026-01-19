@@ -27,6 +27,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -70,6 +71,7 @@ public class LiveMsgSendSync {
 
     public static Set<Long> skipOrdinaryPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static Set<Long> skipAdvancedPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Map<Long, Long> missingCidLogTime = new ConcurrentHashMap<>();
 
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
     public void sndMsgProcess() {
@@ -92,12 +94,25 @@ public class LiveMsgSendSync {
             List<RecordHistoryPart> allParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             List<RecordHistoryPart> parts = new ArrayList<>();
             for (RecordHistoryPart p : allParts) {
+                // 跳过已标记为异常的分P
+                if (p.getUploadRetryCount() >= 9999) {
+                    continue;
+                }
+
                 if (p.getCid() == null || p.getCid() == 0) {
+                    // 标记为分P异常
+                    p.setUpload(false);
+                    p.setUploadRetryCount(9999);
+                    p.setDeleteFailReason("分P缺失CID");
+                    p.setDeleteFailType("CID_MISSING");
+                    partRepository.save(p);
+                    
                     log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Part.SkipMissingCid")
                             .add("historyId", history.getId())
                             .add("partId", p.getId())
                             .addIfNotBlank("title", p.getTitle())
-                            .addIfNotBlank("bvid", history.getBvId()));
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .add("msg", "分P缺失CID，标记为异常并跳过后续处理"));
                 } else {
                     parts.add(p);
                 }

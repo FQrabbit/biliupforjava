@@ -120,7 +120,27 @@ public class HistoryController {
             history.setGiveUpPartCount(giveUpCount);
             if (giveUpCount > 0) {
                 try {
-                    history.setGiveUpPartFiles(partRepository.findGiveUpPartFilePathsByHistoryId(history.getId()));
+                    List<RecordHistoryPart> giveUpParts = partRepository.findGiveUpPartsByHistoryId(history.getId());
+                    history.setGiveUpPartFiles(giveUpParts.stream().map(RecordHistoryPart::getFilePath).toList());
+                    history.setGiveUpPartReasons(giveUpParts.stream().map(p -> {
+                        if (StringUtils.isNotBlank(p.getDeleteFailReason())) {
+                            return p.getDeleteFailReason();
+                        }
+                        String t = p.getDeleteFailType();
+                        if (StringUtils.isBlank(t)) {
+                            return "上传失败/已放弃";
+                        }
+                        return switch (t) {
+                            case "FILE_MISSING" -> "稿件分P文件不存在";
+                            case "CID_MISSING" -> "分P缺失CID";
+                            case "TIMESTAMP_JUMP" -> "分P时间戳跳变(文件损坏)";
+                            case "FILE_SIZE_INVALID" -> "分P文件大小异常";
+                            case "DURATION_INVALID" -> "分P时长异常";
+                            case "UPLOAD_FAILED" -> "分P上传失败";
+                            default -> "上传失败/已放弃";
+                        };
+                    }).toList());
+                    history.setGiveUpPartTypes(giveUpParts.stream().map(p -> StringUtils.isNotBlank(p.getDeleteFailType()) ? p.getDeleteFailType() : "UNKNOWN").toList());
                 } catch (Exception ignored) {
                 }
             }
@@ -136,70 +156,64 @@ public class HistoryController {
             if (StringUtils.isNotBlank(history.getBvId())) {
                 history.setMsgCount(msgRepository.countByBvid(history.getBvId()));
                 history.setSuccessMsgCount(msgRepository.countByBvidAndCode(history.getBvId(), 0));
+                // 统计各类弹幕数量
+                history.setNormalMsgCount(msgRepository.countByBvidAndPool(history.getBvId(), 0));
+                history.setScMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC ["));
+                history.setGuardMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓"));
             }
         }
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
         result.put("total",total);
 
-        if (StringUtils.isNotBlank(request.getViewType())) {
-            try {
-                CriteriaQuery<Long> badgeQuery = criteriaBuilder.createQuery(Long.class);
-                Root<RecordHistory> badgeRoot = badgeQuery.from(RecordHistory.class);
-                badgeQuery.select(criteriaBuilder.count(badgeRoot));
+        // 统计“工作中”和“已归档”的稿件总数
+        try {
+            // 定义归档状态（已完成）：
+            // 1. 已发布 (publish = true)
+            // 2. 稿件状态正常 (code 为 0 或 -50)
+            // 3. 弹幕发送完成 (sendReply = true)
+            Predicate isArchived = criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get("publish"), true),
+                    root.get("code").in(0, -50),
+                    criteriaBuilder.equal(root.get("sendReply"), true)
+            );
 
-                Subquery<Long> partExists = badgeQuery.subquery(Long.class);
-                Root<RecordHistoryPart> partRoot = partExists.from(RecordHistoryPart.class);
-                partExists.select(criteriaBuilder.literal(1L));
-                partExists.where(
-                        criteriaBuilder.and(
-                                criteriaBuilder.equal(partRoot.get("historyId"), badgeRoot.get("id")),
-                                criteriaBuilder.or(
-                                        criteriaBuilder.isTrue(partRoot.get("recording")),
-                                        criteriaBuilder.isNull(partRoot.get("endTime"))
-                                )
-                        )
-                );
-                Predicate isRecording = criteriaBuilder.exists(partExists);
+            // 计算“工作中”的稿件数量
+            CriteriaQuery<Long> workingQuery = criteriaBuilder.createQuery(Long.class);
+            Root<RecordHistory> workingRoot = workingQuery.from(RecordHistory.class);
+            workingQuery.select(criteriaBuilder.count(workingRoot));
+            
+            // 重新构建归档状态的判断条件（因为查询的主体对象变了，所以需要重建条件）
+            Predicate isArchivedForWorking = criteriaBuilder.and(
+                    criteriaBuilder.equal(workingRoot.get("publish"), true),
+                    workingRoot.get("code").in(0, -50),
+                    criteriaBuilder.equal(workingRoot.get("sendReply"), true)
+            );
+            workingQuery.where(criteriaBuilder.not(isArchivedForWorking));
+            Long workingCount = entityManager.createQuery(workingQuery).getSingleResult();
+            result.put("workingCount", workingCount);
 
-                Predicate isStreaming = criteriaBuilder.equal(badgeRoot.get("streaming"), true);
+            // 计算“已归档”的稿件数量
+            CriteriaQuery<Long> archivedQuery = criteriaBuilder.createQuery(Long.class);
+            Root<RecordHistory> archivedRoot = archivedQuery.from(RecordHistory.class);
+            archivedQuery.select(criteriaBuilder.count(archivedRoot));
+            
+            // 重新构建归档状态的判断条件（用于已归档查询）
+            Predicate isArchivedForArchived = criteriaBuilder.and(
+                    criteriaBuilder.equal(archivedRoot.get("publish"), true),
+                    archivedRoot.get("code").in(0, -50),
+                    criteriaBuilder.equal(archivedRoot.get("sendReply"), true)
+            );
+            archivedQuery.where(isArchivedForArchived);
+            Long archivedCount = entityManager.createQuery(archivedQuery).getSingleResult();
+            result.put("archivedCount", archivedCount);
 
-                Predicate isUploading = criteriaBuilder.and(
-                        criteriaBuilder.equal(badgeRoot.get("upload"), true),
-                        criteriaBuilder.equal(badgeRoot.get("publish"), false)
-                );
-
-                Predicate isProcessing = criteriaBuilder.and(
-                        criteriaBuilder.equal(badgeRoot.get("publish"), true),
-                        badgeRoot.get("code").in(-1, -9, -30, -40)
-                );
-
-                Predicate isSendingDanmaku = criteriaBuilder.and(
-                        criteriaBuilder.equal(badgeRoot.get("publish"), true),
-                        badgeRoot.get("code").in(0, -50),
-                        criteriaBuilder.equal(badgeRoot.get("sendReply"), false)
-                );
-
-                Predicate workingPredicate = criteriaBuilder.or(isRecording, isStreaming, isUploading, isProcessing, isSendingDanmaku);
-
-                Predicate isFailed = criteriaBuilder.and(
-                        criteriaBuilder.equal(badgeRoot.get("publish"), true),
-                        criteriaBuilder.not(badgeRoot.get("code").in(0, -50, -1, -9, -30, -40))
-                );
-
-                badgeQuery.where(
-                        criteriaBuilder.not(workingPredicate),
-                        isFailed
-                );
-
-                Long badgeCount = entityManager.createQuery(badgeQuery).getSingleResult();
-                result.put("badgeCount", badgeCount);
-            } catch (Exception e) {
-                log.error("[BLR] {}", LogKvs.event("History.BadgeCount.CalcFailed")
-                        .add("err", e.getMessage())
-                        .add("ex", e.getClass().getSimpleName()), e);
-                result.put("badgeCount", 0);
-            }
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("History.Count.CalcFailed")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            result.put("workingCount", 0);
+            result.put("archivedCount", 0);
         }
 
         return result;
@@ -608,65 +622,43 @@ public class HistoryController {
         }
 
         if (StringUtils.isNotBlank(request.getViewType())) {
-            // 复用子查询逻辑进行记录检查
-            Subquery<Long> partExists = criteriaBuilder.createQuery().subquery(Long.class);
-            Root<RecordHistoryPart> partRoot = partExists.from(RecordHistoryPart.class);
-            partExists.select(criteriaBuilder.literal(1L));
-            partExists.where(
+            // 定义归档状态（已完成）：
+            // 1. 已发布 (publish = true) 且 稿件状态正常 (code 为 0 或 -50) 且 弹幕发送完成 (sendReply = true)
+            // 2. 或者：设置为不上传 (upload = false) 且 录制已结束 (不存在正在录制的分P)
+
+            // 正常上传并完成的条件
+            Predicate isPublishedArchived = criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get("publish"), true),
+                    root.get("code").in(0, -50),
+                    criteriaBuilder.equal(root.get("sendReply"), true)
+            );
+
+            // 设置为不上传且录制已结束的条件
+            Subquery<Long> recordingPartExists = criteriaBuilder.createQuery().subquery(Long.class);
+            Root<RecordHistoryPart> recordingPartRoot = recordingPartExists.from(RecordHistoryPart.class);
+            recordingPartExists.select(criteriaBuilder.literal(1L));
+            recordingPartExists.where(
                     criteriaBuilder.and(
-                            criteriaBuilder.equal(partRoot.get("historyId"), root.get("id")),
+                            criteriaBuilder.equal(recordingPartRoot.get("historyId"), root.get("id")),
                             criteriaBuilder.or(
-                                    criteriaBuilder.isTrue(partRoot.get("recording")),
-                                    criteriaBuilder.isNull(partRoot.get("endTime"))
+                                    criteriaBuilder.isTrue(recordingPartRoot.get("recording")),
+                                    criteriaBuilder.isNull(recordingPartRoot.get("endTime"))
                             )
                     )
             );
-            Predicate isRecording = criteriaBuilder.exists(partExists);
-
-            Predicate isStreaming = criteriaBuilder.equal(root.get("streaming"), true);
-
-            Predicate isUploading = criteriaBuilder.and(
-                    criteriaBuilder.equal(root.get("upload"), true),
-                    criteriaBuilder.equal(root.get("publish"), false)
+            Predicate isNoUploadArchived = criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get("upload"), false),
+                    criteriaBuilder.not(criteriaBuilder.exists(recordingPartExists))
             );
 
-            Predicate isProcessing = criteriaBuilder.and(
-                    criteriaBuilder.equal(root.get("publish"), true),
-                    root.get("code").in(-1, -9, -30, -40)
-            );
-
-            Predicate isSendingDanmaku = criteriaBuilder.and(
-                    criteriaBuilder.equal(root.get("publish"), true),
-                    root.get("code").in(0, -50),
-                    criteriaBuilder.equal(root.get("sendReply"), false)
-            );
-
-            Subquery<Long> danmakuExists = criteriaBuilder.createQuery().subquery(Long.class);
-            Root<LiveMsg> danmakuRoot = danmakuExists.from(LiveMsg.class);
-            Subquery<Long> danmakuPartExists = criteriaBuilder.createQuery().subquery(Long.class);
-            Root<RecordHistoryPart> danmakuPartRoot = danmakuPartExists.from(RecordHistoryPart.class);
-            danmakuPartExists.select(criteriaBuilder.literal(1L));
-            danmakuPartExists.where(
-                    criteriaBuilder.and(
-                            criteriaBuilder.equal(danmakuPartRoot.get("historyId"), root.get("id")),
-                            criteriaBuilder.equal(danmakuPartRoot.get("id"), danmakuRoot.get("partId"))
-                    )
-            );
-            danmakuExists.select(criteriaBuilder.literal(1L));
-            danmakuExists.where(
-                    criteriaBuilder.and(
-                            criteriaBuilder.equal(danmakuRoot.get("code"), -1),
-                            criteriaBuilder.exists(danmakuPartExists)
-                    )
-            );
-            Predicate isDanmakuPending = criteriaBuilder.exists(danmakuExists);
-
-            Predicate workingPredicate = criteriaBuilder.or(isRecording, isStreaming, isUploading, isProcessing, isSendingDanmaku, isDanmakuPending);
+            // 综合归档状态
+            Predicate isArchived = criteriaBuilder.or(isPublishedArchived, isNoUploadArchived);
 
             if ("working".equals(request.getViewType())) {
-                predicatesList.add(workingPredicate);
+                // 工作中 = 非归档
+                predicatesList.add(criteriaBuilder.not(isArchived));
             } else if ("archived".equals(request.getViewType())) {
-                predicatesList.add(criteriaBuilder.not(workingPredicate));
+                predicatesList.add(isArchived);
             }
         }
 

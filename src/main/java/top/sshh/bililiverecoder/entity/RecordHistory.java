@@ -81,14 +81,71 @@ public class RecordHistory {
     private List<String> giveUpPartFiles;
 
     @Transient
+    private List<String> giveUpPartReasons;
+
+    @Transient
+    private List<String> giveUpPartTypes;
+
+    @Transient
     private int msgCount;
 
     @Transient
     private int successMsgCount;
+
+    @Transient
+    private int normalMsgCount;
+
+    @Transient
+    private int scMsgCount;
+
+    @Transient
+    private int guardMsgCount;
 
 
     @Transient
     private LocalDateTime from;
     @Transient
     private LocalDateTime to;
+
+    /**
+     * 获取稿件状态描述
+     * 不修改数据库结构，仅做逻辑映射
+     */
+    public String getStatus() {
+        if (recording) {
+            return "正在录制";
+        }
+        // 如果没有开启上传，或者手动关闭了上传
+        if (!upload) {
+            return "已完成";
+        }
+        // 已经标记为上传，但还没有发布成功（publish=true表示B站接口返回成功并获取到avid/bvid）
+        if (!publish) {
+            if (uploadRetryCount > 0) {
+                return "上传中(重试" + uploadRetryCount + ")";
+            }
+            return "上传中";
+        }
+        // 已经发布(publish=true)，根据B站稿件状态code判断
+        // 0: 开放浏览, -50: 仅自己可见
+        if (code == 0 || code == -50) {
+            // 只有状态正常的稿件才会进入弹幕发送流程
+            if (sendReply) {
+                return "已完成";
+            } else {
+                return "发送弹幕中";
+            }
+        }
+        
+        // 其他状态处理
+        return switch (code) {
+            case -1 -> "审核中";
+            case -2 -> "被退回";
+            case -10 -> "等待转码";
+            case -20 -> "转码失败";
+            case -30 -> "审核不通过";
+            case -40 -> "审核被锁定";
+            default -> "投稿中(Code:" + code + ")";
+        };
+    }
 }

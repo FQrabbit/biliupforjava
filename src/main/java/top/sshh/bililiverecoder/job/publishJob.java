@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -177,11 +178,20 @@ public class publishJob {
                 // 检查文件是否存在
                 File file = new File(part.getFilePath());
                 if (!file.exists()) {
-                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FileMissing")
+                    log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FileMissing")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
                             .add("partId", part.getId())
                             .add("filePath", part.getFilePath()));
+                    part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    String errorMsg = "稿件分P文件不存在，已放弃补偿上传: " + part.getFilePath();
+                    part.setDeleteFailReason(errorMsg);
+                    part.setDeleteFailType("FILE_MISSING");
+                    try {
+                        partRepository.save(part);
+                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
+                    } catch (Exception ignored) {
+                    }
                     continue;
                 }
 
@@ -195,8 +205,12 @@ public class publishJob {
                             .add("filePath", part.getFilePath())
                             .add("fileSizeBytes", actualFileSize));
                     part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    String errorMsg = "稿件分P文件大小异常，已放弃补偿上传: " + part.getFilePath();
+                    part.setDeleteFailReason(errorMsg);
+                    part.setDeleteFailType("FILE_SIZE_INVALID");
                     try {
                         partRepository.save(part);
+                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
                     } catch (Exception ignored) {
                     }
                     continue;
@@ -227,8 +241,12 @@ public class publishJob {
                             .add("filePath", part.getFilePath())
                             .add("durationSec", actualDuration));
                     part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    String errorMsg = "稿件分P时长异常，已放弃补偿上传: " + part.getFilePath();
+                    part.setDeleteFailReason(errorMsg);
+                    part.setDeleteFailType("DURATION_INVALID");
                     try {
                         partRepository.save(part);
+                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
                     } catch (Exception ignored) {
                     }
                     continue;

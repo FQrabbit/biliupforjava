@@ -13,6 +13,9 @@ import java.util.List;
 public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     List<LiveMsg> findByPartIdAndCode(Long partId, int code);
+
+    int countByPartIdAndCode(Long partId, int code);
+
     List<LiveMsg> findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(int pool, int code, List<Long> partIds);
     Page<LiveMsg> findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(int pool, int code, List<Long> partIds, Pageable page);
 
@@ -29,6 +32,10 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
     int countByBvid(String bvId);
 
     int countByBvidAndCode(String bvId, Integer code);
+
+    int countByBvidAndPool(String bvId, int pool);
+
+    int countByBvidAndPoolAndContextStartingWith(String bvId, int pool, String prefix);
 
     @org.springframework.data.jpa.repository.Modifying
     @Query("delete from LiveMsg where partId = ?1")
