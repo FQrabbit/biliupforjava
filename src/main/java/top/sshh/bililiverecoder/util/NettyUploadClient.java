@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 public class NettyUploadClient {
@@ -33,6 +34,12 @@ public class NettyUploadClient {
     // checkInterval = 1000ms (默认), maxTime = 15000ms
     // 我们将其设为 checkInterval = 100ms 以获得更平滑的效果
     private static final GlobalTrafficShapingHandler trafficHandler = new GlobalTrafficShapingHandler(group, 0, 0, 100);
+
+    private static final long LOW_SPEED_BASE_INTERVAL_MS = 3000;
+    private static final long LOW_SPEED_CONFIRM_DELAY_MS = 10000;
+    private static final long LOW_SPEED_MAX_INTERVAL_MS = 30000;
+    private static final long LOW_SPEED_RECOVERY_STEP_MS = 500;
+    private static final AtomicLong lowSpeedCheckIntervalMs = new AtomicLong(LOW_SPEED_BASE_INTERVAL_MS);
 
     /**
      * 获取全局写入吞吐量 (bytes/s)
@@ -128,26 +135,8 @@ public class NettyUploadClient {
                             ChannelTrafficShapingHandler channelTrafficHandler = new ChannelTrafficShapingHandler(0, 0, 1000);
                             p.addLast(channelTrafficHandler);
 
-                            // 低速检测: 5秒后开始，每3秒检查一次
-                            java.util.concurrent.atomic.AtomicInteger lowSpeedStrikes = new java.util.concurrent.atomic.AtomicInteger(0);
-                            ch.eventLoop().scheduleAtFixedRate(() -> {
-                                if (!ch.isActive()) return;
-
-                                long speed = channelTrafficHandler.trafficCounter().lastWriteThroughput();
-                                // 阈值: 10KB/s
-                                if (speed < 10 * 1024) {
-                                    if (lowSpeedStrikes.incrementAndGet() >= 2) {
-                                        log.info(LogKvs.event("Netty.Upload.LowSpeed")
-                                                .add("speed", speed)
-                                                .add("channelId", ch.id())
-                                                .toString());
-                                        ch.close();
-                                        future.completeExceptionally(new RuntimeException("Low upload speed: " + speed + " B/s"));
-                                    }
-                                } else {
-                                    lowSpeedStrikes.set(0);
-                                }
-                            }, 5, 3, TimeUnit.SECONDS);
+                            AtomicLong lowSpeedStartMs = new AtomicLong(0);
+                            ch.eventLoop().schedule(() -> scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future), 5, TimeUnit.SECONDS);
                             
                             p.addLast(new HttpClientCodec());
                             p.addLast(new HttpObjectAggregator(65536)); // 聚合响应
@@ -225,5 +214,49 @@ public class NettyUploadClient {
             }
             throw new RuntimeException("Netty upload failed: " + e.getMessage(), e);
         }
+    }
+
+    private static void scheduleLowSpeedCheck(Channel ch, ChannelTrafficShapingHandler channelTrafficHandler, AtomicLong lowSpeedStartMs, CompletableFuture<String> future) {
+        long intervalMs = lowSpeedCheckIntervalMs.get();
+        ch.eventLoop().schedule(() -> {
+            if (!ch.isActive()) {
+                return;
+            }
+            long speed = channelTrafficHandler.trafficCounter().lastWriteThroughput();
+            if (speed < 10 * 1024) {
+                long now = System.currentTimeMillis();
+                long started = lowSpeedStartMs.get();
+                if (started == 0) {
+                    lowSpeedStartMs.set(now);
+                    long current = lowSpeedCheckIntervalMs.get();
+                    long next = Math.max(current, LOW_SPEED_CONFIRM_DELAY_MS);
+                    lowSpeedCheckIntervalMs.set(Math.min(next, LOW_SPEED_MAX_INTERVAL_MS));
+                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future);
+                    return;
+                }
+                if (now - started < LOW_SPEED_CONFIRM_DELAY_MS) {
+                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future);
+                    return;
+                }
+                long current = lowSpeedCheckIntervalMs.get();
+                long next = Math.min(LOW_SPEED_MAX_INTERVAL_MS, current * 2);
+                lowSpeedCheckIntervalMs.set(next);
+                log.info(LogKvs.event("Netty.Upload.LowSpeed")
+                        .add("speed", speed)
+                        .add("channelId", ch.id())
+                        .toString());
+                ch.close();
+                future.completeExceptionally(new RuntimeException("Low upload speed: " + speed + " B/s"));
+                return;
+            } else {
+                lowSpeedStartMs.set(0);
+                long current = lowSpeedCheckIntervalMs.get();
+                if (current > LOW_SPEED_BASE_INTERVAL_MS) {
+                    long next = Math.max(LOW_SPEED_BASE_INTERVAL_MS, current - LOW_SPEED_RECOVERY_STEP_MS);
+                    lowSpeedCheckIntervalMs.set(next);
+                }
+            }
+            scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future);
+        }, intervalMs, TimeUnit.MILLISECONDS);
     }
 }

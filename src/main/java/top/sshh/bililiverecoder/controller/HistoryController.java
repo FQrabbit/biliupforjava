@@ -641,7 +641,27 @@ public class HistoryController {
                     criteriaBuilder.equal(root.get("sendReply"), false)
             );
 
-            Predicate workingPredicate = criteriaBuilder.or(isRecording, isStreaming, isUploading, isProcessing, isSendingDanmaku);
+            Subquery<Long> danmakuExists = criteriaBuilder.createQuery().subquery(Long.class);
+            Root<LiveMsg> danmakuRoot = danmakuExists.from(LiveMsg.class);
+            Subquery<Long> danmakuPartExists = criteriaBuilder.createQuery().subquery(Long.class);
+            Root<RecordHistoryPart> danmakuPartRoot = danmakuPartExists.from(RecordHistoryPart.class);
+            danmakuPartExists.select(criteriaBuilder.literal(1L));
+            danmakuPartExists.where(
+                    criteriaBuilder.and(
+                            criteriaBuilder.equal(danmakuPartRoot.get("historyId"), root.get("id")),
+                            criteriaBuilder.equal(danmakuPartRoot.get("id"), danmakuRoot.get("partId"))
+                    )
+            );
+            danmakuExists.select(criteriaBuilder.literal(1L));
+            danmakuExists.where(
+                    criteriaBuilder.and(
+                            criteriaBuilder.equal(danmakuRoot.get("code"), -1),
+                            criteriaBuilder.exists(danmakuPartExists)
+                    )
+            );
+            Predicate isDanmakuPending = criteriaBuilder.exists(danmakuExists);
+
+            Predicate workingPredicate = criteriaBuilder.or(isRecording, isStreaming, isUploading, isProcessing, isSendingDanmaku, isDanmakuPending);
 
             if ("working".equals(request.getViewType())) {
                 predicatesList.add(workingPredicate);
