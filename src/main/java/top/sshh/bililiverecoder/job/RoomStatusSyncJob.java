@@ -55,10 +55,10 @@ public class RoomStatusSyncJob {
                     // 如果直播结束，强制设置录制状态为false，防止状态卡死
                     // 注意：如果直播中，我们不强制设置录制为true，因为录制可能还没开始或失败
                     if (!isLive) {
-                        if (room.isRecording() || room.getHistoryId() != -1) {
+                        if (room.isRecording() || (room.getHistoryId() != null && room.getHistoryId() != -1)) {
                             room.setRecording(false);
                             // 同时清理关联的历史记录状态
-                            if (room.getHistoryId() != -1) {
+                            if (room.getHistoryId() != null && room.getHistoryId() != -1) {
                                 Optional<RecordHistory> historyOpt = historyRepository.findById(room.getHistoryId());
                                 if (historyOpt.isPresent()) {
                                     RecordHistory history = historyOpt.get();
