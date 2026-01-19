@@ -89,7 +89,19 @@ public class LiveMsgSendSync {
         format.setTimeZone(TimeZone.getTimeZone("UTC"));
         List<RecordHistoryPart> partList = new ArrayList<>();
         for (RecordHistory history : historyList) {
-            List<RecordHistoryPart> parts = partRepository.findByHistoryIdAndCidIsNotNullOrderByPageAsc(history.getId());
+            List<RecordHistoryPart> allParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+            List<RecordHistoryPart> parts = new ArrayList<>();
+            for (RecordHistoryPart p : allParts) {
+                if (p.getCid() == null || p.getCid() == 0) {
+                    log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Part.SkipMissingCid")
+                            .add("historyId", history.getId())
+                            .add("partId", p.getId())
+                            .addIfNotBlank("title", p.getTitle())
+                            .addIfNotBlank("bvid", history.getBvId()));
+                } else {
+                    parts.add(p);
+                }
+            }
             //如果没有发送评论
             if (!history.isSendReply()) {
                 RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
@@ -406,6 +418,9 @@ public class LiveMsgSendSync {
             for (LiveMsg msg : allHighLevelMsg) {
                 Long partId = msg.getPartId();
                 if (skipAdvancedPartIds.contains(partId)) {
+                    log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.SkipByManual")
+                            .add("partId", partId)
+                            .addIfNotBlank("bvid", msg.getBvid()));
                     continue;
                 }
                 Optional<RecordHistoryPart> partOptional = partRepository.findById(partId);
@@ -518,6 +533,9 @@ public class LiveMsgSendSync {
                         return;
                     }
                     if (skipOrdinaryPartIds.contains(msg.getPartId())) {
+                        log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.SkipByManual")
+                                .add("partId", msg.getPartId())
+                                .addIfNotBlank("bvid", msg.getBvid()));
                         continue;
                     }
                     count.incrementAndGet();

@@ -231,8 +231,10 @@ public class videoSyncJob {
         next.setCoverUrl(videoInfoResponseData.getPic());
         next = historyRepository.save(next);
 
-        // 前端“刷新状态”只需要更新状态，不做弹幕重解析/文件处理
-        if (!doPostPublishProcessing) {
+        // 前端“刷新状态”只需要更新状态，但如果发现分P缺失CID，我们还是得同步一下CID，否则弹幕发不出去
+        List<RecordHistoryPart> dbParts = partRepository.findByHistoryId(next.getId());
+        boolean hasMissingCid = dbParts.stream().anyMatch(p -> p.getCid() == null || p.getCid() == 0);
+        if (!doPostPublishProcessing && !hasMissingCid) {
             return;
         }
 
@@ -247,131 +249,140 @@ public class videoSyncJob {
         for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
             RecordHistoryPart part = partRepository.findByHistoryIdAndTitle(next.getId(), page.getPart());
             if (part != null) {
+                // 如果是手动刷新状态，仅针对缺失 CID 的分P进行解析
+                boolean needReparse = part.getCid() == null || part.getCid() == 0;
+
                 part.setCid(page.getCid());
                 part.setPage(page.getPage());
                 part.setDuration(page.getDuration());
                 part = partRepository.save(part);
-                //解析弹幕入库
-                List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
-                msgRepository.deleteAll(liveMsgs);
-                liveMsgService.processing(part);
-                log.info("[BLR] {}", LogKvs.event("VideoSync.PartSynced")
-                        .add("roomId", room.getRoomId())
-                        .add("uname", room.getUname())
-                        .add("historyId", next.getId())
-                        .addIfNotBlank("bvid", next.getBvId())
-                        .add("partId", part.getId())
-                        .add("page", part.getPage())
-                        .add("cid", part.getCid())
-                        .addIfNotBlank("partTitle", part.getTitle())
-                        .add("durationSec", part.getDuration()));
+
+                if (doPostPublishProcessing || needReparse) {
+                    //解析弹幕入库
+                    List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
+                    msgRepository.deleteAll(liveMsgs);
+                    liveMsgService.processing(part);
+                    log.info("[BLR] {}", LogKvs.event("VideoSync.PartSynced")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", next.getId())
+                            .addIfNotBlank("bvid", next.getBvId())
+                            .add("partId", part.getId())
+                            .add("page", part.getPage())
+                            .add("cid", part.getCid())
+                            .addIfNotBlank("partTitle", part.getTitle())
+                            .add("durationSec", part.getDuration()));
+                }
             }
         }
-        for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
-            RecordHistoryPart part = partRepository.findByHistoryIdAndTitle(next.getId(), page.getPart());
-            if (part != null) {
-                //如果配置成发布完成后删除则删除文件
-                String filePath = part.getFilePath();
-                if (recordRoom != null && recordRoom.getDeleteType() == 2) {
-                    File file = new File(filePath);
-                    boolean delete = file.delete();
-                    if (delete) {
-                        log.info("[BLR] {}", LogKvs.event("VideoSync.File.DeleteSuccess")
-                                .add("roomId", room.getRoomId())
-                                .add("uname", room.getUname())
-                                .add("historyId", next.getId())
-                                .add("partId", part.getId())
-                                .add("path", filePath));
-                    } else {
-                        log.error("[BLR] {}", LogKvs.event("VideoSync.File.DeleteFailed")
-                                .add("roomId", room.getRoomId())
-                                .add("uname", room.getUname())
-                                .add("historyId", next.getId())
-                                .add("partId", part.getId())
-                                .add("path", filePath));
-                    }
-                } else if (recordRoom != null && StringUtils.isNotBlank(recordRoom.getMoveDir()) && recordRoom.getDeleteType() == 5) {
-
-                    String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                    String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                    String toDirPath = recordRoom.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
-                    File toDir = new File(toDirPath);
-                    if (!toDir.exists()) {
-                        toDir.mkdirs();
-                    }
-                    File startDir = new File(startDirPath);
-                    File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                    if (files != null) {
-                        for (File file : files) {
-                            if (!filePath.startsWith(workPath)) {
-                                part.setFileDelete(true);
-                                part = partRepository.save(part);
-                                continue;
-                            }
-                            try {
-                                Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                        StandardCopyOption.REPLACE_EXISTING);
-                                log.info("[BLR] {}", LogKvs.event("VideoSync.File.MoveSuccess")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", next.getId())
-                                        .add("partId", part.getId())
-                                        .add("from", file.getPath())
-                                        .add("to", toDirPath + file.getName()));
-                            } catch (Exception e) {
-                                log.error("[BLR] {}", LogKvs.event("VideoSync.File.MoveFailed")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", next.getId())
-                                        .add("partId", part.getId())
-                                        .add("from", file.getPath())
-                                        .add("to", toDirPath + file.getName())
-                                        .addIfNotBlank("err", e.getMessage())
-                                        .add("ex", e.getClass().getSimpleName()), e);
+        // 只有在自动同步（发布后处理）流程中才考虑删除文件
+        if (doPostPublishProcessing) {
+            for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
+                RecordHistoryPart part = partRepository.findByHistoryIdAndTitle(next.getId(), page.getPart());
+                if (part != null) {
+                    //如果配置成发布完成后删除则删除文件
+                    String filePath = part.getFilePath();
+                    if (recordRoom != null && recordRoom.getDeleteType() == 2) {
+                        File file = new File(filePath);
+                        boolean delete = file.delete();
+                        if (delete) {
+                            log.info("[BLR] {}", LogKvs.event("VideoSync.File.DeleteSuccess")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("historyId", next.getId())
+                                    .addIfNotBlank("bvid", next.getBvId())
+                                    .add("partId", part.getId())
+                                    .addIfNotBlank("filePath", filePath));
+                        } else {
+                            log.warn("[BLR] {}", LogKvs.event("VideoSync.File.DeleteFailed")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("historyId", next.getId())
+                                    .addIfNotBlank("bvid", next.getBvId())
+                                    .add("partId", part.getId())
+                                    .addIfNotBlank("filePath", filePath));
+                        }
+                    } else if (recordRoom != null && StringUtils.isNotBlank(recordRoom.getMoveDir()) && recordRoom.getDeleteType() == 5) {
+                        String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
+                        String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
+                        String toDirPath = recordRoom.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
+                        File toDir = new File(toDirPath);
+                        if (!toDir.exists()) {
+                            toDir.mkdirs();
+                        }
+                        File startDir = new File(startDirPath);
+                        File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
+                        if (files != null) {
+                            for (File file : files) {
+                                if (!filePath.startsWith(workPath)) {
+                                    part.setFileDelete(true);
+                                    part = partRepository.save(part);
+                                    continue;
+                                }
+                                try {
+                                    Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
+                                            StandardCopyOption.REPLACE_EXISTING);
+                                    log.info("[BLR] {}", LogKvs.event("VideoSync.File.MoveSuccess")
+                                            .add("roomId", room.getRoomId())
+                                            .add("uname", room.getUname())
+                                            .add("historyId", next.getId())
+                                            .add("partId", part.getId())
+                                            .add("from", file.getPath())
+                                            .add("to", toDirPath + file.getName()));
+                                } catch (Exception e) {
+                                    log.error("[BLR] {}", LogKvs.event("VideoSync.File.MoveFailed")
+                                            .add("roomId", room.getRoomId())
+                                            .add("uname", room.getUname())
+                                            .add("historyId", next.getId())
+                                            .add("partId", part.getId())
+                                            .add("from", file.getPath())
+                                            .add("to", toDirPath + file.getName())
+                                            .addIfNotBlank("err", e.getMessage())
+                                            .add("ex", e.getClass().getSimpleName()), e);
+                                }
                             }
                         }
-                    }
 
-                    part.setFilePath(toDirPath + filePath.substring(filePath.lastIndexOf("/") + 1));
-                    part.setFileDelete(true);
-                    part = partRepository.save(part);
-                } else if (recordRoom != null && StringUtils.isNotBlank(recordRoom.getMoveDir()) && recordRoom.getDeleteType() == 11) {
-
-                    String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                    String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                    String toDirPath = recordRoom.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
-                    File toDir = new File(toDirPath);
-                    if (!toDir.exists()) {
-                        toDir.mkdirs();
-                    }
-                    File startDir = new File(startDirPath);
-                    File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                    if (files != null) {
-                        for (File file : files) {
-                            try {
-                                Files.copy(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                        StandardCopyOption.REPLACE_EXISTING);
-                                log.info("[BLR] {}", LogKvs.event("VideoSync.File.CopySuccess")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", next.getId())
-                                        .add("partId", part.getId())
-                                        .add("from", file.getPath())
-                                        .add("to", toDirPath + file.getName()));
-                            } catch (Exception e) {
-                                log.error("[BLR] {}", LogKvs.event("VideoSync.File.CopyFailed")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", next.getId())
-                                        .add("partId", part.getId())
-                                        .add("from", file.getPath())
-                                        .add("to", toDirPath + file.getName())
-                                        .addIfNotBlank("err", e.getMessage())
-                                        .add("ex", e.getClass().getSimpleName()), e);
+                        part.setFilePath(toDirPath + filePath.substring(filePath.lastIndexOf("/") + 1));
+                        part.setFileDelete(true);
+                        part = partRepository.save(part);
+                    } else if (recordRoom != null && StringUtils.isNotBlank(recordRoom.getMoveDir()) && recordRoom.getDeleteType() == 11) {
+                        String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
+                        String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
+                        String toDirPath = recordRoom.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
+                        File toDir = new File(toDirPath);
+                        if (!toDir.exists()) {
+                            toDir.mkdirs();
+                        }
+                        File startDir = new File(startDirPath);
+                        File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
+                        if (files != null) {
+                            for (File file : files) {
+                                try {
+                                    Files.copy(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
+                                            StandardCopyOption.REPLACE_EXISTING);
+                                    log.info("[BLR] {}", LogKvs.event("VideoSync.File.CopySuccess")
+                                            .add("roomId", room.getRoomId())
+                                            .add("uname", room.getUname())
+                                            .add("historyId", next.getId())
+                                            .add("partId", part.getId())
+                                            .add("from", file.getPath())
+                                            .add("to", toDirPath + file.getName()));
+                                } catch (Exception e) {
+                                    log.error("[BLR] {}", LogKvs.event("VideoSync.File.CopyFailed")
+                                            .add("roomId", room.getRoomId())
+                                            .add("uname", room.getUname())
+                                            .add("historyId", next.getId())
+                                            .add("partId", part.getId())
+                                            .add("from", file.getPath())
+                                            .add("to", toDirPath + file.getName())
+                                            .addIfNotBlank("err", e.getMessage())
+                                            .add("ex", e.getClass().getSimpleName()), e);
+                                }
                             }
                         }
+                        part = partRepository.save(part);
                     }
-                    part = partRepository.save(part);
                 }
             }
         }

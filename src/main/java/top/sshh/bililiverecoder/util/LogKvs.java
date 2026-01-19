@@ -295,11 +295,14 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsgSendSync.Visibility.SwitchPrivate.Error", "私有稿件评论流程：切回仅自己可见异常");
         EVENT_ZH.put("LiveMsgSendSync.SleepInterrupted", "弹幕/评论发送：等待被中断");
         EVENT_ZH.put("LiveMsgSendSync.Lock.Failed", "弹幕发送：获取锁失败");
+        EVENT_ZH.put("LiveMsgSendSync.Part.SkipMissingCid", "分P缺失CID，跳过弹幕发送");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.Start", "高级弹幕发送开始");
+        EVENT_ZH.put("LiveMsgSendSync.HighLevel.SkipByManual", "手动跳过高级弹幕发送");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.Send.Failed", "高级弹幕发送失败");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.RateLimit.Pause", "高级弹幕发送频控，暂停一段时间");
         EVENT_ZH.put("LiveMsgSendSync.Normal.EmptyExit", "普通弹幕待发送为0，退出任务");
         EVENT_ZH.put("LiveMsgSendSync.Normal.Start", "普通弹幕发送开始");
+        EVENT_ZH.put("LiveMsgSendSync.Normal.SkipByManual", "手动跳过普通弹幕发送");
         EVENT_ZH.put("LiveMsgSendSync.Normal.TimeLimitStop", "普通弹幕发送超时(超过上限)，停止本次任务");
         EVENT_ZH.put("LiveMsgSendSync.Normal.QueuePollInterrupted", "普通弹幕发送：队列取消息被中断");
         EVENT_ZH.put("LiveMsgSendSync.User.InvalidState", "弹幕发送：用户未登录或未启用");
