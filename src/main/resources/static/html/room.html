@@ -1023,6 +1023,7 @@
     new Vue({
         el: '#roomTable',
         data: {
+            pollingTimer: null,
             manualPasteDialogVisible: false,
             manualPasteContent: '',
             loading: false,
@@ -3113,14 +3114,32 @@
                 });
                 this.initTable();
             },
-            initTable: function () {
+            startPolling: function () {
+                var self = this;
+                this.stopPolling();
+                this.pollingTimer = setInterval(function () {
+                    // 页面不可见时暂停轮询
+                    if (document.hidden) return;
+                    self.initTable(true);
+                }, 30000); // 30秒一次
+            },
+            stopPolling: function () {
+                if (this.pollingTimer) {
+                    clearInterval(this.pollingTimer);
+                    this.pollingTimer = null;
+                }
+            },
+            initTable: function (silent) {
                 let _this = this;
-                _this.loading = true;
+                if (!silent) _this.loading = true;
                 $.ajax({
                     url: '/room',
                     type: 'post',
                     dataType: 'json',
                     success: function (data) {
+                        if (parent && parent.answer && parent.answer.setConnectionStatus) {
+                            parent.answer.setConnectionStatus(false);
+                        }
                         data.forEach(room => {
                             if (room.coverUrl === 'live') {
                                 room.coverType = 'live';
@@ -3131,16 +3150,22 @@
                             }
                         })
                         _this.tableData = data;
-                        _this.loading = false;
+                        if (!silent) _this.loading = false;
                     },
                     error: function () {
-                        _this.loading = false;
+                        if (parent && parent.answer && parent.answer.setConnectionStatus) {
+                            parent.answer.setConnectionStatus(true);
+                        }
+                        if (!silent) _this.loading = false;
                     }
                 });
             }
         },
         created: function created() {
             let _this = this;
+            if (parent && parent.answer && parent.answer.setPageReady) {
+                parent.answer.setPageReady();
+            }
             $.ajax({
                 url: '/biliUser/list',
                 type: 'get',
@@ -3158,6 +3183,7 @@
                 }
             });
             this.initTable();
+            this.startPolling();
             this.handleResize();
             window.addEventListener('resize', this.handleResize);
             var cached = localStorage.getItem('room-view-mode');
@@ -3171,6 +3197,7 @@
             }
         },
         beforeDestroy: function () {
+            this.stopPolling();
             window.removeEventListener('resize', this.handleResize);
         }
     });

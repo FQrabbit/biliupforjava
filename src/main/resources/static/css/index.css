@@ -183,6 +183,73 @@ html, body {
     background-clip: text;
 }
 
+.brand-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.logo-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.mobile-only-alert {
+    display: none;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--bg-primary);
+    border-radius: 50%;
+    padding: 2px;
+    font-size: 12px;
+    box-shadow: var(--shadow-sm);
+    z-index: 2;
+}
+
+.mobile-new-badge {
+    display: none;
+    position: absolute;
+    bottom: -4px;
+    right: -10px;
+    background-color: var(--danger-color);
+    color: white;
+    font-size: 9px;
+    padding: 1px 3px;
+    border-radius: 3px;
+    font-weight: bold;
+    text-decoration: none;
+    transform: scale(0.8);
+    box-shadow: 0 0 5px rgba(255, 77, 79, 0.5);
+    z-index: 2;
+    animation: pulse-badge 2s infinite;
+}
+
+.connection-alert {
+    color: var(--danger-color);
+    font-size: 14px;
+    cursor: help;
+    animation: alert-blink 2s infinite;
+}
+
+@keyframes alert-blink {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.9); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* 移动端优化：当品牌标题隐藏时，在图标上显示警告 */
+@media screen and (max-width: 768px) {
+    .brand-info {
+        display: none !important;
+    }
+    .mobile-only-alert,
+    .mobile-new-badge {
+        display: block;
+    }
+}
+
 .brand-version {
     font-size: 11px;
     color: var(--text-disabled);
@@ -265,6 +332,102 @@ html, body {
     font-weight: 600;
 }
 
+/* ========== Global Overlay & Loading Styles ========== */
+.global-overlay {
+    position: fixed;
+    top: 64px; /* header height */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 1); /* 完全不透明，防止浏览器错误页穿透 */
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity var(--transition-base);
+}
+
+[data-theme="dark"] .global-overlay {
+    background: rgba(24, 24, 27, 1); /* 适配暗色主题 */
+}
+
+.overlay-content {
+    text-align: center;
+    padding: 40px;
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 400px;
+    width: 90%;
+}
+
+.modern-spinner {
+    width: 50px;
+    height: 50px;
+    border: 3px solid var(--border-light);
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+    color: var(--text-secondary);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.error-icon {
+    font-size: 60px;
+    color: var(--danger-color);
+    margin-bottom: 20px;
+}
+
+.error-title {
+    font-size: 20px;
+    color: var(--text-primary);
+    margin: 0 0 10px;
+}
+
+.error-desc {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+
+.retry-box {
+    background: var(--bg-secondary);
+    padding: 15px;
+    border-radius: var(--radius-md);
+    margin-bottom: 24px;
+}
+
+.retry-timer {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary-color);
+    display: block;
+    margin-bottom: 4px;
+}
+
+.retry-text {
+    font-size: 12px;
+    color: var(--text-disabled);
+    margin: 0;
+}
+
+.error-actions .el-button {
+    width: 100%;
+}
+
+/* 导航栏活动标记修正 */
 .nav-item.is-active::after {
     content: '';
     position: absolute;
@@ -555,6 +718,7 @@ html, body {
     background: var(--bg-primary);
     margin: 16px;
     margin-top: 0;
+    transition: opacity 0.3s ease; /* 平滑显示 */
 }
 
 /* ========== Theme Toggle ========== */

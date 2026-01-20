@@ -779,6 +779,7 @@
             quickFilter: null,
             historyUploadProgress: null,
             progressTimer: null,
+            pollingTimer: null,
             showMoreActions: false,
             progressSpeedTracking: {},
             reloadDialogVisible: false,
@@ -866,6 +867,7 @@
             document.addEventListener('visibilitychange', this.handleVisibilityChange);
         },
         beforeDestroy() {
+            this.stopPolling();
             this.$el.removeEventListener('touchstart', this.handleTouchStart);
             this.$el.removeEventListener('touchend', this.handleTouchEnd);
             window.removeEventListener('resize', this.resizeHandler);
@@ -886,11 +888,16 @@
             },
             handleVisibilityChange: function() {
                 if (document.hidden) {
-                    // 页面不可见时停止轮询
+                    // 页面不可见时停止进度轮询
                     this.stopProgressPolling();
-                } else if (this.detailDialogVisible && this.currentDetail && this.currentDetail.id) {
-                    // 页面可见且详情弹窗打开时恢复轮询
-                    this.startProgressPolling(this.currentDetail.id);
+                } else {
+                    // 页面恢复可见时立即刷新一次数据
+                    this.initTable(true);
+                    
+                    if (this.detailDialogVisible && this.currentDetail && this.currentDetail.id) {
+                        // 页面可见且详情弹窗打开时恢复进度轮询
+                        this.startProgressPolling(this.currentDetail.id);
+                    }
                 }
             },
             handleViewTypeChange: function() {
@@ -1224,6 +1231,22 @@
                 this.historyUploadProgress = null;
                 this.currentDetail = {};
                 this.showMoreActions = false;
+            },
+            startPolling: function () {
+                var self = this;
+                this.stopPolling();
+                this.pollingTimer = setInterval(function () {
+                    // 页面不可见时暂停轮询
+                    if (document.hidden) return;
+                    // 仅在"工作中"页签或列表页刷新数据
+                    self.initTable(true);
+                }, 30000); // 30秒一次
+            },
+            stopPolling: function () {
+                if (this.pollingTimer) {
+                    clearInterval(this.pollingTimer);
+                    this.pollingTimer = null;
+                }
             },
             startProgressPolling: function(historyId) {
                 const _this = this;
@@ -1575,6 +1598,9 @@
                     data: JSON.stringify(_this.form),
                     dataType: 'json',
                     success: function (data) {
+                        if (parent && parent.answer && parent.answer.setConnectionStatus) {
+                            parent.answer.setConnectionStatus(false);
+                        }
                         _this.tableData = data.data;
                         _this.total = data.total;
                         if (!silent) _this.loading = false;
@@ -1596,6 +1622,9 @@
                         if (data.archivedCount !== undefined) _this.archivedCount = data.archivedCount;
                     },
                     error: function () {
+                        if (parent && parent.answer && parent.answer.setConnectionStatus) {
+                            parent.answer.setConnectionStatus(true);
+                        }
                         if (!silent) _this.loading = false;
                     }
                 });
@@ -2014,6 +2043,9 @@
             },
         },
         created: function created() {
+            if (parent && parent.answer && parent.answer.setPageReady) {
+                parent.answer.setPageReady();
+            }
             if (!this.form.pageSize) {
                 let availableHeight = window.innerHeight - 350;
                 let estimatedRowHeight = 50;
@@ -2032,6 +2064,7 @@
                 this.$set(this.form, 'current', 1);
             }
             this.initTable();
+            this.startPolling();
             this.loadRoomList();
             this.handleResize();
             this.resizeHandler = this.debounce(this.handleResize, 100);

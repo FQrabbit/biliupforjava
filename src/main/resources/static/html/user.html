@@ -363,6 +363,9 @@
             },
         },
         created: function created() {
+            if (parent && parent.answer && parent.answer.setPageReady) {
+                parent.answer.setPageReady();
+            }
             this.fetchUserList();
             this.handleResize();
             window.addEventListener('resize', this.handleResize);

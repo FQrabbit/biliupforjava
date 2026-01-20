@@ -714,6 +714,94 @@ html, body {
     color: #2d63d6;
 }
 
+[data-theme="dark"] .alert-dialog .el-dialog {
+    border-color: rgba(123, 143, 255, 0.2);
+    border-top-color: #f44747;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+    background: #1f1f24;
+}
+
+[data-theme="dark"] .alert-dialog .el-dialog__header {
+    background: #1f1f24;
+    border-bottom-color: rgba(123, 143, 255, 0.18);
+}
+
+[data-theme="dark"] .alert-dialog .el-dialog__title {
+    color: #e6e6e6;
+}
+
+[data-theme="dark"] .alert-dialog .el-dialog__headerbtn .el-dialog__close {
+    color: #a0a0a0;
+}
+
+[data-theme="dark"] .alert-dialog .el-dialog__body {
+    background: #1f1f24;
+}
+
+[data-theme="dark"] .alert-dialog .el-dialog__footer {
+    background: #18181b;
+    border-top-color: rgba(123, 143, 255, 0.18);
+}
+
+[data-theme="dark"] .alert-banner {
+    border-color: rgba(244, 71, 71, 0.25);
+    background: linear-gradient(90deg, rgba(38, 24, 24, 0.95), rgba(33, 20, 20, 0.9));
+}
+
+[data-theme="dark"] .alert-table {
+    border-color: rgba(123, 143, 255, 0.2);
+}
+
+[data-theme="dark"] .alert-table .el-table__header th {
+    background: #23232a;
+    color: #d0d4e6;
+}
+
+[data-theme="dark"] .alert-brief {
+    color: #b5b9c9;
+}
+
+[data-theme="dark"] .alert-detail-button.el-button--text {
+    color: #7b8fff;
+}
+
+[data-theme="dark"] .alert-detail-button.el-button--text:hover {
+    color: #9ba8ff;
+}
+
+[data-theme="dark"] .detail-dialog .el-dialog {
+    border-color: rgba(123, 143, 255, 0.2);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    background: #1f1f24;
+}
+
+[data-theme="dark"] .detail-dialog .el-dialog__header {
+    background: #18181b;
+    border-bottom-color: rgba(123, 143, 255, 0.18);
+}
+
+[data-theme="dark"] .detail-dialog .el-dialog__title {
+    color: #e6e6e6;
+}
+
+[data-theme="dark"] .detail-dialog .el-dialog__body {
+    background: #1f1f24;
+}
+
+[data-theme="dark"] .detail-dialog .el-dialog__footer {
+    background: #18181b;
+    border-top-color: rgba(123, 143, 255, 0.18);
+}
+
+[data-theme="dark"] .detail-content {
+    background: #141417;
+    border-color: rgba(123, 143, 255, 0.15);
+}
+
+[data-theme="dark"] .detail-pre {
+    color: #d0d4e6;
+}
+
 .detail-dialog .el-dialog {
     border-radius: 12px;
     border: 1px solid rgba(102, 126, 234, 0.14);

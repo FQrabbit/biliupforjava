@@ -20,9 +20,20 @@
     <!-- 顶部导航栏 -->
     <header class="app-header">
         <div class="header-brand">
-            <img src="img/icon.svg" alt="Logo" class="brand-logo">
+            <div class="logo-wrapper">
+                 <img src="img/icon.svg" alt="Logo" class="brand-logo">
+                 <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
+                     <i class="el-icon-warning connection-alert mobile-only-alert"></i>
+                 </el-tooltip>
+                 <a v-if="hasNewVersion" :href="releaseUrl" target="_blank" class="mobile-new-badge" title="发现新版本">NEW</a>
+             </div>
             <div class="brand-info">
-                <h1 class="brand-title">录播姬上传插件</h1>
+                <div class="brand-title-wrapper">
+                    <h1 class="brand-title">录播姬上传插件</h1>
+                    <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
+                        <i class="el-icon-warning connection-alert"></i>
+                    </el-tooltip>
+                </div>
                 <a v-if="hasNewVersion" 
                    :href="releaseUrl" 
                    target="_blank" 
@@ -37,31 +48,31 @@
         <nav class="header-nav">
             <div class="nav-item" 
                  :class="{ 'is-active': activeName === 'home' }" 
-                 @click="activeName = 'home'">
+                 @click="switchTab('home')">
                 <i class="el-icon-document"></i>
                 <span>更新日志</span>
             </div>
             <div class="nav-item" 
                  :class="{ 'is-active': activeName === 'room' }" 
-                 @click="activeName = 'room'; handleClick()">
+                 @click="switchTab('room')">
                 <i class="el-icon-video-camera"></i>
                 <span>直播间</span>
             </div>
             <div class="nav-item" 
                  :class="{ 'is-active': activeName === 'user' }" 
-                 @click="activeName = 'user'; handleClick()">
+                 @click="switchTab('user')">
                 <i class="el-icon-user"></i>
                 <span>用户</span>
             </div>
             <div class="nav-item" 
                  :class="{ 'is-active': activeName === 'history' }" 
-                 @click="activeName = 'history'; handleClick()">
+                 @click="switchTab('history')">
                 <i class="el-icon-time"></i>
                 <span>录制历史</span>
             </div>
             <div class="nav-item" 
                  :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts }" 
-                 @click="activeName = 'log'; handleClick()">
+                 @click="switchTab('log')">
                 <i class="el-icon-monitor"></i>
                 <span>日志</span>
                 <span v-if="hasAlerts" class="alert-badge"></span>
@@ -177,13 +188,42 @@
             </div>
             
             <!-- iframe 子页面 -->
-            <iframe v-else :src="tabSrc" class="tab-frame" frameborder="0" :key="activeName"></iframe>
+            <iframe v-else :src="tabSrc" v-show="(!pageLoading && !connectionError && connectionReady) || keepIframeOnDisconnect()" class="tab-frame" frameborder="0" :key="activeName" @load="onIframeLoad"></iframe>
+        </transition>
+
+        <!-- 全局加载与连接失败遮罩层 -->
+        <transition name="fade">
+            <div v-if="connectionError || (pageLoading && showLoadingAfterDelay)" class="global-overlay">
+                <div class="overlay-content">
+                    <!-- 加载中动画 -->
+                    <div v-if="!connectionError" class="loading-wrapper">
+                        <div class="modern-spinner"></div>
+                        <p class="loading-text">正在连接到进程...</p>
+                    </div>
+
+                    <!-- 连接失败状态 -->
+                    <div v-else class="error-wrapper">
+                        <i class="el-icon-warning-outline error-icon"></i>
+                        <h3 class="error-title">无法连接到进程</h3>
+                        <p class="error-desc">服务器响应超时或进程已断开，请检查后台运行状态。</p>
+                        
+                        <div class="retry-box">
+                            <span class="retry-timer">{{ retryCountdown }}s</span>
+                            <p class="retry-text">后将自动尝试重连</p>
+                        </div>
+
+                        <div class="error-actions">
+                            <el-button type="primary" size="medium" @click="manualRetry" icon="el-icon-refresh">立即重试</el-button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </transition>
     </main>
 </div>
 </body>
 <script>
-    let answer = new Vue({
+    var answer = new Vue({
         el: '#app',
         data: {
             activeName: 'home',
@@ -194,6 +234,17 @@
             configLoading: false,
             configExpanded: false,
             hasConfigChanges: false,
+            connectionLost: false,
+            // 增强的连接状态追踪
+            pageLoading: false,
+            showLoadingAfterDelay: false,
+            connectionError: false,
+            connectionReady: false,
+            isTabSwitching: false,
+            retryCountdown: 10,
+            loadingTimer: null,
+            retryTimer: null,
+            connectionCheckTimer: null,
             currentVersion: 'v1.4.1-beta6.2',
             hasNewVersion: false,
             releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
@@ -267,18 +318,25 @@
                 });
             },
             tabSrc: function () {
+                var baseUrl = '';
                 switch (this.activeName) {
                     case 'room':
-                        return 'html/room.html';
+                        baseUrl = 'html/room.html';
+                        break;
                     case 'user':
-                        return 'html/user.html';
+                        baseUrl = 'html/user.html';
+                        break;
                     case 'history':
-                        return 'html/history.html';
+                        baseUrl = 'html/history.html';
+                        break;
                     case 'log':
-                        return 'html/log.html';
+                        baseUrl = 'html/log.html';
+                        break;
                     default:
                         return '';
                 }
+                // 如果正在加载中，给 URL 加上时间戳防止缓存并强制刷新
+                return this.pageLoading ? baseUrl + '?t=' + Date.now() : baseUrl;
             }
         },
         mounted: function() {
@@ -496,6 +554,157 @@
                     })
                     .catch(e => console.error(e));
             },
+            onIframeLoad: function() {
+                var self = this;
+                setTimeout(function() {
+                    if (self.connectionReady) {
+                        self.pageLoading = false;
+                        self.showLoadingAfterDelay = false;
+                        return;
+                    }
+                    self.startConnectionCheck();
+                }, 500);
+            },
+            setConnectionStatus: function(status) {
+                var self = this;
+                this.connectionLost = status;
+                
+                // 同步修改浏览器标签页标题
+                if (status) {
+                    if (this.keepViewOnDisconnect()) {
+                        this.connectionError = false;
+                        this.pageLoading = false;
+                        this.showLoadingAfterDelay = false;
+                        this.stopRetryCountdown();
+                        this.stopConnectionCheck();
+                        if (this.loadingTimer) {
+                            clearTimeout(this.loadingTimer);
+                            this.loadingTimer = null;
+                        }
+                        if (!document.title.startsWith('⚠️')) {
+                            document.title = '⚠️ ' + document.title;
+                        }
+                        return;
+                    }
+                    this.connectionReady = false;
+                    this.stopConnectionCheck();
+                    if (!document.title.startsWith('⚠️')) {
+                        document.title = '⚠️ ' + document.title;
+                    }
+                    
+                    if (!this.loadingTimer && !this.connectionError) {
+                        var delay = this.getErrorDelay();
+                        this.loadingTimer = setTimeout(function() {
+                            if (self.connectionLost) {
+                                self.connectionError = true;
+                                self.startRetryCountdown();
+                            }
+                        }, delay);
+                    }
+                } else {
+                    this.connectionReady = true;
+                    this.isTabSwitching = false;
+                    this.stopConnectionCheck();
+                    document.title = document.title.replace('⚠️ ', '');
+                    this.connectionError = false;
+                    this.pageLoading = false;
+                    this.showLoadingAfterDelay = false;
+                    this.stopRetryCountdown();
+                    if (this.loadingTimer) {
+                        clearTimeout(this.loadingTimer);
+                        this.loadingTimer = null;
+                    }
+                }
+            },
+            setPageReady: function() {
+                this.connectionReady = true;
+                this.connectionLost = false;
+                this.connectionError = false;
+                this.isTabSwitching = false;
+                this.pageLoading = false;
+                this.showLoadingAfterDelay = false;
+                this.stopRetryCountdown();
+                this.stopConnectionCheck();
+            },
+            keepViewOnDisconnect: function() {
+                return this.activeName === 'room' || this.activeName === 'history';
+            },
+            keepIframeOnDisconnect: function() {
+                return this.connectionLost && this.keepViewOnDisconnect();
+            },
+            getErrorDelay: function() {
+                if (this.activeName === 'room' || this.activeName === 'history') {
+                    return 10000;
+                }
+                if (this.isTabSwitching) {
+                    return 2000;
+                }
+                return 10000;
+            },
+            startConnectionCheck: function() {
+                var self = this;
+                this.stopConnectionCheck();
+                var delay = this.getErrorDelay();
+                this.connectionCheckTimer = setTimeout(function() {
+                    if (!self.connectionReady) {
+                        self.connectionLost = true;
+                        self.connectionError = true;
+                        self.startRetryCountdown();
+                    }
+                    self.pageLoading = false;
+                }, delay);
+            },
+            stopConnectionCheck: function() {
+                if (this.connectionCheckTimer) {
+                    clearTimeout(this.connectionCheckTimer);
+                    this.connectionCheckTimer = null;
+                }
+            },
+            startRetryCountdown: function() {
+                var self = this;
+                this.stopRetryCountdown();
+                this.retryCountdown = 10;
+                this.retryTimer = setInterval(function() {
+                    // 页面不可见时暂停倒计时
+                    if (document.hidden) return;
+                    
+                    self.retryCountdown--;
+                    if (self.retryCountdown <= 0) {
+                        self.stopRetryCountdown(); // 倒计时到0时立即停止定时器
+                        self.manualRetry();
+                    }
+                }, 1000);
+            },
+            stopRetryCountdown: function() {
+                if (this.retryTimer) {
+                    clearInterval(this.retryTimer);
+                    this.retryTimer = null;
+                }
+            },
+            manualRetry: function() {
+                this.stopRetryCountdown(); 
+                
+                if (this.activeName === 'home') {
+                    window.location.reload();
+                    return;
+                }
+
+                var self = this;
+                this.connectionError = false;
+                this.connectionLost = false;
+                this.connectionReady = false;
+                this.pageLoading = true;
+                this.showLoadingAfterDelay = true; // 立即显示加载动画
+                this.startConnectionCheck();
+                
+                this.$nextTick(function() {
+                    var iframe = document.querySelector('.tab-frame');
+                    if (iframe) {
+                        var currentSrc = iframe.src.split('?')[0];
+                        iframe.src = currentSrc + '?t=' + Date.now();
+                    }
+                });
+            },
             toggleTheme: function() {
                 this.theme = this.theme === 'dark' ? 'light' : 'dark';
                 this.applyTheme(this.theme);
@@ -515,6 +724,21 @@
                     // 用户取消跳转
                 });
             },
+            switchTab: function(tab) {
+                // 如果当前已经处于连接断开状态，拦截切换请求，直接显示错误遮罩
+                if (this.connectionLost || this.connectionError) {
+                    this.connectionError = true;
+                    this.startRetryCountdown();
+                    return;
+                }
+                
+                // 正常切换
+                this.activeName = tab;
+                if (tab !== 'home') {
+                    this.isTabSwitching = true;
+                    this.handleClick();
+                }
+            },
             applyTheme: function(theme) {
                 document.documentElement.setAttribute('data-theme', theme);
                 localStorage.setItem('theme', theme);
@@ -524,7 +748,21 @@
                 }
             },
             handleClick: function () {
-                // Navigate to tab content
+                var self = this;
+                this.connectionReady = false;
+                this.connectionLost = false;
+                this.connectionError = false;
+                this.stopRetryCountdown();
+                this.startConnectionCheck();
+                this.pageLoading = true;
+                this.showLoadingAfterDelay = false;
+                // 2秒后才显示加载动画，避免闪烁
+                if (this.loadingTimer) clearTimeout(this.loadingTimer);
+                this.loadingTimer = setTimeout(function() {
+                    if (self.pageLoading) {
+                        self.showLoadingAfterDelay = true;
+                    }
+                }, 2000);
             }
         }
     });
