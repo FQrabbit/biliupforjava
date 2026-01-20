@@ -559,9 +559,8 @@ public class HighEnergyCutPublishService {
                                     .addIfNotBlank("err", e.getMessage())
                                     .add("ex", e.getClass().getSimpleName()), e);
                             try {
-                                //                                                log.info("上传失败等待十秒==>{}", uploadFile.getName());
-                                Thread.sleep(10000L);
-                            } catch (InterruptedException ex) {
+                        Thread.sleep(10000L);
+                    } catch (InterruptedException ex) {
                                 log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.RetryWaitInterrupted")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())

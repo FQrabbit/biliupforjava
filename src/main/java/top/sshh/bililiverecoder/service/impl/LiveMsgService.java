@@ -142,7 +142,11 @@ public class LiveMsgService {
                 try {
                     saxReader.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", false);
                 } catch (Exception e) {
-                    log.warn("Failed to disable secure-processing feature", e);
+                    log.warn("[BLR] {}", LogKvs.event("LiveMsg.Parse.DisableSecureFailed")
+                            .add("filePath", xmlFilePath)
+                            .add("partId", part.getId())
+                            .add("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
                 }
 
                 List<LiveMsg> liveMsgs = new ArrayList<>();

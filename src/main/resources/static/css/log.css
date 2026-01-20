@@ -618,6 +618,151 @@ html, body {
     color: #da70d6;
 }
 
+.alert-dialog .el-dialog {
+    border-radius: 14px;
+    border: 1px solid rgba(102, 126, 234, 0.16);
+    border-top: 3px solid #f44747;
+    box-shadow: 0 18px 50px rgba(38, 70, 134, 0.18);
+    background: #ffffff;
+}
+
+.alert-dialog .el-dialog__header {
+    padding: 14px 18px;
+    background: #ffffff;
+    border-bottom: 1px solid rgba(102, 126, 234, 0.12);
+}
+
+.alert-dialog .el-dialog__title {
+    color: #303133;
+    font-weight: 600;
+}
+
+.alert-dialog .el-dialog__headerbtn {
+    top: 12px;
+    right: 14px;
+}
+
+.alert-dialog .el-dialog__headerbtn .el-dialog__close {
+    color: #909399;
+}
+
+.alert-dialog .el-dialog__body {
+    padding: 14px 18px 6px;
+    background: #ffffff;
+}
+
+.alert-dialog .el-dialog__footer {
+    padding: 10px 18px 16px;
+    background: #f7f9ff;
+    border-top: 1px solid rgba(102, 126, 234, 0.12);
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+}
+
+.alert-banner {
+    margin-bottom: 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(244, 71, 71, 0.18);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), rgba(255, 241, 241, 0.9));
+}
+
+.alert-table {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(102, 126, 234, 0.12);
+}
+
+.alert-table .el-table__header th {
+    background: #f4f7ff;
+    color: #3a4a6b;
+    font-weight: 600;
+}
+
+.alert-table .el-table__row:hover {
+    transform: translateX(2px);
+    box-shadow: inset 3px 0 0 rgba(58, 122, 254, 0.35);
+}
+
+.alert-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.alert-brief {
+    flex: 1;
+    max-height: 36px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    word-break: break-all;
+    font-size: 12px;
+    color: #5b667a;
+    line-height: 18px;
+}
+
+.alert-detail-button.el-button--text {
+    padding: 0;
+    height: 18px;
+    line-height: 18px;
+    color: #3a7afe;
+}
+
+.alert-detail-button.el-button--text:hover {
+    color: #2d63d6;
+}
+
+.detail-dialog .el-dialog {
+    border-radius: 12px;
+    border: 1px solid rgba(102, 126, 234, 0.14);
+    box-shadow: 0 16px 40px rgba(38, 70, 134, 0.16);
+    background: #ffffff;
+}
+
+.detail-dialog .el-dialog__header {
+    padding: 14px 18px;
+    background: #f7f9ff;
+    border-bottom: 1px solid rgba(102, 126, 234, 0.12);
+}
+
+.detail-dialog .el-dialog__title {
+    color: #2f3b55;
+    font-weight: 600;
+}
+
+.detail-dialog .el-dialog__body {
+    padding: 14px 18px 6px;
+    background: #ffffff;
+}
+
+.detail-dialog .el-dialog__footer {
+    padding: 10px 18px 16px;
+    background: #f7f9ff;
+    border-top: 1px solid rgba(102, 126, 234, 0.12);
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.detail-content {
+    background: #f4f7ff;
+    padding: 16px;
+    border-radius: 8px;
+    max-height: 60vh;
+    overflow-y: auto;
+    border: 1px solid rgba(102, 126, 234, 0.12);
+}
+
+.detail-pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    color: #2f3b55;
+}
+
 /* 响应式适配 */
 @media (max-width: 768px) {
     .log-header {

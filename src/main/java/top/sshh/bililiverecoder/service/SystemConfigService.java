@@ -28,7 +28,7 @@ public class SystemConfigService {
 
     @PostConstruct
     public void init() {
-        log.info(LogKvs.event("SystemConfig.Init").add("msg", "Initializing system configurations").toString());
+        log.info("[BLR] {}", LogKvs.event("SystemConfig.Init").add("msg", "Initializing system configurations"));
         
         // 加载API速率限制
         loadOrInitConfig(KEY_API_RATE_LIMIT, "5.0", "Bilibili API 请求限速 (QPS) 0:不限速");
@@ -41,10 +41,9 @@ public class SystemConfigService {
         if (configOpt.isPresent()) {
             applyConfig(key, configOpt.get().getConfigValue());
         } else {
-            log.info(LogKvs.event("SystemConfig.CreateDefault")
+            log.info("[BLR] {}", LogKvs.event("SystemConfig.CreateDefault")
                     .add("key", key)
-                    .add("value", defaultValue)
-                    .toString());
+                    .add("value", defaultValue));
             SystemConfig config = new SystemConfig();
             config.setConfigKey(key);
             config.setConfigValue(defaultValue);
@@ -67,10 +66,9 @@ public class SystemConfigService {
         
         applyConfig(key, value);
         
-        log.info(LogKvs.event("SystemConfig.Updated")
+        log.info("[BLR] {}", LogKvs.event("SystemConfig.Updated")
                 .add("key", key)
-                .add("value", value)
-                .toString());
+                .add("value", value));
     }
 
     private void applyConfig(String key, String value) {
@@ -82,11 +80,10 @@ public class SystemConfigService {
                 rateLimiterService.setUploadSpeedLimit(doubleValue);
             }
         } catch (NumberFormatException e) {
-            log.error(LogKvs.event("SystemConfig.ApplyFailed")
+            log.error("[BLR] {}", LogKvs.event("SystemConfig.ApplyFailed")
                     .add("key", key)
                     .add("value", value)
-                    .add("error", "Invalid number format")
-                    .toString());
+                    .add("error", "Invalid number format"));
         }
     }
 

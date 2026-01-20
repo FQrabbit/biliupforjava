@@ -194,13 +194,18 @@ public class NettyUploadClient {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
 
         } catch (java.util.concurrent.TimeoutException e) {
-            log.error("Netty upload timeout", e);
+            log.error("[BLR] {}", LogKvs.event("Netty.Upload.Timeout")
+                    .add("timeoutMs", timeoutMs)
+                    .add("url", url), e);
             if (ch != null) {
                 ch.close();
             }
             throw new RuntimeException("Netty upload timeout", e);
         } catch (Exception e) {
-            log.error("Netty upload failed", e);
+            log.error("[BLR] {}", LogKvs.event("Netty.Upload.Failed")
+                    .add("url", url)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
             // 如果传输未开始（例如连接失败），需要手动关闭文件
             if (!transferStarted) {
                 try {
@@ -241,10 +246,9 @@ public class NettyUploadClient {
                 long current = lowSpeedCheckIntervalMs.get();
                 long next = Math.min(LOW_SPEED_MAX_INTERVAL_MS, current * 2);
                 lowSpeedCheckIntervalMs.set(next);
-                log.info(LogKvs.event("Netty.Upload.LowSpeed")
+                log.info("[BLR] {}", LogKvs.event("Netty.Upload.LowSpeed")
                         .add("speed", speed)
-                        .add("channelId", ch.id())
-                        .toString());
+                        .add("channelId", ch.id()));
                 ch.close();
                 future.completeExceptionally(new RuntimeException("Low upload speed: " + speed + " B/s"));
                 return;

@@ -22,10 +22,9 @@ public class RateLimiterService {
     @PostConstruct
     public void init() {
         instance = this;
-        log.info(LogKvs.event("RateLimiter.Init")
+        log.info("[BLR] {}", LogKvs.event("RateLimiter.Init")
                 .add("apiLimit", apiRateLimiter.getRate())
-                .add("uploadLimit", uploadBandwidthLimiter.getRate())
-                .toString());
+                .add("uploadLimit", uploadBandwidthLimiter.getRate()));
     }
 
     public static RateLimiterService getInstance() {
@@ -46,10 +45,9 @@ public class RateLimiterService {
         } else {
             apiRateLimiter.setRate(permitsPerSecond);
         }
-        log.info(LogKvs.event("RateLimiter.Update")
+        log.info("[BLR] {}", LogKvs.event("RateLimiter.Update")
                 .add("type", "API")
-                .add("newLimit", permitsPerSecond)
-                .toString());
+                .add("newLimit", permitsPerSecond));
     }
 
     public void setUploadSpeedLimit(double mbPerSecond) {
@@ -57,19 +55,17 @@ public class RateLimiterService {
             uploadBandwidthLimiter.setRate(Double.MAX_VALUE);
             // 同时更新 Netty 的全局限速器
             NettyUploadClient.updateWriteLimit(0);
-            log.info(LogKvs.event("RateLimiter.Update")
+            log.info("[BLR] {}", LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
-                    .add("newLimitMB", "Unlimited")
-                    .toString());
+                    .add("newLimitMB", "Unlimited"));
         } else {
             double bytesPerSecond = mbPerSecond * 1024 * 1024;
             uploadBandwidthLimiter.setRate(bytesPerSecond);
             // 同时更新 Netty 的全局限速器
             NettyUploadClient.updateWriteLimit((long) bytesPerSecond);
-            log.info(LogKvs.event("RateLimiter.Update")
+            log.info("[BLR] {}", LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
-                    .add("newLimitMB", mbPerSecond)
-                    .toString());
+                    .add("newLimitMB", mbPerSecond));
         }
     }
 }

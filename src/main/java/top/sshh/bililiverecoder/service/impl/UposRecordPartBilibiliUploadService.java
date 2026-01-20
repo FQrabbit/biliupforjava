@@ -461,7 +461,6 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("err", e.getMessage())
                                                         .add("ex", e.getClass().getSimpleName()));
                                                 try {
-                                                    //                                                log.info("上传失败等待十秒==>{}", uploadFile.getName());
                                                     Thread.sleep(10000L);
                                                 } catch (InterruptedException ex) {
                                                     log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.RetryWaitInterrupted")

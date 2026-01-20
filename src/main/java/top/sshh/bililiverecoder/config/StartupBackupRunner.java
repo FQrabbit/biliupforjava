@@ -7,6 +7,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import top.sshh.bililiverecoder.util.LogKvs;
 import javax.sql.DataSource;
 import java.io.File;
 import java.sql.Connection;
@@ -35,7 +36,7 @@ public class StartupBackupRunner implements ApplicationRunner {
         try (Connection connection = dataSource.getConnection()) {
             String url = connection.getMetaData().getURL();
             if (url != null && url.contains(":h2:")) {
-                log.info("Detected H2 database, starting backup...");
+                log.info("[BLR] {}", LogKvs.event("Database.Backup.Start").add("url", url));
                 
                 // 创建备份目录
                 File backupDir = new File(workPath, "backup");
@@ -53,13 +54,15 @@ public class StartupBackupRunner implements ApplicationRunner {
                 // H2 备份命令
                 String sql = String.format("BACKUP TO '%s'", backupPath);
                 jdbcTemplate.execute(sql);
-                log.info("Database backup created at: {}", backupPath);
+                log.info("[BLR] {}", LogKvs.event("Database.Backup.Success").add("path", backupPath));
 
                 // 清理旧备份
                 cleanupOldBackups(backupDir);
             }
         } catch (Exception e) {
-            log.error("Failed to backup database", e);
+            log.error("[BLR] {}", LogKvs.event("Database.Backup.Failed")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
         }
     }
 
@@ -71,9 +74,9 @@ public class StartupBackupRunner implements ApplicationRunner {
             int filesToDelete = files.length - 10;
             for (int i = 0; i < filesToDelete; i++) {
                 if (files[i].delete()) {
-                    log.info("Deleted old backup: {}", files[i].getName());
+                    log.info("[BLR] {}", LogKvs.event("Database.Backup.Cleanup.Success").add("fileName", files[i].getName()));
                 } else {
-                    log.warn("Failed to delete old backup: {}", files[i].getName());
+                    log.warn("[BLR] {}", LogKvs.event("Database.Backup.Cleanup.Failed").add("fileName", files[i].getName()));
                 }
             }
         }

@@ -177,6 +177,9 @@ public final class LogKvs {
         EVENT_ZH.put("Webhook.InvalidPayload", "Webhook 请求体无效(缺少关键字段)");
 
         // HTTP
+        EVENT_ZH.put("Netty.Upload.Timeout", "Netty上传：连接/传输超时");
+        EVENT_ZH.put("Netty.Upload.Failed", "Netty上传：连接/传输失败");
+        EVENT_ZH.put("Netty.Upload.LowSpeed", "Netty上传：传输速度过慢，已强制断开");
         EVENT_ZH.put("ImageProxy.InvalidHost", "图片代理：Host不合法");
         EVENT_ZH.put("ImageProxy.InvalidScheme", "图片代理：Scheme不合法");
         EVENT_ZH.put("ImageProxy.Failed", "图片代理：请求失败");
@@ -320,6 +323,7 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsg.Send.Error", "弹幕发送：发生异常");
         EVENT_ZH.put("LiveMsg.Parse.BatchSaved", "弹幕解析：批量保存成功");
         EVENT_ZH.put("LiveMsg.Parse.Progress", "弹幕解析：进度更新");
+        EVENT_ZH.put("LiveMsg.Parse.DisableSecureFailed", "弹幕解析：禁用 XML 安全检查失败(可能影响大文件解析)");
         EVENT_ZH.put("LiveMsg.Parse.Saved", "弹幕解析：保存成功");
         EVENT_ZH.put("LiveMsg.Parse.Failed", "弹幕解析：失败");
         EVENT_ZH.put("LiveMsg.Parse.CloseFailed", "弹幕解析：关闭文件流失败");
@@ -407,6 +411,13 @@ public final class LogKvs {
         // 限流器
         EVENT_ZH.put("RateLimiter.Init", "全局限流器：初始化");
         EVENT_ZH.put("RateLimiter.Update", "全局限流器：更新带宽限制");
+
+        // 数据库备份
+        EVENT_ZH.put("Database.Backup.Start", "数据库备份：开始备份 H2 数据库");
+        EVENT_ZH.put("Database.Backup.Success", "数据库备份：备份创建成功");
+        EVENT_ZH.put("Database.Backup.Failed", "数据库备份：备份失败");
+        EVENT_ZH.put("Database.Backup.Cleanup.Success", "数据库备份：清理旧备份成功");
+        EVENT_ZH.put("Database.Backup.Cleanup.Failed", "数据库备份：清理旧备份失败");
     }
 
     private LogKvs() {
