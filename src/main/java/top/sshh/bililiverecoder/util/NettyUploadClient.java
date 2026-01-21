@@ -39,6 +39,8 @@ public class NettyUploadClient {
     private static final long LOW_SPEED_CONFIRM_DELAY_MS = 10000;
     private static final long LOW_SPEED_MAX_INTERVAL_MS = 30000;
     private static final long LOW_SPEED_RECOVERY_STEP_MS = 500;
+    private static final long LOW_SPEED_WARMUP_MS = 15000;
+    private static final long LOW_SPEED_MIN_WRITTEN_BYTES = 32 * 1024;
     private static final AtomicLong lowSpeedCheckIntervalMs = new AtomicLong(LOW_SPEED_BASE_INTERVAL_MS);
 
     /**
@@ -107,6 +109,7 @@ public class NettyUploadClient {
         boolean transferStarted = false;
 
         try {
+            AtomicLong transferStartMs = new AtomicLong(0);
             final SslContext sslCtx;
             if (ssl) {
                 sslCtx = SslContextBuilder.forClient()
@@ -136,7 +139,7 @@ public class NettyUploadClient {
                             p.addLast(channelTrafficHandler);
 
                             AtomicLong lowSpeedStartMs = new AtomicLong(0);
-                            ch.eventLoop().schedule(() -> scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future), 5, TimeUnit.SECONDS);
+                            ch.eventLoop().schedule(() -> scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future), 5, TimeUnit.SECONDS);
                             
                             p.addLast(new HttpClientCodec());
                             p.addLast(new HttpObjectAggregator(65536)); // 聚合响应
@@ -187,6 +190,7 @@ public class NettyUploadClient {
             // 发送文件体 (ChunkedFile)
             // 每次发送 8KB 的 chunk，GlobalTrafficShapingHandler 会在这些 chunk 之间插入延迟
             // 注意：ChunkedFile 构造函数会自动 seek 到 start 位置
+            transferStartMs.set(System.currentTimeMillis());
             ch.writeAndFlush(new ChunkedFile(file, start, length, 8192));
             transferStarted = true;
 
@@ -221,26 +225,40 @@ public class NettyUploadClient {
         }
     }
 
-    private static void scheduleLowSpeedCheck(Channel ch, ChannelTrafficShapingHandler channelTrafficHandler, AtomicLong lowSpeedStartMs, CompletableFuture<String> future) {
+    private static void scheduleLowSpeedCheck(Channel ch, ChannelTrafficShapingHandler channelTrafficHandler, AtomicLong lowSpeedStartMs, AtomicLong transferStartMs, CompletableFuture<String> future) {
         long intervalMs = lowSpeedCheckIntervalMs.get();
         ch.eventLoop().schedule(() -> {
             if (!ch.isActive()) {
                 return;
             }
+            long startMs = transferStartMs.get();
+            if (startMs <= 0) {
+                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+                return;
+            }
+            long now = System.currentTimeMillis();
+            if (now - startMs < LOW_SPEED_WARMUP_MS) {
+                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+                return;
+            }
+            long writtenBytes = channelTrafficHandler.trafficCounter().cumulativeWrittenBytes();
+            if (writtenBytes < LOW_SPEED_MIN_WRITTEN_BYTES) {
+                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+                return;
+            }
             long speed = channelTrafficHandler.trafficCounter().lastWriteThroughput();
             if (speed < 10 * 1024) {
-                long now = System.currentTimeMillis();
                 long started = lowSpeedStartMs.get();
                 if (started == 0) {
                     lowSpeedStartMs.set(now);
                     long current = lowSpeedCheckIntervalMs.get();
                     long next = Math.max(current, LOW_SPEED_CONFIRM_DELAY_MS);
                     lowSpeedCheckIntervalMs.set(Math.min(next, LOW_SPEED_MAX_INTERVAL_MS));
-                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future);
+                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
                     return;
                 }
                 if (now - started < LOW_SPEED_CONFIRM_DELAY_MS) {
-                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future);
+                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
                     return;
                 }
                 long current = lowSpeedCheckIntervalMs.get();
@@ -260,7 +278,7 @@ public class NettyUploadClient {
                     lowSpeedCheckIntervalMs.set(next);
                 }
             }
-            scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, future);
+            scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
         }, intervalMs, TimeUnit.MILLISECONDS);
     }
 }
