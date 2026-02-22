@@ -42,6 +42,9 @@ public class publishJob {
     @Autowired
     UploadServiceFactory uploadServiceFactory;
 
+    @Autowired
+    top.sshh.bililiverecoder.service.SystemConfigService systemConfigService;
+
     private static final java.util.concurrent.ConcurrentHashMap<Long, Long> uploadFailureMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
@@ -56,9 +59,26 @@ public class publishJob {
         List<RecordHistory> historyList = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
+        // 从配置中读取短时间开播合并时间，默认20分钟
+        int mergeIntervalMinutes = 20;
+        try {
+            String mergeIntervalConfig = systemConfigService.getAllConfigsMap().get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
+            if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
+                mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
+                if (mergeIntervalMinutes < 1) {
+                    mergeIntervalMinutes = 1;
+                } else if (mergeIntervalMinutes > 1440) {
+                    mergeIntervalMinutes = 1440;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("PublishJob.ParseMergeIntervalConfigFailed")
+                    .add("error", e.getMessage()));
+        }
+
         for (RecordRoom room : roomList) {
-            // 查询不在录制,下播十分钟后的需要上传的历史
-            Iterator<RecordHistory> iterator = historyRepository.findByRoomIdAndRecordingIsFalseAndUploadIsTrueAndPublishIsFalseAndUploadRetryCountLessThanAndEndTimeBetweenOrderByEndTimeAsc(room.getRoomId(), 5, now.minusMonths(1L), now.minusMinutes(11L)).iterator();
+            // 查询不在录制,下播指定时间后的需要上传的历史
+            Iterator<RecordHistory> iterator = historyRepository.findByRoomIdAndRecordingIsFalseAndUploadIsTrueAndPublishIsFalseAndUploadRetryCountLessThanAndEndTimeBetweenOrderByEndTimeAsc(room.getRoomId(), 5, now.minusMonths(1L), now.minusMinutes((long) mergeIntervalMinutes)).iterator();
             iterator.forEachRemaining(historyList::add);
         }
         if (!historyList.isEmpty()) {

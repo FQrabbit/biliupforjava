@@ -29,6 +29,9 @@ public class RecordEventRecordStartedService implements RecordEventService {
     @Autowired
     private RecordHistoryPartRepository historyPartRepository;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.SystemConfigService systemConfigService;
+
 
     @Override
     public void processing(RecordEventDTO event) {
@@ -107,7 +110,24 @@ public class RecordEventRecordStartedService implements RecordEventService {
             if (history == null) {
                 // 其次复用最近结束的记录（解决短时间内的重连）
                 // 同样需要检查 publish 状态，已发布的稿件无法追加分P
-                List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(eventData.getRoomId(), now.minusMinutes(20L), now);
+                // 从配置中读取合并时间间隔，默认20分钟
+                int mergeIntervalMinutes = 20;
+                try {
+                    String mergeIntervalConfig = systemConfigService.getAllConfigsMap().get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
+                    if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
+                        mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
+                        if (mergeIntervalMinutes < 1) {
+                            mergeIntervalMinutes = 1;
+                        } else if (mergeIntervalMinutes > 1440) {
+                            mergeIntervalMinutes = 1440;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("[BLR] {}", LogKvs.event("RecordStarted.ParseMergeIntervalFailed")
+                            .add("roomId", roomId)
+                            .add("error", e.getMessage()));
+                }
+                List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(eventData.getRoomId(), now.minusMinutes((long) mergeIntervalMinutes), now);
                 if (!CollectionUtils.isEmpty(historyList)) {
                     // 过滤掉已经发布的稿件
                     historyList = historyList.stream().filter(h -> !h.isPublish()).collect(java.util.stream.Collectors.toList());

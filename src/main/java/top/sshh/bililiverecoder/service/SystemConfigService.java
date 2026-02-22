@@ -19,6 +19,7 @@ public class SystemConfigService {
 
     public static final String KEY_API_RATE_LIMIT = "bili.limit.api-qps";
     public static final String KEY_UPLOAD_SPEED_LIMIT = "bili.limit.upload-mb";
+    public static final String KEY_MERGE_INTERVAL_MINUTES = "bili.publish.merge-interval-minutes";
 
     @Autowired
     private SystemConfigRepository systemConfigRepository;
@@ -34,6 +35,8 @@ public class SystemConfigService {
         loadOrInitConfig(KEY_API_RATE_LIMIT, "5.0", "Bilibili API 请求限速 (QPS) 0:不限速");
         // 加载上传速度限制
         loadOrInitConfig(KEY_UPLOAD_SPEED_LIMIT, "0", "视频上传带宽限速 (MB/s) 0:不限速");
+        // 加载短时间开播合并时间
+        loadOrInitConfig(KEY_MERGE_INTERVAL_MINUTES, "20", "短时间开播合并时间 (分钟) - 下播后等待多长时间再投稿，同时间隔多少分钟内开播算同一次直播，避免短时间开播下播拆分稿件");
     }
 
     private void loadOrInitConfig(String key, String defaultValue, String description) {
@@ -61,6 +64,7 @@ public class SystemConfigService {
         if (config.getDescription() == null) {
             if (KEY_API_RATE_LIMIT.equals(key)) config.setDescription("Bilibili API 请求限速 (QPS)");
             if (KEY_UPLOAD_SPEED_LIMIT.equals(key)) config.setDescription("视频上传带宽限速 (MB/s)");
+            if (KEY_MERGE_INTERVAL_MINUTES.equals(key)) config.setDescription("短时间开播合并时间 (分钟)");
         }
         systemConfigRepository.save(config);
         

@@ -309,7 +309,7 @@
                 <div class="data-card" 
                      :class="{ 
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
-                        'is-failed': item.publish && (item.code == -2 || item.code == -4 || item.code == -100),
+                        'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (item.giveUpPartCount > 0),
                         'is-success': item.publish && (item.code == 0 || item.code == -50)
                      }" 
                      v-for="item in tableData" :key="item.id" @click="showDetail(item)">
@@ -943,7 +943,7 @@
                 if (status === '已完成' || status === '发送弹幕中') return 'success';
                 if (status.indexOf('上传中') > -1 || status === '等待上传') return 'primary';
                 if (status === '正在录制' || status === '审核中' || status === '等待转码' || status === '已提交' || status === '定时发布') return 'warn';
-                if (status === '转码失败' || status === '审核不通过' || status === '审核被锁定' || status === '被退回' || status === '已删除' || status.indexOf('投稿中') > -1) return 'danger';
+                if (status === '存在异常' || status === '转码失败' || status === '审核不通过' || status === '审核被锁定' || status === '被退回' || status === '已删除' || status.indexOf('投稿中') > -1) return 'danger';
                 // 默认使用 info 样式 (灰色)
                 return 'info';
             },
@@ -989,7 +989,7 @@
                 return (sec / 3600) >= 10;
             },
             formatGiveUpFilesTooltip: function(files) {
-                if (!files || !files.length) return '存在已放弃的分P（未返回文件列表）';
+                if (!files || !Array.isArray(files) || !files.length) return '存在已放弃的分P（未返回文件列表）';
                 const names = files.map(p => {
                     if (!p) return '';
                     const seg = String(p).split('/');

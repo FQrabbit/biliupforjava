@@ -856,6 +856,20 @@ public class RecordBiliPublishService {
                                         .add("historyId", history.getId())
                                         .addIfNotBlank("title", history.getTitle())
                                         .add("code", 21588));
+                                // 标记所有未上传的分P为放弃（时间戳跳变）
+                                for (RecordHistoryPart part : uploadParts) {
+                                    if (!part.isUpload()) {
+                                        part.setUpload(false);
+                                        part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                                        part.setDeleteFailType("TIMESTAMP_JUMP");
+                                        part.setDeleteFailReason("分P转码失败(时间戳跳变-文件损坏)，已放弃重新上传");
+                                        partRepository.save(part);
+                                        log.info("[BLR] {}", LogKvs.event("Publish.TimestampJump.MarkPartGiveUp")
+                                                .add("historyId", history.getId())
+                                                .add("partId", part.getId())
+                                                .add("partTitle", part.getTitle()));
+                                    }
+                                }
                                 // 设置为不上传，避免后续任务再次扫描到
                                 history.setUpload(false);
                                 historyRepository.save(history);

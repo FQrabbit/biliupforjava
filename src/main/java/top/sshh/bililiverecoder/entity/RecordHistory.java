@@ -115,9 +115,14 @@ public class RecordHistory {
         if (recording) {
             return "正在录制";
         }
+        
+        if (giveUpPartCount > 0) {
+            return "存在异常";
+        }
+
         // 如果没有开启上传，或者手动关闭了上传
         if (!upload) {
-            return "已完成";
+            return "录制完成（未上传）";
         }
         // 已经标记为上传，但还没有发布成功（publish=true表示B站接口返回成功并获取到avid/bvid）
         if (!publish) {

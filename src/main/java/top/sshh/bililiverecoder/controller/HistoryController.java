@@ -107,60 +107,8 @@ public class HistoryController {
         // 同步执行数据库查询操作，避免并行流中的 EntityManager 会话问题
         for (RecordHistory history : list) {
             history.setRoomName(roomCache.get(history.getRoomId()));
-            history.setPartCount(partRepository.countByHistoryId(history.getId()));
-            history.setPartDuration(partRepository.sumHistoryDurationByHistoryId(history.getId()));
-            history.setUploadPartCount(partRepository.countByHistoryIdAndFileNameNotNull(history.getId()));
-
-            // 标记“永久放弃上传”的分P，便于 UI 提示用户具体哪个文件异常
-            int giveUpCount = 0;
-            try {
-                giveUpCount = partRepository.countGiveUpPartsByHistoryId(history.getId());
-            } catch (Exception ignored) {
-            }
-            history.setGiveUpPartCount(giveUpCount);
-            if (giveUpCount > 0) {
-                try {
-                    List<RecordHistoryPart> giveUpParts = partRepository.findGiveUpPartsByHistoryId(history.getId());
-                    history.setGiveUpPartFiles(giveUpParts.stream().map(RecordHistoryPart::getFilePath).toList());
-                    history.setGiveUpPartReasons(giveUpParts.stream().map(p -> {
-                        if (StringUtils.isNotBlank(p.getDeleteFailReason())) {
-                            return p.getDeleteFailReason();
-                        }
-                        String t = p.getDeleteFailType();
-                        if (StringUtils.isBlank(t)) {
-                            return "上传失败/已放弃";
-                        }
-                        return switch (t) {
-                            case "FILE_MISSING" -> "稿件分P文件不存在";
-                            case "CID_MISSING" -> "分P缺失CID";
-                            case "TIMESTAMP_JUMP" -> "分P时间戳跳变(文件损坏)";
-                            case "FILE_SIZE_INVALID" -> "分P文件大小异常";
-                            case "DURATION_INVALID" -> "分P时长异常";
-                            case "UPLOAD_FAILED" -> "分P上传失败";
-                            default -> "上传失败/已放弃";
-                        };
-                    }).toList());
-                    history.setGiveUpPartTypes(giveUpParts.stream().map(p -> StringUtils.isNotBlank(p.getDeleteFailType()) ? p.getDeleteFailType() : "UNKNOWN").toList());
-                } catch (Exception ignored) {
-                }
-            }
-
-            // 注意：这里不要在列表接口里落库纠偏 recording。
-            // 原因：历史数据可能处于“分P切片/短暂事件延迟”的中间态，
-            // 若在此处把 recording 误改为 false，会让发布定时任务误判并触发投稿。
-            // 列表展示层面仅基于分P实际状态计算。
-            int actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
-            history.setRecordPartCount(actuallyRecordingParts);
-            history.setRecording(actuallyRecordingParts > 0);
-
-            if (StringUtils.isNotBlank(history.getBvId())) {
-                history.setMsgCount(msgRepository.countByBvid(history.getBvId()));
-                history.setSuccessMsgCount(msgRepository.countByBvidAndCode(history.getBvId(), 0));
-                // 统计各类弹幕数量
-                history.setNormalMsgCount(msgRepository.countByBvidAndPool(history.getBvId(), 0));
-                history.setScMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC ["));
-                history.setGuardMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓"));
-            }
+            // 使用统一方法填充额外字段（分P统计、放弃分P、弹幕统计等）
+            populateHistoryFields(history);
         }
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
@@ -663,5 +611,76 @@ public class HistoryController {
         }
 
         return predicatesList;
+    }
+
+    /**
+     * 填充RecordHistory的额外字段，包括分P统计、放弃分P信息等。
+     * 注意：房间名(roomName)需要调用方单独设置，通常通过roomCache获取。
+     * 此方法用于确保返回给前端的数据一致性。
+     */
+    private void populateHistoryFields(RecordHistory history) {
+        if (history == null) {
+            return;
+        }
+        // 分P总数
+        history.setPartCount(partRepository.countByHistoryId(history.getId()));
+        // 分P总时长
+        history.setPartDuration(partRepository.sumHistoryDurationByHistoryId(history.getId()));
+        // 已上传分P数
+        history.setUploadPartCount(partRepository.countByHistoryIdAndFileNameNotNull(history.getId()));
+
+        // 标记“永久放弃上传”的分P
+        int giveUpCount = 0;
+        try {
+            giveUpCount = partRepository.countGiveUpPartsByHistoryId(history.getId());
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("History.GiveUpCount.QueryFailed")
+                    .add("historyId", history.getId())
+                    .add("err", e.getMessage()), e);
+        }
+        history.setGiveUpPartCount(giveUpCount);
+        if (giveUpCount > 0) {
+            try {
+                List<RecordHistoryPart> giveUpParts = partRepository.findGiveUpPartsByHistoryId(history.getId());
+                history.setGiveUpPartFiles(giveUpParts.stream().map(RecordHistoryPart::getFilePath).toList());
+                history.setGiveUpPartReasons(giveUpParts.stream().map(p -> {
+                    if (StringUtils.isNotBlank(p.getDeleteFailReason())) {
+                        return p.getDeleteFailReason();
+                    }
+                    String t = p.getDeleteFailType();
+                    if (StringUtils.isBlank(t)) {
+                        return "上传失败/已放弃";
+                    }
+                    return switch (t) {
+                        case "FILE_MISSING" -> "稿件分P文件不存在";
+                        case "CID_MISSING" -> "分P缺失CID";
+                        case "TIMESTAMP_JUMP" -> "分P时间戳跳变(文件损坏)";
+                        case "FILE_SIZE_INVALID" -> "分P文件大小异常";
+                        case "DURATION_INVALID" -> "分P时长异常";
+                        case "UPLOAD_FAILED" -> "分P上传失败";
+                        default -> "上传失败/已放弃";
+                    };
+                }).toList());
+                history.setGiveUpPartTypes(giveUpParts.stream().map(p -> StringUtils.isNotBlank(p.getDeleteFailType()) ? p.getDeleteFailType() : "UNKNOWN").toList());
+            } catch (Exception e) {
+                log.error("[BLR] {}", LogKvs.event("History.GiveUpParts.QueryFailed")
+                        .add("historyId", history.getId())
+                        .add("err", e.getMessage()), e);
+            }
+        }
+
+        // 计算实际录制中的分P数量
+        int actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
+        history.setRecordPartCount(actuallyRecordingParts);
+        history.setRecording(actuallyRecordingParts > 0);
+
+        // 弹幕统计
+        if (StringUtils.isNotBlank(history.getBvId())) {
+            history.setMsgCount(msgRepository.countByBvid(history.getBvId()));
+            history.setSuccessMsgCount(msgRepository.countByBvidAndCode(history.getBvId(), 0));
+            history.setNormalMsgCount(msgRepository.countByBvidAndPool(history.getBvId(), 0));
+            history.setScMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC ["));
+            history.setGuardMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓"));
+        }
     }
 }

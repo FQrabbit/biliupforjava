@@ -23,6 +23,8 @@ public final class LogKvs {
     private static final Map<String, String> EVENT_ZH = new HashMap<>();
     static {
         EVENT_ZH.put("History.BadgeCount.CalcFailed", "计算历史记录角标数失败");
+        EVENT_ZH.put("History.GiveUpCount.QueryFailed", "查询放弃分P数量失败");
+        EVENT_ZH.put("History.GiveUpParts.QueryFailed", "查询放弃分P列表失败");
 
         // 上传
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");
@@ -113,6 +115,7 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.LoginInvalid", "投稿：上传用户登录失效");
         EVENT_ZH.put("Publish.TimestampJump.GiveUpPart", "投稿：检测到时间戳跳变，放弃该分P");
         EVENT_ZH.put("Publish.TimestampJump.SkipReupload", "投稿：时间戳跳变，跳过重新上传");
+        EVENT_ZH.put("Publish.TimestampJump.MarkPartGiveUp", "投稿：标记分P为时间戳跳变放弃");
         EVENT_ZH.put("Publish.PartUploadLock.Acquired", "投稿：获取分P上传锁成功");
         EVENT_ZH.put("Publish.Part.NotUploaded", "投稿：分P未上传完成，等待/触发上传");
         EVENT_ZH.put("Publish.Republish.Response", "投稿：重新投稿响应");
