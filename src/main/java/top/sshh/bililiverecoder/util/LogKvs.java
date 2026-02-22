@@ -25,6 +25,7 @@ public final class LogKvs {
         EVENT_ZH.put("History.BadgeCount.CalcFailed", "计算历史记录角标数失败");
         EVENT_ZH.put("History.GiveUpCount.QueryFailed", "查询放弃分P数量失败");
         EVENT_ZH.put("History.GiveUpParts.QueryFailed", "查询放弃分P列表失败");
+        EVENT_ZH.put("History.MergeInterval.InvalidConfig", "合并间隔时间配置无效");
 
         // 上传
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");

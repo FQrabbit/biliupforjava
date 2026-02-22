@@ -24,6 +24,7 @@ import top.sshh.bililiverecoder.service.impl.HighEnergyCutPublishService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.service.SystemConfigService;
 
 import java.io.File;
 import java.io.IOException;
@@ -54,6 +55,8 @@ public class HistoryController {
     private HighEnergyCutPublishService highEnergyCutPublishService;
     @Autowired
     private top.sshh.bililiverecoder.job.videoSyncJob videoSyncJob;
+    @Autowired
+    private SystemConfigService systemConfigService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -682,5 +685,40 @@ public class HistoryController {
             history.setScMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC ["));
             history.setGuardMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓"));
         }
+
+    // 计算是否处于等待投稿状态
+    boolean waitingForPublish = false;
+    if (history.isUpload() && !history.isPublish() && !history.isRecording() 
+            && history.getGiveUpPartCount() == 0 && history.getPartCount() > 0
+            && history.getUploadPartCount() == history.getPartCount() && history.getEndTime() != null) {
+        
+        // 获取合并间隔时间配置，参考 publishJob 中的范围校验（1-1440分钟）
+        String mergeIntervalConfig = systemConfigService.getAllConfigsMap()
+                .get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
+        int mergeIntervalMinutes = 20; // 默认值
+        try {
+            if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
+                mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
+                // 范围校验：1-1440分钟，超出范围自动修正
+                if (mergeIntervalMinutes < 1) {
+                    mergeIntervalMinutes = 1;
+                } else if (mergeIntervalMinutes > 1440) {
+                    mergeIntervalMinutes = 1440;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("History.MergeInterval.InvalidConfig")
+                    .add("historyId", history.getId())
+                    .add("configValue", mergeIntervalConfig)
+                    .add("error", e.getMessage()));
+        }
+        
+        // 计算距离结束时间经过的分钟数
+        long minutesSinceEnd = java.time.Duration.between(history.getEndTime(), LocalDateTime.now()).toMinutes();
+        if (minutesSinceEnd >= 0 && minutesSinceEnd < mergeIntervalMinutes) {
+            waitingForPublish = true;
+        }
+    }
+    history.setWaitingForPublish(waitingForPublish);
     }
 }

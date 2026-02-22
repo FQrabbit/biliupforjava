@@ -77,6 +77,10 @@ public class RecordHistory {
     @Transient
     private int giveUpPartCount;
 
+    // 是否处于等待投稿状态（分P已上传完毕，等待合并间隔时间）
+    @Transient
+    private boolean waitingForPublish;
+
     @Transient
     private List<String> giveUpPartFiles;
 
@@ -120,6 +124,11 @@ public class RecordHistory {
             return "存在异常";
         }
 
+        // 等待投稿状态（分P已上传完毕，等待合并间隔时间）
+        if (waitingForPublish) {
+            return "等待投稿";
+        }
+
         // 如果没有开启上传，或者手动关闭了上传
         if (!upload) {
             return "录制完成（未上传）";
@@ -146,10 +155,13 @@ public class RecordHistory {
         return switch (code) {
             case -1 -> "审核中";
             case -2 -> "被退回";
+            case -4 -> "被锁定";
+            case -9 -> "转码中";
             case -10 -> "等待转码";
             case -20 -> "转码失败";
-            case -30 -> "审核不通过";
-            case -40 -> "审核被锁定";
+            case -30 -> "已提交";
+            case -40 -> "定时发布";
+            case -100 -> "已删除";
             default -> "投稿中(Code:" + code + ")";
         };
     }

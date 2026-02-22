@@ -942,8 +942,8 @@
                 if (!status) return '';
                 if (status === '已完成' || status === '发送弹幕中') return 'success';
                 if (status.indexOf('上传中') > -1 || status === '等待上传') return 'primary';
-                if (status === '正在录制' || status === '审核中' || status === '等待转码' || status === '已提交' || status === '定时发布') return 'warn';
-                if (status === '存在异常' || status === '转码失败' || status === '审核不通过' || status === '审核被锁定' || status === '被退回' || status === '已删除' || status.indexOf('投稿中') > -1) return 'danger';
+                if (status === '正在录制' || status === '审核中' || status === '等待转码' || status === '转码中' || status === '已提交' || status === '定时发布' || status === '等待投稿') return 'warn';
+                if (status === '存在异常' || status === '转码失败' || status === '被锁定' || status === '被退回' || status === '已删除' || status.indexOf('投稿中') > -1) return 'danger';
                 // 默认使用 info 样式 (灰色)
                 return 'info';
             },
