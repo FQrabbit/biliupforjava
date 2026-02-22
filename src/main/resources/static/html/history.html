@@ -647,11 +647,12 @@
                 <div class="action-group-primary">
                     <el-button class="modern-btn" @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
                     <el-button class="modern-btn" @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
+                    <el-button v-if="currentDetail.waitingForPublish" class="modern-btn breathing" @click="touchPublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-s-release">立即投稿</el-button>
                 </div>
 
                 <!-- 更多操作开关 -->
                 <div class="action-group-more-toggle">
-                    <el-button class="modern-btn" @click="showMoreActions = !showMoreActions" size="small" plain :icon="showMoreActions ? 'el-icon-arrow-left' : 'el-icon-more'">
+                    <el-button :class="{ 'modern-btn': true, 'breathing': currentDetail.waitingForPublish }" @click="showMoreActions = !showMoreActions" size="small" plain :icon="showMoreActions ? 'el-icon-arrow-left' : 'el-icon-more'">
                         {{ showMoreActions ? '收起' : '更多操作' }}
                     </el-button>
                 </div>

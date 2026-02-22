@@ -7,6 +7,37 @@ html, body {
     overflow: hidden;
 }
 
+/* 呼吸灯动画效果 - 用于等待投稿状态按钮 */
+@keyframes breathing-light {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(255, 193, 7, 0.5), 0 0 10px rgba(255, 193, 7, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(255, 193, 7, 0.8), 0 0 25px rgba(255, 193, 7, 0.5);
+    }
+}
+
+/* 立即投稿按钮呼吸灯效果 */
+.modern-btn.breathing {
+    animation: breathing-light 2s ease-in-out infinite;
+    position: relative;
+    z-index: 1;
+}
+
+/* 更多操作按钮呼吸灯效果 */
+.action-group-more-toggle .modern-btn.breathing {
+    animation: breathing-light 2s ease-in-out infinite;
+}
+
+/* 暗黑模式呼吸灯效果 */
+[data-theme='dark'] .modern-btn.breathing {
+    animation: breathing-light 2s ease-in-out infinite;
+}
+
+[data-theme='dark'] .action-group-more-toggle .modern-btn.breathing {
+    animation: breathing-light 2s ease-in-out infinite;
+}
+
 .history-container {
     height: 100%;
     display: flex;
