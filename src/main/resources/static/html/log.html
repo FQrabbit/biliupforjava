@@ -276,11 +276,6 @@
                 return 'info';
             }
         },
-        mounted: function() {
-            if (parent && parent.answer && parent.answer.setPageReady) {
-                parent.answer.setPageReady();
-            }
-        },
         watch: {
             visibleLevels: {
                 handler() {
@@ -312,10 +307,13 @@
              }
          },
          mounted() {
-             window.addEventListener('resize', this.handleResize);
-             
-             // 监听滚动事件，用于手动滚动时自动取消“自动滚动”状态
-             const container = this.$refs.console;
+            if (parent && parent.answer && parent.answer.setPageReady) {
+                parent.answer.setPageReady();
+            }
+            window.addEventListener('resize', this.handleResize);
+            
+            // 监听滚动事件，用于手动滚动时自动取消“自动滚动”状态
+            const container = this.$refs.console;
              if (container) {
                  container.addEventListener('scroll', () => {
                      // 如果是程序触发的滚动，则忽略
@@ -615,45 +613,42 @@
             loadHistory() {
                 this.loadingHistory = true;
                 const lines = this.getHistoryLines();
-                fetch(`/log/history?lines=${lines}`)
-                    .then(res => res.json())
-                    .then(lines => {
-                        // 格式: 2023-01-01 12:00:00.000 | INFO  | thread | logger | message
-                        const parsedLogs = lines.map(line => {
-                            const parts = line.split('|');
-                            if (parts.length >= 5) {
-                                return {
-                                    timestamp: parts[0].trim(),
-                                    level: parts[1].trim(),
-                                    thread: parts[2].trim(),
-                                    logger: parts[3].trim(),
-                                    message: parts.slice(4).join('|').trim()
-                                };
-                            } else {
-                                return {
-                                    timestamp: '',
-                                    level: 'INFO',
-                                    message: line
-                                };
-                            }
-                        });
-                        // 赋予稳定 id
-                        const base = this.nextLogId;
-                        for (let i = 0; i < parsedLogs.length; i++) {
-                            parsedLogs[i].__id = String(base + i);
+                ApiUtil.get(`/log/history?lines=${lines}`, (data) => {
+                    // 格式: 2023-01-01 12:00:00.000 | INFO  | thread | logger | message
+                    const parsedLogs = data.map(line => {
+                        const parts = line.split('|');
+                        if (parts.length >= 5) {
+                            return {
+                                timestamp: parts[0].trim(),
+                                level: parts[1].trim(),
+                                thread: parts[2].trim(),
+                                logger: parts[3].trim(),
+                                message: parts.slice(4).join('|').trim()
+                            };
+                        } else {
+                            return {
+                                timestamp: '',
+                                level: 'INFO',
+                                message: line
+                            };
                         }
-                        this.nextLogId = base + parsedLogs.length;
-                        this.logs = parsedLogs;
-                        this.loadingHistory = false;
-                        this.startProgressiveRender(this.filteredLogs);
-                        this.reportConnection(false);
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        this.loadingHistory = false;
-                        this.$message.error('加载历史日志失败');
-                        this.reportConnection(true);
                     });
+                    // 赋予稳定 id
+                    const base = this.nextLogId;
+                    for (let i = 0; i < parsedLogs.length; i++) {
+                        parsedLogs[i].__id = String(base + i);
+                    }
+                    this.nextLogId = base + parsedLogs.length;
+                    this.logs = parsedLogs;
+                    this.loadingHistory = false;
+                    this.startProgressiveRender(this.filteredLogs);
+                    this.reportConnection(false);
+                }, (err) => {
+                    console.error(err);
+                    this.loadingHistory = false;
+                    this.$message.error('加载历史日志失败');
+                    this.reportConnection(true);
+                });
             },
             clearLogs() {
                 this.logs = [];
@@ -665,32 +660,27 @@
                 this.rendering = false;
             },
             fetchAlerts() {
-                fetch('/log/alerts')
-                    .then(res => res.json())
-                    .then(data => {
-                        this.alerts = data;
-                        if (this.alerts.length > 0 && !this.showAlerts) {
-                            this.$notify({
-                                title: '系统异常提醒',
-                                message: `发现 ${this.alerts.length} 条异常记录，请点击查看。`,
-                                type: 'warning',
-                                position: 'bottom-right'
-                            });
-                        }
-                    })
-                    .catch(e => console.error(e));
+                ApiUtil.get('/log/alerts', (data) => {
+                    this.alerts = data;
+                    if (this.alerts.length > 0 && !this.showAlerts) {
+                        this.$notify({
+                            title: '系统异常提醒',
+                            message: `发现 ${this.alerts.length} 条异常记录，请点击查看。`,
+                            type: 'warning',
+                            position: 'bottom-right'
+                        });
+                    }
+                });
             },
             clearAlerts() {
-                fetch('/log/alerts', { method: 'DELETE' })
-                    .then(() => {
-                        this.alerts = [];
-                        this.showAlerts = false;
-                        this.$message.success('已清除所有异常记录');
-                    })
-                    .catch(e => {
-                        console.error(e);
-                        this.$message.error('清除失败');
-                    });
+                ApiUtil.delete('/log/alerts', () => {
+                    this.alerts = [];
+                    this.showAlerts = false;
+                    this.$message.success('已清除所有异常记录');
+                }, (e) => {
+                    console.error(e);
+                    this.$message.error('清除失败');
+                });
             },
             formatDate(dateStr) {
                 return new Date(dateStr).toLocaleString();

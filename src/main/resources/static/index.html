@@ -410,31 +410,26 @@
             },
             loadSystemConfig: function() {
                 var self = this;
-                $.ajax({
-                    url: '/system-config/list',
-                    type: 'GET',
-                    success: function(data) {
-                        if (data && data.length > 0) {
-                            data.forEach(function(item) {
-                                if (item.configKey === 'bili.limit.api-qps') {
-                                    self.systemConfig.apiQps = parseFloat(item.configValue);
-                                } else if (item.configKey === 'bili.limit.upload-mb') {
-                                    self.systemConfig.uploadMb = parseFloat(item.configValue);
-                                } else if (item.configKey === 'bili.publish.merge-interval-minutes') {
-                                    self.systemConfig.mergeIntervalMinutes = parseInt(item.configValue);
-                                }
-                            });
-                        }
-                        // 保存原始配置用于重置
-                        self.originalConfig = {
-                            apiQps: self.systemConfig.apiQps,
-                            uploadMb: self.systemConfig.uploadMb,
-                            mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes
-                        };
-                    },
-                    error: function(e) {
-                        console.error('Failed to load system config', e);
+                ApiUtil.get('/system-config/list', function(data) {
+                    if (data && data.length > 0) {
+                        data.forEach(function(item) {
+                            if (item.configKey === 'bili.limit.api-qps') {
+                                self.systemConfig.apiQps = parseFloat(item.configValue);
+                            } else if (item.configKey === 'bili.limit.upload-mb') {
+                                self.systemConfig.uploadMb = parseFloat(item.configValue);
+                            } else if (item.configKey === 'bili.publish.merge-interval-minutes') {
+                                self.systemConfig.mergeIntervalMinutes = parseInt(item.configValue);
+                            }
+                        });
                     }
+                    // 保存原始配置用于重置
+                    self.originalConfig = {
+                        apiQps: self.systemConfig.apiQps,
+                        uploadMb: self.systemConfig.uploadMb,
+                        mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes
+                    };
+                }, function(e) {
+                    console.error('Failed to load system config', e);
                 });
             },
             saveSystemConfig: function() {
@@ -460,14 +455,7 @@
                 
                 var promises = updates.map(function(item) {
                     return new Promise(function(resolve, reject) {
-                        $.ajax({
-                            url: '/system-config/update',
-                            type: 'POST',
-                            contentType: 'application/json',
-                            data: JSON.stringify(item),
-                            success: resolve,
-                            error: reject
-                        });
+                        ApiUtil.post('/system-config/update', item, resolve, reject);
                     });
                 });
 
@@ -515,28 +503,22 @@
                 } catch (e) { console.error(e); }
 
                 // 从API获取版本
-                $.ajax({
-                    url: 'https://api.github.com/repos/FQrabbit/biliupforjava/releases?per_page=1',
-                    type: 'GET',
-                    timeout: 5000,
-                    success: function(data) {
-                        localStorage.setItem(CACHE_KEY, JSON.stringify({
-                            timestamp: Date.now(),
-                            data: data
-                        }));
-                        processData(data);
-                    },
-                    error: function(xhr) {
-                        console.warn('[Update] 检查失败:', xhr.status);
-                        // 如果可用，尝试使用过期的缓存
-                        try {
-                            var cache = JSON.parse(localStorage.getItem(CACHE_KEY));
-                            if (cache && cache.data) {
-                                console.log('[Update] 使用过时缓存回退');
-                                processData(cache.data);
-                            }
-                        } catch (e) {}
-                    }
+                ApiUtil.get('https://api.github.com/repos/FQrabbit/biliupforjava/releases?per_page=1', function(data) {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify({
+                        timestamp: Date.now(),
+                        data: data
+                    }));
+                    processData(data);
+                }, function(xhr) {
+                    console.warn('[Update] 检查失败:', xhr.status);
+                    // 如果可用，尝试使用过期的缓存
+                    try {
+                        var cache = JSON.parse(localStorage.getItem(CACHE_KEY));
+                        if (cache && cache.data) {
+                            console.log('[Update] 使用过时缓存回退');
+                            processData(cache.data);
+                        }
+                    } catch (e) {}
                 });
             },
             compareVersions: function(v1, v2) {
@@ -581,12 +563,9 @@
                 return 0;
             },
             checkAlerts: function() {
-                fetch('/log/alerts')
-                    .then(res => res.json())
-                    .then(data => {
-                        this.hasAlerts = data && data.length > 0;
-                    })
-                    .catch(e => console.error(e));
+                ApiUtil.get('/log/alerts', (data) => {
+                    this.hasAlerts = data && data.length > 0;
+                });
             },
             onIframeLoad: function() {
                 var self = this;

@@ -39,8 +39,14 @@ public class LoginInterceptor implements HandlerInterceptor {
         log.info("[BLR] {}", LogKvs.event("Auth.Basic.Failed")
             .add("ip", request.getRemoteAddr())
             .add("path", request.getRequestURI()));
+
+        String accept = request.getHeader("Accept");
+        if (StringUtils.contains(accept, "text/html") && !"XMLHttpRequest".equals(request.getHeader("X-Requested-With"))) {
+            response.sendRedirect("/html/login.html");
+            return false;
+        }
         
-        response.setHeader("WWW-Authenticate", "Basic realm=\"Restricted\"");
+        // response.setHeader("WWW-Authenticate", "Basic realm=\"Restricted\"");
         response.setStatus(401);
         return false;
     }

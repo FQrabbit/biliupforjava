@@ -16,6 +16,19 @@ public class MvcConfig implements WebMvcConfigurer{
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         LoginInterceptor loginInterceptor = new LoginInterceptor(userName,password);
-        registry.addInterceptor(loginInterceptor).addPathPatterns("/**").excludePathPatterns("/**/recordWebHook");
+        registry.addInterceptor(loginInterceptor)
+                .addPathPatterns("/**")
+                .excludePathPatterns(
+                        "/**/recordWebHook",
+                        "/",
+                        "/index.html",
+                        "/html/**",
+                        "/css/**",
+                        "/js/**",
+                        "/img/**",
+                        "/ws/**",
+                        "/favicon.ico",
+                        "/error"
+                );
     }
 }

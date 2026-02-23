@@ -1,4 +1,14 @@
-﻿const ApiUtil = {
+// 全局配置：每次请求前检查 localStorage 是否有 token，有则带上
+$.ajaxSetup({
+    beforeSend: function(xhr) {
+        const token = localStorage.getItem('biliup_auth');
+        if (token) {
+            xhr.setRequestHeader('Authorization', token);
+        }
+    }
+});
+
+const ApiUtil = {
     get: function(url, callback, errorCallback) {
         $.ajax({
             url: url,
@@ -8,6 +18,10 @@
                 callback(data);
             },
             error: function(xhr, status, error) {
+                if (xhr.status === 401) {
+                    window.location.href = '/html/login.html';
+                    return;
+                }
                 if (errorCallback) {
                     errorCallback(xhr);
                 } else {
@@ -28,6 +42,34 @@
                 callback(result);
             },
             error: function(xhr, status, error) {
+                if (xhr.status === 401) {
+                    window.location.href = '/html/login.html';
+                    return;
+                }
+                if (errorCallback) {
+                    errorCallback(xhr);
+                } else {
+                    console.error('Request failed:', error);
+                }
+            }
+        });
+    },
+
+    put: function(url, data, callback, errorCallback) {
+        $.ajax({
+            url: url,
+            type: 'PUT',
+            contentType: 'application/json;charset=utf-8',
+            data: JSON.stringify(data),
+            dataType: 'json',
+            success: function(result) {
+                callback(result);
+            },
+            error: function(xhr, status, error) {
+                if (xhr.status === 401) {
+                    window.location.href = '/html/login.html';
+                    return;
+                }
                 if (errorCallback) {
                     errorCallback(xhr);
                 } else {
@@ -46,6 +88,10 @@
                 callback(data);
             },
             error: function(xhr, status, error) {
+                if (xhr.status === 401) {
+                    window.location.href = '/html/login.html';
+                    return;
+                }
                 if (errorCallback) {
                     errorCallback(xhr);
                 } else {
