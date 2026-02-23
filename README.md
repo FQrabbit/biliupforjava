@@ -294,14 +294,12 @@ docker network connect bili-net bup
 <details>
 <summary><b>点击查看界面截图</b></summary>
 
-| 主页面 | 房间管理 |
-|:------:|:--------:|
-| [![主页面](https://i.ooxx.ooo/i/YmE1Y.png)](https://i.ooxx.ooo/i/YmE1Y.png) | [![用户管理](https://i.ooxx.ooo/i/ZGExN.png)](https://i.ooxx.ooo/i/ZGExN.png) |
-
-| 上传历史 |
-|:--------:|
-| [![上传历史](https://i.ooxx.ooo/i/Zjg3M.png)](https://i.ooxx.ooo/i/Zjg3M.png)![详细信息]( https://i.ooxx.ooo/i/MGQ4M.png) |   
-
+![直播间管理](Doc\Screenshot\room.jpg) 
+![房间配置](Doc\Screenshot\Room-Configuration.jpg)
+![上传历史](Doc\Screenshot\history.jpg)
+![详细信息](Doc\Screenshot\history_1.jpg)
+![分P上传进度](Doc\Screenshot\history_2.jpg)
+![筛选条件](Doc\Screenshot\Filter-criteria.jpg)
 
 </details>
 
