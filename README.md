@@ -294,12 +294,12 @@ docker network connect bili-net bup
 <details>
 <summary><b>点击查看界面截图</b></summary>
 
-![直播间管理](Doc\Screenshot\room.jpg) 
-![房间配置](Doc\Screenshot\Room-Configuration.jpg)
-![上传历史](Doc\Screenshot\history.jpg)
-![详细信息](Doc\Screenshot\history_1.jpg)
-![分P上传进度](Doc\Screenshot\history_2.jpg)
-![筛选条件](Doc\Screenshot\Filter-criteria.jpg)
+![直播间管理](Doc/Screenshot/room.jpg) 
+![房间配置](Doc/Screenshot/Room-Configuration.jpg)
+![上传历史](Doc/Screenshot/history.jpg)
+![详细信息](Doc/Screenshot/history_1.jpg)
+![分P上传进度](Doc/Screenshot/history_2.jpg)
+![筛选条件](Doc/Screenshot/Filter-criteria.jpg)
 
 </details>
 
