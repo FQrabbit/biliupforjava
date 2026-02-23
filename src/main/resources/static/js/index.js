@@ -158,8 +158,12 @@ const COMMON_BOOL_OPTIONS = [
         text = text.replace(/(\bFile\s*:\s*)([^|\r\n]*)/g, '$1***');
 
         // 1) 类JSON字段（字符串值）
-        // title/liveTitle/roomName/uname/filePath/fileName/location/key/bvId/bvid/roomId
-        text = text.replace(/("(?:title|liveTitle|roomName|uname|filePath|fileName|location|key|bvId|bvid|roomId)"\s*:\s*")([^"\\]*)(")/g, '$1***$3');
+        // title/liveTitle/roomName/uname/filePath/fileName/location/key/bvId/bvid/roomId/aid
+        text = text.replace(/("(?:title|liveTitle|roomName|uname|filePath|fileName|location|key|bvId|bvid|roomId|partTitle|aid)"\s*:\s*")([^"\\]*)(")/g, '$1***$3');
+
+        // 1) 类JSON字段（数字值）
+        // 例："aid": 1161217...
+        text = text.replace(/("(?:aid)"\s*:\s*)(\d+)/g, '$1***');
 
         // 1.0) 类JSON字段（对象/数组值）——这些字段往往整段都包含敏感信息
         // payload/history/part/room 等
@@ -168,7 +172,7 @@ const COMMON_BOOL_OPTIONS = [
         // 1.1) 非JSON的 key/value 形式（避免遗漏）
         // 例：[BLR] event=FileOpen | roomId=18597 | title=xxx | filePath=... | payload={...}
         // 注意：这里只掩码敏感字段，不掩码 event 等分类字段。
-        text = text.replace(/\b(title|liveTitle|roomName|uname|filePath|fileName|toDir|location|key|payload|history|part|room|uploadUserId)\s*[:=]\s*([^|\r\n]+)/g, '$1=***');
+        text = text.replace(/\b(title|liveTitle|roomName|uname|filePath|fileName|toDir|location|key|payload|history|part|room|uploadUserId|partTitle|aid)\s*[:=]\s*([^|\r\n]+)/g, '$1=***');
 
         // 2) 日志中常见的普通模式
         // ==>[Title]
