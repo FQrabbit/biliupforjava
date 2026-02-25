@@ -7,7 +7,11 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"eventId", "filePath"}))
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"eventId", "filePath"}),
+       indexes = {
+           @Index(name = "idx_history_id", columnList = "historyId"),
+           @Index(name = "idx_room_id", columnList = "roomId")
+       })
 public class RecordHistoryPart {
 
     @Id

@@ -101,7 +101,11 @@ public class HistoryController {
         typedQuery.setMaxResults(request.getPageSize());
         List<RecordHistory> list = typedQuery.getResultList();
         
+        // 获取一次配置，避免在循环中重复查询数据库
+        Map<String, String> configMap = systemConfigService.getAllConfigsMap();
+
         Map<String,String> roomCache = new HashMap<>();
+        // 房间数量通常较少，直接全量加载比循环查询更高效
         Iterable<RecordRoom> iterable = roomRepository.findAll();
         for (RecordRoom recordRoom : iterable) {
             roomCache.put(recordRoom.getRoomId(),recordRoom.getUname());
@@ -111,7 +115,7 @@ public class HistoryController {
         for (RecordHistory history : list) {
             history.setRoomName(roomCache.get(history.getRoomId()));
             // 使用统一方法填充额外字段（分P统计、放弃分P、弹幕统计等）
-            populateHistoryFields(history);
+            populateHistoryFields(history, configMap);
         }
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
@@ -621,15 +625,13 @@ public class HistoryController {
      * 注意：房间名(roomName)需要调用方单独设置，通常通过roomCache获取。
      * 此方法用于确保返回给前端的数据一致性。
      */
-    private void populateHistoryFields(RecordHistory history) {
+    private void populateHistoryFields(RecordHistory history, Map<String, String> configMap) {
         if (history == null) {
             return;
         }
-        // 分P总数
+        // 分P统计
         history.setPartCount(partRepository.countByHistoryId(history.getId()));
-        // 分P总时长
         history.setPartDuration(partRepository.sumHistoryDurationByHistoryId(history.getId()));
-        // 已上传分P数
         history.setUploadPartCount(partRepository.countByHistoryIdAndFileNameNotNull(history.getId()));
 
         // 标记“永久放弃上传”的分P
@@ -692,9 +694,8 @@ public class HistoryController {
             && history.getGiveUpPartCount() == 0 && history.getPartCount() > 0
             && history.getUploadPartCount() == history.getPartCount() && history.getEndTime() != null) {
         
-        // 获取合并间隔时间配置，参考 publishJob 中的范围校验（1-1440分钟）
-        String mergeIntervalConfig = systemConfigService.getAllConfigsMap()
-                .get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
+        // 使用外部传入的配置映射，避免在循环中重复查询数据库
+        String mergeIntervalConfig = configMap.get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
         int mergeIntervalMinutes = 20; // 默认值
         try {
             if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
