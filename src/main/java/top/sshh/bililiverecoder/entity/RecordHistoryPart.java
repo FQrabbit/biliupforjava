@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @Table(uniqueConstraints = @UniqueConstraint(columnNames = {"eventId", "filePath"}),
        indexes = {
            @Index(name = "idx_history_id", columnList = "historyId"),
-           @Index(name = "idx_room_id", columnList = "roomId")
+           @Index(name = "idx_record_history_part_room_id", columnList = "roomId")
        })
 public class RecordHistoryPart {
 

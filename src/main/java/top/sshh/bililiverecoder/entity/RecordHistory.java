@@ -10,7 +10,7 @@ import java.util.List;
 @Entity
 @Table(uniqueConstraints = @UniqueConstraint(columnNames = "eventId"),
        indexes = {
-           @Index(name = "idx_room_id", columnList = "roomId"),
+           @Index(name = "idx_record_history_room_id", columnList = "roomId"),
            @Index(name = "idx_end_time", columnList = "endTime"),
            @Index(name = "idx_bv_id", columnList = "bvId"),
            @Index(name = "idx_publish_code_reply", columnList = "publish, code, sendReply")
