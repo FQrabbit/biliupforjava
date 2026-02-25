@@ -200,7 +200,10 @@ public class HistoryController {
     }
 
     @GetMapping("/delete/{id}")
-    public Map<String, String> delete(@PathVariable("id") Long id) {
+    public Map<String, String> delete(@PathVariable("id") Long id,
+                                      @RequestParam(required = false, defaultValue = "true") boolean deleteVideo,
+                                      @RequestParam(required = false, defaultValue = "true") boolean deleteDanmaku,
+                                      @RequestParam(required = false, defaultValue = "true") boolean deleteCover) {
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -226,7 +229,9 @@ public class HistoryController {
                 File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
                 if (files != null) {
                     for (File file : files) {
-                        file.delete();
+                        if (shouldDeleteFile(file, deleteVideo, deleteDanmaku, deleteCover)) {
+                            file.delete();
+                        }
                     }
                 }
                 part.setFileDelete(true);
@@ -242,6 +247,24 @@ public class HistoryController {
             result.put("msg", "录制历史不存在");
             return result;
         }
+    }
+
+    private boolean shouldDeleteFile(File file, boolean deleteVideo, boolean deleteDanmaku, boolean deleteCover) {
+        String name = file.getName().toLowerCase();
+        // 视频文件扩展名
+        if (name.endsWith(".mp4") || name.endsWith(".flv") || name.endsWith(".mkv") || name.endsWith(".ts") || name.endsWith(".mov") || name.endsWith(".avi")) {
+            return deleteVideo;
+        }
+        // 弹幕文件扩展名
+        if (name.endsWith(".xml") || name.endsWith(".ass")) {
+            return deleteDanmaku;
+        }
+        // 封面文件扩展名
+        if (name.endsWith(".jpg") || name.endsWith(".png") || name.endsWith(".jpeg") || name.endsWith(".webp") || name.endsWith(".gif")) {
+            return deleteCover;
+        }
+        // 其他文件默认删除
+        return true;
     }
 
     @GetMapping("/deleteMsg/{id}")

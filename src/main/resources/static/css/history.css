@@ -81,6 +81,12 @@ html, body {
     transition: all 0.3s ease;
 }
 
+.category-tabs-container.is-disabled {
+    opacity: 0.55;
+    filter: grayscale(0.12);
+    pointer-events: none;
+}
+
 .category-tabs-container .el-tabs__header {
     margin: 0;
 }
@@ -357,6 +363,16 @@ html, body {
     padding: 20px;
 }
 
+.filter-body.is-disabled {
+    opacity: 0.55;
+    filter: grayscale(0.12);
+    pointer-events: none;
+}
+
+.filter-body.is-disabled * {
+    cursor: not-allowed;
+}
+
 /* 快捷筛选标签 */
 .quick-filters {
     display: flex;
@@ -380,6 +396,10 @@ html, body {
     border-radius: 20px;
     padding: 0 14px;
     font-weight: 500;
+}
+
+.quick-tag.is-disabled {
+    cursor: not-allowed;
 }
 
 .quick-tag:hover {
@@ -591,6 +611,12 @@ html, body {
     gap: 16px;
 }
 
+.data-card-grid.is-multi-select-mode {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
 .data-card {
     background: rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(12px);
@@ -625,6 +651,32 @@ html, body {
 
 .data-card:active {
     transform: translateY(-2px) scale(0.98);
+}
+
+.data-card.press-anim {
+    animation: cardPress 220ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.data-card:hover.press-anim {
+    animation-name: cardPressHover;
+}
+
+@keyframes cardPress {
+    0% { transform: translateY(0) scale(1); }
+    45% { transform: translateY(1px) scale(0.97); }
+    100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes cardPressHover {
+    0% { transform: translateY(-4px) scale(1); }
+    45% { transform: translateY(-1px) scale(0.97); }
+    100% { transform: translateY(-4px) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .data-card.press-anim {
+        animation: none;
+    }
 }
 
 .data-card:hover::before {
@@ -2843,5 +2895,147 @@ html, body {
 [data-theme='dark'] .exception-item {
     background: #2b2b2b;
     border-color: rgba(245, 108, 108, 0.3);
+}
+
+/* ========== Multi-select Mode Styles ========== */
+.data-card.is-selected {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-color: var(--danger-color);
+    z-index: 10;
+}
+
+[data-theme='dark'] .data-card.is-selected {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    border-color: var(--danger-color);
+}
+
+.selection-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(245, 108, 108, 0.22);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 5;
+    transition: all 0.3s;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    border-radius: var(--radius-xl);
+    pointer-events: none;
+}
+
+[data-theme='dark'] .selection-overlay {
+    background: rgba(245, 108, 108, 0.18);
+}
+
+.selection-icon {
+    font-size: 48px;
+    color: var(--danger-color);
+    animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes bounceIn {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.batch-action-bar {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 12px 24px;
+    border-radius: 50px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    z-index: 2000;
+    border: 1px solid var(--border-light);
+    animation: slideUp 0.3s ease-out;
+}
+
+[data-theme='dark'] .batch-action-bar {
+    background: rgba(31, 31, 31, 0.95);
+    border-color: #333;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+@keyframes slideUp {
+    from { transform: translate(-50%, 100%); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.batch-count {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 16px;
+    white-space: nowrap;
+}
+
+.batch-options {
+    display: flex;
+    gap: 15px;
+    border-left: 1px solid var(--border-light);
+    border-right: 1px solid var(--border-light);
+    padding: 0 20px;
+}
+
+[data-theme='dark'] .batch-options {
+    border-color: #444;
+}
+
+.batch-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Pending Delete Animation */
+.delete-icon-anim {
+    animation: shake 2s infinite;
+    color: var(--danger-color);
+}
+
+@keyframes shake {
+  0%, 100% { transform: rotate(0deg); }
+  10%, 30%, 50%, 70%, 90% { transform: rotate(-10deg); }
+  20%, 40%, 60%, 80% { transform: rotate(10deg); }
+}
+
+/* Mobile Adaptation for Batch Bar */
+@media (max-width: 768px) {
+    .batch-action-bar {
+        width: 90%;
+        bottom: 20px;
+        flex-direction: column;
+        border-radius: 20px;
+        padding: 16px;
+        gap: 12px;
+    }
+    
+    .batch-options {
+        border: none;
+        padding: 0;
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+    }
+    
+    .batch-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .batch-actions .el-button {
+        flex: 1;
+    }
 }
 

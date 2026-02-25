@@ -8,6 +8,8 @@
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
     <link href="../css/history.css" rel="stylesheet">
+    <style>
+    </style>
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
@@ -85,15 +87,15 @@
     <main class="history-main">
         
         <!-- 分类标签页 -->
-        <div class="category-tabs-container">
+        <div class="category-tabs-container" :class="{ 'is-disabled': isMultiSelectMode }">
             <el-tabs v-model="form.viewType" @tab-click="handleViewTypeChange">
-                <el-tab-pane name="working">
+                <el-tab-pane name="working" :disabled="isMultiSelectMode">
                     <span slot="label">
                         工作中的稿件
                         <el-badge v-if="workingCount > 0" :value="workingCount" class="item" type="success" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
                     </span>
                 </el-tab-pane>
-                <el-tab-pane name="archived">
+                <el-tab-pane name="archived" :disabled="isMultiSelectMode">
                     <span slot="label">
                         已归档的稿件
                         <el-badge v-if="archivedCount > 0" :value="archivedCount" class="item" type="info" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
@@ -116,36 +118,40 @@
             </div>
             
             <transition name="filter-slide">
-                <div class="filter-body" v-show="filterExpanded">
+                <div class="filter-body" v-show="filterExpanded" :class="{ 'is-disabled': isMultiSelectMode }">
                     <!-- 快捷筛选标签 -->
                     <div class="quick-filters">
                         <span class="quick-filter-label">快捷筛选：</span>
                         <el-tag 
                             :type="quickFilter === 'recording' ? 'primary' : 'info'" 
                             :effect="quickFilter === 'recording' ? 'dark' : 'plain'"
-                            @click="setQuickFilter('recording')"
-                            class="quick-tag">
+                            @click="isMultiSelectMode ? null : setQuickFilter('recording')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
                             <i class="el-icon-video-camera"></i> 录制中
                         </el-tag>
                         <el-tag 
                             :type="quickFilter === 'success' ? 'success' : 'info'" 
                             :effect="quickFilter === 'success' ? 'dark' : 'plain'"
-                            @click="setQuickFilter('success')"
-                            class="quick-tag">
+                            @click="isMultiSelectMode ? null : setQuickFilter('success')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
                             <i class="el-icon-circle-check"></i> 已通过
                         </el-tag>
                         <el-tag 
                             :type="quickFilter === 'self' ? 'success' : 'info'" 
                             :effect="quickFilter === 'self' ? 'dark' : 'plain'"
-                            @click="setQuickFilter('self')"
-                            class="quick-tag">
+                            @click="isMultiSelectMode ? null : setQuickFilter('self')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
                             <i class="el-icon-view"></i> 仅自己可见
                         </el-tag>
                         <el-tag 
                             :type="quickFilter === 'fail' ? 'danger' : 'info'" 
                             :effect="quickFilter === 'fail' ? 'dark' : 'plain'"
-                            @click="setQuickFilter('fail')"
-                            class="quick-tag">
+                            @click="isMultiSelectMode ? null : setQuickFilter('fail')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
                             <i class="el-icon-circle-close"></i> 不通过
                         </el-tag>
                     </div>
@@ -157,7 +163,7 @@
                     <div class="filter-grid">
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-house"></i> 房间号</label>
-                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small">
+                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small" :disabled="isMultiSelectMode">
                                 <el-option
                                         v-for="room in roomList"
                                         :key="room.roomId"
@@ -171,7 +177,7 @@
                         
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-video-play"></i> BV号</label>
-                            <el-input v-model="form.bvId" clearable placeholder="输入BV号" size="small" @clear="onFilterChange">
+                            <el-input v-model="form.bvId" clearable placeholder="输入BV号" size="small" @clear="onFilterChange" :disabled="isMultiSelectMode">
                                 <i slot="prefix" class="el-input__icon el-icon-search"></i>
                             </el-input>
                         </div>
@@ -180,7 +186,7 @@
                             <label class="filter-label"><i class="el-icon-upload2"></i> 上传状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.upload !== null && form.upload !== undefined" class="select-prefix-icon" :class="form.upload === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === true ? '#67c23a' : '#f56c6c'}"></i>
-                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload !== null && form.upload !== undefined}">
+                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload !== null && form.upload !== undefined}" :disabled="isMultiSelectMode">
                                     <el-option label="已上传" :value="true">
                                         <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已上传
                                     </el-option>
@@ -195,7 +201,7 @@
                             <label class="filter-label"><i class="el-icon-video-camera"></i> 录制状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.recording !== null && form.recording !== undefined" class="select-prefix-icon" :class="form.recording === true ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === true ? '#e6a23c' : '#909399'}"></i>
-                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording !== null && form.recording !== undefined}">
+                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording !== null && form.recording !== undefined}" :disabled="isMultiSelectMode">
                                     <el-option label="录制中" :value="true">
                                         <i class="el-icon-video-camera" style="color: #e6a23c; margin-right: 6px;"></i>录制中
                                     </el-option>
@@ -210,7 +216,7 @@
                             <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? '#67c23a' : '#909399'}"></i>
-                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}">
+                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode || isMultiSelectMode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}">
                                     <el-option label="已发布" :value="true">
                                         <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已发布
                                     </el-option>
@@ -225,7 +231,7 @@
                             <label class="filter-label"><i class="el-icon-s-check"></i> 审核状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.code !== null && form.code !== undefined && form.code !== ''" class="select-prefix-icon" :class="getCodeIcon(form.code)" :style="{color: getCodeColor(form.code)}"></i>
-                                <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}">
+                                <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}" :disabled="isMultiSelectMode">
                                     <el-option label="未审核" :value="-999">
                                         <i class="el-icon-remove-outline" style="color: #909399; margin-right: 6px;"></i>未审核
                                     </el-option>
@@ -246,10 +252,10 @@
                             <div class="filter-label-row">
                                 <label class="filter-label" title="按结束时间(endTime)筛选"><i class="el-icon-date"></i> 结束时间</label>
                                 <div class="date-shortcuts">
-                                    <el-link type="primary" :underline="false" @click="setDateRange(0)">今天</el-link>
-                                    <el-link type="primary" :underline="false" @click="setDateRange(1)">最近24h</el-link>
-                                    <el-link type="primary" :underline="false" @click="setDateRange(3)">3天</el-link>
-                                    <el-link type="primary" :underline="false" @click="setDateRange(7)">7天</el-link>
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(0)" :disabled="isMultiSelectMode">今天</el-link>
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(1)" :disabled="isMultiSelectMode">最近24h</el-link>
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(3)" :disabled="isMultiSelectMode">3天</el-link>
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(7)" :disabled="isMultiSelectMode">7天</el-link>
                                 </div>
                             </div>
                             <div class="date-range">
@@ -259,6 +265,7 @@
                                         placeholder="开始时间"
                                     value-format="yyyy-MM-dd HH:mm:ss.SSS"
                                         size="small"
+                                        :disabled="isMultiSelectMode"
                                         @change="onFilterChange">
                                 </el-date-picker>
                                 <span class="date-separator">至</span>
@@ -268,6 +275,7 @@
                                         placeholder="结束时间"
                                     value-format="yyyy-MM-dd HH:mm:ss.SSS"
                                         size="small"
+                                        :disabled="isMultiSelectMode"
                                         @change="onFilterChange">
                                 </el-date-picker>
                             </div>
@@ -276,8 +284,11 @@
                     
                     <!-- 操作按钮 -->
                     <div class="filter-footer">
-                        <el-button class="modern-btn" type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading">查询</el-button>
-                        <el-button class="modern-btn" icon="el-icon-refresh" @click="resetFilters" size="small">重置</el-button>
+                        <el-button class="modern-btn" type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading || isMultiSelectMode">查询</el-button>
+                        <el-button class="modern-btn" icon="el-icon-refresh" @click="resetFilters" size="small" :disabled="isMultiSelectMode">重置</el-button>
+                        <el-button class="modern-btn" icon="el-icon-files" @click="toggleBatchMode" size="small" :type="isMultiSelectMode ? 'primary' : 'default'" plain>
+                            {{ isMultiSelectMode ? '退出管理' : '批量管理' }}
+                        </el-button>
                     </div>
                 </div>
             </transition>
@@ -305,14 +316,26 @@
             </div>
             
             <!-- 卡片视图 -->
-            <div v-else-if="viewMode === 'card'" class="data-card-grid" :key="form.current" v-loading="loading" element-loading-text="加载中...">
+            <div v-else-if="viewMode === 'card'" class="data-card-grid" :class="{'is-multi-select-mode': isMultiSelectMode}" :key="form.current" v-loading="loading" element-loading-text="加载中..."
+                 @mousedown.prevent="onSelectDragStart"
+                 @mousemove.prevent="onSelectDragMove"
+                 @mouseup.prevent="onSelectDragEnd"
+                 @mouseleave.prevent="onSelectDragEnd"
+                 @touchstart="onSelectTouchStart"
+                 @touchmove="onSelectTouchMove"
+                 @touchend="onSelectTouchEnd">
                 <div class="data-card" 
                      :class="{ 
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
                         'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (item.giveUpPartCount > 0),
-                        'is-success': item.publish && (item.code == 0 || item.code == -50)
+                        'is-success': item.publish && (item.code == 0 || item.code == -50),
+                        'is-selected': isMultiSelectMode && isSelected(item),
+                        'press-anim': pressedCardId === item.id
                      }" 
-                     v-for="item in tableData" :key="item.id" @click="showDetail(item)">
+                     v-for="item in tableData" :key="item.id" :data-id="item.id" @click="handleCardClick(item)">
+                    <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
+                        <i class="el-icon-delete selection-icon"></i>
+                    </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
                             <div class="card-title">{{ maskText(item.title || '无标题') }}</div>
@@ -445,6 +468,21 @@
             </div>
         </transition>
 
+        <!-- 批量操作栏 -->
+        <div class="batch-action-bar" v-if="isMultiSelectMode">
+            <el-checkbox v-model="isAllSelected" :indeterminate="isIndeterminate">全选本页</el-checkbox>
+            <span class="batch-count">已选 {{ selectedItems.length }} 项</span>
+            <div class="batch-options">
+                <el-checkbox v-model="batchDeleteOptions.deleteVideo">同时删除视频文件</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteDanmaku">同时删除弹幕文件</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteCover">同时删除封面图片</el-checkbox>
+            </div>
+            <div class="batch-actions">
+                <el-button type="danger" size="small" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedItems.length === 0">批量删除</el-button>
+                <el-button size="small" @click="toggleBatchMode">取消</el-button>
+            </div>
+        </div>
+
         <!-- 分页 -->
         <div class="pagination-container">
             <div v-if="isMobile && showSwipeHint && viewMode === 'card'" class="swipe-hint" @click="closeSwipeHint">
@@ -456,6 +494,7 @@
             <el-pagination
                     @size-change="handleSizeChange"
                     @current-change="handleCurrentChange"
+                    :disabled="isMultiSelectMode"
                     :current-page.sync="form.current"
                     :page-sizes="pageSizes"
                     :page-size="form.pageSize || 10"
@@ -789,6 +828,22 @@
                 restartOrdinary: false,
                 restartAdvanced: false
             },
+            isMultiSelectMode: false,
+            selectedItems: [],
+            pressedCardId: null,
+            pressedCardTimer: null,
+            dragSelecting: false,
+            dragSelectMode: null,
+            dragLastCardId: null,
+            dragStartX: 0,
+            dragStartY: 0,
+            didDragSelect: false,
+            didDragSelectTimer: null,
+            batchDeleteOptions: {
+                deleteVideo: false,
+                deleteDanmaku: false,
+                deleteCover: false
+            },
             pickerOptions: {
                 shortcuts: [{
                     text: '最近24小时',
@@ -826,6 +881,21 @@
             }
         },
         computed: {
+            isAllSelected: {
+                get: function() {
+                    return this.tableData.length > 0 && this.selectedItems.length === this.tableData.length;
+                },
+                set: function(val) {
+                    if (val) {
+                        this.selectedItems = this.tableData.slice();
+                    } else {
+                        this.selectedItems = [];
+                    }
+                }
+            },
+            isIndeterminate: function() {
+                return this.selectedItems.length > 0 && this.selectedItems.length < this.tableData.length;
+            },
             isPublishLockedByCode: function() {
                 return this.form.code !== null && this.form.code !== undefined && this.form.code !== '';
             },
@@ -893,7 +963,9 @@
                     this.stopProgressPolling();
                 } else {
                     // 页面恢复可见时立即刷新一次数据
-                    this.initTable(true);
+                    if (!this.isMultiSelectMode) {
+                        this.initTable(true);
+                    }
                     
                     if (this.detailDialogVisible && this.currentDetail && this.currentDetail.id) {
                         // 页面可见且详情弹窗打开时恢复进度轮询
@@ -901,7 +973,219 @@
                     }
                 }
             },
+            toggleBatchMode: function() {
+                this.isMultiSelectMode = !this.isMultiSelectMode;
+                this.selectedItems = [];
+                if (this.isMultiSelectMode) {
+                    this.filterExpanded = false;
+                    this.stopPolling();
+                    this.$message.info('已进入批量管理模式，点击卡片进行选择');
+                } else {
+                    this.startPolling();
+                    this.initTable(true);
+                }
+            },
+            handleCardClick: function(item) {
+                var _this = this;
+                this.pressedCardId = item.id;
+                if (this.pressedCardTimer) {
+                    clearTimeout(this.pressedCardTimer);
+                    this.pressedCardTimer = null;
+                }
+                this.pressedCardTimer = setTimeout(function() {
+                    if (_this.pressedCardId === item.id) {
+                        _this.pressedCardId = null;
+                    }
+                    _this.pressedCardTimer = null;
+                }, 220);
+                if (this.isMultiSelectMode && this.didDragSelect) {
+                    this.didDragSelect = false;
+                    if (this.didDragSelectTimer) {
+                        clearTimeout(this.didDragSelectTimer);
+                        this.didDragSelectTimer = null;
+                    }
+                    return;
+                }
+                if (this.isMultiSelectMode) {
+                    this.toggleSelection(item);
+                } else {
+                    this.showDetail(item);
+                }
+            },
+            findClosestCardIdFromPoint: function(clientX, clientY) {
+                var el = document.elementFromPoint(clientX, clientY);
+                while (el) {
+                    if (el.classList && el.classList.contains('data-card')) {
+                        return el.getAttribute('data-id');
+                    }
+                    el = el.parentNode;
+                }
+                return null;
+            },
+            applyDragSelectionById: function(cardId) {
+                if (!this.isMultiSelectMode) return;
+                if (!cardId) return;
+                if (this.dragLastCardId === cardId) return;
+                this.dragLastCardId = cardId;
+
+                var item = this.tableData.find(function(i) { return String(i.id) === String(cardId); });
+                if (!item) return;
+
+                var selected = this.isSelected(item);
+                if (!this.dragSelectMode) {
+                    this.dragSelectMode = selected ? 'deselect' : 'select';
+                }
+                if (this.dragSelectMode === 'select') {
+                    if (!selected) this.selectedItems.push(item);
+                } else {
+                    if (selected) {
+                        var idx = this.selectedItems.findIndex(function(i) { return i.id === item.id; });
+                        if (idx > -1) this.selectedItems.splice(idx, 1);
+                    }
+                }
+            },
+            onSelectDragStart: function(e) {
+                if (!this.isMultiSelectMode) return;
+                if (this.viewMode !== 'card') return;
+                if (e && e.button !== undefined && e.button !== 0) return;
+                this.didDragSelect = true;
+                if (this.didDragSelectTimer) {
+                    clearTimeout(this.didDragSelectTimer);
+                    this.didDragSelectTimer = null;
+                }
+                this.dragSelecting = true;
+                this.dragSelectMode = null;
+                this.dragLastCardId = null;
+                this.dragStartX = e.clientX;
+                this.dragStartY = e.clientY;
+                this.applyDragSelectionById(this.findClosestCardIdFromPoint(e.clientX, e.clientY));
+            },
+            onSelectDragMove: function(e) {
+                if (!this.dragSelecting) return;
+                this.applyDragSelectionById(this.findClosestCardIdFromPoint(e.clientX, e.clientY));
+            },
+            onSelectDragEnd: function() {
+                if (!this.dragSelecting) return;
+                this.dragSelecting = false;
+                this.dragSelectMode = null;
+                this.dragLastCardId = null;
+                var _this = this;
+                if (this.didDragSelectTimer) clearTimeout(this.didDragSelectTimer);
+                this.didDragSelectTimer = setTimeout(function() {
+                    _this.didDragSelect = false;
+                    _this.didDragSelectTimer = null;
+                }, 350);
+            },
+            onSelectTouchStart: function(e) {
+                if (!this.isMultiSelectMode) return;
+                if (this.viewMode !== 'card') return;
+                if (!e || !e.touches || !e.touches[0]) return;
+                var t = e.touches[0];
+                this.didDragSelect = true;
+                if (this.didDragSelectTimer) {
+                    clearTimeout(this.didDragSelectTimer);
+                    this.didDragSelectTimer = null;
+                }
+                this.dragSelecting = true;
+                this.dragSelectMode = null;
+                this.dragLastCardId = null;
+                this.dragStartX = t.clientX;
+                this.dragStartY = t.clientY;
+                this.applyDragSelectionById(this.findClosestCardIdFromPoint(t.clientX, t.clientY));
+            },
+            onSelectTouchMove: function(e) {
+                if (!this.dragSelecting) return;
+                if (!e || !e.touches || !e.touches[0]) return;
+                var t = e.touches[0];
+                this.applyDragSelectionById(this.findClosestCardIdFromPoint(t.clientX, t.clientY));
+            },
+            onSelectTouchEnd: function() {
+                if (!this.dragSelecting) return;
+                this.dragSelecting = false;
+                this.dragSelectMode = null;
+                this.dragLastCardId = null;
+                var _this = this;
+                if (this.didDragSelectTimer) clearTimeout(this.didDragSelectTimer);
+                this.didDragSelectTimer = setTimeout(function() {
+                    _this.didDragSelect = false;
+                    _this.didDragSelectTimer = null;
+                }, 450);
+            },
+            isSelected: function(item) {
+                return this.selectedItems.some(function(i) { return i.id === item.id; });
+            },
+            toggleSelection: function(item) {
+                var index = this.selectedItems.findIndex(function(i) { return i.id === item.id; });
+                if (index > -1) {
+                    this.selectedItems.splice(index, 1);
+                } else {
+                    this.selectedItems.push(item);
+                }
+            },
+            handleBatchDelete: function() {
+                var _this = this;
+                if (this.selectedItems.length === 0) return;
+
+                var msg = '<p>确定要删除选中的 <span style="color:#F56C6C;font-weight:bold;">' + this.selectedItems.length + '</span> 个稿件吗？</p>';
+                if (this.batchDeleteOptions.deleteVideo || this.batchDeleteOptions.deleteDanmaku || this.batchDeleteOptions.deleteCover) {
+                    msg += '<p style="margin-top:10px;">同时删除以下本地文件：</p><ul style="color:#F56C6C;padding-left:20px;">';
+                    if (this.batchDeleteOptions.deleteVideo) msg += '<li>视频文件</li>';
+                    if (this.batchDeleteOptions.deleteDanmaku) msg += '<li>弹幕文件</li>';
+                    if (this.batchDeleteOptions.deleteCover) msg += '<li>封面图片</li>';
+                    msg += '</ul>';
+                    msg += '<p style="font-size:12px;color:#909399;margin-top:10px;">注意：此操作不可恢复！</p>';
+                }
+
+                this.$confirm(msg, '批量删除确认', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '确定删除',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(function() {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在批量删除 ' + _this.selectedItems.length + ' 个稿件...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+
+                    // 使用 Promise.all 并行请求
+                    var promises = _this.selectedItems.map(function(item) {
+                        return new Promise(function(resolve, reject) {
+                            $.ajax({
+                                url: '/history/delete/' + item.id,
+                                type: 'get',
+                                data: _this.batchDeleteOptions,
+                                dataType: 'json',
+                                success: function(res) {
+                                    resolve({ id: item.id, success: res.type === 'success', msg: res.msg });
+                                },
+                                error: function() {
+                                    resolve({ id: item.id, success: false, msg: '请求失败' });
+                                }
+                            });
+                        });
+                    });
+
+                    Promise.all(promises).then(function(results) {
+                        loading.close();
+                        var successCount = results.filter(function(r) { return r.success; }).length;
+                        var failCount = results.length - successCount;
+                        
+                        if (failCount === 0) {
+                            _this.$message.success('成功删除 ' + successCount + ' 个稿件');
+                        } else {
+                            _this.$message.warning('删除完成：成功 ' + successCount + ' 个，失败 ' + failCount + ' 个');
+                        }
+                        _this.isMultiSelectMode = false;
+                        _this.selectedItems = [];
+                        _this.startPolling();
+                        _this.initTable();
+                    });
+                }).catch(function() {});
+            },
             handleViewTypeChange: function() {
+                if (this.isMultiSelectMode) return;
                 this.form.current = 1;
                 this.initTable();
             },
@@ -1102,6 +1386,7 @@
                 });
             },
             resetFilters: function() {
+                if (this.isMultiSelectMode) return;
                 this.form.roomId = '';
                 this.form.bvId = '';
                 this.form.upload = null;
@@ -1114,6 +1399,7 @@
                 this.initTable();
             },
             setQuickFilter: function(type) {
+                if (this.isMultiSelectMode) return;
                 this.resetFilters();
                 if (this.quickFilter === type) {
                     this.quickFilter = null;
@@ -1141,9 +1427,11 @@
                 this.initTable();
             },
             onFilterChange: function() {
+                if (this.isMultiSelectMode) return;
                 this.quickFilter = null;
             },
             setDateRange: function(days) {
+                if (this.isMultiSelectMode) return;
                 const end = new Date();
                 const start = new Date();
                 if (days === 0) {
@@ -1192,13 +1480,16 @@
                 localStorage.setItem('hasShownSwipeHint', 'true');
             },
             handleTouchStart(e) {
+                if (this.isMultiSelectMode) return;
                 this.touchStartX = e.changedTouches[0].screenX;
             },
             handleTouchEnd(e) {
+                if (this.isMultiSelectMode) return;
                 this.touchEndX = e.changedTouches[0].screenX;
                 this.handleSwipe();
             },
             handleSwipe() {
+                if (this.isMultiSelectMode) return;
                 if (this.viewMode === 'table') return;
                 if (Math.abs(this.touchEndX - this.touchStartX) > 50) {
                     if (this.touchEndX < this.touchStartX) {
@@ -1239,6 +1530,7 @@
                 this.pollingTimer = setInterval(function () {
                     // 页面不可见时暂停轮询
                     if (document.hidden) return;
+                    if (self.isMultiSelectMode) return;
                     // 仅在"工作中"页签或列表页刷新数据
                     self.initTable(true);
                 }, 30000); // 30秒一次
@@ -1574,11 +1866,13 @@
                 });
             },
             handleSizeChange(val) {
+                if (this.isMultiSelectMode) return;
                 this.form.pageSize=val;
                 this.userChangedPageSize = true;
                 this.initTable();
             },
             handleCurrentChange(val) {
+                if (this.isMultiSelectMode) return;
                 if (val > this.form.current) {
                     this.transitionName = 'slide-left';
                 } else if (val < this.form.current) {
@@ -1590,6 +1884,10 @@
                 this.initTable();
             },
             initTable: function (silent) {
+                if (this.isMultiSelectMode) {
+                    if (!silent) this.loading = false;
+                    return;
+                }
                 if (!silent) this.loading = true;
                 let _this = this;
                 $.ajax({
