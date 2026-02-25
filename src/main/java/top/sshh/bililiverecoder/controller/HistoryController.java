@@ -28,6 +28,8 @@ import top.sshh.bililiverecoder.service.SystemConfigService;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -200,11 +202,11 @@ public class HistoryController {
     }
 
     @GetMapping("/delete/{id}")
-    public Map<String, String> delete(@PathVariable("id") Long id,
+    public Map<String, Object> delete(@PathVariable("id") Long id,
                                       @RequestParam(required = false, defaultValue = "true") boolean deleteVideo,
                                       @RequestParam(required = false, defaultValue = "true") boolean deleteDanmaku,
                                       @RequestParam(required = false, defaultValue = "true") boolean deleteCover) {
-        Map<String, String> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
             result.put("msg", "请输入id");
@@ -215,22 +217,80 @@ public class HistoryController {
             RecordHistory history = historyOptional.get();
             List<LiveMsg> liveMsgs = msgRepository.queryByBvid(history.getBvId());
             msgRepository.deleteAll(liveMsgs);
+            List<Map<String, Object>> notDeletedFiles = new ArrayList<>();
+            int localDeleteAttempt = 0;
+            int localDeleteSuccess = 0;
+            boolean deleteAnyLocal = deleteVideo || deleteDanmaku || deleteCover;
             List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : partList) {
                 String filePath = part.getFilePath();
-                if(! filePath.startsWith(workPath)){
+                if (filePath == null) {
                     part.setFileDelete(true);
-                    part = partRepository.save(part);
+                    partRepository.save(part);
+                    continue;
+                }
+                if (!filePath.startsWith(workPath)) {
+                    if (deleteAnyLocal) {
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("path", filePath);
+                        entry.put("kind", "unknown");
+                        entry.put("status", "skipped");
+                        entry.put("reason", "文件不在 workPath 下，出于安全跳过");
+                        notDeletedFiles.add(entry);
+                    }
+                    part.setFileDelete(true);
+                    partRepository.save(part);
                     continue;
                 }
                 String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
                 String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
                 File startDir = new File(startDirPath);
                 File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                if (files != null) {
+                if (files == null) {
+                    if (deleteAnyLocal) {
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("path", startDirPath);
+                        entry.put("kind", "unknown");
+                        entry.put("status", "missing");
+                        entry.put("reason", "目录不存在或无法读取");
+                        notDeletedFiles.add(entry);
+                    }
+                } else {
+                    if (files.length == 0 && deleteAnyLocal) {
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("path", filePath);
+                        entry.put("kind", "unknown");
+                        entry.put("status", "missing");
+                        entry.put("reason", "未找到匹配的本地文件");
+                        notDeletedFiles.add(entry);
+                    }
                     for (File file : files) {
-                        if (shouldDeleteFile(file, deleteVideo, deleteDanmaku, deleteCover)) {
-                            file.delete();
+                        if (!shouldDeleteFile(file, deleteVideo, deleteDanmaku, deleteCover)) {
+                            continue;
+                        }
+                        localDeleteAttempt++;
+                        Path path = file.toPath();
+                        String lowerName = file.getName() == null ? "" : file.getName().toLowerCase();
+                        String kind = fileKindByLowerName(lowerName);
+                        if (!Files.exists(path)) {
+                            Map<String, Object> entry = new LinkedHashMap<>();
+                            entry.put("path", path.toString().replace("\\", "/"));
+                            entry.put("kind", kind);
+                            entry.put("status", "missing");
+                            entry.put("reason", "文件不存在");
+                            notDeletedFiles.add(entry);
+                            continue;
+                        }
+                        try {
+                            Files.delete(path);
+                            localDeleteSuccess++;
+                        } catch (Exception ex) {
+                            Map<String, Object> entry = new LinkedHashMap<>();
+                            entry.put("path", path.toString().replace("\\", "/"));
+                            entry.put("kind", kind);
+                            entry.put("status", "failed");
+                            entry.put("reason", ex.getClass().getSimpleName() + ": " + String.valueOf(ex.getMessage()));
+                            notDeletedFiles.add(entry);
                         }
                     }
                 }
@@ -239,8 +299,29 @@ public class HistoryController {
             }
             partRepository.deleteAll(partList);
             historyRepository.delete(history);
-            result.put("type", "success");
-            result.put("msg", "录制历史删除成功");
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("historyId", id);
+            data.put("deleteVideo", deleteVideo);
+            data.put("deleteDanmaku", deleteDanmaku);
+            data.put("deleteCover", deleteCover);
+            data.put("localDeleteAttempt", localDeleteAttempt);
+            data.put("localDeleteSuccess", localDeleteSuccess);
+            data.put("notDeletedFiles", notDeletedFiles);
+            result.put("data", data);
+            if (notDeletedFiles.isEmpty()) {
+                result.put("type", "success");
+                result.put("msg", "录制历史删除成功");
+            } else {
+                result.put("type", "warning");
+                result.put("msg", "录制历史删除成功（有 " + notDeletedFiles.size() + " 个本地文件未删除）");
+                log.warn(LogKvs.event("History.Delete.LocalFileNotDeleted")
+                        .msg("删除录制历史时发现本地文件未删除")
+                        .add("historyId", id)
+                        .add("notDeletedCount", notDeletedFiles.size())
+                        .add("localDeleteAttempt", localDeleteAttempt)
+                        .add("localDeleteSuccess", localDeleteSuccess)
+                        .toString());
+            }
             return result;
         } else {
             result.put("type", "warning");
@@ -249,7 +330,24 @@ public class HistoryController {
         }
     }
 
+    private String fileKindByLowerName(String lowerName) {
+        if (lowerName == null) return "unknown";
+        if (lowerName.endsWith(".mp4") || lowerName.endsWith(".flv") || lowerName.endsWith(".mkv") || lowerName.endsWith(".ts") || lowerName.endsWith(".mov") || lowerName.endsWith(".avi")) {
+            return "video";
+        }
+        if (lowerName.endsWith(".xml") || lowerName.endsWith(".ass")) {
+            return "danmaku";
+        }
+        if (lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp") || lowerName.endsWith(".gif")) {
+            return "cover";
+        }
+        return "other";
+    }
+
     private boolean shouldDeleteFile(File file, boolean deleteVideo, boolean deleteDanmaku, boolean deleteCover) {
+        if (!deleteVideo && !deleteDanmaku && !deleteCover) {
+            return false;
+        }
         String name = file.getName().toLowerCase();
         // 视频文件扩展名
         if (name.endsWith(".mp4") || name.endsWith(".flv") || name.endsWith(".mkv") || name.endsWith(".ts") || name.endsWith(".mov") || name.endsWith(".avi")) {

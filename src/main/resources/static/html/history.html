@@ -1122,6 +1122,43 @@
                     this.selectedItems.push(item);
                 }
             },
+            buildNotDeletedFilesHtml: function(items) {
+                var esc = function(s) {
+                    return String(s == null ? '' : s)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                };
+                var label = function(kind) {
+                    if (kind === 'video') return '视频';
+                    if (kind === 'danmaku') return '弹幕';
+                    if (kind === 'cover') return '封面';
+                    if (kind === 'other') return '其他';
+                    return '未知';
+                };
+                var statusLabel = function(status) {
+                    if (status === 'missing') return '未找到';
+                    if (status === 'skipped') return '已跳过';
+                    if (status === 'failed') return '删除失败';
+                    return '未删除';
+                };
+                var html = '<div style="max-height: 45vh; overflow:auto;">';
+                html += '<p style="margin:0 0 10px 0; color:#606266;">以下文件未删除成功，请手动检查（可能已被移动/删除/占用/权限不足）：</p>';
+                items.forEach(function(group) {
+                    html += '<div style="margin:10px 0 6px 0; font-weight:600; color:#303133;">稿件ID：' + esc(group.historyId) + '</div>';
+                    html += '<ul style="margin:0; padding-left:20px; color:#606266;">';
+                    (group.files || []).forEach(function(f) {
+                        var line = '[' + statusLabel(f.status) + ']' + '[' + label(f.kind) + '] ' + esc(f.path);
+                        if (f.reason) line += '（' + esc(f.reason) + '）';
+                        html += '<li style="margin:4px 0;">' + line + '</li>';
+                    });
+                    html += '</ul>';
+                });
+                html += '</div>';
+                return html;
+            },
             handleBatchDelete: function() {
                 var _this = this;
                 if (this.selectedItems.length === 0) return;
@@ -1158,10 +1195,12 @@
                                 data: _this.batchDeleteOptions,
                                 dataType: 'json',
                                 success: function(res) {
-                                    resolve({ id: item.id, success: res.type === 'success', msg: res.msg });
+                                    var ok = res && typeof res.msg === 'string' && res.msg.indexOf('删除成功') > -1;
+                                    var files = res && res.data && Array.isArray(res.data.notDeletedFiles) ? res.data.notDeletedFiles : [];
+                                    resolve({ id: item.id, deleted: ok, type: res && res.type, msg: res && res.msg, notDeletedFiles: files });
                                 },
                                 error: function() {
-                                    resolve({ id: item.id, success: false, msg: '请求失败' });
+                                    resolve({ id: item.id, deleted: false, type: 'error', msg: '请求失败', notDeletedFiles: [] });
                                 }
                             });
                         });
@@ -1169,8 +1208,11 @@
 
                     Promise.all(promises).then(function(results) {
                         loading.close();
-                        var successCount = results.filter(function(r) { return r.success; }).length;
+                        var successCount = results.filter(function(r) { return r.deleted; }).length;
                         var failCount = results.length - successCount;
+                        var notDeletedGrouped = results
+                            .filter(function(r) { return r.deleted && r.notDeletedFiles && r.notDeletedFiles.length > 0; })
+                            .map(function(r) { return { historyId: r.id, files: r.notDeletedFiles }; });
                         
                         if (failCount === 0) {
                             _this.$message.success('成功删除 ' + successCount + ' 个稿件');
@@ -1181,6 +1223,13 @@
                         _this.selectedItems = [];
                         _this.startPolling();
                         _this.initTable();
+                        if (notDeletedGrouped.length > 0) {
+                            _this.$alert(_this.buildNotDeletedFilesHtml(notDeletedGrouped), '部分本地文件未删除', {
+                                dangerouslyUseHTMLString: true,
+                                confirmButtonText: '知道了',
+                                type: 'warning'
+                            });
+                        }
                     });
                 }).catch(function() {});
             },
@@ -2218,6 +2267,14 @@
                                 message: data.msg,
                                 type: data.type
                             });
+                            var files = data && data.data && Array.isArray(data.data.notDeletedFiles) ? data.data.notDeletedFiles : [];
+                            if (files.length > 0) {
+                                _this.$alert(_this.buildNotDeletedFilesHtml([{ historyId: id, files: files }]), '部分本地文件未删除', {
+                                    dangerouslyUseHTMLString: true,
+                                    confirmButtonText: '知道了',
+                                    type: 'warning'
+                                });
+                            }
                             _this.initTable();
                         },
                         error: function() {
