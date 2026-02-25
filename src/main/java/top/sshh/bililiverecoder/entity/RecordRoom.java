@@ -52,6 +52,11 @@ public class RecordRoom {
     private Long seasonId;
 
     /**
+     * 对应合集下的具体分组ID (section_id)
+     */
+    private Long sectionId;
+
+    /**
      * 仅自己可见
      */
     private int isOnlySelf = 0;

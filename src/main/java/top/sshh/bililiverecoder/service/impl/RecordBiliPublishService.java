@@ -939,15 +939,15 @@ public class RecordBiliPublishService {
                         }
 
                         try {
-                            if (room.getSeasonId() != null && room.getSeasonId() > 0) {
-                                String addSeasons = BiliApi.addSeasons(biliBiliUser, room.getSeasonId(), aid, String.valueOf(uploadParts.get(0).getCid()), videoUploadDto.getTitle());
+                            if (room.getSectionId() != null && room.getSectionId() > 0) {
+                                String addSeasons = BiliApi.addSeasons(biliBiliUser, room.getSectionId(), aid, String.valueOf(uploadParts.get(0).getCid()), videoUploadDto.getTitle());
                                 Integer code = JsonPath.read(addSeasons, "code");
                                 if (code == 0) {
                                     log.info("[BLR] {}", LogKvs.event("Publish.Season.Add.Success")
                                             .add("roomId", room.getRoomId())
                                             .add("uname", room.getUname())
                                             .add("historyId", history.getId())
-                                            .add("seasonId", room.getSeasonId())
+                                            .add("sectionId", room.getSectionId())
                                             .addIfNotBlank("aid", aid));
                                 }
                             }
@@ -956,7 +956,7 @@ public class RecordBiliPublishService {
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
                                     .add("historyId", history.getId())
-                                    .add("seasonId", room.getSeasonId())
+                                    .add("sectionId", room.getSectionId())
                                     .addIfNotBlank("aid", aid), e);
                         }
 
