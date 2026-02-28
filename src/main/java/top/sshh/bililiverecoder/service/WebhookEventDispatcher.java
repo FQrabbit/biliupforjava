@@ -18,6 +18,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 @Slf4j
@@ -27,6 +28,8 @@ public class WebhookEventDispatcher {
     private final TaskExecutor webhookExecutor;
 
     private final TaskScheduler scheduler;
+
+    private final ShutdownState shutdownState;
 
     private final ConcurrentHashMap<String, SerialExecutor> executors = new ConcurrentHashMap<>();
 
@@ -39,12 +42,14 @@ public class WebhookEventDispatcher {
     public WebhookEventDispatcher(
             @Qualifier("webhookExecutor") TaskExecutor webhookExecutor,
             @Qualifier("webhookTaskScheduler") TaskScheduler scheduler,
+            ShutdownState shutdownState,
             // 每个 lockKey 的最大待处理任务数；过大可能导致内存增长，过小可能导致 503 重试
             @org.springframework.beans.factory.annotation.Value("${record.webhook.max-pending-per-key:200}") int maxPendingPerKey,
             @org.springframework.beans.factory.annotation.Value("${record.webhook.idle-ttl-minutes:120}") long idleTtlMinutes
     ) {
         this.webhookExecutor = Objects.requireNonNull(webhookExecutor, "webhookExecutor");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+        this.shutdownState = Objects.requireNonNull(shutdownState, "shutdownState");
         this.maxPendingPerKey = Math.max(10, maxPendingPerKey);
         this.idleTtlMillis = Duration.ofMinutes(Math.max(10, idleTtlMinutes)).toMillis();
 
@@ -56,6 +61,9 @@ public class WebhookEventDispatcher {
      * @return true 表示成功入队；false 表示队列压力过大，应让发送方重试
      */
     public boolean submit(String lockKey, long delayMs, Runnable task) {
+        if (shutdownState.isShuttingDown()) {
+            return false;
+        }
         if (task == null) {
             return true;
         }

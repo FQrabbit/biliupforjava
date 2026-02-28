@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
@@ -88,9 +89,14 @@ public class RecordBiliPublishService {
     private LiveMsgRepository msgRepository;
     @Autowired
     private CaptchaService captchaService;
+    @Autowired
+    private ShutdownState shutdownState;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
+        if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+            return;
+        }
         this.publishRecordHistory(history);
     }
 
@@ -124,6 +130,9 @@ public class RecordBiliPublishService {
 
     @Async
     public void asyncRepublishRecordHistory(RecordHistory history) {
+        if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+            return;
+        }
 
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         String wxuid = room.getWxuid();
@@ -135,6 +144,7 @@ public class RecordBiliPublishService {
                     .add("uname", room.getUname())
                     .add("uploadUserId", room.getUploadUserId())
                     .add("historyId", history.getId()));
+            return;
         }
         BiliBiliUser biliBiliUser = userOptional.get();
         if (!biliBiliUser.isLogin()) {
@@ -143,6 +153,7 @@ public class RecordBiliPublishService {
                     .add("uname", room.getUname())
                     .add("uploadUserId", room.getUploadUserId())
                     .add("historyId", history.getId()));
+            return;
         }
 
         // 发布任务入队列
@@ -223,6 +234,7 @@ public class RecordBiliPublishService {
                         .add("uname", room.getUname())
                         .add("uploadUserId", room.getUploadUserId())
                         .add("historyId", history.getId()));
+                return;
             }
             biliBiliUser = userOptional.get();
             Map<String, Object> map = new HashMap<>();

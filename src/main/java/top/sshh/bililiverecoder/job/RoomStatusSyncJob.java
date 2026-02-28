@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
@@ -30,12 +31,21 @@ public class RoomStatusSyncJob {
     @Autowired
     private RecordHistoryPartRepository partRepository;
 
+    @Autowired
+    private ShutdownState shutdownState;
+
     // 启动后10秒执行一次，之后每隔60分钟执行一次
     @Scheduled(fixedDelay = 3600000, initialDelay = 10000)
     public void syncRoomStatus() {
+        if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+            return;
+        }
         log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Start"));
         for (RecordRoom room : roomRepository.findAll()) {
             try {
+                if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+                    return;
+                }
                 // 避免请求过快，每10秒请求一个房间，降低API请求压力
                 Thread.sleep(10000);
                 BiliLiveRoomInfoResponse response = BiliApi.getLiveRoomInfo(room.getRoomId());
@@ -107,11 +117,18 @@ public class RoomStatusSyncJob {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                if (shutdownState.isShuttingDown()) {
+                    log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.SleepInterrupted")
+                            .add("waitMs", 10000)
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname()));
+                    return;
+                }
                 log.warn("[BLR] {}", LogKvs.event("RoomStatusSyncJob.SleepInterrupted")
                         .add("waitMs", 10000)
                         .add("roomId", room.getRoomId())
                         .add("uname", room.getUname()), e);
-                break;
+                return;
             } catch (Exception e) {
                 log.error("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Failed")
                         .add("roomId", room.getRoomId())

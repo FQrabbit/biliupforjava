@@ -5,7 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
+import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
@@ -46,6 +49,13 @@ public class RecordEventFileClosedService implements RecordEventService {
 
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
+
+    @Autowired
+    @Qualifier("taskExecutor")
+    private TaskExecutor taskExecutor;
+
+    @Autowired
+    private ShutdownState shutdownState;
 
     @Autowired
     private LiveMsgService liveMsgService;
@@ -156,12 +166,23 @@ public class RecordEventFileClosedService implements RecordEventService {
                     toDir.mkdirs();
                 }
                 Long id = part.getId();
-                new Thread(() -> {
-                    RecordHistoryPart part2 = historyPartRepository.findById(id).get();
+                if (!shutdownState.isShuttingDown()) {
+                taskExecutor.execute(() -> {
+                    if (shutdownState.isShuttingDown()) {
+                        return;
+                    }
+                    Optional<RecordHistoryPart> partOptional = historyPartRepository.findById(id);
+                    if (!partOptional.isPresent()) {
+                        return;
+                    }
+                    RecordHistoryPart part2 = partOptional.get();
                     File startDir = new File(startDirPath);
                     File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
                     if (files != null) {
                         for (File file : files) {
+                            if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+                                return;
+                            }
                             if (!filePath.startsWith(workPath)) {
                                 part2.setFileDelete(true);
                                 part2 = historyPartRepository.save(part2);
@@ -209,13 +230,16 @@ public class RecordEventFileClosedService implements RecordEventService {
                     part2.setFilePath(toDirPath + filePath.substring(filePath.lastIndexOf("/") + 1));
                     part2.setFileDelete(true);
                     part2 = historyPartRepository.save(part2);
-                }).start();
+                });
+                }
             }
             // 文件上传操作
             //开始上传该视频分片，异步上传任务。
             // 小于设定文件大小和时长不上传
             if (fileSize > 1024 * 1024 * room.getFileSizeLimit() && part.getDuration() > room.getDurationLimit()) {
-                uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                if (!shutdownState.isShuttingDown()) {
+                    uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                }
             } else {
                 double fileSizeMb = fileSize / 1024d / 1024d;
                 double durationSec = part.getDuration();

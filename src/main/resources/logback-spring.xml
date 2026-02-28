@@ -24,6 +24,7 @@
     </appender>
 
     <logger name="top.sshh.bililiverecoder" level="DEBUG"/>
+    <logger name="io.undertow.websockets.jsr.UndertowSession" level="OFF"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE" />

@@ -13,6 +13,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
 
@@ -44,6 +45,9 @@ public class publishJob {
 
     @Autowired
     top.sshh.bililiverecoder.service.SystemConfigService systemConfigService;
+
+    @Autowired
+    ShutdownState shutdownState;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Long> uploadFailureMap = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.concurrent.ConcurrentHashMap<String, FileProbe> fileProbeMap = new java.util.concurrent.ConcurrentHashMap<>();
@@ -101,6 +105,9 @@ public class publishJob {
     // 定时查询直播历史，如果下一次直播开始时间和上一次结束时间小于5min，视为同一次直播
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
     public void publish() {
+        if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+            return;
+        }
         //查询出所有需要上传的房间
         List<RecordRoom> roomList = roomRepository.findByUpload(true);
 
@@ -135,6 +142,9 @@ public class publishJob {
         }
 
         for (RecordHistory history : historyList) {
+            if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+                return;
+            }
             // 二次校验：不信任 history.recording 单字段，避免被历史数据/列表纠偏误改后误触发投稿。
             // 只要存在未结束(endTime=null)或仍标记录制中的分P，就视为仍在录制，直接跳过。
             int actuallyRecordingParts = 0;
@@ -233,7 +243,13 @@ public class publishJob {
                         .add("waitMs", 30000));
                 Thread.sleep(30000);
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                if (shutdownState.isShuttingDown()) {
+                    log.info("[BLR] {}", LogKvs.event("PublishJob.WaitNextInterrupted"));
+                    return;
+                }
                 log.warn("[BLR] {}", LogKvs.event("PublishJob.WaitNextInterrupted"), e);
+                return;
             }
         }
     }
@@ -241,10 +257,16 @@ public class publishJob {
     // 独立的分P上传补偿任务，每分钟检查未上传的分P（不依赖整个录制历史状态）
     @Scheduled(fixedDelay = 60000, initialDelay = 10000)
     public void retryFailedPartUpload() {
+        if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+            return;
+        }
         List<RecordRoom> roomList = roomRepository.findByUpload(true);
         LocalDateTime now = LocalDateTime.now();
         
         for (RecordRoom room : roomList) {
+            if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+                return;
+            }
             // 查询该房间下所有已录制完成（endTime > 5分钟前）但未上传的分P
             // 仅扫描所属history存在且已开启上传(upload=true)的分P，避免无意义重复扫描
             List<RecordHistoryPart> pendingParts = partRepository.findPendingUploadPartsWithHistoryUploadEnabled(
@@ -252,6 +274,9 @@ public class publishJob {
 
             int triggeredCount = 0;
             for (RecordHistoryPart part : pendingParts) {
+                if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
+                    return;
+                }
                 // 检查失败冷却时间
                 if (uploadFailureMap.containsKey(part.getId())) {
                     long nextRetry = uploadFailureMap.get(part.getId());
@@ -368,34 +393,36 @@ public class publishJob {
                     continue;
                 }
                 
-                // 触发异步上传（使用新线程避免阻塞定时任务）
                 log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.TriggerUpload")
                         .add("roomId", room.getRoomId())
                         .add("uname", room.getUname())
                         .add("partId", part.getId())
                         .add("filePath", part.getFilePath()));
                 triggeredCount++;
-                new Thread(() -> {
-                    try {
-                        uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
-                    } catch (Exception e) {
-                        log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.UploadFailed")
-                                .add("roomId", room.getRoomId())
-                                .add("uname", room.getUname())
-                                .add("partId", part.getId())
-                                .add("filePath", part.getFilePath())
-                                .addIfNotBlank("err", e.getMessage())
-                                .add("ex", e.getClass().getSimpleName()), e);
-                        // 失败后冷却20分钟
-                        uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 20 * 60 * 1000);
-                    }
-                }).start();
+                try {
+                    uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                } catch (Exception e) {
+                    log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.UploadFailed")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath())
+                            .addIfNotBlank("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
+                    uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 20 * 60 * 1000);
+                }
 
                 try {
                     // 避免同时触发过多线程
                     Thread.sleep(5000);
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    if (shutdownState.isShuttingDown()) {
+                        log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.ThrottleSleepInterrupted"));
+                        return;
+                    }
                     log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.ThrottleSleepInterrupted"), e);
+                    return;
                 }
             }
 

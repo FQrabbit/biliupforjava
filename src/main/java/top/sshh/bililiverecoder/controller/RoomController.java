@@ -537,7 +537,11 @@ public class RoomController {
         if (roomOptional.isPresent()) {
             RecordRoom room = roomOptional.get();
             if (room.getUploadUserId() != null) {
-                BiliBiliUser biliUser = userRepository.findById(room.getUploadUserId()).get();
+                Optional<BiliBiliUser> biliUserOptional = userRepository.findById(room.getUploadUserId());
+                if (!biliUserOptional.isPresent()) {
+                    return "{\"code\":-1,\"message\":\"未找到上传用户\",\"ttl\":1,\"data\":{\"seasons\":[]}}";
+                }
+                BiliBiliUser biliUser = biliUserOptional.get();
                 int attempt = 0;
                 while (true) {
                     try {
