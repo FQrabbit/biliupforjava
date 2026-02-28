@@ -231,7 +231,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                 part.setSessionId(incomingSessionId);
                 part.setRecording(true);
                 part.setStartTime(LocalDateTime.now());
-                part.setEndTime(LocalDateTime.now());
+                part.setEndTime(null);
                 part = historyPartRepository.save(part);
 
                 log.info("[BLR] {}", LogKvs.event("FileOpen.PartSaved")

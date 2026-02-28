@@ -33,6 +33,8 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     int countByBvidAndCode(String bvId, Integer code);
 
+    int countByBvidAndPoolAndCode(String bvId, int pool, int code);
+
     int countByBvidAndPool(String bvId, int pool);
 
     int countByBvidAndPoolAndContextStartingWith(String bvId, int pool, String prefix);

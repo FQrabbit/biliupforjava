@@ -84,9 +84,6 @@ public class LiveMsgSendSync {
             return;
         }
         List<BiliBiliUser> allUser = userRepository.findByLoginIsTrueAndEnableIsTrue();
-        if (CollectionUtils.isEmpty(allUser)) {
-            return;
-        }
         DateFormat format = new SimpleDateFormat("HH:mm:ss");
         format.setTimeZone(TimeZone.getTimeZone("UTC"));
         List<RecordHistoryPart> partList = new ArrayList<>();
@@ -117,9 +114,13 @@ public class LiveMsgSendSync {
                     parts.add(p);
                 }
             }
+            // 房间弹幕发送开关（普通/SC）
+            RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+            boolean sendDmEnabled = room != null && Boolean.TRUE.equals(room.getSendDm());
+            boolean sendScEnabled = room != null && Boolean.TRUE.equals(room.getSendSc());
+
             //如果没有发送评论
             if (!history.isSendReply()) {
-                RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
                 String wxuid = null;
                 String pushMsgTags = null;
                 BiliBiliUser user = null;
@@ -131,11 +132,40 @@ public class LiveMsgSendSync {
                     if (userOptional.isPresent()) {
                         user = userOptional.get();
                         if (!(user.isLogin() && user.isEnable())) {
-                            continue;
+                            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.UploadUser.InvalidState")
+                                    .add("uid", user.getUid())
+                                    .addIfNotBlank("uname", user.getUname())
+                                    .add("login", user.isLogin())
+                                    .add("enable", user.isEnable())
+                                    .add("historyId", history.getId())
+                                    .addIfNotBlank("bvid", history.getBvId()));
+                            user = null; // 后续按“无可用上传账号”处理
                         }
                     }
                 }
 
+                // 普通弹幕/高级弹幕/SC 全关闭：直接标记“评论已处理”，避免状态卡住
+                if (!sendDmEnabled && !sendScEnabled) {
+                    history.setSendReply(true);
+                    historyRepository.save(history);
+                    log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.AllDmDisabled.Archive")
+                            .add("roomId", history.getRoomId())
+                            .add("historyId", history.getId())
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("title", history.getTitle()));
+                    continue;
+                }
+
+                // 未开启 SC/上舰发送时，不发送“SC/上舰列表评论”，直接认为评论阶段已完成
+                if (!sendScEnabled) {
+                    history.setSendReply(true);
+                    historyRepository.save(history);
+                    log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.SkipByRoomConfig")
+                            .add("roomId", history.getRoomId())
+                            .add("historyId", history.getId())
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("title", history.getTitle()));
+                } else {
                 boolean isPrivateFlow = false;
                 try {
                     if (user != null) {
@@ -239,7 +269,15 @@ public class LiveMsgSendSync {
                     reply.setMessage(context.toString());
                     replies.add(reply);
                 }
-                if (!replies.isEmpty()) {
+                // 需要发送评论但没有可用的上传账号：跳过本次评论发送，避免空指针
+                if (user == null && !replies.isEmpty()) {
+                    log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.SkipNoUploadUser")
+                            .add("roomId", history.getRoomId())
+                            .add("historyId", history.getId())
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("title", history.getTitle())
+                            .add("replyCount", replies.size()));
+                } else if (!replies.isEmpty()) {
                     try {
                         String replId = null;
                     for (int i = 0; i < replies.size(); i++) {
@@ -391,9 +429,11 @@ public class LiveMsgSendSync {
                     }
                     continue;
                 }
+                }
             }
             // 只有非仅自己可见(-50)的稿件，才加入弹幕发送队列
-            if (history.getCode() != -50) {
+            // 并且至少开启了普通弹幕或SC/上舰发送开关
+            if (history.getCode() != -50 && (sendDmEnabled || sendScEnabled)) {
                 partList.addAll(parts);
             }
         }

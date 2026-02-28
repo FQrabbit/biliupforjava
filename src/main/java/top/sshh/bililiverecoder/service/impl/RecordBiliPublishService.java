@@ -459,8 +459,8 @@ public class RecordBiliPublishService {
                     continue;
                 }
                 if (file.exists()) {
-                    if (uploadPart.isRecording() && file.lastModified() > System.currentTimeMillis() - (10 * 60 * 1000)) {
-                        log.error("[BLR] {}", LogKvs.event("Publish.Part.StillRecording")
+                    if (file.lastModified() > System.currentTimeMillis() - (10 * 60 * 1000) || uploadPart.getEndTime() == null) {
+                        log.warn("[BLR] {}", LogKvs.event("Publish.Part.FileStillWriting")
                                 .add("roomId", room.getRoomId())
                                 .add("uname", room.getUname())
                                 .add("historyId", history.getId())
@@ -478,7 +478,7 @@ public class RecordBiliPublishService {
                             }
                         }
                         uploadPart = partRepository.save(uploadPart);
-                        if (uploadPart.getEndTime().isAfter(now.plusMinutes(11L))) {
+                        if (uploadPart.getEndTime() != null && uploadPart.getEndTime().isAfter(now.plusMinutes(11L))) {
                             log.error("[BLR] {}", LogKvs.event("Publish.Part.EndTimeSuspicious")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())

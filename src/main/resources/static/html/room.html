@@ -13,6 +13,7 @@
             border: none !important;
             background: transparent !important;
             box-shadow: none !important;
+            z-index: 3000 !important;
         }
         .season-cover-tooltip.el-tooltip__popper .popper__arrow {
             display: none !important;
@@ -428,13 +429,15 @@
                                                 popper-class="season-cover-tooltip"
                                                 placement="right"
                                                 :open-delay="150"
-                                                :enterable="false">
+                                                :append-to-body="true"
+                                                :enterable="false"
+                                                @show="preloadSeasonCover(item)">
                                             <div slot="content">
                                                 <div class="season-cover-tooltip-wrap" v-if="seasonCoverObjectUrls[item.season.id]">
                                                     <img class="season-cover-tooltip-img" :src="seasonCoverObjectUrls[item.season.id]">
                                                 </div>
                                             </div>
-                                            <span style="float: left" @mouseenter="preloadSeasonCover(item)">{{ item.season.title }}</span>
+                                            <span style="float: left">{{ item.season.title }}</span>
                                         </el-tooltip>
                                     </el-option>
                                 </el-select>

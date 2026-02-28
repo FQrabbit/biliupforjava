@@ -107,17 +107,19 @@ public class HistoryController {
         Map<String, String> configMap = systemConfigService.getAllConfigsMap();
 
         Map<String,String> roomCache = new HashMap<>();
+        Map<String, RecordRoom> roomEntityCache = new HashMap<>();
         // 房间数量通常较少，直接全量加载比循环查询更高效
         Iterable<RecordRoom> iterable = roomRepository.findAll();
         for (RecordRoom recordRoom : iterable) {
             roomCache.put(recordRoom.getRoomId(),recordRoom.getUname());
+            roomEntityCache.put(recordRoom.getRoomId(), recordRoom);
         }
         
         // 同步执行数据库查询操作，避免并行流中的 EntityManager 会话问题
         for (RecordHistory history : list) {
             history.setRoomName(roomCache.get(history.getRoomId()));
             // 使用统一方法填充额外字段（分P统计、放弃分P、弹幕统计等）
-            populateHistoryFields(history, configMap);
+            populateHistoryFields(history, configMap, roomEntityCache.get(history.getRoomId()));
         }
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
@@ -125,27 +127,13 @@ public class HistoryController {
 
         // 统计“工作中”和“已归档”的稿件总数
         try {
-            // 定义归档状态（已完成）：
-            // 1. 已发布 (publish = true)
-            // 2. 稿件状态正常 (code 为 0 或 -50)
-            // 3. 弹幕发送完成 (sendReply = true)
-            Predicate isArchived = criteriaBuilder.and(
-                    criteriaBuilder.equal(root.get("publish"), true),
-                    root.get("code").in(0, -50),
-                    criteriaBuilder.equal(root.get("sendReply"), true)
-            );
-
             // 计算“工作中”的稿件数量
             CriteriaQuery<Long> workingQuery = criteriaBuilder.createQuery(Long.class);
             Root<RecordHistory> workingRoot = workingQuery.from(RecordHistory.class);
             workingQuery.select(criteriaBuilder.count(workingRoot));
             
             // 重新构建归档状态的判断条件（因为查询的主体对象变了，所以需要重建条件）
-            Predicate isArchivedForWorking = criteriaBuilder.and(
-                    criteriaBuilder.equal(workingRoot.get("publish"), true),
-                    workingRoot.get("code").in(0, -50),
-                    criteriaBuilder.equal(workingRoot.get("sendReply"), true)
-            );
+            Predicate isArchivedForWorking = buildPublishedArchivedPredicate(criteriaBuilder, workingRoot);
             workingQuery.where(criteriaBuilder.not(isArchivedForWorking));
             Long workingCount = entityManager.createQuery(workingQuery).getSingleResult();
             result.put("workingCount", workingCount);
@@ -156,11 +144,7 @@ public class HistoryController {
             archivedQuery.select(criteriaBuilder.count(archivedRoot));
             
             // 重新构建归档状态的判断条件（用于已归档查询）
-            Predicate isArchivedForArchived = criteriaBuilder.and(
-                    criteriaBuilder.equal(archivedRoot.get("publish"), true),
-                    archivedRoot.get("code").in(0, -50),
-                    criteriaBuilder.equal(archivedRoot.get("sendReply"), true)
-            );
+            Predicate isArchivedForArchived = buildPublishedArchivedPredicate(criteriaBuilder, archivedRoot);
             archivedQuery.where(isArchivedForArchived);
             Long archivedCount = entityManager.createQuery(archivedQuery).getSingleResult();
             result.put("archivedCount", archivedCount);
@@ -699,15 +683,11 @@ public class HistoryController {
 
         if (StringUtils.isNotBlank(request.getViewType())) {
             // 定义归档状态（已完成）：
-            // 1. 已发布 (publish = true) 且 稿件状态正常 (code 为 0 或 -50) 且 弹幕发送完成 (sendReply = true)
+            // 1. 已发布 (publish = true) 且 稿件状态正常 (code 为 0 或 -50) 且（已发送评论 或 房间关闭全部弹幕开关）
             // 2. 或者：设置为不上传 (upload = false) 且 录制已结束 (不存在正在录制的分P)
 
             // 正常上传并完成的条件
-            Predicate isPublishedArchived = criteriaBuilder.and(
-                    criteriaBuilder.equal(root.get("publish"), true),
-                    root.get("code").in(0, -50),
-                    criteriaBuilder.equal(root.get("sendReply"), true)
-            );
+            Predicate isPublishedArchived = buildPublishedArchivedPredicate(criteriaBuilder, root);
 
             // 设置为不上传且录制已结束的条件
             Subquery<Long> recordingPartExists = criteriaBuilder.createQuery().subquery(Long.class);
@@ -741,12 +721,28 @@ public class HistoryController {
         return predicatesList;
     }
 
+    private Predicate buildPublishedArchivedPredicate(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root) {
+        Subquery<String> disabledRooms = criteriaBuilder.createQuery().subquery(String.class);
+        Root<RecordRoom> roomRoot = disabledRooms.from(RecordRoom.class);
+        disabledRooms.select(roomRoot.get("roomId"));
+        Predicate dmOff = criteriaBuilder.or(criteriaBuilder.isNull(roomRoot.get("sendDm")), criteriaBuilder.isFalse(roomRoot.get("sendDm")));
+        Predicate scOff = criteriaBuilder.or(criteriaBuilder.isNull(roomRoot.get("sendSc")), criteriaBuilder.isFalse(roomRoot.get("sendSc")));
+        disabledRooms.where(criteriaBuilder.and(dmOff, scOff));
+        Predicate allDmDisabled = root.get("roomId").in(disabledRooms);
+
+        return criteriaBuilder.and(
+                criteriaBuilder.equal(root.get("publish"), true),
+                root.get("code").in(0, -50),
+                criteriaBuilder.or(criteriaBuilder.equal(root.get("sendReply"), true), allDmDisabled)
+        );
+    }
+
     /**
      * 填充RecordHistory的额外字段，包括分P统计、放弃分P信息等。
      * 注意：房间名(roomName)需要调用方单独设置，通常通过roomCache获取。
      * 此方法用于确保返回给前端的数据一致性。
      */
-    private void populateHistoryFields(RecordHistory history, Map<String, String> configMap) {
+    private void populateHistoryFields(RecordHistory history, Map<String, String> configMap, RecordRoom room) {
         if (history == null) {
             return;
         }
@@ -807,6 +803,14 @@ public class HistoryController {
             history.setNormalMsgCount(msgRepository.countByBvidAndPool(history.getBvId(), 0));
             history.setScMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC ["));
             history.setGuardMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓"));
+
+            // 发送开关与待发送数量（仅用于状态展示，不影响后台任务）
+            boolean sendDm = room != null && Boolean.TRUE.equals(room.getSendDm());
+            boolean sendSc = room != null && Boolean.TRUE.equals(room.getSendSc());
+            history.setRoomSendDm(sendDm);
+            history.setRoomSendSc(sendSc);
+            history.setPendingNormalMsgCount(sendDm ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : 0);
+            history.setPendingHighMsgCount(sendSc ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : 0);
         }
 
     // 计算是否处于等待投稿状态

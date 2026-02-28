@@ -7,7 +7,6 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
-import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
@@ -15,6 +14,7 @@ import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -62,22 +62,22 @@ public class RoomStatusSyncJob {
                                 Optional<RecordHistory> historyOpt = historyRepository.findById(room.getHistoryId());
                                 if (historyOpt.isPresent()) {
                                     RecordHistory history = historyOpt.get();
+                                    if (!Objects.equals(history.getRoomId(), room.getRoomId())) {
+                                        log.error("[BLR] {}", LogKvs.event("RoomStatusSyncJob.HistoryRoomMismatch")
+                                                .add("roomId", room.getRoomId())
+                                                .add("uname", room.getUname())
+                                                .add("roomHistoryId", room.getHistoryId())
+                                                .add("historyId", history.getId())
+                                                .add("historyRoomId", history.getRoomId()));
+                                        room.setHistoryId(-1L);
+                                        changed = true;
+                                        continue;
+                                    }
                                     if (history.isRecording() || history.isStreaming()) {
                                         history.setRecording(false);
                                         history.setStreaming(false);
                                         history.setEndTime(LocalDateTime.now());
                                         historyRepository.save(history);
-
-                                        // 严谨起见，同时清理该稿件下所有未结束的分P
-                                        partRepository.findByHistoryId(history.getId()).stream()
-                                                .filter(RecordHistoryPart::isRecording)
-                                                .forEach(part -> {
-                                                    part.setRecording(false);
-                                                    if (part.getEndTime() == null) {
-                                                        part.setEndTime(LocalDateTime.now());
-                                                    }
-                                                    partRepository.save(part);
-                                                });
 
                                         log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetHistory")
                                                 .add("roomId", room.getRoomId())

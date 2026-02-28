@@ -111,6 +111,30 @@ public class RecordHistory {
     @Transient
     private int guardMsgCount;
 
+    /**
+     * 待发送普通弹幕数量（仅用于前端展示，不入库）
+     */
+    @Transient
+    private int pendingNormalMsgCount;
+
+    /**
+     * 待发送高级弹幕(SC/上舰)数量（仅用于前端展示，不入库）
+     */
+    @Transient
+    private int pendingHighMsgCount;
+
+    /**
+     * 房间是否开启普通弹幕发送（仅用于前端展示，不入库）
+     */
+    @Transient
+    private Boolean roomSendDm;
+
+    /**
+     * 房间是否开启高级弹幕/SC发送（仅用于前端展示，不入库）
+     */
+    @Transient
+    private Boolean roomSendSc;
+
 
     @Transient
     private LocalDateTime from;
@@ -149,12 +173,32 @@ public class RecordHistory {
         // 已经发布(publish=true)，根据B站稿件状态code判断
         // 0: 开放浏览, -50: 仅自己可见
         if (code == 0 || code == -50) {
-            // 只有状态正常的稿件才会进入弹幕发送流程
-            if (sendReply) {
+            // 说明：sendReply 在数据库里表示“SC/上舰评论是否已发送”（历史字段名沿用，不改表）
+            // 普通/高级弹幕是否发送，由房间开关决定；待发送数量由 Controller 统计后回填到 transient 字段
+            // 如果没有回填房间开关（例如某些非列表接口直接返回 entity），则保持旧逻辑，避免误判
+            if (roomSendDm == null && roomSendSc == null) {
+                return sendReply ? "已完成" : "发送弹幕中";
+            }
+
+            boolean dmEnabled = Boolean.TRUE.equals(roomSendDm);
+            boolean scEnabled = Boolean.TRUE.equals(roomSendSc);
+            int pending = Math.max(0, pendingNormalMsgCount) + Math.max(0, pendingHighMsgCount);
+
+            // 如果弹幕/SC 全部关闭，就不要卡在“发送中”
+            if (!dmEnabled && !scEnabled) {
                 return "已完成";
-            } else {
+            }
+
+            // 先看评论（SC列表）是否需要发送
+            if (scEnabled && !sendReply) {
                 return "发送弹幕中";
             }
+
+            // 评论已处理完，再看弹幕队列是否还有待发送
+            if (pending > 0) {
+                return "弹幕发送中";
+            }
+            return "已完成";
         }
         
         // 其他状态处理

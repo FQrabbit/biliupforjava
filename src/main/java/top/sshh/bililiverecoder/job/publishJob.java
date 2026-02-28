@@ -46,8 +46,56 @@ public class publishJob {
     top.sshh.bililiverecoder.service.SystemConfigService systemConfigService;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Long> uploadFailureMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, FileProbe> fileProbeMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
+
+    private static final class FileProbe {
+        private final long size;
+        private final long timeMs;
+
+        private FileProbe(long size, long timeMs) {
+            this.size = size;
+            this.timeMs = timeMs;
+        }
+    }
+
+    private static boolean isFileStillWriting(File file, String filePath, long nowMs) {
+        if (filePath == null || filePath.isBlank()) {
+            return false;
+        }
+        if (file == null || !file.exists()) {
+            fileProbeMap.remove(filePath);
+            return false;
+        }
+        long lastModified = -1;
+        try {
+            lastModified = file.lastModified();
+        } catch (Exception ignored) {
+        }
+        long recentModifiedMs = 10L * 60L * 1000L;
+        if (lastModified > 0 && lastModified > nowMs - recentModifiedMs) {
+            return true;
+        }
+
+        long size = -1;
+        try {
+            size = file.length();
+        } catch (Exception ignored) {
+        }
+        long stableWindowMs = 60L * 1000L;
+        FileProbe prev = fileProbeMap.get(filePath);
+        if (prev == null) {
+            fileProbeMap.put(filePath, new FileProbe(size, nowMs));
+            return true;
+        }
+        if (prev.size == size && nowMs - prev.timeMs >= stableWindowMs) {
+            fileProbeMap.remove(filePath);
+            return false;
+        }
+        fileProbeMap.put(filePath, new FileProbe(size, nowMs));
+        return true;
+    }
 
 
     // 定时查询直播历史，如果下一次直播开始时间和上一次结束时间小于5min，视为同一次直播
@@ -150,6 +198,35 @@ public class publishJob {
                 continue;
             }
 
+            try {
+                long nowMs = System.currentTimeMillis();
+                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+                boolean stillWriting = false;
+                for (RecordHistoryPart p : parts) {
+                    String fp = p.getFilePath();
+                    if (fp == null || fp.isBlank()) {
+                        continue;
+                    }
+                    File f = new File(fp);
+                    if (isFileStillWriting(f, fp, nowMs)) {
+                        log.info("[BLR] {}", LogKvs.event("PublishJob.Skip.FileStillWriting")
+                                .add("historyId", history.getId())
+                                .add("roomId", history.getRoomId())
+                                .addIfNotBlank("title", history.getTitle())
+                                .add("partId", p.getId())
+                                .add("filePath", fp)
+                                .add("lastModified", f.exists() ? f.lastModified() : -1)
+                                .add("fileSizeBytes", f.exists() ? f.length() : -1));
+                        stillWriting = true;
+                        break;
+                    }
+                }
+                if (stillWriting) {
+                    continue;
+                }
+            } catch (Exception ignored) {
+            }
+
             publishService.publishRecordHistory(history);
             try {
                 log.info("[BLR] {}", LogKvs.event("PublishJob.WaitNext")
@@ -215,24 +292,28 @@ public class publishJob {
                     continue;
                 }
 
+                if (isFileStillWriting(file, part.getFilePath(), System.currentTimeMillis())) {
+                    log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.Skip.FileStillWriting")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("filePath", part.getFilePath())
+                            .add("lastModified", file.lastModified())
+                            .add("fileSizeBytes", file.length()));
+                    uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 5 * 60 * 1000);
+                    continue;
+                }
+
                 // 以磁盘真实文件为准，避免历史数据 fileSize/duration 写入异常导致误判
                 long actualFileSize = file.length();
                 if (actualFileSize <= 0) {
-                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FileSizeUnreadableGiveUp")
+                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FileSizeUnreadableRetryLater")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
                             .add("partId", part.getId())
                             .add("filePath", part.getFilePath())
                             .add("fileSizeBytes", actualFileSize));
-                    part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
-                    String errorMsg = "稿件分P文件大小异常，已放弃补偿上传: " + part.getFilePath();
-                    part.setDeleteFailReason(errorMsg);
-                    part.setDeleteFailType("FILE_SIZE_INVALID");
-                    try {
-                        partRepository.save(part);
-                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
-                    } catch (Exception ignored) {
-                    }
+                    uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 10 * 60 * 1000);
                     continue;
                 }
                 if (part.getFileSize() != actualFileSize && actualFileSize > 0) {
@@ -254,21 +335,13 @@ public class publishJob {
                     }
                 }
                 if (actualDuration <= 0) {
-                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.DurationUnreadableGiveUp")
+                    log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.DurationUnreadableRetryLater")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
                             .add("partId", part.getId())
                             .add("filePath", part.getFilePath())
                             .add("durationSec", actualDuration));
-                    part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
-                    String errorMsg = "稿件分P时长异常，已放弃补偿上传: " + part.getFilePath();
-                    part.setDeleteFailReason(errorMsg);
-                    part.setDeleteFailType("DURATION_INVALID");
-                    try {
-                        partRepository.save(part);
-                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
-                    } catch (Exception ignored) {
-                    }
+                    uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 10 * 60 * 1000);
                     continue;
                 }
                 
