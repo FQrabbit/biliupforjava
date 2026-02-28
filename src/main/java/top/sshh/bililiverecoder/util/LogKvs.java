@@ -65,6 +65,7 @@ public final class LogKvs {
 
         // 录制事件
         EVENT_ZH.put("Room.AutoCreate", "房间不存在，自动创建房间配置");
+        EVENT_ZH.put("Room.Seasons.FetchFailed", "房间合集列表获取失败(返回空列表)");
         EVENT_ZH.put("RecordStarted.ReuseHistory", "录制开始：复用历史记录(继续录制)");
         EVENT_ZH.put("RecordStarted.ReuseHistory.Detail", "录制开始：复用历史记录明细(调试)");
         EVENT_ZH.put("RecordStarted.ReuseActiveHistory", "录制开始：复用活跃的历史记录");

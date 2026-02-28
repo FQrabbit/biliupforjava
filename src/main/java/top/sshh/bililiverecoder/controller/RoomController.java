@@ -538,10 +538,62 @@ public class RoomController {
             RecordRoom room = roomOptional.get();
             if (room.getUploadUserId() != null) {
                 BiliBiliUser biliUser = userRepository.findById(room.getUploadUserId()).get();
-                return BiliApi.getSeasons(biliUser);
+                int attempt = 0;
+                while (true) {
+                    try {
+                        String raw = BiliApi.getSeasons(biliUser);
+                        if (StringUtils.isBlank(raw)) {
+                            log.warn("[BLR] {}", LogKvs.event("Room.Seasons.FetchFailed")
+                                    .add("roomId", roomId)
+                                    .add("uploadUserId", room.getUploadUserId())
+                                    .add("timeout", false)
+                                    .add("attempt", attempt)
+                                    .add("reason", "empty_response"));
+                            return "{\"code\":-1,\"message\":\"获取合集失败\",\"ttl\":1,\"data\":{\"seasons\":[]}}";
+                        }
+
+                        try {
+                            Map<String, Object> obj = JSON.parseObject(raw, new TypeReference<Map<String, Object>>() {});
+                            Object dataObj = obj.get("data");
+                            Map<String, Object> data;
+                            if (dataObj instanceof Map) {
+                                data = (Map<String, Object>) dataObj;
+                            } else {
+                                data = new HashMap<>();
+                                obj.put("data", data);
+                            }
+                            Object seasons = data.get("seasons");
+                            if (!(seasons instanceof List)) {
+                                data.put("seasons", new ArrayList<>());
+                            }
+                            if (!obj.containsKey("ttl")) {
+                                obj.put("ttl", 1);
+                            }
+                            return JSON.toJSONString(obj);
+                        } catch (Exception ignored) {
+                            return raw;
+                        }
+                    } catch (RuntimeException e) {
+                        boolean timeout = StringUtils.containsIgnoreCase(e.getMessage(), "timed out");
+                        if (timeout && attempt < 1) {
+                            attempt++;
+                            try { Thread.sleep(200L); } catch (Exception ignored) {}
+                            continue;
+                        }
+                        log.warn("[BLR] {}", LogKvs.event("Room.Seasons.FetchFailed")
+                                .add("roomId", roomId)
+                                .add("uploadUserId", room.getUploadUserId())
+                                .add("timeout", timeout)
+                                .add("attempt", attempt)
+                                .addIfNotBlank("err", e.getMessage())
+                                .add("ex", e.getClass().getSimpleName()), e);
+                        return "{\"code\":-1,\"message\":\"获取合集失败\",\"ttl\":1,\"data\":{\"seasons\":[]}}";
+                    }
+                }
             }
         }
-        return null;
+        // 前端 dataType=json 且会访问 data.data.seasons，这里返回一个最小可用结构，避免空指针
+        return "{\"code\":-1,\"message\":\"未配置上传用户\",\"ttl\":1,\"data\":{\"seasons\":[]}}";
     }
 
     @GetMapping(value = "/image-proxy")
@@ -570,13 +622,33 @@ public class RoomController {
             HttpHeaders forwardHeaders = new HttpHeaders();
             forwardHeaders.add("Referer", "https://www.bilibili.com/");
             forwardHeaders.add("User-Agent", "Mozilla/5.0");
+            forwardHeaders.add("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
             HttpEntity<Void> httpEntity = new HttpEntity<>(forwardHeaders);
 
             ResponseEntity<byte[]> resp = restTemplate.exchange(url, HttpMethod.GET, httpEntity, byte[].class);
             byte[] imageBytes = resp.getBody();
+            MediaType ct = resp.getHeaders().getContentType();
+
+            if (!resp.getStatusCode().is2xxSuccessful()) {
+                log.warn("[BLR] {}", LogKvs.event("ImageProxy.UpstreamNon2xx")
+                        .add("url", url)
+                        .add("status", resp.getStatusCode().value()));
+                return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
+            }
+            if (imageBytes == null || imageBytes.length == 0) {
+                log.warn("[BLR] {}", LogKvs.event("ImageProxy.EmptyBody")
+                        .add("url", url)
+                        .add("contentType", ct == null ? "" : ct.toString()));
+                return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
+            }
+            if (ct != null && !"image".equalsIgnoreCase(ct.getType())) {
+                log.warn("[BLR] {}", LogKvs.event("ImageProxy.NonImageContentType")
+                        .add("url", url)
+                        .add("contentType", ct.toString()));
+                return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
+            }
 
             HttpHeaders headers = new HttpHeaders();
-            MediaType ct = resp.getHeaders().getContentType();
             if (ct == null) {
                 String path = uri.getPath();
                 ct = MediaTypeFactory.getMediaType(path).orElse(MediaType.IMAGE_JPEG);

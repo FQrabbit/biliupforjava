@@ -13,7 +13,7 @@
             border: none !important;
             background: transparent !important;
             box-shadow: none !important;
-            z-index: 3000 !important;
+            z-index: 9999 !important;
         }
         .season-cover-tooltip.el-tooltip__popper .popper__arrow {
             display: none !important;
@@ -31,6 +31,20 @@
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+        .season-cover-tooltip-loading {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #909399;
+            font-size: 12px;
+            background: #f5f7fa;
+        }
+        .season-option-label {
+            display: block;
+            width: 100%;
         }
     </style>
     <script src="../js/jquery-3.3.1.min.js"></script>
@@ -422,7 +436,7 @@
                                 <el-input v-model="room.tags" placeholder="多个标签用逗号分隔"></el-input>
                             </el-form-item>
                             <el-form-item label="加入合集">
-                                <el-select v-model="room.seasonId" placeholder="选择合集" style="width: 100%" clearable filterable @change="changeSeason">
+                                <el-select v-model="room.seasonId" placeholder="选择合集" style="width: 100%" clearable filterable @change="changeSeason" @visible-change="onSeasonDropdownVisibleChange">
                                     <el-option :key="item.season.id" :label="item.season.title" :value="item.season.id" v-for="item in seasonsList">
                                         <el-tooltip
                                                 :disabled="!getSeasonCoverUrl(item)"
@@ -433,11 +447,12 @@
                                                 :enterable="false"
                                                 @show="preloadSeasonCover(item)">
                                             <div slot="content">
-                                                <div class="season-cover-tooltip-wrap" v-if="seasonCoverObjectUrls[item.season.id]">
-                                                    <img class="season-cover-tooltip-img" :src="seasonCoverObjectUrls[item.season.id]">
+                                                <div class="season-cover-tooltip-wrap" v-if="getSeasonCoverUrl(item)">
+                                                    <img v-if="seasonCoverObjectUrls[item.season.id]" class="season-cover-tooltip-img" :src="seasonCoverObjectUrls[item.season.id]">
+                                                    <div v-else class="season-cover-tooltip-loading">加载中...</div>
                                                 </div>
                                             </div>
-                                            <span style="float: left">{{ item.season.title }}</span>
+                                            <div class="season-option-label">{{ item.season.title }}</div>
                                         </el-tooltip>
                                     </el-option>
                                 </el-select>
@@ -2997,6 +3012,7 @@
                     dataType: 'json',
                     success: function (data) {
                         _this.seasonsList = data.data.seasons;
+                        _this.onSeasonDropdownVisibleChange(true);
                         if (_this.room.seasonId) {
                             let selectedSeason = _this.seasonsList.find(item => item.season.id === _this.room.seasonId);
                             if (selectedSeason && selectedSeason.sections && selectedSeason.sections.sections) {
@@ -3075,6 +3091,14 @@
                         _this.$set(_this.seasonCoverObjectUrls, seasonId, objectUrl);
                     }
                 });
+            },
+            onSeasonDropdownVisibleChange: function(visible) {
+                if (!visible) return;
+                var list = this.seasonsList || [];
+                var max = Math.min(list.length, 12);
+                for (var i = 0; i < max; i++) {
+                    this.preloadSeasonCover(list[i]);
+                }
             },
             refreshRoomCoverPreview: function() {
                 var _this = this;

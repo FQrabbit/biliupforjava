@@ -31,6 +31,10 @@ const ApiUtil = {
             if (!res.ok) {
                 throw new Error('bad_response');
             }
+            var ct = res.headers && res.headers.get ? res.headers.get('content-type') : '';
+            if (ct && ct.indexOf('image/') !== 0) {
+                throw new Error('non_image');
+            }
             return res.blob();
         });
     },
@@ -108,9 +112,26 @@ const ApiUtil = {
         $.ajax({
             url: url,
             type: 'DELETE',
-            dataType: 'json',
-            success: function(data) {
-                callback(data);
+            dataType: 'text',
+            success: function(data, textStatus, jqXHR) {
+                try {
+                    var ct = (jqXHR && jqXHR.getResponseHeader) ? (jqXHR.getResponseHeader('Content-Type') || '') : '';
+                    if (ct.indexOf('text/html') >= 0) {
+                        window.location.href = '/html/login.html';
+                        return;
+                    }
+                } catch (e) {}
+
+                var result = data;
+                try {
+                    var ct2 = (jqXHR && jqXHR.getResponseHeader) ? (jqXHR.getResponseHeader('Content-Type') || '') : '';
+                    if (ct2.indexOf('application/json') >= 0 && typeof data === 'string' && data) {
+                        result = JSON.parse(data);
+                    }
+                } catch (e) {
+                    result = data;
+                }
+                callback(result);
             },
             error: function(xhr, status, error) {
                 if (xhr.status === 401) {

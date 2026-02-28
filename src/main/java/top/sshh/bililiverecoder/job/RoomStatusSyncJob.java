@@ -71,17 +71,17 @@ public class RoomStatusSyncJob {
                                                 .add("historyRoomId", history.getRoomId()));
                                         room.setHistoryId(-1L);
                                         changed = true;
-                                        continue;
-                                    }
-                                    if (history.isRecording() || history.isStreaming()) {
-                                        history.setRecording(false);
-                                        history.setStreaming(false);
-                                        history.setEndTime(LocalDateTime.now());
-                                        historyRepository.save(history);
+                                    } else {
+                                        if (history.isRecording() || history.isStreaming()) {
+                                            history.setRecording(false);
+                                            history.setStreaming(false);
+                                            history.setEndTime(LocalDateTime.now());
+                                            historyRepository.save(history);
 
-                                        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetHistory")
-                                                .add("roomId", room.getRoomId())
-                                                .add("historyId", history.getId()));
+                                            log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetHistory")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("historyId", history.getId()));
+                                        }
                                     }
                                 }
                             }

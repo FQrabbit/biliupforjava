@@ -35,8 +35,9 @@ public class LogController {
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/alerts")
-    public void clearAlerts() {
+    public java.util.Map<String, Object> clearAlerts() {
         logAnalyzeService.clearAlerts();
+        return java.util.Collections.singletonMap("success", true);
     }
 
     @GetMapping("/history")
