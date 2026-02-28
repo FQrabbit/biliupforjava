@@ -520,6 +520,7 @@
 
 <script src="../js/vue.min.js"></script>
 <script src="../js/element-ui.js"></script>
+<script src="../js/version.js"></script>
 <script>
     new Vue({
         el: '#app',
@@ -532,7 +533,7 @@
             theme: localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             rememberPassword: false,
             rememberWarned: false,
-            currentVersion: 'v1.4.1-beta6.4',
+            currentVersion: window.BILIUPFORJAVA_VERSION || '读取版本号异常',
             hasNewVersion: false,
             releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
             loginError: false,

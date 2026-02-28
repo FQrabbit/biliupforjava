@@ -19,7 +19,7 @@ public class LoginInterceptor implements HandlerInterceptor {
             log.info("[BLR] {}", LogKvs.event("Auth.Basic.Enabled"));
         }else {
             this.authString = "";
-            log.warn("[BLR] {}", LogKvs.event("Auth.Basic.DisabledByConfig"));
+            log.info("[BLR] {}", LogKvs.event("Auth.Basic.DisabledByConfig"));
         }
     }
 

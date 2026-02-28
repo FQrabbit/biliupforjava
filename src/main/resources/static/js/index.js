@@ -9,6 +9,31 @@ $.ajaxSetup({
 });
 
 const ApiUtil = {
+    fetchBlob: function(url, options) {
+        var token = null;
+        try {
+            token = localStorage.getItem('biliup_auth');
+        } catch (e) {
+        }
+        var headers = (options && options.headers) ? options.headers : {};
+        if (token) {
+            headers = Object.assign({}, headers, { 'Authorization': token });
+        }
+        return fetch(url, Object.assign({
+            method: 'GET',
+            headers: headers,
+            cache: 'no-store'
+        }, options || {})).then(function (res) {
+            if (res.status === 401) {
+                window.location.href = '/html/login.html';
+                throw new Error('unauthorized');
+            }
+            if (!res.ok) {
+                throw new Error('bad_response');
+            }
+            return res.blob();
+        });
+    },
     get: function(url, callback, errorCallback) {
         $.ajax({
             url: url,

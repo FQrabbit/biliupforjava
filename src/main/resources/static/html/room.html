@@ -7,6 +7,31 @@
     <link href="../css/element-ui.css" rel="stylesheet">
     <link href="../css/index.css" rel="stylesheet">
     <link href="../css/room.css" rel="stylesheet">
+    <style>
+        .season-cover-tooltip.el-tooltip__popper {
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        .season-cover-tooltip.el-tooltip__popper .popper__arrow {
+            display: none !important;
+        }
+        .season-cover-tooltip-wrap {
+            width: 240px;
+            height: 135px;
+            overflow: hidden;
+            border-radius: 6px;
+            background: #fff;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+        }
+        .season-cover-tooltip-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    </style>
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
@@ -398,7 +423,19 @@
                             <el-form-item label="加入合集">
                                 <el-select v-model="room.seasonId" placeholder="选择合集" style="width: 100%" clearable filterable @change="changeSeason">
                                     <el-option :key="item.season.id" :label="item.season.title" :value="item.season.id" v-for="item in seasonsList">
-                                        <span style="float: left">{{ item.season.title }}</span>
+                                        <el-tooltip
+                                                :disabled="!getSeasonCoverUrl(item)"
+                                                popper-class="season-cover-tooltip"
+                                                placement="right"
+                                                :open-delay="150"
+                                                :enterable="false">
+                                            <div slot="content">
+                                                <div class="season-cover-tooltip-wrap" v-if="seasonCoverObjectUrls[item.season.id]">
+                                                    <img class="season-cover-tooltip-img" :src="seasonCoverObjectUrls[item.season.id]">
+                                                </div>
+                                            </div>
+                                            <span style="float: left" @mouseenter="preloadSeasonCover(item)">{{ item.season.title }}</span>
+                                        </el-tooltip>
                                     </el-option>
                                 </el-select>
                             </el-form-item>
@@ -524,7 +561,8 @@
                                     :show-file-list="false"
                                     :on-success="handleCoverSuccess"
                                     :before-upload="beforeCoverUpload">
-                                    <div v-if="room.coverUrl" class="cover-preview-mini" :style="{backgroundImage: 'url(/room/image-proxy?url=' + encodeURIComponent(room.coverUrl) + ')'}"></div>
+                                    <div v-if="room.coverUrl && roomCoverObjectUrl" class="cover-preview-mini" :style="{backgroundImage: 'url(' + roomCoverObjectUrl + ')'}"></div>
+                                    <div v-else-if="room.coverUrl" class="cover-placeholder-mini"><i class="el-icon-plus"></i></div>
                                     <div v-else class="cover-placeholder-mini"><i class="el-icon-plus"></i></div>
                                 </el-upload>
                             </el-form-item>
@@ -2582,6 +2620,10 @@
             addRoom: {},
             exportConfig: {},
             seasonsList: [],
+            seasonCoverObjectUrls: {},
+            imageObjectUrlCache: {},
+            imageObjectUrlLoading: {},
+            roomCoverObjectUrl: '',
             tableData: [],
             lines: [],
             lineStats: {},
@@ -2811,6 +2853,9 @@
                 this.room = JSON.parse(JSON.stringify(row));
                 this.dialogFormVisible = true;
                 this.getSeasons(row.id);
+                this.$nextTick(() => {
+                    this.refreshRoomCoverPreview();
+                });
             },
             handleEeditLiveMsg: function (index, row) {
                 this.room = JSON.parse(JSON.stringify(row));
@@ -2958,6 +3003,109 @@
                     }
                 });
             },
+            getSeasonCoverUrl: function(item) {
+                if (!item || !item.season) return '';
+                var s = item.season;
+                var candidates = [
+                    s.cover_https,
+                    s.coverHttps,
+                    s.cover_https_url,
+                    s.coverHttpsUrl,
+                    s.coverHttpsURL,
+                    s.cover_url,
+                    s.coverUrl,
+                    s.coverURL,
+                    s.cover
+                ];
+                for (var i = 0; i < candidates.length; i++) {
+                    var u = candidates[i];
+                    if (u && typeof u === 'string') {
+                        u = u.trim();
+                        if (u) {
+                            if (u.indexOf('//') === 0) u = 'https:' + u;
+                            return u;
+                        }
+                    }
+                }
+                return '';
+            },
+            buildImageProxyUrl: function(url) {
+                if (!url) return '';
+                return '/room/image-proxy?url=' + encodeURIComponent(url);
+            },
+            ensureImageObjectUrl: function(cacheKey, proxyUrl) {
+                var _this = this;
+                if (!cacheKey || !proxyUrl) return Promise.resolve('');
+                if (_this.imageObjectUrlCache[cacheKey]) return Promise.resolve(_this.imageObjectUrlCache[cacheKey]);
+                if (_this.imageObjectUrlLoading[cacheKey]) return _this.imageObjectUrlLoading[cacheKey];
+
+                var p = ApiUtil.fetchBlob(proxyUrl).then(function (blob) {
+                    var objectUrl = '';
+                    try {
+                        objectUrl = URL.createObjectURL(blob);
+                    } catch (e) {
+                        objectUrl = '';
+                    }
+                    if (objectUrl) {
+                        _this.$set(_this.imageObjectUrlCache, cacheKey, objectUrl);
+                    }
+                    _this.$delete(_this.imageObjectUrlLoading, cacheKey);
+                    return objectUrl;
+                }).catch(function () {
+                    _this.$delete(_this.imageObjectUrlLoading, cacheKey);
+                    return '';
+                });
+
+                _this.$set(_this.imageObjectUrlLoading, cacheKey, p);
+                return p;
+            },
+            preloadSeasonCover: function(item) {
+                var _this = this;
+                if (!item || !item.season) return;
+                var seasonId = item.season.id;
+                var coverUrl = _this.getSeasonCoverUrl(item);
+                if (!coverUrl) return;
+                var proxyUrl = _this.buildImageProxyUrl(coverUrl);
+                var cacheKey = 'season:' + seasonId + ':' + coverUrl;
+                _this.ensureImageObjectUrl(cacheKey, proxyUrl).then(function (objectUrl) {
+                    if (objectUrl) {
+                        _this.$set(_this.seasonCoverObjectUrls, seasonId, objectUrl);
+                    }
+                });
+            },
+            refreshRoomCoverPreview: function() {
+                var _this = this;
+                if (!_this.room || _this.room.coverType !== 'diy') {
+                    _this.roomCoverObjectUrl = '';
+                    return;
+                }
+                var raw = _this.room.coverUrl ? String(_this.room.coverUrl) : '';
+                if (!raw || raw === 'live') {
+                    _this.roomCoverObjectUrl = '';
+                    return;
+                }
+                var proxyUrl = _this.buildImageProxyUrl(raw);
+                var cacheKey = 'roomCover:' + raw;
+                _this.ensureImageObjectUrl(cacheKey, proxyUrl).then(function (objectUrl) {
+                    if (objectUrl) {
+                        _this.roomCoverObjectUrl = objectUrl;
+                    }
+                });
+            },
+            revokeAllImageObjectUrls: function() {
+                var cache = this.imageObjectUrlCache || {};
+                for (var k in cache) {
+                    if (!Object.prototype.hasOwnProperty.call(cache, k)) continue;
+                    var u = cache[k];
+                    if (u && typeof u === 'string' && u.indexOf('blob:') === 0) {
+                        try { URL.revokeObjectURL(u); } catch (e) {}
+                    }
+                }
+                this.seasonCoverObjectUrls = {};
+                this.imageObjectUrlCache = {};
+                this.imageObjectUrlLoading = {};
+                this.roomCoverObjectUrl = '';
+            },
             changeSeason: function(val) {
                 if (!val) {
                     this.sectionsList = [];
@@ -3032,6 +3180,7 @@
                 if (change === 'diy' && (this.room.coverUrl === 'live' || !this.room.coverUrl)) {
                      this.room.coverUrl = '';
                 }
+                this.refreshRoomCoverPreview();
             },
             handleCoverSuccess(data, file) {
                 this.$message({
@@ -3039,6 +3188,7 @@
                     type: data.type
                 });
                 this.room.coverUrl = data.coverUrl;
+                this.refreshRoomCoverPreview();
             },
             testLines() {
                 var _this = this;
@@ -3221,11 +3371,23 @@
         watch: {
             viewMode: function (val) {
                 localStorage.setItem('room-view-mode', val);
+            },
+            dialogFormVisible: function (val) {
+                if (!val) {
+                    this.revokeAllImageObjectUrls();
+                }
+            },
+            'room.coverUrl': function () {
+                this.refreshRoomCoverPreview();
+            },
+            'room.coverType': function () {
+                this.refreshRoomCoverPreview();
             }
         },
         beforeDestroy: function () {
             this.stopPolling();
             window.removeEventListener('resize', this.handleResize);
+            this.revokeAllImageObjectUrls();
         }
     });
 </script>
