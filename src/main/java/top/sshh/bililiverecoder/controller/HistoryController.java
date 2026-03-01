@@ -133,7 +133,7 @@ public class HistoryController {
             workingQuery.select(criteriaBuilder.count(workingRoot));
             
             // 重新构建归档状态的判断条件（因为查询的主体对象变了，所以需要重建条件）
-            Predicate isArchivedForWorking = buildPublishedArchivedPredicate(criteriaBuilder, workingRoot);
+            Predicate isArchivedForWorking = buildFullArchivedPredicate(criteriaBuilder, workingRoot);
             workingQuery.where(criteriaBuilder.not(isArchivedForWorking));
             Long workingCount = entityManager.createQuery(workingQuery).getSingleResult();
             result.put("workingCount", workingCount);
@@ -144,7 +144,7 @@ public class HistoryController {
             archivedQuery.select(criteriaBuilder.count(archivedRoot));
             
             // 重新构建归档状态的判断条件（用于已归档查询）
-            Predicate isArchivedForArchived = buildPublishedArchivedPredicate(criteriaBuilder, archivedRoot);
+            Predicate isArchivedForArchived = buildFullArchivedPredicate(criteriaBuilder, archivedRoot);
             archivedQuery.where(isArchivedForArchived);
             Long archivedCount = entityManager.createQuery(archivedQuery).getSingleResult();
             result.put("archivedCount", archivedCount);
@@ -686,29 +686,7 @@ public class HistoryController {
             // 1. 已发布 (publish = true) 且 稿件状态正常 (code 为 0 或 -50) 且（已发送评论 或 房间关闭全部弹幕开关）
             // 2. 或者：设置为不上传 (upload = false) 且 录制已结束 (不存在正在录制的分P)
 
-            // 正常上传并完成的条件
-            Predicate isPublishedArchived = buildPublishedArchivedPredicate(criteriaBuilder, root);
-
-            // 设置为不上传且录制已结束的条件
-            Subquery<Long> recordingPartExists = criteriaBuilder.createQuery().subquery(Long.class);
-            Root<RecordHistoryPart> recordingPartRoot = recordingPartExists.from(RecordHistoryPart.class);
-            recordingPartExists.select(criteriaBuilder.literal(1L));
-            recordingPartExists.where(
-                    criteriaBuilder.and(
-                            criteriaBuilder.equal(recordingPartRoot.get("historyId"), root.get("id")),
-                            criteriaBuilder.or(
-                                    criteriaBuilder.isTrue(recordingPartRoot.get("recording")),
-                                    criteriaBuilder.isNull(recordingPartRoot.get("endTime"))
-                            )
-                    )
-            );
-            Predicate isNoUploadArchived = criteriaBuilder.and(
-                    criteriaBuilder.equal(root.get("upload"), false),
-                    criteriaBuilder.not(criteriaBuilder.exists(recordingPartExists))
-            );
-
-            // 综合归档状态
-            Predicate isArchived = criteriaBuilder.or(isPublishedArchived, isNoUploadArchived);
+            Predicate isArchived = buildFullArchivedPredicate(criteriaBuilder, root);
 
             if ("working".equals(request.getViewType())) {
                 // 工作中 = 非归档
@@ -735,6 +713,31 @@ public class HistoryController {
                 root.get("code").in(0, -50),
                 criteriaBuilder.or(criteriaBuilder.equal(root.get("sendReply"), true), allDmDisabled)
         );
+    }
+
+    private Predicate buildFullArchivedPredicate(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root) {
+        // 正常上传并完成的条件
+        Predicate isPublishedArchived = buildPublishedArchivedPredicate(criteriaBuilder, root);
+
+        // 设置为不上传且录制已结束的条件
+        Subquery<Long> recordingPartExists = criteriaBuilder.createQuery().subquery(Long.class);
+        Root<RecordHistoryPart> recordingPartRoot = recordingPartExists.from(RecordHistoryPart.class);
+        recordingPartExists.select(criteriaBuilder.literal(1L));
+        recordingPartExists.where(
+                criteriaBuilder.and(
+                        criteriaBuilder.equal(recordingPartRoot.get("historyId"), root.get("id")),
+                        criteriaBuilder.or(
+                                criteriaBuilder.isTrue(recordingPartRoot.get("recording")),
+                                criteriaBuilder.isNull(recordingPartRoot.get("endTime"))
+                        )
+                )
+        );
+        Predicate isNoUploadArchived = criteriaBuilder.and(
+                criteriaBuilder.equal(root.get("upload"), false),
+                criteriaBuilder.not(criteriaBuilder.exists(recordingPartExists))
+        );
+
+        return criteriaBuilder.or(isPublishedArchived, isNoUploadArchived);
     }
 
     /**
