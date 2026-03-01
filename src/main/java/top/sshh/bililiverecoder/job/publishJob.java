@@ -72,15 +72,6 @@ public class publishJob {
             fileProbeMap.remove(filePath);
             return false;
         }
-        long lastModified = -1;
-        try {
-            lastModified = file.lastModified();
-        } catch (Exception ignored) {
-        }
-        long recentModifiedMs = 10L * 60L * 1000L;
-        if (lastModified > 0 && lastModified > nowMs - recentModifiedMs) {
-            return true;
-        }
 
         long size = -1;
         try {
@@ -93,9 +84,14 @@ public class publishJob {
             fileProbeMap.put(filePath, new FileProbe(size, nowMs));
             return true;
         }
-        if (prev.size == size && nowMs - prev.timeMs >= stableWindowMs) {
-            fileProbeMap.remove(filePath);
-            return false;
+        if (prev.size == size) {
+            // 如果文件大小一直没变，且距离上次记录的时间已经超过了稳定窗口（60秒），说明文件已经稳定了
+            if (nowMs - prev.timeMs >= stableWindowMs) {
+                fileProbeMap.remove(filePath);
+                return false;
+            }
+            // 文件大小没变，但还没到时间，继续等。ps：这里不要更新时间，否则倒计时会重置，导致一直过不去
+            return true;
         }
         fileProbeMap.put(filePath, new FileProbe(size, nowMs));
         return true;

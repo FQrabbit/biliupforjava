@@ -471,7 +471,7 @@ public class RecordBiliPublishService {
                     continue;
                 }
                 if (file.exists()) {
-                    if (file.lastModified() > System.currentTimeMillis() - (10 * 60 * 1000) || uploadPart.getEndTime() == null) {
+                    if (uploadPart.getEndTime() == null) {
                         log.warn("[BLR] {}", LogKvs.event("Publish.Part.FileStillWriting")
                                 .add("roomId", room.getRoomId())
                                 .add("uname", room.getUname())
