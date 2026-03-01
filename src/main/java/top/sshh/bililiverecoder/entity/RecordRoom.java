@@ -40,6 +40,9 @@ public class RecordRoom {
     
     // 主播性别：-1: 保密, 0: 女, 1: 男
     private Integer gender;
+    
+    // 直播间封面
+    private String liveCoverUrl;
 
     // 1自制，2 转载
     private int copyright = 1;

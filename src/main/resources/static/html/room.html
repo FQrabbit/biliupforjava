@@ -618,6 +618,16 @@
                                         <el-radio-button label="diy">自定义</el-radio-button>
                                     </el-tooltip>
                                 </el-radio-group>
+                                
+                                <!-- 直播封面预览 -->
+                                <div v-if="room.coverType == 'live'" class="cover-display-mini">
+                                    <div v-if="liveCoverObjectUrl" class="cover-preview-mini" :style="{backgroundImage: 'url(' + liveCoverObjectUrl + ')'}"></div>
+                                    <div v-else class="cover-placeholder-mini">
+                                        <i class="el-icon-picture-outline"></i>
+                                        <span>暂无直播封面</span>
+                                    </div>
+                                </div>
+
                                 <el-upload
                                     v-if="room.coverType == 'diy'"
                                     class="cover-uploader-mini"
@@ -2690,6 +2700,7 @@
             imageObjectUrlCache: {},
             imageObjectUrlLoading: {},
             roomCoverObjectUrl: '',
+            liveCoverObjectUrl: '',
             tableData: [],
             lines: [],
             lineStats: {},
@@ -3150,22 +3161,42 @@
             },
             refreshRoomCoverPreview: function() {
                 var _this = this;
-                if (!_this.room || _this.room.coverType !== 'diy') {
-                    _this.roomCoverObjectUrl = '';
-                    return;
-                }
-                var raw = _this.room.coverUrl ? String(_this.room.coverUrl) : '';
-                if (!raw || raw === 'live') {
-                    _this.roomCoverObjectUrl = '';
-                    return;
-                }
-                var proxyUrl = _this.buildImageProxyUrl(raw);
-                var cacheKey = 'roomCover:' + raw;
-                _this.ensureImageObjectUrl(cacheKey, proxyUrl).then(function (objectUrl) {
-                    if (objectUrl) {
-                        _this.roomCoverObjectUrl = objectUrl;
+                
+                // 处理自定义封面预览
+                if (_this.room && _this.room.coverType === 'diy') {
+                    var raw = _this.room.coverUrl ? String(_this.room.coverUrl) : '';
+                    if (raw && raw !== 'live') {
+                        var proxyUrl = _this.buildImageProxyUrl(raw);
+                        var cacheKey = 'roomCover:' + raw;
+                        _this.ensureImageObjectUrl(cacheKey, proxyUrl).then(function (objectUrl) {
+                            if (objectUrl) {
+                                _this.roomCoverObjectUrl = objectUrl;
+                            }
+                        });
+                    } else {
+                        _this.roomCoverObjectUrl = '';
                     }
-                });
+                } else {
+                    _this.roomCoverObjectUrl = '';
+                }
+
+                // 处理直播封面预览
+                if (_this.room && _this.room.coverType === 'live') {
+                    var liveUrl = _this.room.liveCoverUrl;
+                    if (liveUrl) {
+                        var proxyUrl = _this.buildImageProxyUrl(liveUrl);
+                        var cacheKey = 'liveCover:' + liveUrl;
+                        _this.ensureImageObjectUrl(cacheKey, proxyUrl).then(function (objectUrl) {
+                            if (objectUrl) {
+                                _this.liveCoverObjectUrl = objectUrl;
+                            }
+                        });
+                    } else {
+                        _this.liveCoverObjectUrl = '';
+                    }
+                } else {
+                    _this.liveCoverObjectUrl = '';
+                }
             },
             revokeAllImageObjectUrls: function() {
                 var cache = this.imageObjectUrlCache || {};
@@ -3180,6 +3211,7 @@
                 this.imageObjectUrlCache = {};
                 this.imageObjectUrlLoading = {};
                 this.roomCoverObjectUrl = '';
+                this.liveCoverObjectUrl = '';
             },
             changeSeason: function(val) {
                 if (!val) {

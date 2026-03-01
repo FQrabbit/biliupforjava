@@ -112,30 +112,54 @@ public class RoomStatusSyncJob {
                                .add("uname", room.getUname()));
                     }
 
-                    // 更新头像
-                    if(response.getData().getUser_cover() != null && !response.getData().getUser_cover().equals(room.getUserCover())){
-                        room.setUserCover(response.getData().getUser_cover());
+                    // 更新直播间封面
+                    if (response.getData().getUser_cover() != null && !response.getData().getUser_cover().equals(room.getLiveCoverUrl())) {
+                        room.setLiveCoverUrl(response.getData().getUser_cover());
                         changed = true;
                     }
 
-                    // 更新主播UID和性别
+                    // 更新主播UID和性别、头像、昵称
                     Long uid = response.getData().getUid();
                     if (uid != null && uid > 0) {
                         if (!Objects.equals(uid, room.getAnchorId())) {
                             room.setAnchorId(uid);
                             changed = true;
-                            // 主播ID变了，强制更新性别
+                            // 主播ID变了，强制更新性别和头像
                             room.setGender(null);
                         }
                         
-                        // 如果性别未知，尝试获取
-                        if (room.getGender() == null) {
+                        boolean needUpdateMasterInfo = room.getGender() == null || room.getUserCover() == null;
+                        if (!needUpdateMasterInfo && room.getUserCover().contains("/live/")) {
+                            needUpdateMasterInfo = true;
+                        }
+                        if (!needUpdateMasterInfo && response.getData().getUser_cover() != null && response.getData().getUser_cover().equals(room.getUserCover())) {
+                            needUpdateMasterInfo = true;
+                        }
+
+                        if (needUpdateMasterInfo) {
                             try {
                                 BiliLiveMasterInfoResponse masterInfo = BiliApi.getLiveMasterInfo(uid);
                                 if (masterInfo != null && masterInfo.getCode() == 0 && masterInfo.getData() != null && masterInfo.getData().getInfo() != null) {
-                                    Integer gender = masterInfo.getData().getInfo().getGender();
+                                    BiliLiveMasterInfoResponse.Info info = masterInfo.getData().getInfo();
+                                    
+                                    // 更新性别
+                                    Integer gender = info.getGender();
                                     if (!Objects.equals(gender, room.getGender())) {
                                         room.setGender(gender);
+                                        changed = true;
+                                    }
+                                    
+                                    // 更新头像
+                                    String face = info.getFace();
+                                    if (face != null && !face.equals(room.getUserCover())) {
+                                        room.setUserCover(face);
+                                        changed = true;
+                                    }
+                                    
+                                    // 更新昵称
+                                    String uname = info.getUname();
+                                    if (uname != null && !uname.equals(room.getUname())) {
+                                        room.setUname(uname);
                                         changed = true;
                                     }
                                 }
