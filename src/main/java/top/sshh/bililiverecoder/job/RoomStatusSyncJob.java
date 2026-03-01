@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.entity.RecordRoom;
+import top.sshh.bililiverecoder.entity.data.BiliLiveMasterInfoResponse;
 import top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
@@ -109,6 +110,42 @@ public class RoomStatusSyncJob {
                         log.debug("[BLR] {}", LogKvs.event("RoomStatusSyncJob.TitleChanged")
                                .add("roomId", room.getRoomId())
                                .add("uname", room.getUname()));
+                    }
+
+                    // 更新头像
+                    if(response.getData().getUser_cover() != null && !response.getData().getUser_cover().equals(room.getUserCover())){
+                        room.setUserCover(response.getData().getUser_cover());
+                        changed = true;
+                    }
+
+                    // 更新主播UID和性别
+                    Long uid = response.getData().getUid();
+                    if (uid != null && uid > 0) {
+                        if (!Objects.equals(uid, room.getAnchorId())) {
+                            room.setAnchorId(uid);
+                            changed = true;
+                            // 主播ID变了，强制更新性别
+                            room.setGender(null);
+                        }
+                        
+                        // 如果性别未知，尝试获取
+                        if (room.getGender() == null) {
+                            try {
+                                BiliLiveMasterInfoResponse masterInfo = BiliApi.getLiveMasterInfo(uid);
+                                if (masterInfo != null && masterInfo.getCode() == 0 && masterInfo.getData() != null && masterInfo.getData().getInfo() != null) {
+                                    Integer gender = masterInfo.getData().getInfo().getGender();
+                                    if (!Objects.equals(gender, room.getGender())) {
+                                        room.setGender(gender);
+                                        changed = true;
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.warn("[BLR] {}", LogKvs.event("RoomStatusSyncJob.GetMasterInfoFailed")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uid", uid)
+                                        .add("err", e.getMessage()));
+                            }
+                        }
                     }
 
                     if (changed) {

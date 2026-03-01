@@ -12,8 +12,10 @@ public class BiliLiveRoomInfoResponse {
     @Data
     public static class RoomInfo {
         private Long room_id;
+        private Long uid;
         private Integer live_status; // 0: 空闲, 1: 直播中, 2: 轮播中
         private String title;
         private String live_time;
+        private String user_cover;
     }
 }

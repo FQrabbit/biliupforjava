@@ -206,8 +206,16 @@
                 
                 <div class="room-card-header">
                     <div class="room-avatar">
-                        {{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}
+                        <img v-if="!privacyMode && item.userCover" :src="item.userCover" referrerpolicy="no-referrer">
+                        <span v-else>{{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}</span>
                         <span v-if="item.streaming" class="live-indicator"></span>
+                        
+                        <!-- 性别图标 -->
+                        <div v-if="!privacyMode && item.gender !== null && item.gender !== -1" 
+                             class="gender-icon" 
+                             :class="item.gender === 1 ? 'male' : 'female'">
+                            <i :class="item.gender === 1 ? 'el-icon-male' : 'el-icon-female'"></i>
+                        </div>
                     </div>
                     <div class="room-info">
                         <h3 class="room-name">{{ maskText(item.uname) }}</h3>

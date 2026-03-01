@@ -32,6 +32,14 @@ public class RecordRoom {
     // 发布到哪个分区
     private Integer tid = 21;
 
+    // 主播头像
+    private String userCover;
+
+    // 主播ID
+    private Long anchorId;
+    
+    // 主播性别：-1: 保密, 0: 女, 1: 男
+    private Integer gender;
 
     // 1自制，2 转载
     private int copyright = 1;

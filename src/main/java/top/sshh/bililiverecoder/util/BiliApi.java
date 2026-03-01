@@ -405,6 +405,14 @@ public class BiliApi {
         return JSON.parseObject(response, BiliLiveRoomInfoResponse.class);
     }
 
+    public static BiliLiveMasterInfoResponse getLiveMasterInfo(long uid) {
+        Map<String, String> headers = getCommonHeaders();
+        String url = "https://api.live.bilibili.com/live_user/v1/Master/info?uid=" + uid;
+        String res = HttpClientUtil.get(url, headers);
+        return JSON.parseObject(res, new TypeReference<BiliLiveMasterInfoResponse>() {
+        });
+    }
+
     public static BiliVideoPartInfoResponse getVideoPartInfo(BiliBiliUser user, String bvid) {
         String url = "https://member.bilibili.com/x/vupre/web/archive/view";
         Map<String, String> params = new TreeMap<>();
