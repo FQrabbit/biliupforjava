@@ -1,0 +1,103 @@
+/* ========== Global Reset & Scrollbar ========== */
+/* 全局重置、滚动条美化、基础 box-sizing */
+
+/* ========== Modern Scrollbar Global Styles ========== */
+::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background-clip: content-box;
+    transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+
+/* 针对需要防止跳动的容器进行优化，并通过 padding 补偿消除"留白"感 */
+.room-container,
+.user-container,
+.history-main,
+.log-console,
+.detail-content-modern,
+.action-group-secondary,
+.changelog-container,
+.el-table__body-wrapper,
+.el-drawer__body,
+.el-dialog__body {
+    scrollbar-gutter: stable;
+}
+
+/* 具体的 padding 补偿逻辑 */
+.room-container, 
+.user-container {
+    padding-right: calc(20px - var(--scrollbar-width)) !important;
+}
+
+.history-main,
+.changelog-container {
+    padding-right: calc(24px - var(--scrollbar-width)) !important;
+}
+
+.log-console,
+.action-group-secondary {
+    padding-right: calc(16px - var(--scrollbar-width)) !important;
+}
+
+.detail-content-modern {
+    padding-right: calc(10px - var(--scrollbar-width)) !important;
+}
+
+/* Firefox 兼容性 */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .room-container,
+    .user-container {
+        scrollbar-gutter: auto;
+        padding-right: 20px !important;
+    }
+    .history-main,
+    .changelog-container {
+        scrollbar-gutter: auto;
+        padding-right: 24px !important;
+    }
+    .log-console {
+        scrollbar-gutter: auto;
+        padding-right: 16px !important;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        border: 1px solid transparent;
+        background-clip: content-box;
+    }
+
+    html {
+        font-size: 13px;
+    }
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+[data-theme="dark"] body {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}

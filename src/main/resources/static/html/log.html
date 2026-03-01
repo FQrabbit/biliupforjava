@@ -6,12 +6,20 @@
     <title>日志控制台</title>
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
-    <link href="../css/index.css" rel="stylesheet">
+    <link href="../css/base/variables.css" rel="stylesheet">
+    <link href="../css/base/reset.css" rel="stylesheet">
+    <link href="../css/base/element-override.css" rel="stylesheet">
+    <link href="../css/base/shared-components.css" rel="stylesheet">
+    <link href="../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../css/animations/transitions.css" rel="stylesheet">
+    <link href="../css/animations/effects.css" rel="stylesheet">
     <link href="../css/log.css" rel="stylesheet">
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
-    <script src="../js/index.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/mixins.js"></script>
+    <script src="../js/privacy.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -703,7 +711,7 @@
                 
                 if (this.selectedLogs.has(log)) {
                     this.selectedLogs.delete(log);
-                    // Force update for Set reactivity
+                    // 强制更新以实现 Set 的响应性
                     this.selectedLogs = new Set(this.selectedLogs);
                 } else {
                     this.selectedLogs.add(log);
@@ -715,7 +723,7 @@
             copySelectedLogs() {
                 if (this.selectedLogs.size === 0) return;
 
-                // Filter logs to maintain order
+                // 过滤日志以保持顺序
                 const selectedContent = this.logs
                     .filter(log => this.selectedLogs.has(log))
                     .map(log => {
@@ -737,7 +745,7 @@
                         this.$message.error('复制失败');
                     });
                 } else {
-                    // Fallback
+                    // 回退处理
                     const textArea = document.createElement("textarea");
                     textArea.value = selectedContent;
                     document.body.appendChild(textArea);

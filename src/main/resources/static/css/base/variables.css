@@ -1,0 +1,131 @@
+/* ========== Design Tokens / CSS Variables ========== */
+/* 所有颜色、尺寸、阴影、动效变量集中定义于此 */
+
+/* ========== CSS Layer Order Declaration ========== */
+/* 层叠优先级从低到高：reset → tokens → element-ui → components → animations → pages → effects → utilities */
+/* 在此声明顺序后，各文件可选择性地用 @layer 包裹，也可不包裹（不包裹则自动高于所有 layer） */
+@layer reset, tokens, element-ui, components, animations, pages, effects, utilities;
+
+:root {
+    --primary-color: #5b6cff;
+    --primary-light: #7b8fff;
+    --primary-dark: #4a5ae8;
+    --success-color: #52c41a;
+    --warning-color: #faad14;
+    --danger-color: #ff4d4f;
+    --text-primary: #262626;
+    --text-secondary: #595959;
+    --text-disabled: #8c8c8c;
+    --bg-primary: #ffffff;
+    --bg-secondary: #fafafa;
+    --bg-tertiary: #f5f5f5;
+    --border-color: #d9d9d9;
+    --border-light: #f0f0f0;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+    --shadow-md: 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    /* ===== Apple-style Motion System ===== */
+    /* macOS 系统级缓动曲线 */
+    --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);         /* 标准 — 匀称自然 */
+    --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);   /* 弹性 — 轻微过冲 */
+    --ease-decel: cubic-bezier(0, 0.55, 0.45, 1);           /* 减速 — 入场专用 */
+    --ease-accel: cubic-bezier(0.55, 0, 1, 0.45);           /* 加速 — 离场专用 */
+    --ease-modal: cubic-bezier(0.32, 0.72, 0, 1);           /* 弹窗 — 苹果 sheet 风格 */
+    /* 标准时长 */
+    --duration-fast: 0.2s;
+    --duration-base: 0.3s;
+    --duration-slow: 0.45s;
+    /* 组合过渡预设 — 大部分 transition 属性引用这些变量 */
+    --transition-fast: var(--duration-fast) var(--ease-apple);
+    --transition-base: var(--duration-base) var(--ease-apple);
+    --transition-slow: var(--duration-slow) var(--ease-apple);
+    --transition: var(--transition-base);
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --glow-primary: 0 0 20px rgba(91, 108, 255, 0.3);
+    --glow-success: 0 0 20px rgba(82, 196, 26, 0.3);
+
+    /* ===== 间距系统 (Spacing Scale) ===== */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+
+    /* ===== 层级系统 (Z-Index Scale) ===== */
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-fixed: 300;
+    --z-modal-backdrop: 400;
+    --z-modal: 500;
+    --z-popover: 600;
+    --z-tooltip: 700;
+
+    /* ===== 特效变量 (Effect Tokens) ===== */
+    --blur-sm: 4px;
+    --blur-md: 12px;
+    --blur-lg: 20px;
+    --blur-xl: 40px;
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --neon-glow-intensity: 0.3;
+
+    /* 现代化滚动条变量 */
+    --scrollbar-width: 6px;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+}
+
+/* ========== Dark Theme Variables ========== */
+[data-theme="dark"] {
+    --primary-color: #7b8fff;
+    --primary-light: #9ba8ff;
+    --primary-dark: #5b6cff;
+    --text-primary: #e8e8e8;
+    --text-secondary: #a0a0a0;
+    --text-disabled: #666666;
+    --bg-primary: #18181b;
+    --bg-secondary: #0a0a0c;
+    --bg-tertiary: #27272a;
+    --border-color: #3f3f46;
+    --border-light: #27272a;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+    --glow-primary: 0 0 25px rgba(123, 143, 255, 0.4);
+    --glow-success: 0 0 25px rgba(82, 196, 26, 0.4);
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --neon-glow-intensity: 0.4;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+}
+
+/* 移动端滚动条适配 */
+@media (max-width: 768px) {
+    :root {
+        --scrollbar-width: 4px;
+    }
+}
+
+/* 系统暗色模式自动检测（用户未手动选择时生效） */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --primary-color: #7b8fff;
+        --primary-light: #9ba8ff;
+        --primary-dark: #5b6cff;
+        --text-primary: #e8e8e8;
+        --text-secondary: #a0a0a0;
+        --text-disabled: #666666;
+        --bg-primary: #18181b;
+        --bg-secondary: #0a0a0c;
+        --bg-tertiary: #27272a;
+        --border-color: #3f3f46;
+        --border-light: #27272a;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    }
+}

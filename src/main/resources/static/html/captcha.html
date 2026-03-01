@@ -32,7 +32,7 @@
             <!-- 新增：显示详细调试信息，方便用户判断验证类型 -->
             <el-collapse style="margin-top: 10px;">
                 <el-collapse-item title="查看 B站返回的详细要求 (Debug Info)" name="1">
-                    <div style="background-color: #f5f7fa; padding: 10px; border-radius: 4px;">
+                    <div style="background-color: var(--bg-tertiary, #f5f7fa); padding: 10px; border-radius: 4px;">
                         <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word;">{{ JSON.stringify(extra, null, 2) }}</pre>
                     </div>
                     <div style="margin-top: 5px; color: #909399; font-size: 12px;">

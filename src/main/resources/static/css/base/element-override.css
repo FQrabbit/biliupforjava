@@ -1,0 +1,69 @@
+﻿/* ========== Element UI Global Overrides ========== */
+/* Element UI 组件级别覆盖样式（纯 UI 框架层） */
+/* 共享业务组件已拆分至 shared-components.css */
+/* 暗色主题覆盖已拆分至 dark-overrides.css */
+
+/* ========== Global Interaction Enhancements ========== */
+.el-button {
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast) !important;
+}
+
+.el-button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.el-button:active {
+    transform: translateY(0) scale(0.96);
+}
+
+.el-input__inner, .el-textarea__inner {
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast) !important;
+}
+
+.el-input__inner:focus, .el-textarea__inner:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(91, 108, 255, 0.1);
+}
+
+.el-card {
+    transition: transform var(--transition-base), box-shadow var(--transition-base) !important;
+}
+
+.el-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md) !important;
+}
+
+.el-button,
+.el-input__inner,
+.el-select .el-input__inner,
+.el-textarea__inner {
+    min-height: 44px;
+    font-size: 14px;
+}
+
+.el-table__header-wrapper {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+}
+
+.el-table__body tr > td {
+    padding-top: 14px;
+    padding-bottom: 14px;
+}
+
+.el-dialog__wrapper .el-dialog.is-fullscreen {
+    padding: 0;
+}
+
+pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-x: auto;
+    background: var(--bg-tertiary);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}

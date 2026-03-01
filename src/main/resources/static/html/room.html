@@ -5,7 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
-    <link href="../css/index.css" rel="stylesheet">
+    <link href="../css/base/variables.css" rel="stylesheet">
+    <link href="../css/base/reset.css" rel="stylesheet">
+    <link href="../css/base/element-override.css" rel="stylesheet">
+    <link href="../css/base/shared-components.css" rel="stylesheet">
+    <link href="../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../css/animations/transitions.css" rel="stylesheet">
+    <link href="../css/animations/effects.css" rel="stylesheet">
     <link href="../css/room.css" rel="stylesheet">
     <style>
         .season-cover-tooltip.el-tooltip__popper {
@@ -23,7 +29,7 @@
             height: 135px;
             overflow: hidden;
             border-radius: 6px;
-            background: #fff;
+            background: var(--bg-primary, #fff);
             box-shadow: 0 10px 24px rgba(0,0,0,0.25);
         }
         .season-cover-tooltip-img {
@@ -38,9 +44,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #909399;
+            color: var(--text-disabled, #909399);
             font-size: 12px;
-            background: #f5f7fa;
+            background: var(--bg-tertiary, #f5f7fa);
         }
         .season-option-label {
             display: block;
@@ -50,7 +56,9 @@
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
-    <script src="../js/index.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/mixins.js"></script>
+    <script src="../js/privacy.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -108,15 +116,21 @@
             </div>
             <div class="room-stats">
                 <div class="room-stat-item">
-                    <div class="room-stat-value">{{ tableData.length }}</div>
+                    <transition name="count-flip" mode="out-in">
+                        <div class="room-stat-value" :key="'total-' + tableData.length">{{ tableData.length }}</div>
+                    </transition>
                     <div class="room-stat-label">总房间</div>
                 </div>
                 <div class="room-stat-item">
-                    <div class="room-stat-value live">{{ tableData.filter(r => r.streaming).length }}</div>
+                    <transition name="count-flip" mode="out-in">
+                        <div class="room-stat-value live" :key="'live-' + tableData.filter(r => r.streaming).length">{{ tableData.filter(r => r.streaming).length }}</div>
+                    </transition>
                     <div class="room-stat-label">直播中</div>
                 </div>
                 <div class="room-stat-item">
-                    <div class="room-stat-value recording">{{ tableData.filter(r => r.recording).length }}</div>
+                    <transition name="count-flip" mode="out-in">
+                        <div class="room-stat-value recording" :key="'rec-' + tableData.filter(r => r.recording).length">{{ tableData.filter(r => r.recording).length }}</div>
+                    </transition>
                     <div class="room-stat-label">录制中</div>
                 </div>
             </div>
@@ -145,8 +159,32 @@
 
     <!-- 内容区域 -->
     <transition name="fade-slide">
+        <!-- 骨架屏加载状态 -->
+        <div v-if="loading && tableData.length === 0" class="room-card-grid" key="skeleton">
+            <div class="skeleton-card" v-for="n in 3" :key="'sk-' + n">
+                <div class="skeleton-card-header">
+                    <div class="skeleton-avatar"></div>
+                    <div class="skeleton-info">
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+                <div class="skeleton-card-tags">
+                    <div class="skeleton-tag"></div>
+                    <div class="skeleton-tag"></div>
+                    <div class="skeleton-tag"></div>
+                </div>
+                <div class="skeleton-card-footer">
+                    <div class="skeleton-btn"></div>
+                    <div class="skeleton-btn"></div>
+                    <div class="skeleton-btn"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- 空状态 -->
-        <div v-if="tableData.length === 0 && !loading" class="room-empty" key="empty">
+        <div v-else-if="tableData.length === 0 && !loading" class="room-empty" key="empty">
             <i class="el-icon-video-camera room-empty-icon"></i>
             <h3 class="room-empty-title">还没有添加直播间</h3>
             <p class="room-empty-desc">点击"添加房间"按钮，开始监控房间</p>
@@ -157,11 +195,13 @@
 
         <!-- 卡片视图 -->
         <div v-else-if="viewMode === 'card'" class="room-card-grid" key="card">
-            <div class="room-card" 
-                 :class="{ 
-                    'is-recording': item.recording, 
-                    'is-streaming': item.streaming && !item.recording 
-                 }" 
+            <div class="room-card"
+                 :class="{
+                    'is-recording': item.recording,
+                    'is-streaming': item.streaming && !item.recording
+                 }"
+                 data-stagger
+                 :style="{ animationDelay: index * 40 + 'ms' }"
                  v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)">
                 
                 <div class="room-card-header">
@@ -2723,7 +2763,7 @@
                         this.$message.error('复制失败');
                     });
                 } else {
-                    // Fallback
+                    // 回退处理
                     const textArea = document.createElement("textarea");
                     textArea.value = configStr;
                     document.body.appendChild(textArea);
@@ -2778,7 +2818,7 @@
                         <div style="margin-top: 10px; padding: 10px; background-color: #f0f9eb; border-radius: 4px;">
                             <div style="font-weight: bold; margin-bottom: 5px;">如何修改 Flag (方案3):</div>
                             <div style="font-size: 12px; color: #606266; margin-bottom: 5px;">请复制下方地址到浏览器地址栏打开 (无法直接跳转):</div>
-                            <div style="background: #fff; padding: 5px; border: 1px solid #dcdfe6; border-radius: 3px; color: #409EFF; word-break: break-all; font-family: monospace; user-select: all;">
+                            <div style="background: var(--bg-tertiary, #f5f5f5); padding: 5px; border: 1px solid var(--border-color, #dcdfe6); border-radius: 3px; color: var(--primary-color, #409EFF); word-break: break-all; font-family: monospace; user-select: all;">
                                 ${flagUrl}
                             </div>
                             <div style="font-size: 12px; margin-top: 5px; line-height: 1.5;">
@@ -2939,19 +2979,19 @@
                     data: JSON.stringify(_this.exportConfig),
                     dataType: 'json',
                     success: function (data) {
-                        // get the current date and time
+                        // 获取当前日期和时间
                         var now = new Date();
 
-                        // format the date and time using Intl.DateTimeFormat API
+                        // 使用 Intl.DateTimeFormat API 格式化日期和时间
                         var dateString = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
                         var timeString = new Intl.DateTimeFormat('zh-CN', { hour: 'numeric', minute: 'numeric' }).format(now);
 
-                        // construct the file name using the formatted date and time
+                        // 使用格式化的日期和时间构造文件名
                         var fileName = 'biliupForJavaConfig_' + dateString.replace(/\//g, '年') + timeString.replace(':', '点') + '分.json';
 
                         var blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
 
-                        // create a hidden link
+                        // 创建隐藏的链接
                         var link = document.createElement('a');
                         link.href = window.URL.createObjectURL(blob);
                         link.download = fileName;
@@ -3288,11 +3328,11 @@
                 if (!status) return '';
                 if (status.includes('ms')) {
                     var ms = parseInt(status);
-                    if (ms < 200) return '#67C23A'; // Green
-                    if (ms < 500) return '#E6A23C'; // Yellow
-                    return '#F56C6C'; // Red
+                    if (ms < 200) return '#67C23A'; // 绿色
+                    if (ms < 500) return '#E6A23C'; // 黄色
+                    return '#F56C6C'; // 红色
                 }
-                return '#F56C6C'; // Error
+                return '#F56C6C'; // 错误
             },
             getLineStatusIcon(status) {
                 if (!status) return '';
@@ -3341,9 +3381,6 @@
                     type: 'post',
                     dataType: 'json',
                     success: function (data) {
-                        if (parent && parent.answer && parent.answer.setConnectionStatus) {
-                            parent.answer.setConnectionStatus(false);
-                        }
                         data.forEach(room => {
                             if (room.coverUrl === 'live') {
                                 room.coverType = 'live';
@@ -3355,6 +3392,12 @@
                         })
                         _this.tableData = data;
                         if (!silent) _this.loading = false;
+                        // 等待 Vue 渲染完成后再通知父页面，确保内容已就位
+                        _this.$nextTick(function() {
+                            if (parent && parent.answer && parent.answer.setConnectionStatus) {
+                                parent.answer.setConnectionStatus(false);
+                            }
+                        });
                     },
                     error: function () {
                         if (parent && parent.answer && parent.answer.setConnectionStatus) {
@@ -3367,9 +3410,8 @@
         },
         created: function created() {
             let _this = this;
-            if (parent && parent.answer && parent.answer.setPageReady) {
-                parent.answer.setPageReady();
-            }
+            // setPageReady 由 initTable 成功回调中的 setConnectionStatus(false) 触发
+            // 确保数据加载完成后再通知父页面显示 iframe，避免卡片动画闪烁
             $.ajax({
                 url: '/biliUser/list',
                 type: 'get',

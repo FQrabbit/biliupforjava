@@ -1,0 +1,82 @@
+/* ========== Advanced Effects Entry Point ========== */
+/* 高级特效入口文件 —— 未来所有视觉特效集中注册于此 */
+/*
+ * 使用指南：
+ * 1. 基础动画关键帧 → css/animations/transitions.css
+ * 2. Design Tokens（模糊/光效/间距） → css/base/variables.css
+ * 3. 此文件用于放置「组合型」高级特效类，可直接在 HTML 元素上添加 class 使用
+ *
+ * 已预留的 Token：
+ *   --blur-sm / --blur-md / --blur-lg / --blur-xl    模糊等级
+ *   --glass-bg / --glass-border                       毛玻璃背景/边框
+ *   --neon-glow-intensity                             霓虹光强度
+ *
+ * 示例特效（取消注释即可使用）：
+ */
+
+/* ---------- Glassmorphism 毛玻璃 ---------- */
+/*
+.glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
+    border-radius: var(--radius-lg);
+}
+*/
+
+/* ---------- Neon Glow 霓虹发光 ---------- */
+/*
+.neon-glow {
+    box-shadow: 0 0 calc(8px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.4),
+                0 0 calc(20px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.2),
+                0 0 calc(40px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.1);
+    transition: box-shadow var(--transition-base);
+}
+
+.neon-glow:hover {
+    box-shadow: 0 0 calc(12px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.6),
+                0 0 calc(30px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.3),
+                0 0 calc(60px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.15);
+}
+*/
+
+/* ---------- Particle Shimmer 微粒闪烁背景 ---------- */
+/*
+.particle-shimmer {
+    position: relative;
+    overflow: hidden;
+}
+
+.particle-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.4) 0%, transparent 100%),
+                       radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
+                       radial-gradient(1px 1px at 80% 20%, rgba(255,255,255,0.35) 0%, transparent 100%);
+    animation: breathe 4s ease-in-out infinite;
+    pointer-events: none;
+}
+*/
+
+/* ---------- Depth Shadow 深度阴影 ---------- */
+/*
+.depth-shadow {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04),
+                0 2px 4px rgba(0,0,0,0.04),
+                0 4px 8px rgba(0,0,0,0.04),
+                0 8px 16px rgba(0,0,0,0.04),
+                0 16px 32px rgba(0,0,0,0.04);
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+.depth-shadow:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04),
+                0 4px 8px rgba(0,0,0,0.04),
+                0 8px 16px rgba(0,0,0,0.04),
+                0 16px 32px rgba(0,0,0,0.04),
+                0 32px 64px rgba(0,0,0,0.06);
+}
+*/

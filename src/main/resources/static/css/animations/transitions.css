@@ -1,0 +1,444 @@
+/* ========== Shared @keyframes & Vue Transitions ========== */
+/* 所有公共动画关键帧 + Vue 过渡类 + 无障碍/主题切换保护 */
+
+/* ========== @keyframes ========== */
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bounce-x {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-4px); }
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ========== 卡片交错入场动画 ========== */
+@keyframes card-stagger-in {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.room-card[data-stagger],
+.data-card[data-stagger] {
+    animation: card-stagger-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ========== 骨架屏加载动画 ========== */
+@keyframes skeleton-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.skeleton-card {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    padding: 20px;
+    overflow: hidden;
+    position: relative;
+}
+
+.skeleton-line {
+    height: 14px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border-light) 50%, var(--bg-tertiary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.8s linear infinite;
+    margin-bottom: 12px;
+}
+
+.skeleton-line.short { width: 40%; }
+.skeleton-line.medium { width: 65%; }
+.skeleton-line.long { width: 90%; }
+.skeleton-line.full { width: 100%; }
+
+.skeleton-line.title {
+    height: 20px;
+    margin-bottom: 16px;
+}
+
+.skeleton-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border-light) 50%, var(--bg-tertiary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.8s linear infinite;
+    flex-shrink: 0;
+}
+
+.skeleton-tag {
+    display: inline-block;
+    height: 24px;
+    width: 72px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border-light) 50%, var(--bg-tertiary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.8s linear infinite;
+    margin-right: 8px;
+}
+
+.skeleton-card-header {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.skeleton-card-header .skeleton-info {
+    flex: 1;
+}
+
+.skeleton-card-tags {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.skeleton-card-footer {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+}
+
+.skeleton-btn {
+    height: 32px;
+    width: 72px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border-light) 50%, var(--bg-tertiary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.8s linear infinite;
+}
+
+/* 骨架屏每行延迟 */
+.skeleton-card:nth-child(2) .skeleton-line,
+.skeleton-card:nth-child(2) .skeleton-avatar,
+.skeleton-card:nth-child(2) .skeleton-tag,
+.skeleton-card:nth-child(2) .skeleton-btn { animation-delay: 0.15s; }
+.skeleton-card:nth-child(3) .skeleton-line,
+.skeleton-card:nth-child(3) .skeleton-avatar,
+.skeleton-card:nth-child(3) .skeleton-tag,
+.skeleton-card:nth-child(3) .skeleton-btn { animation-delay: 0.3s; }
+
+[data-theme="dark"] .skeleton-line,
+[data-theme="dark"] .skeleton-avatar,
+[data-theme="dark"] .skeleton-tag,
+[data-theme="dark"] .skeleton-btn {
+    background: linear-gradient(90deg, rgba(39, 39, 42, 0.8) 25%, rgba(63, 63, 70, 0.5) 50%, rgba(39, 39, 42, 0.8) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.8s linear infinite;
+}
+
+[data-theme="dark"] .skeleton-card {
+    background: rgba(39, 39, 42, 0.5);
+    border-color: rgba(63, 63, 70, 0.4);
+}
+
+/* ========== 统一对话框入退场动画 (Apple sheet 风格) ========== */
+.dialog-fade-enter-active {
+    animation: dialog-apple-in var(--duration-slow) var(--ease-modal) both !important;
+}
+.dialog-fade-leave-active {
+    animation: dialog-apple-out var(--duration-base) var(--ease-accel) both !important;
+}
+@keyframes dialog-apple-in {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes dialog-apple-out {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to   { opacity: 0; transform: scale(0.94) translateY(8px); }
+}
+
+/* 弹窗遮罩层渐变 */
+.v-modal {
+    transition: opacity var(--duration-base) var(--ease-apple) !important;
+}
+
+/* ========== Vue Transition: fade-slide (Tab 切换) ========== */
+
+/* 入场：留在正常文档流，苹果减速曲线 */
+.fade-slide-enter-active {
+    transition: opacity var(--duration-base) var(--ease-decel),
+                transform var(--duration-base) var(--ease-decel);
+    pointer-events: none;
+    will-change: opacity, transform;
+    z-index: 1;
+    position: relative;
+}
+
+/* 离场：绝对定位脱离文档流，苹果加速曲线 */
+.fade-slide-leave-active {
+    transition: opacity var(--duration-fast) var(--ease-accel),
+                transform var(--duration-fast) var(--ease-accel);
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    will-change: opacity, transform;
+    z-index: 0;
+}
+
+/* iframe 离场时保持其布局尺寸（因为 absolute 脱离了 flex 布局） */
+.fade-slide-leave-active.tab-frame {
+    width: calc(100% - 32px);
+    margin: 16px;
+    margin-top: 0;
+}
+
+/* 入场初始：从 scale(0.97) 渐入 — macOS 窗口淡入风格 */
+.fade-slide-enter {
+    opacity: 0;
+    transform: scale(0.97);
+}
+
+/* 离场结束：缩回消失 */
+.fade-slide-leave-to {
+    opacity: 0;
+    transform: scale(0.97);
+}
+
+/* 入场目标 */
+.fade-slide-enter-to {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* ---------- iframe（.tab-frame）过渡覆盖 ---------- */
+.fade-slide-leave.tab-frame {
+    opacity: 1;
+}
+
+.fade-slide-leave-to.tab-frame {
+    opacity: 0;
+}
+
+.fade-slide-enter.tab-frame,
+.fade-slide-enter-to.tab-frame,
+.fade-slide-enter-active.tab-frame {
+    opacity: 0;
+    transition: none;
+}
+
+/* ========== Vue Transition: fade-transform (水平切换) ========== */
+.fade-transform-enter-active {
+    transition: opacity var(--duration-base) var(--ease-decel),
+                transform var(--duration-base) var(--ease-decel);
+}
+
+.fade-transform-leave-active {
+    transition: opacity var(--duration-fast) var(--ease-accel),
+                transform var(--duration-fast) var(--ease-accel);
+}
+
+.fade-transform-enter {
+    opacity: 0;
+    transform: translateX(-8px);
+}
+
+.fade-transform-leave-to {
+    opacity: 0;
+    transform: translateX(8px);
+}
+
+/* ========== Vue Transition: slide-left / slide-right (翻页) ========== */
+.slide-left-enter-active,
+.slide-right-enter-active {
+    transition: opacity var(--duration-base) var(--ease-decel),
+                transform var(--duration-base) var(--ease-decel);
+}
+
+.slide-left-leave-active,
+.slide-right-leave-active {
+    transition: opacity var(--duration-fast) var(--ease-accel),
+                transform var(--duration-fast) var(--ease-accel);
+}
+
+.slide-left-enter {
+    opacity: 0;
+    transform: translateX(20px);
+}
+.slide-left-leave-to {
+    opacity: 0;
+    transform: translateX(-20px);
+}
+
+.slide-right-enter {
+    opacity: 0;
+    transform: translateX(-20px);
+}
+.slide-right-leave-to {
+    opacity: 0;
+    transform: translateX(20px);
+}
+
+/* ========== Vue Transition: count-flip (数字翻转) ========== */
+.count-flip-enter-active {
+    transition: opacity var(--duration-fast) var(--ease-decel),
+                transform var(--duration-fast) var(--ease-spring);
+}
+
+.count-flip-leave-active {
+    transition: opacity 0.15s var(--ease-accel),
+                transform 0.15s var(--ease-accel);
+}
+
+.count-flip-enter {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.95);
+}
+
+.count-flip-leave-to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.95);
+}
+
+/* ========== Swipe Hint ========== */
+.swipe-hint {
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    animation: fadeIn var(--duration-slow) var(--ease-decel);
+}
+
+.swipe-icon {
+    animation: bounce-x 1.5s var(--ease-apple) infinite;
+}
+
+/* ========== prefers-reduced-motion 无障碍支持 ========== */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ========== 主题切换平滑过渡 ========== */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+    transition: background-color var(--duration-slow) var(--ease-apple),
+                color var(--duration-slow) var(--ease-apple),
+                border-color var(--duration-slow) var(--ease-apple),
+                box-shadow var(--duration-slow) var(--ease-apple),
+                background-image var(--duration-slow) var(--ease-apple),
+                background var(--duration-slow) var(--ease-apple) !important;
+}
+
+/* 用更高优先级覆盖，确保 Vue transition 动画不被主题过渡劫持 */
+html.theme-transitioning .fade-slide-enter-active,
+html.theme-transitioning .fade-slide-leave-active {
+    transition: opacity var(--duration-base) var(--ease-apple),
+                transform var(--duration-base) var(--ease-apple) !important;
+}
+
+html.theme-transitioning .fade-transform-enter-active,
+html.theme-transitioning .fade-transform-leave-active {
+    transition: opacity var(--duration-base) var(--ease-apple),
+                transform var(--duration-base) var(--ease-apple) !important;
+}
+
+html.theme-transitioning .filter-slide-enter-active,
+html.theme-transitioning .filter-slide-leave-active {
+    transition: max-height var(--duration-base) var(--ease-apple),
+                opacity var(--duration-base) var(--ease-apple),
+                padding var(--duration-base) var(--ease-apple) !important;
+}
+
+html.theme-transitioning .count-flip-enter-active,
+html.theme-transitioning .count-flip-leave-active,
+html.theme-transitioning .slide-left-enter-active,
+html.theme-transitioning .slide-left-leave-active,
+html.theme-transitioning .slide-right-enter-active,
+html.theme-transitioning .slide-right-leave-active,
+html.theme-transitioning .zoom-fade-enter-active,
+html.theme-transitioning .zoom-fade-leave-active,
+html.theme-transitioning .actions-slide-enter-active,
+html.theme-transitioning .actions-slide-leave-active,
+html.theme-transitioning .room-legend-collapse-enter-active,
+html.theme-transitioning .room-legend-collapse-leave-active,
+html.theme-transitioning .fade-enter-active,
+html.theme-transitioning .fade-leave-active {
+    transition: opacity var(--duration-base) var(--ease-apple),
+                transform var(--duration-base) var(--ease-apple),
+                max-height var(--duration-base) var(--ease-apple) !important;
+}
+
+/* ========== 跨页面公共动画帧 ========== */
+/* 以下 @keyframes 统一定义，各页面 CSS 不再重复声明 */
+
+/* 渐变色调偏移 — 用于头部装饰条 */
+@keyframes gradientShift {
+    0%, 100% { filter: hue-rotate(0deg); opacity: 0.8; }
+    50% { filter: hue-rotate(20deg); opacity: 1; }
+}
+
+/* 呼吸灯 — 用于等待投稿等状态按钮 */
+@keyframes breathing-light {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(255, 193, 7, 0.5), 0 0 10px rgba(255, 193, 7, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(255, 193, 7, 0.8), 0 0 25px rgba(255, 193, 7, 0.5);
+    }
+}
+
+/* 通用脉冲（带透明度） — 用于状态图标的活跃提示 */
+@keyframes pulse-gentle {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+    }
+}
+
+/* 呼吸动画 — 比 pulse 更柔和 */
+@keyframes breathe {
+    0%, 100% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+/* 反向 shimmer — 从右向左的光泽扫过 */
+@keyframes shimmer-reverse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}

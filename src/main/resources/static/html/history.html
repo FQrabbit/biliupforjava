@@ -6,14 +6,20 @@
     <title>录制历史 - Bili Live Recorder</title>
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <link href="../css/element-ui.css" rel="stylesheet">
-    <link href="../css/index.css" rel="stylesheet">
+    <link href="../css/base/variables.css" rel="stylesheet">
+    <link href="../css/base/reset.css" rel="stylesheet">
+    <link href="../css/base/element-override.css" rel="stylesheet">
+    <link href="../css/base/shared-components.css" rel="stylesheet">
+    <link href="../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../css/animations/transitions.css" rel="stylesheet">
+    <link href="../css/animations/effects.css" rel="stylesheet">
     <link href="../css/history.css" rel="stylesheet">
-    <style>
-    </style>
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
-    <script src="../js/index.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/mixins.js"></script>
+    <script src="../js/privacy.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -324,14 +330,16 @@
                  @touchstart="onSelectTouchStart"
                  @touchmove="onSelectTouchMove"
                  @touchend="onSelectTouchEnd">
-                <div class="data-card" 
-                     :class="{ 
+                <div class="data-card"
+                     :class="{
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
                         'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (item.giveUpPartCount > 0),
                         'is-success': item.publish && (item.code == 0 || item.code == -50),
                         'is-selected': isMultiSelectMode && isSelected(item),
                         'press-anim': pressedCardId === item.id
-                     }" 
+                     }"
+                     data-stagger
+                     :style="{ animationDelay: (tableData.indexOf(item)) * 30 + 'ms' }"
                      v-for="item in tableData" :key="item.id" :data-id="item.id" @click="handleCardClick(item)">
                     <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
                         <i class="el-icon-delete selection-icon"></i>
@@ -1334,24 +1342,23 @@
                 return '异常文件：' + names.slice(0, 5).join('，') + ' … 等' + names.length + '个';
             },
             getGiveUpReason: function(idx, filePath) {
-                // 1) 优先使用后端返回的数组 giveUpPartReasons[idx]
+                // 优先使用后端返回的数组
                 const reasons = this.currentDetail.giveUpPartReasons;
                 if (Array.isArray(reasons) && reasons[idx]) return reasons[idx];
 
-                // 1.1) 兼容其它数组字段（如 giveUpReasonList）
+                // 兼容其它数组字段（如giveUpReasonList）
                 const reasons2 = this.currentDetail.giveUpReasonList || this.currentDetail.giveUpPartReasonList;
                 if (Array.isArray(reasons2) && reasons2[idx]) return reasons2[idx];
 
-                // 2) 兼容单字段 giveUpPartReason / giveUpPartMsg / giveUpReason / giveUpReasonMsg
+                // 兼容单字段形式的原因字段
                 if (this.currentDetail.giveUpPartReason) return this.currentDetail.giveUpPartReason;
                 if (this.currentDetail.giveUpPartMsg) return this.currentDetail.giveUpPartMsg;
                 if (this.currentDetail.giveUpReason) return this.currentDetail.giveUpReason;
                 if (this.currentDetail.giveUpReasonMsg) return this.currentDetail.giveUpReasonMsg;
 
-                // 3) 尝试从上传进度 stateMsg 中匹配同一个文件/分P
+                // 尝试从上传进度中根据文件名或分P索引匹配
                 const items = (this.historyUploadProgress && this.historyUploadProgress.items) || [];
                 if (items.length) {
-                    // 根据文件名或 partId/page 做模糊匹配
                     const targetName = filePath ? String(filePath).split(/[/\\\\]/).pop() : '';
                     const match = items.find(it => {
                         if (!it) return false;
@@ -1363,7 +1370,7 @@
                     if (match && match.stateMsg) return match.stateMsg;
                 }
 
-                // 4) 默认提示（占位，便于确认是后端未返回原因）
+                // 默认提示（表示后端未返回原因）
                 return '未返回异常原因';
             },
             formatGiveUpType: function(idx) {
@@ -1405,10 +1412,10 @@
             hasRecordingMismatch: function(item) {
                 if (!item) return false;
                 const recordPartCount = (item.recordPartCount !== null && item.recordPartCount !== undefined) ? item.recordPartCount : null;
-                // 明显矛盾：
-                // 1) 已结束/已发布，但仍存在录制中的分P
-                // 2) 历史标记录制中，但没有任何录制中分P，并且已经有结束时间
+                // 检测录制状态矛盾
+                // 情况1：已结束/已发布，但仍存在录制中的分P
                 if ((!!item.endTime || item.publish === true) && recordPartCount !== null && recordPartCount > 0) return true;
+                // 情况2：标记为录制中，但没有任何录制中分P且已有结束时间
                 return item.recording === true && recordPartCount === 0 && !!item.endTime;
             },
             handleCommand: function(command, row) {
@@ -1946,13 +1953,10 @@
                     data: JSON.stringify(_this.form),
                     dataType: 'json',
                     success: function (data) {
-                        if (parent && parent.answer && parent.answer.setConnectionStatus) {
-                            parent.answer.setConnectionStatus(false);
-                        }
                         _this.tableData = data.data;
                         _this.total = data.total;
                         if (!silent) _this.loading = false;
-                        
+
                         // 如果详情弹窗打开，同步更新 currentDetail
                         if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id) {
                             var updatedItem = _this.tableData.find(function(item) {
@@ -1968,6 +1972,12 @@
 
                         if (data.workingCount !== undefined) _this.workingCount = data.workingCount;
                         if (data.archivedCount !== undefined) _this.archivedCount = data.archivedCount;
+                        // 等待 Vue 渲染完成后再通知父页面，确保内容已就位
+                        _this.$nextTick(function() {
+                            if (parent && parent.answer && parent.answer.setConnectionStatus) {
+                                parent.answer.setConnectionStatus(false);
+                            }
+                        });
                     },
                     error: function () {
                         if (parent && parent.answer && parent.answer.setConnectionStatus) {
@@ -2399,9 +2409,8 @@
             },
         },
         created: function created() {
-            if (parent && parent.answer && parent.answer.setPageReady) {
-                parent.answer.setPageReady();
-            }
+            // setPageReady 由 initTable 成功回调中的 setConnectionStatus(false) 触发
+            // 确保数据加载完成后再通知父页面显示 iframe，避免卡片动画闪烁
             if (!this.form.pageSize) {
                 let availableHeight = window.innerHeight - 350;
                 let estimatedRowHeight = 50;

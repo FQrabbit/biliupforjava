@@ -9,12 +9,25 @@
     <link rel="icon" href="img/icon.svg" type="image/svg+xml">
     <title>录播姬上传插件</title>
     <link href="css/element-ui.css" rel="stylesheet">
-    <link href="css/index.css" rel="stylesheet">
+    <link href="css/base/variables.css" rel="stylesheet">
+    <link href="css/base/reset.css" rel="stylesheet">
+    <link href="css/base/element-override.css" rel="stylesheet">
+    <link href="css/base/shared-components.css" rel="stylesheet">
+    <link href="css/base/dark-overrides.css" rel="stylesheet">
+    <link href="css/animations/transitions.css" rel="stylesheet">
+    <link href="css/animations/effects.css" rel="stylesheet">
+    <link href="css/pages/home.css" rel="stylesheet">
+    <link href="css/user.css" rel="stylesheet">
+    <link href="css/log.css" rel="stylesheet">
     <script src="js/jquery-3.3.1.min.js"></script>
     <script src="js/vue.min.js"></script>
     <script src="js/element-ui.js"></script>
     <script src="js/version.js"></script>
-    <script src="js/index.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/mixins.js"></script>
+    <script src="js/privacy.js"></script>
+    <script src="js/pages/user.js"></script>
+    <script src="js/pages/log.js"></script>
 </head>
 <body>
 <div id="app" class="app-container">
@@ -46,39 +59,40 @@
                 <span v-else class="brand-version">{{ currentVersion }}</span>
             </div>
         </div>
-        <nav class="header-nav">
-            <div class="nav-item" 
-                 :class="{ 'is-active': activeName === 'home' }" 
+        <nav class="header-nav" ref="headerNav">
+            <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
+            <div class="nav-item" ref="navHome"
+                 :class="{ 'is-active': activeName === 'home' }"
                  @click="switchTab('home')">
                 <i class="el-icon-document"></i>
                 <span>更新日志</span>
             </div>
-            <div class="nav-item" 
-                 :class="{ 'is-active': activeName === 'room' }" 
+            <div class="nav-item" ref="navRoom"
+                 :class="{ 'is-active': activeName === 'room' }"
                  @click="switchTab('room')">
                 <i class="el-icon-video-camera"></i>
                 <span>直播间</span>
             </div>
-            <div class="nav-item" 
-                 :class="{ 'is-active': activeName === 'user' }" 
+            <div class="nav-item" ref="navUser"
+                 :class="{ 'is-active': activeName === 'user' }"
                  @click="switchTab('user')">
                 <i class="el-icon-user"></i>
                 <span>用户</span>
             </div>
-            <div class="nav-item" 
-                 :class="{ 'is-active': activeName === 'history' }" 
+            <div class="nav-item" ref="navHistory"
+                 :class="{ 'is-active': activeName === 'history' }"
                  @click="switchTab('history')">
                 <i class="el-icon-time"></i>
                 <span>录制历史</span>
             </div>
-            <div class="nav-item" 
-                 :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts }" 
+            <div class="nav-item" ref="navLog"
+                 :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts }"
                  @click="switchTab('log')">
                 <i class="el-icon-monitor"></i>
                 <span>日志</span>
                 <span v-if="hasAlerts" class="alert-badge"></span>
             </div>
-            
+
             <!-- 主题切换按钮 -->
             <div class="theme-toggle" @click="toggleTheme" title="切换主题">
                 <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
@@ -204,8 +218,21 @@
                 </div>
             </div>
             
-            <!-- iframe 子页面 -->
-            <iframe v-else :src="tabSrc" v-show="(!pageLoading && !connectionError && connectionReady) || keepIframeOnDisconnect()" class="tab-frame" frameborder="0" :key="activeName" @load="onIframeLoad"></iframe>
+            <!-- 组件化页面：user -->
+            <user-page v-else-if="activeName === 'user'"
+                       @connection-status="setConnectionStatus"
+                       key="user">
+            </user-page>
+
+            <!-- 组件化页面：log -->
+            <log-page v-else-if="activeName === 'log'"
+                      @connection-status="setConnectionStatus"
+                      @page-ready="setPageReady"
+                      key="log">
+            </log-page>
+
+            <!-- iframe 子页面（尚未组件化的页面） -->
+            <iframe v-else :src="tabSrc" class="tab-frame" :class="{'is-ready': isIframeReady}" frameborder="0" :key="activeName" @load="onIframeLoad"></iframe>
         </transition>
 
         <!-- 全局加载与连接失败遮罩层 -->
@@ -238,6 +265,389 @@
         </transition>
     </main>
 </div>
+
+<!-- ========== 用户管理页面模板 ========== -->
+<script type="text/x-template" id="user-template">
+<div class="user-container">
+    <!-- 页面头部 -->
+    <div class="user-header">
+        <div class="user-header-left">
+            <div class="user-header-title">
+                <i class="el-icon-user icon"></i>
+                <h2>用户管理</h2>
+            </div>
+            <div class="user-stats">
+                <div class="user-stat-item">
+                    <div class="user-stat-value">{{ tableData.length }}</div>
+                    <div class="user-stat-label">总用户</div>
+                </div>
+                <div class="user-stat-item">
+                    <div class="user-stat-value">{{ tableData.filter(u => u.login).length }}</div>
+                    <div class="user-stat-label">已登录</div>
+                </div>
+            </div>
+        </div>
+        <div class="user-header-actions">
+            <el-button class="modern-btn" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus" type="primary">
+                添加账号
+            </el-button>
+            <el-tooltip effect="dark" :content="privacyMode ? '隐私模式：开' : '隐私模式：关'" placement="top">
+                <el-button class="modern-btn" type="primary" @click="togglePrivacyMode" :icon="privacyMode ? 'el-icon-lock' : 'el-icon-view'">隐私</el-button>
+            </el-tooltip>
+            <el-radio-group v-model="viewMode" size="small">
+                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
+                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
+            </el-radio-group>
+        </div>
+    </div>
+
+    <!-- 内容区域 -->
+    <transition name="fade-transform">
+        <!-- 空状态 -->
+        <div v-if="tableData.length === 0 && !loading" class="empty-state" key="empty">
+            <i class="el-icon-user empty-icon"></i>
+            <h3 class="empty-title">暂无关联账号</h3>
+            <p class="empty-desc">添加 Bilibili 账号后，程序将自动使用该账号进行弹幕发送与互动。</p>
+            <el-button class="modern-btn" type="primary" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus">
+                立即添加账号
+            </el-button>
+        </div>
+
+        <!-- 卡片视图 -->
+        <div v-else-if="viewMode === 'card'" class="user-card-grid" key="card">
+            <div class="user-card"
+                 :class="{ 'is-active': item.login && item.enable, 'is-warning': !item.login }"
+                 v-for="item in tableData" :key="item.id">
+                <div class="user-card-header">
+                    <div class="user-avatar">{{ privacyMode ? '*' : (item.uname || 'U').charAt(0).toUpperCase() }}</div>
+                    <div class="user-info">
+                        <h3 class="user-name">{{ maskText(item.uname || '未命名用户') }}</h3>
+                        <div class="user-uid">UID: {{ maskText(item.uid) }}</div>
+                    </div>
+                </div>
+                <div class="user-card-body">
+                    <div class="user-status-grid">
+                        <el-tooltip :content="item.login ? '账号已登录，Token 有效' : '账号未登录或 Token 已过期'" placement="top">
+                            <div class="status-item">
+                                <div class="status-icon" :class="item.login ? 'success' : 'danger'">
+                                    <i :class="item.login ? 'el-icon-check' : 'el-icon-close'"></i>
+                                </div>
+                                <div class="status-text">
+                                    <div class="status-label">登录状态</div>
+                                    <div class="status-value" :class="item.login ? 'success' : 'danger'">
+                                        {{ item.login ? '已登录' : '未登录' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </el-tooltip>
+                        <el-tooltip :content="item.enable ? '已开启自动分摊弹幕任务' : '已关闭弹幕任务分摊'" placement="top">
+                            <div class="status-item">
+                                <div class="status-icon" :class="item.enable ? 'success' : 'danger'">
+                                    <i :class="item.enable ? 'el-icon-chat-dot-round' : 'el-icon-turn-off'"></i>
+                                </div>
+                                <div class="status-text">
+                                    <div class="status-label">弹幕发送</div>
+                                    <div class="status-value" :class="item.enable ? 'success' : 'danger'">
+                                        {{ item.enable ? '已开启' : '已关闭' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </el-tooltip>
+                    </div>
+                    <div class="user-update-time">
+                        <i class="el-icon-time"></i>
+                        <span>最后活跃：{{ item.updateTime }}</span>
+                    </div>
+                </div>
+                <div class="user-card-footer">
+                    <el-button size="small" icon="el-icon-edit" @click="handleEdit(0, item)">设置</el-button>
+                    <el-popconfirm @confirm="deleteUser(item.id)" title="确定移除该账号吗？" confirm-button-text="移除" cancel-button-text="取消" confirm-button-type="danger">
+                        <el-button slot="reference" size="small" type="danger" icon="el-icon-delete">移除</el-button>
+                    </el-popconfirm>
+                </div>
+            </div>
+        </div>
+
+        <!-- 表格视图 -->
+        <div v-else class="table-wrapper" key="table">
+            <el-table
+                    v-loading="loading"
+                    :data="tableData"
+                    style="width: 100%">
+                <el-table-column label="用户ID" width="130">
+                    <template slot-scope="scope">{{ maskText(scope.row.uid) }}</template>
+                </el-table-column>
+                <el-table-column label="昵称" min-width="150">
+                    <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
+                </el-table-column>
+                <el-table-column label="登录状态" width="120">
+                    <template slot-scope="scope">
+                        <el-tag :type="scope.row.login ? 'success' : 'danger'" size="small">
+                            {{ scope.row.login ? '已登录' : '未登录' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="弹幕发送" width="120">
+                    <template slot-scope="scope">
+                        <el-tag :type="scope.row.enable ? 'success' : 'info'" size="small">
+                            {{ scope.row.enable ? '已开启' : '已关闭' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="更新时间" prop="updateTime" width="200"></el-table-column>
+                <el-table-column label="操作" width="180" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" icon="el-icon-edit">编辑</el-button>
+                        <el-popconfirm @confirm="deleteUser(scope.row.id)" title="确定删除吗？" confirm-button-type="danger">
+                            <el-button slot="reference" size="mini" type="danger" icon="el-icon-delete">删除</el-button>
+                        </el-popconfirm>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+    </transition>
+
+    <!-- 登录弹窗 -->
+    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="isMobile" @close="cancelLogin" title="扫码登录" center custom-class="login-dialog" width="420px">
+        <div class="login-qr-wrapper">
+            <div class="login-tips">
+                <i class="el-icon-mobile-phone"></i>
+                <span>请使用哔哩哔哩APP扫描二维码</span>
+            </div>
+            <div class="login-status" :style="{color: loginStatusColor}">
+                <i :class="loginStatusIcon"></i>
+                <span>{{ loginStatusText }}</span>
+            </div>
+            <div class="qr-container">
+                <el-image :src="'data:image/png;base64,' + image" fit="contain"></el-image>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="getLoginImage();" type="primary" icon="el-icon-refresh" :loading="loginLoading">刷新二维码</el-button>
+            <el-button @click="cancelLogin">关闭</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 编辑弹窗 -->
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="用户账号设置" width="500px">
+        <el-form :model="user" label-width="120px">
+            <el-form-item label="当前账号">
+                <el-tag type="info" size="medium">{{ maskText(user.uname) }}</el-tag>
+                <span style="margin-left: 10px; color: var(--text-disabled); font-size: 12px;">UID: {{ maskText(user.uid) }}</span>
+            </el-form-item>
+            <el-form-item label="弹幕分摊">
+                <el-switch v-model="user.enable" active-text="开启" inactive-text="关闭"></el-switch>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.6;">
+                    开启后，该账号将参与全站投稿的普通弹幕任务分摊。<br/>
+                    <i class="el-icon-info"></i> 不会发送高级弹幕（SC/上舰等）。
+                </div>
+            </el-form-item>
+        </el-form>
+        <div class="dialog-footer" slot="footer">
+            <el-button @click="dialogFormVisible = false">取消</el-button>
+            <el-button @click="updateUser()" type="primary" :loading="saveLoading">保存设置</el-button>
+        </div>
+    </el-dialog>
+</div>
+</script>
+
+<!-- ========== 日志控制台页面模板 ========== -->
+<script type="text/x-template" id="log-template">
+<div class="app-container log-page">
+    <el-container class="log-layout">
+        <el-header class="log-header" height="auto">
+            <el-card shadow="never" class="log-toolbar-card">
+                <!-- 标题栏 -->
+                <div class="log-toolbar-head">
+                    <div class="log-title-section">
+                        <span class="log-title">
+                            <i class="el-icon-document"></i> 日志控制台
+                        </span>
+                        <transition name="el-zoom-in-top">
+                            <el-tag size="mini" :type="statusTagType" effect="dark">{{ statusText }}</el-tag>
+                        </transition>
+                    </div>
+                    <div class="log-actions">
+                        <el-button size="mini" class="modern-btn" type="danger" plain icon="el-icon-delete" @click="clearLogs">
+                            清空
+                        </el-button>
+                        <transition name="el-zoom-in-center">
+                            <el-button v-if="alerts.length > 0" size="mini" class="modern-btn" type="warning" plain icon="el-icon-warning" @click="showAlerts = true">
+                                异常 <el-badge :value="alerts.length" class="alert-badge"></el-badge>
+                            </el-button>
+                        </transition>
+                    </div>
+                </div>
+
+                <!-- 搜索和筛选行 -->
+                <div class="log-filter-row">
+                    <div class="log-search-wrapper">
+                        <el-input 
+                            v-model="searchKeyword" 
+                            size="small" 
+                            placeholder="搜索日志内容..." 
+                            clearable
+                            @input="onSearchInput">
+                            <i slot="prefix" class="el-icon-search"></i>
+                        </el-input>
+                    </div>
+                    
+                    <el-select 
+                        v-model="visibleLevels" 
+                        multiple 
+                        collapse-tags 
+                        placeholder="日志等级" 
+                        size="small" 
+                        class="log-level-select" 
+                        popper-class="log-level-popper">
+                            <el-option label="INFO" value="INFO">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-INFO"></span>
+                                    <span class="log-level-text level-INFO">INFO</span>
+                                </span>
+                            </el-option>
+                            <el-option label="WARN" value="WARN">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-WARN"></span>
+                                    <span class="log-level-text level-WARN">WARN</span>
+                                </span>
+                            </el-option>
+                            <el-option label="ERROR" value="ERROR">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-ERROR"></span>
+                                    <span class="log-level-text level-ERROR">ERROR</span>
+                                </span>
+                            </el-option>
+                            <el-option label="DEBUG" value="DEBUG">
+                                <span class="log-level-option">
+                                    <span class="log-level-dot level-DEBUG"></span>
+                                    <span class="log-level-text level-DEBUG">DEBUG</span>
+                                </span>
+                            </el-option>
+                        </el-select>
+                </div>
+
+                <!-- 开关控制行 -->
+                <div class="log-switches-row">
+                    <el-tooltip effect="dark" placement="top">
+                        <div slot="content">
+                            开启后会加载/保留更多日志（最多2000行）<br/>
+                            关闭时仅保留较少日志（默认500行），保证浏览器更流畅
+                        </div>
+                        <el-button class="modern-btn" :type="detailedMode ? 'primary' : ''" size="mini" @click="detailedMode = !detailedMode; handleDetailedModeChange()">
+                            <i class="el-icon-tickets"></i> 详细模式
+                        </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip effect="dark" placement="top" content="开启后点击日志行可多选，并自动复制到剪贴板">
+                        <el-button class="modern-btn" :type="selectionMode ? 'primary' : ''" size="mini" @click="selectionMode = !selectionMode; handleSelectionModeChange(selectionMode)">
+                            <i class="el-icon-document-checked"></i> 多选
+                        </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip effect="dark" placement="top" content="开启后日志自动换行；关闭后单行不换行，便于对齐查看">
+                        <el-button class="modern-btn" :type="autoWrap ? 'primary' : ''" size="mini" @click="autoWrap = !autoWrap">
+                            <i class="el-icon-sort"></i> 自动换行
+                        </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip effect="dark" placement="top" content="开启后新日志到来会自动滚动到底部">
+                        <el-button class="modern-btn" :type="autoScroll ? 'primary' : ''" size="mini" @click="autoScroll = !autoScroll">
+                            <i class="el-icon-bottom"></i> 自动滚动
+                        </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip effect="dark" placement="top" content="开启后通过 WebSocket 实时接收日志">
+                        <el-button class="modern-btn" :type="realtime ? 'primary' : ''" size="mini" @click="realtime = !realtime; toggleRealtime()">
+                            <i class="el-icon-connection"></i> 实时推送
+                        </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip effect="dark" placement="top">
+                        <div slot="content">
+                            开启后将 BV 号、文件路径、标题/房间名/主播名<br/>
+                            等敏感信息显示为 ***，便于截图分享
+                        </div>
+                        <el-button class="modern-btn" :type="privacyMode ? 'primary' : ''" size="mini" @click="togglePrivacyMode">
+                            <i class="el-icon-view"></i> 隐私模式
+                        </el-button>
+                    </el-tooltip>
+                </div>
+            </el-card>
+        </el-header>
+
+        <el-main class="log-content">
+            <div class="log-console" ref="console" v-loading="rendering" 
+                 element-loading-text="正在处理大量日志..."
+                 element-loading-spinner="el-icon-loading"
+                 element-loading-background="rgba(0, 0, 0, 0.7)">
+                <div class="log-list">
+                    <div v-for="(log, index) in displayedLogs" :key="log.__id" 
+                         class="log-line" 
+                         :class="{ 
+                             'nowrap': !autoWrap, 
+                             'selection-mode': selectionMode, 
+                             'selected': isSelected(log),
+                             'new-log': log.__isNew
+                         }"
+                         :data-log-id="log.__id"
+                         @click="handleLogClick(log)">
+                        <span class="log-time">{{ log.timestamp }}</span>
+                        <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
+                        <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
+                        <span class="log-message" v-html="getFormattedMessage(log)"></span>
+                    </div>
+                </div>
+            </div>
+        </el-main>
+    </el-container>
+
+    <el-dialog title="系统异常提醒" :visible.sync="showAlerts" width="90%" :fullscreen="isMobile" custom-class="alert-dialog">
+        <el-alert
+            class="alert-banner"
+            title="这些异常是在您离线期间或最近发生的，请检查。"
+            type="warning"
+            :closable="false">
+        </el-alert>
+        <el-table :data="alerts" stripe class="alert-table" height="300">
+            <el-table-column prop="timestamp" label="时间" width="160">
+                <template slot-scope="scope">{{ formatDate(scope.row.timestamp) }}</template>
+            </el-table-column>
+            <el-table-column prop="type" label="类型" width="120">
+                <template slot-scope="scope">
+                    <el-tag :type="getAlertType(scope.row.type)" size="mini">{{ scope.row.type }}</el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="详情" min-width="300">
+                <template slot-scope="scope">
+                    <div class="alert-detail-row">
+                        <div class="alert-brief">
+                            {{ getBriefMessage(scope.row.message) }}
+                        </div>
+                        <el-button size="mini" type="text" class="alert-detail-button" @click="showDetail(scope.row.message)">详情</el-button>
+                    </div>
+                </template>
+            </el-table-column>
+        </el-table>
+        <span slot="footer" class="dialog-footer">
+            <el-button class="modern-btn" type="danger" @click="clearAlerts">清除所有</el-button>
+            <el-button class="modern-btn" @click="showAlerts = false">关 闭</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 详情弹窗 -->
+    <el-dialog title="异常详情" :visible.sync="detailDialogVisible" width="80%" append-to-body custom-class="detail-dialog">
+        <div class="detail-content">
+            <pre class="detail-pre" v-html="formatLogMessage(currentDetail)"></pre>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button class="modern-btn" type="primary" size="small" @click="copyDetail">复制内容</el-button>
+            <el-button class="modern-btn" size="small" @click="detailDialogVisible = false">关 闭</el-button>
+        </span>
+    </el-dialog>
+</div>
+</script>
+
 </body>
 <script>
     var answer = new Vue({
@@ -268,7 +678,10 @@
             releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             hasAlerts: false,
-            versions: window.BILIUPFORJAVA_CHANGELOG || []
+            versions: window.BILIUPFORJAVA_CHANGELOG || [],
+            navIndicatorStyle: { left: '0px', width: '0px', opacity: 0 },
+            // 已组件化的页面列表（不走 iframe）
+            componentPages: ['user', 'log']
         },
         computed: {
             sortedVersions: function () {
@@ -282,28 +695,35 @@
                     case 'room':
                         baseUrl = 'html/room.html';
                         break;
-                    case 'user':
-                        baseUrl = 'html/user.html';
-                        break;
+                    // user, log 已组件化，不再使用 iframe
                     case 'history':
                         baseUrl = 'html/history.html';
-                        break;
-                    case 'log':
-                        baseUrl = 'html/log.html';
                         break;
                     default:
                         return '';
                 }
-                // 如果正在加载中，给 URL 加上时间戳防止缓存并强制刷新
-                return this.pageLoading ? baseUrl + '?t=' + Date.now() : baseUrl;
+                // 使用 handleClick 时记录的时间戳防止缓存，不依赖 pageLoading
+                // 避免 pageLoading 变化时 tabSrc 改变导致 iframe 双重加载
+                return baseUrl + '?t=' + (this._tabLoadTimestamp || '0');
+            },
+            isIframeReady: function() {
+                return (!this.pageLoading && !this.connectionError && this.connectionReady) || this.keepIframeOnDisconnect();
             }
         },
         mounted: function() {
+            var self = this;
             this.applyTheme(this.theme);
             this.checkAlerts();
             this.loadSystemConfig();
             setInterval(this.checkAlerts, 30000);
             this.checkUpdate();
+            // 初始化导航指示器
+            this.$nextTick(function() {
+                self.updateNavIndicator();
+            });
+            window.addEventListener('resize', function() {
+                self.updateNavIndicator();
+            });
         },
         methods: {
             validateNumber: function(value, field, allowDecimal) {
@@ -555,6 +975,7 @@
                         }, delay);
                     }
                 } else {
+                    // 现在使用 CSS class (is-ready) 控制 iframe 可见性，无需手动操作 opacity
                     this.connectionReady = true;
                     this.isTabSwitching = false;
                     this.stopConnectionCheck();
@@ -570,6 +991,7 @@
                 }
             },
             setPageReady: function() {
+                // 现在使用 CSS class (is-ready) 控制 iframe 可见性，无需手动操作 opacity
                 this.connectionReady = true;
                 this.connectionLost = false;
                 this.connectionError = false;
@@ -659,8 +1081,20 @@
                 });
             },
             toggleTheme: function() {
+                document.documentElement.classList.add('theme-transitioning');
+                // 同步给 iframe 也添加过渡类
+                var iframe = document.querySelector('iframe');
+                if (iframe && iframe.contentDocument) {
+                    iframe.contentDocument.documentElement.classList.add('theme-transitioning');
+                }
                 this.theme = this.theme === 'dark' ? 'light' : 'dark';
                 this.applyTheme(this.theme);
+                setTimeout(function() {
+                    document.documentElement.classList.remove('theme-transitioning');
+                    if (iframe && iframe.contentDocument) {
+                        iframe.contentDocument.documentElement.classList.remove('theme-transitioning');
+                    }
+                }, 400);
             },
             goToRelease: function() {
                 var self = this;
@@ -677,6 +1111,9 @@
                     // 用户取消跳转
                 });
             },
+            isComponentPage: function(tab) {
+                return this.componentPages.indexOf(tab) >= 0;
+            },
             switchTab: function(tab) {
                 // 如果当前已经处于连接断开状态，拦截切换请求，直接显示错误遮罩
                 if (this.connectionLost || this.connectionError) {
@@ -684,10 +1121,15 @@
                     this.startRetryCountdown();
                     return;
                 }
-                
+
                 // 正常切换
+                var self = this;
                 this.activeName = tab;
-                if (tab !== 'home') {
+                this.$nextTick(function() {
+                    self.updateNavIndicator();
+                });
+                // 组件化页面不走 iframe 加载流程
+                if (tab !== 'home' && !this.isComponentPage(tab)) {
                     this.isTabSwitching = true;
                     this.handleClick();
                 }
@@ -700,8 +1142,24 @@
                     iframe.contentDocument.documentElement.setAttribute('data-theme', theme);
                 }
             },
+            updateNavIndicator: function() {
+                var refMap = { home: 'navHome', room: 'navRoom', user: 'navUser', history: 'navHistory', log: 'navLog' };
+                var refName = refMap[this.activeName];
+                var el = this.$refs[refName];
+                var nav = this.$refs.headerNav;
+                if (el && nav) {
+                    var navRect = nav.getBoundingClientRect();
+                    var elRect = el.getBoundingClientRect();
+                    this.navIndicatorStyle = {
+                        left: (elRect.left - navRect.left + (elRect.width - 24) / 2) + 'px',
+                        width: '24px',
+                        opacity: 1
+                    };
+                }
+            },
             handleClick: function () {
                 var self = this;
+                this._tabLoadTimestamp = Date.now(); // 记录时间戳供 tabSrc 使用
                 this.connectionReady = false;
                 this.connectionLost = false;
                 this.connectionError = false;
@@ -721,232 +1179,5 @@
     });
 </script>
 
-<style>
-    /* 配置面板样式 - 参考历史页面的筛选条件 */
-    .config-panel {
-        background: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(16px);
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--border-light);
-        box-shadow: var(--shadow-sm);
-        margin-bottom: 20px;
-        overflow: hidden;
-        transition: var(--transition-base);
-    }
-    
-    [data-theme="dark"] .config-panel {
-        background: rgba(30, 30, 40, 0.85);
-        border: 1px solid var(--border-color);
-        box-shadow: var(--shadow-md);
-    }
-    
-    .config-header {
-        padding: 16px 20px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-bottom: 1px solid var(--border-light);
-        transition: var(--transition-fast);
-    }
-    
-    [data-theme="dark"] .config-header {
-        border-bottom: 1px solid var(--border-color);
-    }
-    
-    .config-header:hover {
-        background: rgba(91, 108, 255, 0.05);
-    }
-    
-    .config-header:active {
-        background: rgba(91, 108, 255, 0.1);
-    }
-    
-    .config-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text-primary);
-    }
-    
-    .config-title i {
-        font-size: 18px;
-        color: var(--primary-color);
-        transition: transform var(--transition-base);
-    }
-    
-    .config-header:hover .config-title i {
-        transform: rotate(15deg) scale(1.1);
-    }
-    
-    .config-badge {
-        margin-left: 8px;
-        transform: translateY(-2px);
-    }
-    
-    .config-actions {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-    }
-    
-    .config-actions .reset-btn {
-        color: var(--primary-color);
-        padding: 4px 12px;
-        font-size: 13px;
-        transition: var(--transition-fast);
-    }
-    
-    .config-actions .expand-icon {
-        font-size: 16px;
-        color: var(--text-secondary);
-        transition: transform var(--transition-base);
-    }
-    
-    .config-body {
-        padding: 20px;
-        background: transparent;
-    }
-    
-    .config-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 300px));
-        gap: 20px;
-        margin-bottom: 16px;
-    }
-    
-    .config-item {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-    
-    .config-label {
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--text-secondary);
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    
-    .config-label i {
-        font-size: 14px;
-        color: var(--primary-color);
-    }
-    
-    .config-unit {
-        margin-left: auto;
-        padding: 2px 8px;
-        background: rgba(91, 108, 255, 0.1);
-        border: 1px solid rgba(91, 108, 255, 0.2);
-        border-radius: var(--radius-sm);
-        color: var(--primary-color);
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        line-height: 1;
-    }
-    
-    [data-theme="dark"] .config-unit {
-        background: rgba(123, 143, 255, 0.15);
-        border-color: rgba(123, 143, 255, 0.3);
-        color: var(--primary-light);
-    }
-    
-    .config-input {
-        width: 100%;
-    }
-    
-    .config-input .el-input__inner {
-        background: var(--bg-primary);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        color: var(--text-primary);
-        transition: var(--transition-fast);
-        font-size: 14px;
-        height: 36px;
-        line-height: 36px;
-        padding: 0 12px;
-    }
-    
-    .config-input .el-input__inner:hover {
-        border-color: var(--primary-light);
-        box-shadow: var(--shadow-sm);
-    }
-    
-    .config-input .el-input__inner:focus {
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.1);
-        transform: translateY(-1px);
-    }
-    
-    .config-help {
-        font-size: 12px;
-        color: var(--text-disabled);
-        line-height: 1.5;
-        margin-top: 4px;
-    }
-    
-    .config-footer {
-        display: flex;
-        justify-content: flex-end;
-        padding-top: 16px;
-        border-top: 1px solid var(--border-light);
-    }
-    
-    [data-theme="dark"] .config-footer {
-        border-top: 1px solid var(--border-color);
-    }
-    
-    /* 动画效果 - 丝滑滑动过渡 (同步 history 页面风格) */
-    .filter-slide-enter-active,
-    .filter-slide-leave-active {
-        transition: all var(--transition-base);
-        max-height: 800px; /* 增加最大高度确保内容不被截断 */
-        overflow: hidden;
-        opacity: 1;
-    }
-    
-    .filter-slide-enter,
-    .filter-slide-leave-to {
-        max-height: 0;
-        opacity: 0;
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-    }
-    
-    .filter-slide-enter-to,
-    .filter-slide-leave {
-        opacity: 1;
-        max-height: 800px;
-    }
-    
-    /* 响应式设计 */
-    @media (max-width: 768px) {
-        .config-grid {
-            grid-template-columns: 1fr;
-            gap: 16px;
-        }
-        
-        .config-header {
-            padding: 14px 16px;
-        }
-        
-        .config-body {
-            padding: 16px;
-        }
-        
-        .config-title {
-            font-size: 14px;
-        }
-        
-        .config-actions .reset-btn {
-            padding: 3px 10px;
-            font-size: 12px;
-        }
-    }
-</style>
+<!-- 配置面板样式已移至 css/index.css -->
 </html>

@@ -1,679 +1,1262 @@
 /* user.html 页面专属样式 */
 
+
+
 /* ========== 页面基础布局 ========== */
-html, body {
-    height: 100%;
-    overflow: hidden;
-}
+
+
+
 
 .user-container {
+
     height: 100%;
+
     overflow-y: auto;
+
     box-sizing: border-box;
+
     padding: 20px;
+
     background: var(--bg-secondary);
+
 }
+
+
 
 /* ========== 页面标题区域 ========== */
+
 .user-header {
+
     display: flex;
+
     justify-content: space-between;
+
     align-items: center;
+
     flex-wrap: wrap;
+
     gap: 16px;
+
     margin-bottom: 24px;
+
     padding: 20px 24px;
+
     background: rgba(255, 255, 255, 0.8);
+
     backdrop-filter: blur(12px);
+
     -webkit-backdrop-filter: blur(12px);
+
     border-radius: var(--radius-lg);
+
     box-shadow: var(--shadow-sm);
+
     border: 1px solid var(--border-light);
+
     position: relative;
+
     overflow: hidden;
-    transition: all var(--transition-base);
+
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+
 }
+
+
 
 .user-header:hover {
+
     box-shadow: var(--shadow-md);
+
     transform: translateY(-2px);
+
 }
 
+
+
 [data-theme="dark"] .user-header {
+
     background: rgba(39, 39, 42, 0.7);
+
     border-color: rgba(63, 63, 70, 0.5);
+
 }
+
+
 
 /* 头部背景装饰 */
+
 .user-header::before {
+
     content: '';
+
     position: absolute;
+
     top: 0;
+
     left: 0;
+
     right: 0;
+
     height: 3px;
+
     background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #00d4ff 100%);
+
     opacity: 0.8;
+
     animation: gradientShift 4s linear infinite;
+
 }
 
-@keyframes gradientShift {
-    0%, 100% { filter: hue-rotate(0deg); opacity: 0.8; }
-    50% { filter: hue-rotate(20deg); opacity: 1; }
-}
+
+
+
+
 
 .user-header-left {
+
     display: flex;
+
     align-items: center;
+
     gap: 16px;
+
 }
+
+
 
 .user-header-title {
+
     display: flex;
+
     align-items: center;
+
     gap: 10px;
+
 }
+
+
 
 .user-header-title h2 {
+
     margin: 0;
+
     font-size: 20px;
+
     font-weight: 600;
+
     color: var(--text-primary);
+
 }
+
+
 
 .user-header-title .icon {
+
     font-size: 24px;
+
     color: var(--primary-color);
+
     transition: transform var(--transition-base);
+
 }
+
+
 
 .user-header:hover .user-header-title .icon {
+
     transform: rotate(10deg) scale(1.1);
+
 }
+
+
 
 .user-stats {
+
     display: flex;
+
     gap: 20px;
+
     padding-left: 16px;
+
     border-left: 1px solid var(--border-light);
+
 }
+
+
 
 .user-stat-item {
+
     text-align: center;
+
     transition: transform var(--transition-base);
+
 }
+
+
 
 .user-header:hover .user-stat-item {
+
     transform: translateY(-2px);
+
 }
+
+
 
 .user-stat-value {
+
     font-size: 24px;
+
     font-weight: 700;
+
     color: var(--primary-color);
+
     line-height: 1.2;
+
 }
+
+
 
 .user-stat-label {
+
     font-size: 12px;
+
     color: var(--text-secondary);
+
 }
+
+
 
 .user-header-actions {
+
     display: flex;
+
     align-items: center;
+
     gap: 12px;
+
 }
+
+
 
 .user-header-actions .el-button {
-    transition: all var(--transition-fast) !important;
+
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast) !important;
+
 }
+
+
 
 /* 登录按钮特殊样式 */
+
 .login-btn {
+
     background: linear-gradient(135deg, var(--primary-color), var(--primary-dark)) !important;
+
     border: none !important;
+
     padding: 12px 24px !important;
+
     font-size: 15px !important;
+
     border-radius: var(--radius-md) !important;
+
     box-shadow: 0 4px 15px rgba(91, 108, 255, 0.3);
-    transition: all var(--transition-base) !important;
+
+    transition: transform var(--transition-base), box-shadow var(--transition-base) !important;
+
 }
+
+
 
 .login-btn:hover {
+
     transform: translateY(-2px);
+
     box-shadow: 0 6px 20px rgba(91, 108, 255, 0.4);
+
 }
+
+
 
 .login-btn:active {
+
     transform: translateY(0) scale(0.96);
+
 }
+
+
 
 /* ========== 用户卡片网格 ========== */
+
 .user-card-grid {
+
     display: grid;
+
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+
     gap: 20px;
+
 }
+
+
 
 /* 用户卡片样式 */
+
 .user-card {
+
     background: var(--bg-primary);
+
     border-radius: var(--radius-lg);
+
     box-shadow: var(--shadow-sm);
+
     overflow: hidden;
-    transition: all var(--transition-base);
+
+    transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+
     border: 1px solid var(--border-light);
+
     position: relative;
+
 }
+
+
 
 .user-card:hover {
+
     transform: translateY(-6px);
+
     box-shadow: var(--shadow-lg);
+
     border-color: var(--primary-light);
+
 }
+
+
 
 .user-card:active {
+
     transform: translateY(-3px) scale(0.985);
+
 }
 
-/* 卡片顶部装饰条 */
+
+
+/* 卡片顶部装饰线 */
+
 .user-card::before {
+
     content: '';
+
     position: absolute;
+
     top: 0;
+
     left: 0;
+
     right: 0;
+
     height: 4px;
+
     background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+
     opacity: 0;
+
     transition: opacity var(--transition-base);
+
 }
+
+
 
 .user-card:hover::before {
+
     opacity: 1;
+
 }
+
+
 
 /* 卡片状态发光效果 */
+
 .user-card.is-active {
+
     border-color: rgba(82, 196, 26, 0.3);
+
     box-shadow: 
+
         var(--shadow-sm),
+
         0 0 20px rgba(82, 196, 26, 0.15),
+
         inset 0 1px 0 rgba(82, 196, 26, 0.1);
+
 }
+
+
 
 .user-card.is-active::before {
+
     background: linear-gradient(90deg, var(--success-color), #95de64);
+
     opacity: 1;
+
 }
+
+
 
 .user-card.is-active:hover {
+
     border-color: rgba(82, 196, 26, 0.5);
+
     box-shadow: 
+
         var(--shadow-md),
+
         0 0 30px rgba(82, 196, 26, 0.25);
+
 }
 
-/* 需要注意状态 - 未登录 */
+
+
+/* 需要注意状态 - 未登录*/
+
 .user-card.is-warning {
+
     border-color: rgba(255, 77, 79, 0.3);
+
     box-shadow: 
+
         var(--shadow-sm),
+
         0 0 15px rgba(255, 77, 79, 0.1);
+
 }
+
+
 
 .user-card.is-warning::before {
+
     background: linear-gradient(90deg, var(--danger-color), #ff7875);
+
     opacity: 1;
+
 }
+
+
 
 .user-card.is-warning:hover {
+
     border-color: rgba(255, 77, 79, 0.5);
+
     box-shadow: 
+
         var(--shadow-md),
+
         0 0 25px rgba(255, 77, 79, 0.2);
+
 }
 
-/* 警告状态头像 */
+
+
+/* 警告状态头部 */
+
 .user-card.is-warning .user-avatar {
+
     background: linear-gradient(135deg, var(--danger-color), #ff7875);
+
     box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3);
+
 }
 
-/* 正常状态头像 */
+
+
+/* 正常状态头部 */
+
 .user-card.is-active .user-avatar {
+
     background: linear-gradient(135deg, var(--success-color), #95de64);
+
     box-shadow: 0 4px 12px rgba(82, 196, 26, 0.3);
+
 }
+
+
 
 .user-card-header {
+
     display: flex;
+
     align-items: center;
+
     padding: 20px;
+
     gap: 16px;
+
     border-bottom: 1px solid var(--border-light);
+
     background: linear-gradient(to bottom, var(--bg-primary), var(--bg-secondary));
+
 }
+
+
 
 .user-avatar {
+
     width: 56px;
+
     height: 56px;
+
     border-radius: 50%;
+
     background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
+
     font-size: 24px;
+
     font-weight: 700;
+
     color: white;
+
     flex-shrink: 0;
+
     box-shadow: 0 4px 12px rgba(91, 108, 255, 0.3);
+
 }
+
+
 
 .user-info {
+
     flex: 1;
+
     min-width: 0;
+
 }
+
+
 
 .user-name {
+
     font-size: 18px;
+
     font-weight: 600;
+
     color: var(--text-primary);
+
     margin: 0 0 4px 0;
+
     white-space: nowrap;
+
     overflow: hidden;
+
     text-overflow: ellipsis;
+
 }
+
+
 
 .user-uid {
+
     font-size: 13px;
+
     color: var(--text-secondary);
+
     font-family: 'Monaco', 'Consolas', monospace;
+
 }
+
+
 
 .user-card-body {
+
     padding: 20px;
+
 }
+
+
 
 .user-status-grid {
+
     display: grid;
+
     grid-template-columns: 1fr 1fr;
+
     gap: 12px;
+
     margin-bottom: 16px;
+
 }
+
+
 
 .status-item {
+
     display: flex;
+
     align-items: center;
+
     gap: 10px;
+
     padding: 12px 14px;
+
     background: var(--bg-secondary);
+
     border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
+
+    transition: background var(--transition-fast);
+
 }
+
+
 
 .status-item:hover {
+
     background: var(--bg-tertiary);
+
 }
+
+
 
 .status-icon {
+
     width: 36px;
+
     height: 36px;
+
     border-radius: 50%;
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
+
     font-size: 16px;
+
 }
+
+
 
 .status-icon.success {
+
     background: rgba(82, 196, 26, 0.15);
+
     color: var(--success-color);
+
 }
+
+
 
 .status-icon.danger {
+
     background: rgba(255, 77, 79, 0.15);
+
     color: var(--danger-color);
+
 }
+
+
 
 .status-text {
+
     flex: 1;
+
 }
+
+
 
 .status-label {
+
     font-size: 12px;
+
     color: var(--text-secondary);
+
     margin-bottom: 2px;
+
 }
+
+
 
 .status-value {
+
     font-size: 14px;
+
     font-weight: 600;
+
     color: var(--text-primary);
+
 }
+
+
 
 .status-value.success {
+
     color: var(--success-color);
+
 }
+
+
 
 .status-value.danger {
+
     color: var(--danger-color);
+
 }
+
+
 
 .user-update-time {
+
     display: flex;
+
     align-items: center;
+
     gap: 6px;
+
     font-size: 12px;
+
     color: var(--text-disabled);
+
     padding-top: 12px;
+
     border-top: 1px dashed var(--border-light);
+
 }
+
+
 
 .user-update-time i {
+
     font-size: 14px;
+
 }
+
+
 
 .user-card-footer {
+
     display: flex;
+
     justify-content: flex-end;
+
     gap: 10px;
+
     padding: 16px 20px;
+
     background: var(--bg-secondary);
+
     border-top: 1px solid var(--border-light);
+
 }
+
+
 
 /* ========== 空状态 ========== */
+
 .empty-state {
+
     display: flex;
+
     flex-direction: column;
+
     align-items: center;
+
     justify-content: center;
+
     padding: 80px 20px;
+
     text-align: center;
+
     background: var(--bg-primary);
+
     border-radius: var(--radius-lg);
+
     border: 2px dashed var(--border-color);
+
 }
+
+
 
 .empty-icon {
+
     font-size: 64px;
+
     color: var(--text-disabled);
+
     margin-bottom: 20px;
+
 }
+
+
 
 .empty-title {
+
     font-size: 18px;
+
     font-weight: 600;
+
     color: var(--text-primary);
+
     margin: 0 0 8px 0;
+
 }
+
+
 
 .empty-desc {
+
     font-size: 14px;
+
     color: var(--text-secondary);
+
     margin: 0 0 24px 0;
+
 }
+
+
+
+
+
 
 /* ========== 弹窗样式 ========== */
+
 .el-dialog {
+
     border-radius: var(--radius-lg) !important;
+
     overflow: hidden;
+
 }
+
+
 
 .el-dialog__header {
+
     padding: 20px 24px;
+
     border-bottom: 1px solid var(--border-light);
+
     background: var(--bg-primary);
+
 }
+
+
 
 .el-dialog__title {
+
     font-size: 18px;
+
     font-weight: 600;
+
 }
+
+
 
 .el-dialog__body {
+
     padding: 24px;
+
 }
+
+
 
 .el-dialog__footer {
+
     padding: 16px 24px;
+
     border-top: 1px solid var(--border-light);
+
     background: var(--bg-secondary);
+
 }
+
+
 
 /* 登录弹窗 */
+
 .login-dialog {
+
     border-radius: var(--radius-lg) !important;
+
 }
+
+
 
 .login-qr-wrapper {
+
     text-align: center;
+
     padding: 20px 0;
+
 }
+
+
 
 .login-tips {
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
+
     gap: 8px;
+
     margin-bottom: 20px;
+
     padding: 12px 20px;
+
     background: var(--bg-secondary);
+
     border-radius: var(--radius-md);
+
     color: var(--text-secondary);
+
     font-size: 14px;
+
 }
+
+
 
 .login-tips i {
+
     font-size: 20px;
+
     color: var(--primary-color);
+
 }
+
+
 
 .login-status {
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
+
     gap: 6px;
+
     margin-bottom: 16px;
+
     font-size: 13px;
+
     font-weight: 500;
-    transition: color 0.3s ease;
+
+    transition: color var(--duration-base) var(--ease-apple);
+
 }
+
+
 
 .qr-container {
+
     display: inline-block;
+
     padding: 16px;
+
     background: white;
+
     border-radius: var(--radius-lg);
+
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+
 }
+
+
 
 .qr-container img,
+
 .qr-container .el-image {
+
     display: block;
+
     width: 200px !important;
+
     height: 200px !important;
+
     border-radius: var(--radius-md);
+
 }
+
+
 
 /* ========== 表格视图样式 ========== */
+
 .table-wrapper {
+
     background: var(--bg-primary);
+
     border-radius: var(--radius-lg);
+
     box-shadow: var(--shadow-sm);
+
     overflow: hidden;
+
 }
+
+
 
 /* ========== 响应式适配 ========== */
+
 @media (max-width: 768px) {
+
     .user-container {
+
         padding: 12px;
+
     }
+
     
+
     .user-header {
+
         padding: 16px;
+
         flex-direction: column;
+
         align-items: stretch;
+
     }
+
     
+
     .user-header-left {
+
         flex-direction: column;
+
         align-items: flex-start;
+
     }
+
     
+
     .user-stats {
+
         padding-left: 0;
+
         padding-top: 12px;
+
         border-left: none;
+
         border-top: 1px solid var(--border-light);
+
     }
+
     
+
     .user-header-actions {
+
         justify-content: space-between;
+
     }
+
     
+
     .user-card-grid {
+
         grid-template-columns: 1fr;
+
     }
+
     
+
     .user-status-grid {
+
         grid-template-columns: 1fr;
+
     }
+
     
+
     .login-btn {
+
         flex: 1;
+
     }
+
     
+
     .el-dialog.is-fullscreen {
+
         width: 95% !important;
+
         height: auto !important;
+
         max-height: 90vh !important;
+
         border-radius: 8px;
+
     }
+
 }
+
+
 
 /* ========== 暗色主题适配 ========== */
+
 [data-theme="dark"] .user-card {
+
     background: rgba(255, 255, 255, 0.02);
+
     border-color: rgba(255, 255, 255, 0.08);
+
 }
+
+
 
 [data-theme="dark"] .user-card:hover {
+
     background: rgba(255, 255, 255, 0.04);
+
     border-color: rgba(91, 108, 255, 0.3);
+
 }
+
+
 
 [data-theme="dark"] .user-card.is-active {
+
     background: rgba(82, 196, 26, 0.03);
+
     border-color: rgba(82, 196, 26, 0.4);
+
     box-shadow: 
+
         0 0 25px rgba(82, 196, 26, 0.15),
+
         inset 0 1px 0 rgba(82, 196, 26, 0.1);
+
 }
+
+
 
 [data-theme="dark"] .user-card.is-active:hover {
+
     background: rgba(82, 196, 26, 0.05);
+
     box-shadow: 0 0 35px rgba(82, 196, 26, 0.25);
+
 }
+
+
 
 [data-theme="dark"] .user-card.is-warning {
+
     background: rgba(255, 77, 79, 0.03);
+
     border-color: rgba(255, 77, 79, 0.4);
+
     box-shadow: 0 0 20px rgba(255, 77, 79, 0.12);
+
 }
+
+
 
 [data-theme="dark"] .user-card.is-warning:hover {
+
     background: rgba(255, 77, 79, 0.05);
+
     box-shadow: 0 0 30px rgba(255, 77, 79, 0.2);
+
 }
+
+
 
 [data-theme="dark"] .user-card-header {
+
     background: linear-gradient(to bottom, rgba(255, 255, 255, 0.03), transparent);
+
 }
+
+
 
 [data-theme="dark"] .user-header {
+
     background: rgba(255, 255, 255, 0.02);
+
     border: 1px solid rgba(255, 255, 255, 0.06);
+
 }
+
+
 
 [data-theme="dark"] .status-item {
+
     background: rgba(255, 255, 255, 0.03);
+
 }
+
+
 
 [data-theme="dark"] .status-item:hover {
+
     background: rgba(255, 255, 255, 0.06);
+
 }
+
+
 
 [data-theme="dark"] .user-card-footer {
+
     background: rgba(0, 0, 0, 0.2);
+
 }
+
+
 
 [data-theme="dark"] .qr-container {
+
     background: white;
+
 }
+
+
 
 [data-theme="dark"] .table-wrapper {
+
     background: rgba(255, 255, 255, 0.02);
+
 }
 
+
+
 [data-theme="dark"] .empty-state {
+
     background: rgba(255, 255, 255, 0.02);
+
     border-color: rgba(255, 255, 255, 0.1);
+
 }
+
+
 
 /* ========== 通用现代动画 ========== */
 
-/* 脉冲动画 */
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.8;
-        transform: scale(1.05);
-    }
-}
 
-/* 呼吸动画 */
-@keyframes breathe {
-    0%, 100% {
-        opacity: 0.6;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 1;
-        transform: scale(1.1);
-    }
-}
 
-@keyframes iconPop {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.15); }
-    100% { transform: scale(1); }
-}
+/* @keyframes pulse-gentle / breathe 已移至 transitions.css */
 
-/* 渐变滑入动画 */
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
+
+
 
 /* 添加动画到按钮图标 */
+
 .modern-btn:hover [class^="el-icon-"],
+
 .modern-btn:hover [class*=" el-icon-"] {
+
     animation: iconPop var(--transition-base);
+
 }
 
-/* 卡片列表动画 */
-.user-card {
-    transition: all var(--transition-base);
-}
+
+
+
+
