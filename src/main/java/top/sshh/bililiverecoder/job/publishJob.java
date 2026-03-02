@@ -57,11 +57,25 @@ public class publishJob {
     private static final class FileProbe {
         private final long size;
         private final long timeMs;
+        private volatile long lastActiveTime;
 
         private FileProbe(long size, long timeMs) {
             this.size = size;
             this.timeMs = timeMs;
+            this.lastActiveTime = timeMs;
         }
+
+        void updateActiveTime() {
+            this.lastActiveTime = System.currentTimeMillis();
+        }
+    }
+
+    // 每天清理一次过期的 FileProbe
+    @Scheduled(fixedDelay = 24 * 60 * 60 * 1000)
+    public void cleanupFileProbeMap() {
+        long now = System.currentTimeMillis();
+        // 清理超过 24 小时未活跃的条目
+        fileProbeMap.entrySet().removeIf(entry -> now - entry.getValue().lastActiveTime > 24 * 60 * 60 * 1000L);
     }
 
     private static boolean isFileStillWriting(File file, String filePath, long nowMs) {
@@ -69,7 +83,20 @@ public class publishJob {
             return false;
         }
         if (file == null || !file.exists()) {
-            fileProbeMap.remove(filePath);
+            FileProbe prev = fileProbeMap.get(filePath);
+            // 如果文件丢失，但之前在监控中，可能是网络波动，给它一点时间（稳定窗口）
+            if (prev != null) {
+                long stableWindowMs = 60L * 1000L;
+                if (nowMs - prev.timeMs >= stableWindowMs) {
+                    fileProbeMap.remove(filePath);
+                    log.warn("[BLR] {}", LogKvs.event("FileProbe.Remove.Missing")
+                        .add("filePath", filePath));
+                    return false;
+                }
+                log.warn("[BLR] {}", LogKvs.event("FileProbe.Missing.Waiting")
+                    .add("filePath", filePath));
+                return true;
+            }
             return false;
         }
 
@@ -82,17 +109,34 @@ public class publishJob {
         FileProbe prev = fileProbeMap.get(filePath);
         if (prev == null) {
             fileProbeMap.put(filePath, new FileProbe(size, nowMs));
+            log.info("[BLR] {}", LogKvs.event("FileProbe.Start")
+                .add("filePath", filePath)
+                .add("size", size));
             return true;
         }
+        prev.updateActiveTime();
         if (prev.size == size) {
             // 如果文件大小一直没变，且距离上次记录的时间已经超过了稳定窗口（60秒），说明文件已经稳定了
             if (nowMs - prev.timeMs >= stableWindowMs) {
-                fileProbeMap.remove(filePath);
+                // 稳定后不要移除，否则下次检查又会变成"新文件"重新计时，导致一直在"不稳定"和"稳定"之间横跳
+                // fileProbeMap.remove(filePath); 
+                log.debug("[BLR] {}", LogKvs.event("FileProbe.Stable")
+                    .add("filePath", filePath)
+                    .add("size", size)
+                    .add("duration", nowMs - prev.timeMs));
                 return false;
             }
             // 文件大小没变，但还没到时间，继续等。ps：这里不要更新时间，否则倒计时会重置，导致一直过不去
+            log.debug("[BLR] {}", LogKvs.event("FileProbe.Waiting")
+                .add("filePath", filePath)
+                .add("size", size)
+                .add("duration", nowMs - prev.timeMs));
             return true;
         }
+        log.info("[BLR] {}", LogKvs.event("FileProbe.SizeChanged")
+            .add("filePath", filePath)
+            .add("old", prev.size)
+            .add("new", size));
         fileProbeMap.put(filePath, new FileProbe(size, nowMs));
         return true;
     }
@@ -209,6 +253,10 @@ public class publishJob {
                 List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
                 boolean stillWriting = false;
                 for (RecordHistoryPart p : parts) {
+                    // 已上传的分P不再检查文件稳定性，避免因文件移动或网络波动导致整个稿件卡住
+                    if (p.isUpload()) {
+                        continue;
+                    }
                     String fp = p.getFilePath();
                     if (fp == null || fp.isBlank()) {
                         continue;

@@ -63,6 +63,14 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.ServiceError", "上传服务发生异常");
         EVENT_ZH.put("Upload.Concurrency", "分P上传：动态调整并发数");
 
+        // 文件检测
+        EVENT_ZH.put("FileProbe.Remove.Missing", "文件检测：文件丢失，移除监控");
+        EVENT_ZH.put("FileProbe.Missing.Waiting", "文件检测：文件丢失但仍在等待(可能是网络波动)");
+        EVENT_ZH.put("FileProbe.Start", "文件检测：开始监控");
+        EVENT_ZH.put("FileProbe.Stable", "文件检测：文件已稳定");
+        EVENT_ZH.put("FileProbe.Waiting", "文件检测：文件等待中");
+        EVENT_ZH.put("FileProbe.SizeChanged", "文件检测：文件大小发生变化");
+
         // 录制事件
         EVENT_ZH.put("Room.AutoCreate", "房间不存在，自动创建房间配置");
         EVENT_ZH.put("Room.Seasons.FetchFailed", "房间合集列表获取失败(返回空列表)");
@@ -253,24 +261,24 @@ public final class LogKvs {
         EVENT_ZH.put("PublishJob.PartRecording.Healed", "定时任务：纠偏分P录制状态");
         EVENT_ZH.put("PublishJob.PartRecording.RecountFailed", "定时任务：纠偏后再次统计失败，跳过投稿");
         EVENT_ZH.put("PublishJob.PartRecording.SuspectPart", "定时任务：疑似录制中分P详情(调试)");
-        EVENT_ZH.put("PublishJob.Skip.HasRecordingParts", "定时任务：检测到仍在录制的分P，跳过投稿");
-        EVENT_ZH.put("PublishJob.Skip.HistoryStreaming", "定时任务：history.streaming=true，跳过投稿");
+        EVENT_ZH.put("PublishJob.ParseMergeIntervalConfigFailed", "定时任务：解析合并间隔配置失败");
+        EVENT_ZH.put("PublishJob.Skip.HasRecordingParts", "定时任务：存在录制中分P，跳过投稿");
+        EVENT_ZH.put("PublishJob.Skip.HistoryStreaming", "定时任务：直播中，跳过投稿");
         EVENT_ZH.put("PublishJob.Skip.FileStillWriting", "定时任务：检测到文件仍在写入/未稳定，跳过投稿");
-        EVENT_ZH.put("PublishJob.WaitNext", "定时任务：等待下一条投稿任务");
-        EVENT_ZH.put("PublishJob.WaitNextInterrupted", "定时任务：等待被中断");
-        EVENT_ZH.put("PublishJob.PartCompensate.AlreadyUploading", "定时任务：分P上传补偿-正在上传中，跳过");
-        EVENT_ZH.put("PublishJob.PartCompensate.FileMissing", "定时任务：分P上传补偿-文件不存在，跳过");
-        EVENT_ZH.put("PublishJob.PartCompensate.FileSizeUnreadableGiveUp", "定时任务：分P上传补偿-无法读取文件大小，放弃且不再重试");
-        EVENT_ZH.put("PublishJob.PartCompensate.DurationUnreadableGiveUp", "定时任务：分P上传补偿-无法读取文件时长，放弃且不再重试");
-        EVENT_ZH.put("PublishJob.PartCompensate.Skip.FileStillWriting", "定时任务：分P上传补偿-文件仍在写入/未稳定，跳过并稍后重试");
-        EVENT_ZH.put("PublishJob.PartCompensate.FileSizeUnreadableRetryLater", "定时任务：分P上传补偿-无法读取文件大小，稍后重试");
-        EVENT_ZH.put("PublishJob.PartCompensate.DurationUnreadableRetryLater", "定时任务：分P上传补偿-无法读取文件时长，稍后重试");
-        EVENT_ZH.put("PublishJob.PartCompensate.SkipBelowSizeLimit", "定时任务：分P上传补偿-文件小于忽略大小阈值，跳过");
-        EVENT_ZH.put("PublishJob.PartCompensate.SkipBelowDurationLimit", "定时任务：分P上传补偿-文件小于忽略时长阈值，跳过");
-        EVENT_ZH.put("PublishJob.PartCompensate.TriggerUpload", "定时任务：分P上传补偿-触发上传");
-        EVENT_ZH.put("PublishJob.PartCompensate.UploadFailed", "定时任务：分P上传补偿-上传失败");
-        EVENT_ZH.put("PublishJob.PartCompensate.ThrottleSleepInterrupted", "定时任务：分P上传补偿-限速等待被中断");
-        EVENT_ZH.put("PublishJob.PartCompensate.TriggeredSummary", "定时任务：分P上传补偿-本轮触发汇总");
+        EVENT_ZH.put("PublishJob.WaitNext", "定时任务：本轮投稿结束，等待下一轮");
+        EVENT_ZH.put("PublishJob.WaitNextInterrupted", "定时任务：等待下一轮被中断");
+
+        EVENT_ZH.put("PublishJob.PartCompensate.AlreadyUploading", "补偿任务：分P正在上传中，跳过");
+        EVENT_ZH.put("PublishJob.PartCompensate.FileMissing", "补偿任务：文件丢失，放弃上传");
+        EVENT_ZH.put("PublishJob.PartCompensate.Skip.FileStillWriting", "补偿任务：文件仍在写入/未稳定，跳过");
+        EVENT_ZH.put("PublishJob.PartCompensate.FileSizeUnreadableRetryLater", "补偿任务：文件大小无法读取，稍后重试");
+        EVENT_ZH.put("PublishJob.PartCompensate.DurationUnreadableRetryLater", "补偿任务：文件时长无法读取，稍后重试");
+        EVENT_ZH.put("PublishJob.PartCompensate.SkipBelowSizeLimit", "补偿任务：文件小于大小阈值，跳过");
+        EVENT_ZH.put("PublishJob.PartCompensate.SkipBelowDurationLimit", "补偿任务：文件小于时长阈值，跳过");
+        EVENT_ZH.put("PublishJob.PartCompensate.TriggerUpload", "补偿任务：触发分P上传");
+        EVENT_ZH.put("PublishJob.PartCompensate.UploadFailed", "补偿任务：触发上传失败");
+        EVENT_ZH.put("PublishJob.PartCompensate.ThrottleSleepInterrupted", "补偿任务：并发控制等待被中断");
+        EVENT_ZH.put("PublishJob.PartCompensate.TriggeredSummary", "补偿任务：本轮触发统计");
 
         // 视频状态同步
         EVENT_ZH.put("VideoSync.SleepInterrupted", "定时任务：视频状态同步-请求间隔等待被中断");

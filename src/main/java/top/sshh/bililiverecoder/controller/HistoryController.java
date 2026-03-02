@@ -457,10 +457,16 @@ public class HistoryController {
             history.setPublish(false);
             history.setBvId(null);
             history.setCode(-1);
+            // 重置上传重试次数
+            history.setUploadRetryCount(0);
             historyRepository.save(history);
             List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : partList) {
                 part.setUpload(false);
+                // 清空已上传的文件名标记，否则进度条会误认为已完成
+                part.setFileName(null);
+                // 重置分P上传重试次数
+                part.setUploadRetryCount(0);
                 partRepository.save(part);
             }
             result.put("type", "success");
