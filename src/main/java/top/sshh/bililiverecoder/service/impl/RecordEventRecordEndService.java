@@ -61,79 +61,86 @@ public class RecordEventRecordEndService implements RecordEventService {
                 .add("title", eventData.getTitle())
                 .add("sessionId", eventData.getSessionId()));
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
-        Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
-        if (historyOptional.isPresent()) {
-            RecordHistory history = historyOptional.get();
-            history.setSessionId(eventData.getSessionId());
-            history.setEndTime(LocalDateTime.now());
-            history.setRecording(false);
-            history.setStreaming(false);
-            historyRepository.save(history);
-            room.setRecording(false);
-            room.setStreaming(false);
-            room.setSessionId(null);
-            roomRepository.save(room);
+        if (room.getHistoryId() != null) {
+            Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
+            if (historyOptional.isPresent()) {
+                RecordHistory history = historyOptional.get();
+                history.setSessionId(eventData.getSessionId());
+                history.setEndTime(LocalDateTime.now());
+                history.setRecording(false);
+                history.setStreaming(false);
+                historyRepository.save(history);
+                room.setRecording(false);
+                room.setStreaming(false);
+                room.setSessionId(null);
+                roomRepository.save(room);
 
-            // 兜底：录播姬 webhook 不重传，若服务离线导致缺失 FileClosed，则分P可能长期残留 recording=true/endTime=null。
-            // 在'录制结束'事件到达时，按磁盘文件是否稳定（10分钟未修改）来纠偏分P结束态。
-            try {
-                long thresholdMs = 10L * 60L * 1000L;
-                long nowMs = System.currentTimeMillis();
-                int healed = 0;
-                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
-                for (RecordHistoryPart part : parts) {
-                    if (!part.isRecording() && part.getEndTime() != null) {
-                        continue;
-                    }
-                    String filePath = part.getFilePath();
-                    if (filePath == null) {
-                        continue;
-                    }
-                    File file = new File(filePath);
-                    if (!file.exists()) {
-                        continue;
-                    }
-                    if (file.lastModified() > nowMs - thresholdMs) {
-                        continue;
-                    }
-                    boolean changed = false;
-                    if (part.isRecording()) {
-                        part.setRecording(false);
-                        changed = true;
-                    }
-                    if (part.getEndTime() == null) {
-                        part.setEndTime(LocalDateTime.now());
-                        changed = true;
-                    }
-                    if (part.getFileSize() <= 0) {
-                        part.setFileSize(file.length());
-                        changed = true;
-                    }
-                    if (part.getDuration() <= 0 && part.getStartTime() != null && part.getEndTime() != null) {
-                        try {
-                            part.setDuration((float) java.time.Duration.between(part.getStartTime(), part.getEndTime()).getSeconds());
+                // 兜底：录播姬 webhook 不重传，若服务离线导致缺失 FileClosed，则分P可能长期残留 recording=true/endTime=null。
+                // 在'录制结束'事件到达时，按磁盘文件是否稳定（10分钟未修改）来纠偏分P结束态。
+                try {
+                    long thresholdMs = 10L * 60L * 1000L;
+                    long nowMs = System.currentTimeMillis();
+                    int healed = 0;
+                    List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+                    for (RecordHistoryPart part : parts) {
+                        if (!part.isRecording() && part.getEndTime() != null) {
+                            continue;
+                        }
+                        String filePath = part.getFilePath();
+                        if (filePath == null) {
+                            continue;
+                        }
+                        File file = new File(filePath);
+                        if (!file.exists()) {
+                            continue;
+                        }
+                        if (file.lastModified() > nowMs - thresholdMs) {
+                            continue;
+                        }
+                        boolean changed = false;
+                        if (part.isRecording()) {
+                            part.setRecording(false);
                             changed = true;
-                        } catch (Exception ignored) {
+                        }
+                        if (part.getEndTime() == null) {
+                            part.setEndTime(LocalDateTime.now());
+                            changed = true;
+                        }
+                        if (part.getFileSize() <= 0) {
+                            part.setFileSize(file.length());
+                            changed = true;
+                        }
+                        if (part.getDuration() <= 0 && part.getStartTime() != null && part.getEndTime() != null) {
+                            try {
+                                part.setDuration((float) java.time.Duration.between(part.getStartTime(), part.getEndTime()).getSeconds());
+                                changed = true;
+                            } catch (Exception ignored) {
+                            }
+                        }
+                        if (changed) {
+                            partRepository.save(part);
+                            healed++;
                         }
                     }
-                    if (changed) {
-                        partRepository.save(part);
-                        healed++;
+                    if (healed > 0) {
+                        log.info("[BLR] {}", LogKvs.event("RecordEnd.PartHeal.Done")
+                                .add("roomId", eventData.getRoomId())
+                                .add("historyId", history.getId())
+                                .add("healed", healed));
                     }
-                }
-                if (healed > 0) {
-                    log.info("[BLR] {}", LogKvs.event("RecordEnd.PartHeal.Done")
+                } catch (Exception e) {
+                    log.warn("[BLR] {}", LogKvs.event("RecordEnd.PartHeal.Failed")
                             .add("roomId", eventData.getRoomId())
-                            .add("historyId", history.getId())
-                            .add("healed", healed));
+                            .add("historyId", historyOptional.map(RecordHistory::getId).orElse(null))
+                            .add("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
                 }
-            } catch (Exception e) {
-                log.warn("[BLR] {}", LogKvs.event("RecordEnd.PartHeal.Failed")
-                        .add("roomId", eventData.getRoomId())
-                        .add("historyId", historyOptional.map(RecordHistory::getId).orElse(null))
-                        .add("err", e.getMessage())
-                        .add("ex", e.getClass().getSimpleName()), e);
             }
+        } else {
+            // 当 historyId 为空时，说明录播姬发送了录制结束的 Webhook 但本地并没有开启录制或录制记录已丢失
+            log.info("[BLR] {}", LogKvs.event("RecordEnd.NoRecording")
+                    .add("roomId", eventData.getRoomId())
+                    .add("msg", "收到录制结束事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制。"));
         }
         String wxuid = room.getWxuid();
         String pushMsgTags = room.getPushMsgTags();

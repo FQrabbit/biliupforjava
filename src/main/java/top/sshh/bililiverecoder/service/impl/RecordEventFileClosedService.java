@@ -79,6 +79,13 @@ public class RecordEventFileClosedService implements RecordEventService {
             .add("durationSec", eventData.getDuration())
             .add("fileSizeBytes", eventData.getFileSize()));
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
+        if (room.getHistoryId() == null) {
+            log.info("[BLR] {}", LogKvs.event("FileClosed.NoRecording")
+                    .add("roomId", eventData.getRoomId())
+                    .add("filePath", relativePath)
+                    .add("msg", "收到文件关闭事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制。"));
+            return;
+        }
         Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
         if ("blrec".equals(sessionId)) {
             relativePath = relativePath.replace(workPath, "");

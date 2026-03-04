@@ -60,13 +60,20 @@ public class RecordEventStreamEndService implements RecordEventService {
         room.setUpdateTime(LocalDateTime.now());
         roomRepository.save(room);
 
-        Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
-        if (historyOptional.isPresent()) {
-            RecordHistory history = historyOptional.get();
-            history.setStreaming(false);
-            history.setUpdateTime(LocalDateTime.now());
-            history.setEndTime(LocalDateTime.now());
-            historyRepository.save(history);
+        if (room.getHistoryId() != null) {
+            Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
+            if (historyOptional.isPresent()) {
+                RecordHistory history = historyOptional.get();
+                history.setStreaming(false);
+                history.setUpdateTime(LocalDateTime.now());
+                history.setEndTime(LocalDateTime.now());
+                historyRepository.save(history);
+            }
+        } else {
+            // 当 historyId 为空时，说明录播姬发送了 Webhook 但本地并没有开启录制或录制记录已丢失
+            log.info("[BLR] {}", LogKvs.event("StreamEnd.NoRecording")
+                    .add("roomId", eventData.getRoomId())
+                    .add("msg", "收到下播事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制，或录播姬与本程序的连接是否正常。"));
         }
     }
 }

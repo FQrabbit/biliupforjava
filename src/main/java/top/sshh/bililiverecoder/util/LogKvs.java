@@ -84,7 +84,9 @@ public final class LogKvs {
         EVENT_ZH.put("StreamEnd.IgnoredEmpty", "收到空的下播事件，忽略");
         EVENT_ZH.put("StreamEnd.Received", "收到下播事件");
         EVENT_ZH.put("StreamEnd.RoomMissing", "下播事件：房间不存在，忽略");
+        EVENT_ZH.put("StreamEnd.NoRecording", "下播事件：本地无活跃录制记录");
         EVENT_ZH.put("RecordEnd.Received", "收到录制结束事件");
+        EVENT_ZH.put("RecordEnd.NoRecording", "录制结束事件：本地无活跃录制记录");
         EVENT_ZH.put("RecordEnd.PartHeal.Done", "录制结束：分P纠偏/修复成功");
         EVENT_ZH.put("RecordEnd.PartHeal.Failed", "录制结束：分P纠偏/修复失败");
         EVENT_ZH.put("FileOpen.Received", "收到文件打开事件");
@@ -108,6 +110,7 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.SleepInterrupted", "文件打开事件等待被中断(通常不影响主流程)");
         EVENT_ZH.put("FileOpen.UnhandledException", "文件打开事件：发生未捕获异常");
         EVENT_ZH.put("FileClosed", "收到文件关闭事件(分P文件写入结束)");
+        EVENT_ZH.put("FileClosed.NoRecording", "文件关闭事件：本地无活跃录制记录");
         EVENT_ZH.put("FileClosed.PartMissing", "文件关闭事件：找不到分P记录");
         EVENT_ZH.put("FileClosed.FileMissing", "文件关闭事件：文件不存在");
         EVENT_ZH.put("FileClosed.MoveSuccess", "文件关闭后移动文件成功");
