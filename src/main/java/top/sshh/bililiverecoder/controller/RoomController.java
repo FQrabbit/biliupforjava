@@ -2,21 +2,19 @@ package top.sshh.bililiverecoder.controller;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.MediaTypeFactory;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
+import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
@@ -31,10 +29,10 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.URL;
 import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -44,6 +42,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/room")
@@ -60,6 +59,18 @@ public class RoomController {
 
     @Autowired
     private RecordHistoryPartRepository partRepository;
+
+    private final Cache<String, CachedImage> imageCache = CacheBuilder.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(1, TimeUnit.DAYS)
+            .build();
+
+    @Data
+    @AllArgsConstructor
+    private static class CachedImage {
+        private byte[] bytes;
+        private MediaType contentType;
+    }
 
 
     @PostMapping
@@ -606,6 +617,16 @@ public class RoomController {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
         try {
+            // 检查缓存
+            CachedImage cached = imageCache.getIfPresent(url);
+            if (cached != null) {
+                log.debug("[BLR] Image proxy cache hit: {}", url);
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(cached.getContentType());
+                headers.setCacheControl("public, max-age=604800");
+                return new ResponseEntity<>(cached.getBytes(), headers, HttpStatus.OK);
+            }
+
             URI uri = new URI(url);
             String host = uri.getHost();
             String scheme = uri.getScheme();
@@ -652,11 +673,15 @@ public class RoomController {
                 return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
             }
 
-            HttpHeaders headers = new HttpHeaders();
             if (ct == null) {
                 String path = uri.getPath();
                 ct = MediaTypeFactory.getMediaType(path).orElse(MediaType.IMAGE_JPEG);
             }
+
+            // 存入缓存
+            imageCache.put(url, new CachedImage(imageBytes, ct));
+
+            HttpHeaders headers = new HttpHeaders();
             headers.setContentType(ct);
             headers.setCacheControl("public, max-age=604800");
 

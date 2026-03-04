@@ -78,7 +78,10 @@
                  :class="{ 'is-active': item.login && item.enable, 'is-warning': !item.login }" 
                  v-for="item in tableData" :key="item.id">
                 <div class="user-card-header">
-                    <div class="user-avatar">{{ privacyMode ? '*' : (item.uname || 'U').charAt(0).toUpperCase() }}</div>
+                    <div class="user-avatar">
+                        <img v-if="!privacyMode && item.face" :src="buildImageProxyUrl(item.face)" referrerpolicy="no-referrer">
+                        <span v-else>{{ privacyMode ? '*' : (item.uname || 'U').charAt(0).toUpperCase() }}</span>
+                    </div>
                     <div class="user-info">
                         <h3 class="user-name">{{ maskText(item.uname || '未命名用户') }}</h3>
                         <div class="user-uid">UID: {{ maskText(item.uid) }}</div>
@@ -133,11 +136,19 @@
                     v-loading="loading"
                     :data="tableData"
                     style="width: 100%">
-                <el-table-column label="用户ID" width="130">
-                    <template slot-scope="scope">{{ maskText(scope.row.uid) }}</template>
-                </el-table-column>
-                <el-table-column label="昵称" min-width="150">
-                    <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
+                <el-table-column label="用户" min-width="150">
+                    <template slot-scope="scope">
+                        <div class="table-user-cell">
+                            <div class="user-avatar mini">
+                                <img v-if="!privacyMode && scope.row.face" :src="buildImageProxyUrl(scope.row.face)" referrerpolicy="no-referrer">
+                                <span v-else>{{ privacyMode ? '*' : (scope.row.uname || 'U').charAt(0).toUpperCase() }}</span>
+                            </div>
+                            <div class="table-user-info">
+                                <div class="table-user-name">{{ maskText(scope.row.uname || '未命名用户') }}</div>
+                                <div class="table-user-uid">UID: {{ maskText(scope.row.uid) }}</div>
+                            </div>
+                        </div>
+                    </template>
                 </el-table-column>
                 <el-table-column label="登录状态" width="120">
                     <template slot-scope="scope">
@@ -266,6 +277,10 @@
         methods: {
             handleResize: function () {
                 this.isMobile = window.innerWidth <= 768;
+            },
+            buildImageProxyUrl: function(url) {
+                if (!url) return '';
+                return '/room/image-proxy?url=' + encodeURIComponent(url);
             },
             fetchUserList: function () {
                 var self = this;

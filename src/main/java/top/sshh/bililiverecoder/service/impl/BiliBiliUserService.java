@@ -48,6 +48,9 @@ public class BiliBiliUserService {
             try{
                 String userInfo = BiliApi.appMyInfo(user);
                 user.setUname(JsonPath.read(userInfo, "data.uname"));
+                try {
+                    user.setFace(JsonPath.read(userInfo, "data.face"));
+                } catch (Exception e) {}
             }catch (Exception e){
                 log.warn("[BLR] {}", LogKvs.event("User.RefreshToken.MyInfoFailed")
                         .add("uname", user.getUname())
@@ -62,6 +65,9 @@ public class BiliBiliUserService {
             try {
                 String userInfo = BiliApi.appMyInfo(user);
                 user.setUname(JsonPath.read(userInfo, "data.uname"));
+                try {
+                    user.setFace(JsonPath.read(userInfo, "data.face"));
+                } catch (Exception e) {}
                 user.setLogin(true);
                 user.setUpdateTime(LocalDateTime.now());
                 userRepository.save(user);

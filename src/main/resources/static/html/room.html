@@ -206,7 +206,7 @@
                 
                 <div class="room-card-header">
                     <div class="room-avatar">
-                        <img v-if="!privacyMode && item.userCover" :src="item.userCover" referrerpolicy="no-referrer">
+                        <img v-if="!privacyMode && item.userCover" :src="buildImageProxyUrl(item.userCover)" referrerpolicy="no-referrer">
                         <span v-else>{{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}</span>
                         <span v-if="item.streaming" class="live-indicator"></span>
                         

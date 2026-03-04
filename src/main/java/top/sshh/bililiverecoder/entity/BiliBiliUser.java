@@ -17,6 +17,8 @@ public class BiliBiliUser {
 
     private String uname;
 
+    private String face;
+
     private String accessToken;
     private String refreshToken;
 

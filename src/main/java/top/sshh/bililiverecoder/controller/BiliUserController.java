@@ -147,6 +147,11 @@ public class BiliUserController {
                 biliUser.setUpdateTime(LocalDateTime.now());
                 String userInfo = BiliApi.appMyInfo(biliUser);
                 biliUser.setUname(JsonPath.read(userInfo, "data.uname"));
+                try {
+                    biliUser.setFace(JsonPath.read(userInfo, "data.face"));
+                } catch (Exception e) {
+                    session.message = "登录成功，但头像获取失败";
+                }
                 log.info("[BLR] {}", LogKvs.event("BiliUser.Login.Success")
                     .add("uid", biliUser.getUid())
                     .add("uname", biliUser.getUname()));
