@@ -149,14 +149,15 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.Parts.Changed", "投稿失败：分P数量发生变动");
         EVENT_ZH.put("Publish.Parts.NotAllUploaded", "投稿失败：存在未上传完成的分P");
         EVENT_ZH.put("Publish.UploadUserIdMissing", "投稿失败：未配置上传用户ID");
-        EVENT_ZH.put("Publish.Cover.Upload.Response", "投稿：上传封面响应(调试)"
-        );
+        EVENT_ZH.put("Publish.Cover.Upload.Response", "投稿：封面上传响应(调试)");
         EVENT_ZH.put("Publish.Cover.Upload.Failed", "投稿：上传/使用直播封面失败");
-        EVENT_ZH.put("Publish.WebPublish.Response", "投稿：创建投稿响应(调试)"
-        );
+        EVENT_ZH.put("Publish.Cover.NotFound", "投稿：封面文件未找到，尝试使用直播间当前封面兜底");
+        EVENT_ZH.put("Publish.Cover.Fallback.Success", "投稿：兜底封面获取成功");
+        EVENT_ZH.put("Publish.Cover.Fallback.Failed", "投稿：兜底封面获取失败");
+        EVENT_ZH.put("Publish.Cover.Upload.Retry", "投稿：封面上传失败，正在重试");
+        EVENT_ZH.put("Publish.WebPublish.Response", "投稿：Web端提交响应(调试)");
         EVENT_ZH.put("Publish.Captcha.Submit", "投稿：提交验证码结果");
-        EVENT_ZH.put("Publish.Captcha.PublishResponse", "投稿：验证码投稿响应(调试)"
-        );
+        EVENT_ZH.put("Publish.Captcha.PublishResponse", "投稿：验证码投稿响应(调试)");
         EVENT_ZH.put("Publish.Captcha.VerifyFailedPause", "投稿：验证码验证失败，暂停后重试");
         EVENT_ZH.put("Publish.Captcha.HandleError", "投稿：处理验证码流程异常");
         EVENT_ZH.put("Publish.TimestampJump.GiveUpHistory", "投稿：检测到时间戳跳变，放弃该投稿");
@@ -172,8 +173,7 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.File.MoveSuccess", "投稿后移动文件成功");
         EVENT_ZH.put("Publish.File.MoveFailed", "投稿后移动文件失败");
         EVENT_ZH.put("Publish.File.PostProcess.Error", "投稿成功后文件处理(删除/移动)异常");
-        EVENT_ZH.put("Publish.WebPublish.Failed", "投稿失败(异常/返回异常)"
-        );
+        EVENT_ZH.put("Publish.WebPublish.Failed", "投稿失败(异常/返回异常)");
         EVENT_ZH.put("Publish.Error", "投稿流程发生异常");
 
         // 模板

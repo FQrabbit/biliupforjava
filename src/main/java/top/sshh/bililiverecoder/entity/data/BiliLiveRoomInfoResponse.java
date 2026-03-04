@@ -17,5 +17,6 @@ public class BiliLiveRoomInfoResponse {
         private String title;
         private String live_time;
         private String user_cover;
+        private String keyframe;
     }
 }

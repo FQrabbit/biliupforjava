@@ -741,24 +741,101 @@ public class RecordBiliPublishService {
                             if (!cover.exists()) {
                                 cover = new File(filePath.replaceAll(".cover.jpg", ".cover.png"));
                             }
-                            byte[] bytes = new byte[(int)cover.length()];
-                            FileInputStream inputStream = new FileInputStream(cover);
-                            inputStream.read(bytes);
-                            inputStream.close();
-                            String uploadCoverResponse = BiliApi.uploadCover(biliBiliUser, cover.getName(), bytes);
-                            log.info("[BLR] {}", LogKvs.event("Publish.Cover.Upload.Response")
-                                    .add("roomId", room.getRoomId())
-                                    .add("uname", room.getUname())
-                                    .add("historyId", history.getId())
-                                    .addIfNotBlank("coverFile", cover.getName()));
-                            coverUrl = JsonPath.read(uploadCoverResponse, "data.url");
-                            history.setCoverUrl(coverUrl);
-                            history = historyRepository.save(history);
+                            
+                            // 明确检查文件是否存在
+                            if (!cover.exists()) {
+                                log.warn("[BLR] {}", LogKvs.event("Publish.Cover.NotFound")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("historyId", history.getId())
+                                        .add("expectedPath", filePath));
+                                // 尝试使用直播间封面兜底
+                                try {
+                                    BiliLiveRoomInfoResponse roomInfo = BiliApi.getLiveRoomInfo(String.valueOf(room.getRoomId()));
+                                    if (roomInfo != null && roomInfo.getCode() == 0 && roomInfo.getData() != null) {
+                                        String liveCoverUrl = roomInfo.getData().getUser_cover();
+                                        if (StringUtils.isBlank(liveCoverUrl)) {
+                                            liveCoverUrl = roomInfo.getData().getKeyframe();
+                                        }
+                                        if (StringUtils.isNotBlank(liveCoverUrl)) {
+                                            coverUrl = liveCoverUrl;
+                                            log.info("[BLR] {}", LogKvs.event("Publish.Cover.Fallback.Success")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("historyId", history.getId())
+                                                    .add("url", coverUrl));
+                                        } else {
+                                            log.warn("[BLR] {}", LogKvs.event("Publish.Cover.Fallback.Failed")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("reason", "empty_cover_url"));
+                                            coverUrl = "";
+                                        }
+                                    } else {
+                                        log.warn("[BLR] {}", LogKvs.event("Publish.Cover.Fallback.Failed")
+                                                .add("roomId", room.getRoomId())
+                                                .add("reason", "api_error"));
+                                        coverUrl = "";
+                                    }
+                                } catch (Exception e) {
+                                    log.warn("[BLR] {}", LogKvs.event("Publish.Cover.Fallback.Failed")
+                                            .add("roomId", room.getRoomId())
+                                            .add("error", e.getMessage()));
+                                    coverUrl = "";
+                                }
+                            } else {
+                                // 读取文件
+                                byte[] bytes = new byte[(int)cover.length()];
+                                try (FileInputStream inputStream = new FileInputStream(cover)) {
+                                    inputStream.read(bytes);
+                                }
+
+                                // 带重试的上传机制
+                                String uploadCoverResponse = null;
+                                Exception lastException = null;
+                                int maxRetries = 3;
+                                
+                                for (int i = 0; i < maxRetries; i++) {
+                                    try {
+                                        uploadCoverResponse = BiliApi.uploadCover(biliBiliUser, cover.getName(), bytes);
+                                        // 简单检查响应是否有效
+                                        if (uploadCoverResponse != null && uploadCoverResponse.contains("\"code\":0")) {
+                                            break; // 成功，跳出循环
+                                        } else {
+                                            // 如果是业务错误（如图片格式不对），重试可能没用，但在不解析详细code的情况下，暂且统一处理
+                                            throw new RuntimeException("Cover upload response invalid: " + uploadCoverResponse);
+                                        }
+                                    } catch (Exception e) {
+                                        lastException = e;
+                                        if (i < maxRetries - 1) {
+                                            log.warn("[BLR] {}", LogKvs.event("Publish.Cover.Upload.Retry")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("historyId", history.getId())
+                                                    .add("retry", i + 1)
+                                                    .add("error", e.getMessage()));
+                                            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+                                        }
+                                    }
+                                }
+
+                                if (uploadCoverResponse != null && uploadCoverResponse.contains("\"code\":0")) {
+                                    log.info("[BLR] {}", LogKvs.event("Publish.Cover.Upload.Response")
+                                            .add("roomId", room.getRoomId())
+                                            .add("uname", room.getUname())
+                                            .add("historyId", history.getId())
+                                            .addIfNotBlank("coverFile", cover.getName()));
+                                    coverUrl = JsonPath.read(uploadCoverResponse, "data.url");
+                                    history.setCoverUrl(coverUrl);
+                                    history = historyRepository.save(history);
+                                } else {
+                                    // 抛出最后一次异常或通用异常
+                                    throw lastException != null ? lastException : new RuntimeException("Upload failed: " + uploadCoverResponse);
+                                }
+                            }
                         } catch (Exception e) {
                             log.warn("[BLR] {}", LogKvs.event("Publish.Cover.Upload.Failed")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
-                                    .add("historyId", history.getId()), e);
+                                    .add("historyId", history.getId())
+                                    .add("reason", e.getMessage()), e);
                             coverUrl = "";
                         }
                     }
