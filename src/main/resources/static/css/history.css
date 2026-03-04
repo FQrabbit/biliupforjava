@@ -3240,9 +3240,13 @@
 
     padding: 0 10px;
 
+    padding-bottom: calc(var(--detail-footer-offset, 120px) + 24px);
+
     max-height: calc(100vh - 200px);
 
     overflow-y: auto;
+
+    box-sizing: border-box;
 
 }
 
@@ -4112,11 +4116,45 @@
 
     gap: 10px;
 
-    max-height: 200px;
+    margin-top: 10px;
+
+    border: 1px solid #EBEEF5;
+
+    border-radius: 4px;
+
+    background-color: #FAFAFA;
+
+    max-height: clamp(180px, 48vh, 520px);
 
     overflow-y: auto;
 
+    overflow-x: hidden;
+
+    overscroll-behavior: contain;
+
+    -webkit-overflow-scrolling: touch;
+
     padding-right: 6px;
+
+}
+
+.progress-list-modern::-webkit-scrollbar {
+
+    width: 6px;
+
+}
+
+.progress-list-modern::-webkit-scrollbar-thumb {
+
+    background-color: #909399;
+
+    border-radius: 3px;
+
+}
+
+.progress-list-modern::-webkit-scrollbar-track {
+
+    background-color: #F2F6FC;
 
 }
 
@@ -4714,7 +4752,7 @@
 
     .progress-list-modern {
 
-        max-height: none;
+        max-height: clamp(160px, 36vh, 360px);
 
         padding-right: 0;
 
@@ -4732,7 +4770,7 @@
 
     .detail-content-modern {
 
-        padding-bottom: 150px;
+        padding-bottom: calc(var(--detail-footer-offset, 160px) + 24px);
 
     }
 
@@ -5633,6 +5671,26 @@
 [data-theme='dark'] .part-status {
 
     color: #a6a6a6;
+
+}
+
+[data-theme='dark'] .progress-list-modern {
+
+    border-color: #303133;
+
+    background-color: #1f1f1f;
+
+}
+
+[data-theme='dark'] .progress-list-modern::-webkit-scrollbar-thumb {
+
+    background-color: #606266;
+
+}
+
+[data-theme='dark'] .progress-list-modern::-webkit-scrollbar-track {
+
+    background-color: #2b2b2b;
 
 }
 

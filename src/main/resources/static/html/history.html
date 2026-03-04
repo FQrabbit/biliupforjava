@@ -516,7 +516,7 @@
 
     <!-- 详情弹窗 -->
     <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" :destroy-on-close="true" @closed="onDetailClosed">
-        <div class="detail-content-modern" v-if="currentDetail.id">
+        <div class="detail-content-modern" ref="detailContent" v-if="currentDetail.id" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
             <!-- 头部信息 -->
             <div class="detail-header-modern">
                 <div class="detail-header-main">
@@ -656,7 +656,7 @@
                 <div class="progress-row-modern main">
                     <div class="progress-info">
                         <span class="progress-label">整体进度</span>
-                        <span class="progress-text" v-if="historyUploadProgress">{{ calcOverallUploadText() }}</span>
+                        <span class="progress-text" v-if="historyUploadProgress || currentDetailParts.length > 0">{{ calcOverallUploadText() }}</span>
                     </div>
                     <div class="progress-bar-wrapper">
                         <el-progress :percentage="calcOverallUploadPercent()" :status="calcOverallUploadStatus()" :stroke-width="10" :show-text="false"></el-progress>
@@ -664,14 +664,34 @@
                     <div class="progress-main-percent">{{ calcOverallUploadPercent() }}%</div>
                 </div>
 
-                <!-- 分P进度 -->
-                <div class="progress-list-modern">
-                    <div class="progress-row-modern item" v-for="p in (historyUploadProgress ? historyUploadProgress.items : [])" :key="p.partId">
+                <!-- 等待提醒 -->
+                <div v-if="isWaitingForUpload" class="waiting-tip" style="margin-top: 10px; color: #E6A23C; font-size: 13px; display: flex; align-items: center;">
+                    <i class="el-icon-info" style="margin-right: 5px;"></i>
+                    <span>正在等待其他稿件分P上传...</span>
+                </div>
+
+                <!-- 分P进度展开/收起按钮 -->
+                <div class="parts-toggle-container" style="text-align: center; margin-top: 10px;" v-if="mergedParts.length > 0">
+                    <el-button type="text" @click="toggleParts" size="mini">
+                        {{ showAllParts ? '收起分P进度' : '展开分P进度 (' + mergedParts.length + ')' }}
+                        <i :class="showAllParts ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                    </el-button>
+                </div>
+
+                <!-- 分P进度列表 -->
+                <div v-show="showAllParts" class="progress-list-modern" ref="partsList">
+                    <div class="progress-row-modern item" v-for="(p, idx) in mergedParts" :key="p.partId || idx">
                         <div class="progress-info-mini">
-                            <span class="part-badge">P{{ formatProgressPage(p.page) }}</span>
+                            <span class="part-badge">P{{ p.page }}</span>
                             <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
-                            <span class="part-meta">{{ p.chunkDone }}/{{ p.chunkTotal }}</span>
-                            <span v-if="calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
+                            <span class="part-meta">
+                                 <span v-if="p.state === 'SUCCESS' || p.percent >= 100">{{ formatSize(p.fileSize) }}</span>
+                                 <span v-else>
+                                    {{ p.activeChunkDone }}/{{ p.activeChunkTotal }} 分片
+                                    <span v-if="p.fileSize > 0" style="margin-left: 5px; opacity: 0.8;">({{ formatSize(p.fileSize) }})</span>
+                                 </span>
+                            </span>
+                            <span v-if="p.state !== 'SUCCESS' && calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
                         </div>
                         <div class="progress-bar-mini">
                             <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
@@ -688,7 +708,7 @@
                 </div>
             </div>
         </div>
-        <div slot="footer" class="detail-footer">
+        <div slot="footer" class="detail-footer" ref="detailFooter">
             <div class="detail-footer-actions" v-if="currentDetail.id">
                 <!-- 常用操作 -->
                 <div class="action-group-primary">
@@ -814,6 +834,8 @@
             loading: false,
             detailDialogVisible: false,
             currentDetail: {},
+            currentDetailParts: [],
+            showAllParts: false,
             isMobile: window.innerWidth <= 768,
             activeNames: [],
             viewMode: 'card',
@@ -830,6 +852,9 @@
             pollingTimer: null,
             showMoreActions: false,
             progressSpeedTracking: {},
+            detailFooterOffset: 120,
+            partsAutoScrollTimer: null,
+            dialogResizeHandler: null,
             reloadDialogVisible: false,
             currentReloadId: null,
             reloadOptions: {
@@ -917,6 +942,82 @@
                 if (this.form.code !== undefined && this.form.code !== null && this.form.code !== '') count++;
                 if (this.form.from || this.form.to) count++;
                 return count;
+            },
+            mergedParts: function() {
+                if (!this.currentDetailParts || this.currentDetailParts.length === 0) return [];
+                
+                // 映射为基础对象
+                let parts = this.currentDetailParts.map((p, index) => {
+                    return {
+                        partId: p.id,
+                        // 如果 page 无效 (<=0)，则使用 index + 1 作为备选
+                        page: (p.page && p.page > 0) ? p.page : (index + 1),
+                        title: p.title,
+                        fileName: p.fileName,
+                        upload: p.upload,
+                        fileSize: p.fileSize,
+                        filePath: p.filePath,
+                        // 默认状态：如果 upload=true 则 SUCCESS，否则 WAITING
+                        state: p.upload ? 'SUCCESS' : 'WAITING',
+                        percent: p.upload ? 100 : 0,
+                        // 区分 分片进度 和 字节大小
+                        activeChunkDone: 0,
+                        activeChunkTotal: 0,
+                        chunkDone: p.upload ? p.fileSize : 0, // 字节
+                        chunkTotal: p.fileSize,               // 字节
+                        speed: 0,
+                        updateAtMs: 0
+                    };
+                });
+
+                // 合并活跃进度
+                if (this.historyUploadProgress && this.historyUploadProgress.items) {
+                    this.historyUploadProgress.items.forEach(active => {
+                        // 尝试通过 ID 匹配
+                        let match = parts.find(p => p.partId === active.partId);
+                        // 如果 ID 匹配不到，尝试通过 page 匹配 (fallback)
+                        if (!match && active.page) {
+                            match = parts.find(p => p.page === active.page);
+                        }
+                        
+                        if (match) {
+                            match.state = active.state;
+                            match.percent = active.percent;
+                            // 记录活跃的分片进度
+                            match.activeChunkDone = active.chunkDone;
+                            match.activeChunkTotal = active.chunkTotal;
+                            // 注意：这里不再覆盖 chunkDone/chunkTotal 为分片数，保留原字节数用于显示总大小（如果需要）
+                            // 但为了进度条计算，可能需要保留逻辑一致性，或者在模板中区分处理
+                            
+                            match.speed = active.speed;
+                            match.updateAtMs = active.updateAtMs;
+                            if (active.stateMsg) match.stateMsg = active.stateMsg;
+                        }
+                    });
+                }
+                
+                // 按分P排序
+                parts.sort((a, b) => a.page - b.page);
+                return parts;
+            },
+            isWaitingForUpload: function() {
+                // 如果没有详情或已完成，则不显示
+                if (!this.currentDetail || !this.currentDetail.id) return false;
+                // 如果整体进度已完成，不显示
+                if (this.currentDetail.uploadPartCount >= this.currentDetail.partCount && this.currentDetail.partCount > 0) return false;
+                
+                // 如果当前有活跃上传任务，则不是等待中
+                if (this.historyUploadProgress && this.historyUploadProgress.activeCount > 0) return false;
+
+                // 如果有分P未完成且不是 FAILED 状态，且没有活跃任务 -> 等待中
+                // 简单的判断：只要不是全部完成，且没有活跃任务，且不是全部失败
+                // 这里主要为了提示用户“正在排队”
+                
+                // 检查是否有未完成的 part
+                if (this.mergedParts.some(p => p.state !== 'SUCCESS' && p.state !== 'FAILED')) {
+                    return true;
+                }
+                return false;
             }
         },
         watch: {
@@ -927,6 +1028,22 @@
                         this.form.publish = false;
                     } else {
                         this.form.publish = true;
+                    }
+                }
+            },
+            detailDialogVisible: function(val) {
+                if (val) {
+                    if (!this.dialogResizeHandler) {
+                        this.dialogResizeHandler = this.debounce(this.updateDetailFooterOffset, 80);
+                    }
+                    window.addEventListener('resize', this.dialogResizeHandler);
+                    this.$nextTick(() => {
+                        this.updateDetailFooterOffset();
+                    });
+                } else {
+                    this.clearPartsAutoScrollTimer();
+                    if (this.dialogResizeHandler) {
+                        window.removeEventListener('resize', this.dialogResizeHandler);
                     }
                 }
             },
@@ -944,13 +1061,6 @@
             
             // 页面可见性变化监听，优化进度轮询
             document.addEventListener('visibilitychange', this.handleVisibilityChange);
-        },
-        beforeDestroy() {
-            this.stopPolling();
-            this.$el.removeEventListener('touchstart', this.handleTouchStart);
-            this.$el.removeEventListener('touchend', this.handleTouchEnd);
-            window.removeEventListener('resize', this.resizeHandler);
-            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         },
         methods: {
             // 防抖函数工具
@@ -1567,18 +1677,50 @@
                 this.detailDialogVisible = true;
                 this.stopProgressPolling();
                 this.historyUploadProgress = null;
+                this.currentDetailParts = [];
+                this.showAllParts = false;
                 this.$nextTick(() => {
                     this.currentDetail = JSON.parse(JSON.stringify(item || {}));
+                    this.updateDetailFooterOffset();
                     if (this.currentDetail && this.currentDetail.id) {
                         this.startProgressPolling(this.currentDetail.id);
+                        // 获取所有分P信息
+                        var _this = this;
+                        ApiUtil.post('../part/list/' + this.currentDetail.id, {}, function (data) {
+                            _this.currentDetailParts = data || [];
+                        }, function (error) {
+                            console.error('获取分P列表失败', error);
+                        });
                     }
                 });
             },
             onDetailClosed: function() {
+                this.clearPartsAutoScrollTimer();
                 this.stopProgressPolling();
                 this.historyUploadProgress = null;
                 this.currentDetail = {};
+                this.currentDetailParts = [];
+                this.showAllParts = false;
                 this.showMoreActions = false;
+                this.detailFooterOffset = this.isMobile ? 160 : 120;
+                if (this.dialogResizeHandler) {
+                    window.removeEventListener('resize', this.dialogResizeHandler);
+                }
+            },
+            clearPartsAutoScrollTimer: function() {
+                if (this.partsAutoScrollTimer) {
+                    clearTimeout(this.partsAutoScrollTimer);
+                    this.partsAutoScrollTimer = null;
+                }
+            },
+            updateDetailFooterOffset: function() {
+                if (!this.detailDialogVisible) return;
+                this.$nextTick(() => {
+                    const footer = this.$refs.detailFooter;
+                    if (!footer || !footer.offsetHeight) return;
+                    const extra = this.isMobile ? 44 : 28;
+                    this.detailFooterOffset = Math.max(96, Math.ceil(footer.offsetHeight + extra));
+                });
             },
             startPolling: function () {
                 var self = this;
@@ -1643,12 +1785,23 @@
 
                                 if (shouldRefresh) {
                                     _this.initTable(true);
+                                    // 同步刷新详情中的分P列表
+                                    if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === historyId) {
+                                        ApiUtil.post('../part/list/' + historyId, {}, function (data) {
+                                            _this.currentDetailParts = data || [];
+                                        });
+                                    }
                                 }
 
                                 if (!nextResp || !nextResp.activeCount || nextResp.activeCount <= 0) {
                                     _this.stopProgressPolling();
                                     // 最后再刷一次确保状态最终一致
                                     _this.initTable(true);
+                                    if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === historyId) {
+                                        ApiUtil.post('../part/list/' + historyId, {}, function (data) {
+                                            _this.currentDetailParts = data || [];
+                                        });
+                                    }
                                 }
                             });
                         }, 1500);
@@ -1688,6 +1841,14 @@
                 const n = Number(page);
                 if (isFinite(n) && n > 0) return n;
                 return '?';
+            },
+            formatSize: function(size) {
+                const s = Number(size);
+                if (!isFinite(s) || s < 0) return '0 B';
+                if (s < 1024) return s + ' B';
+                if (s < 1024 * 1024) return (s / 1024).toFixed(2) + ' KB';
+                if (s < 1024 * 1024 * 1024) return (s / (1024 * 1024)).toFixed(2) + ' MB';
+                return (s / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
             },
             calcOverallUploadPercent: function() {
                 const total = Number(this.currentDetail && this.currentDetail.partCount) || 0;
@@ -1750,6 +1911,7 @@
             },
             formatProgressState: function(state) {
                 if (state === 'UPLOADING') return '分片上传中';
+                if (state === 'WAITING') return '等待中';
                 if (state === 'RETRY_WAIT') return '等待重试';
                 if (state === 'FAILED') return '失败';
                 if (state === 'SUCCESS') return '成功';
@@ -1825,17 +1987,28 @@
                 });
             },
             calculateRemainingTime: function(p) {
-                if (!p || !p.partId && !p.page) return null;
+                if (!p) return null;
                 const partId = p.partId || p.page;
-                const chunkDone = Number(p.chunkDone) || 0;
-                const chunkTotal = Number(p.chunkTotal) || 0;
+                
+                // 优先使用活跃分片数据 (activeChunkDone/Total 是分片数)
+                let chunkDone = 0;
+                let chunkTotal = 0;
+                
+                if (p.activeChunkTotal > 0) {
+                    chunkDone = Number(p.activeChunkDone) || 0;
+                    chunkTotal = Number(p.activeChunkTotal) || 0;
+                } else {
+                    chunkDone = Number(p.chunkDone) || 0;
+                    chunkTotal = Number(p.chunkTotal) || 0;
+                }
+
                 const state = p.state;
                 
-                if (state !== 'UPLOADING' || chunkDone >= chunkTotal) return null;
+                if (state !== 'UPLOADING' || chunkDone >= chunkTotal || chunkTotal <= 0) return null;
                 
                 const track = this.progressSpeedTracking[partId];
                 if (!track || !track.samples || track.samples.length < 2) {
-                    return '正在计算...';
+                    return '计算中...';
                 }
                 
                 const now = Date.now();
@@ -1847,14 +2020,64 @@
                 const totalWeight = weights.reduce((a, b) => a + b, 0);
                 const avgSpeed = recentSamples.reduce((sum, s, i) => sum + s.speed * weights[i], 0) / totalWeight;
                 
-                if (avgSpeed <= 0) return null;
+                if (avgSpeed <= 0) return '计算中...';
                 
                 const remainingChunks = chunkTotal - chunkDone;
                 const remainingSeconds = remainingChunks / avgSpeed;
                 
-                const speedMBps = (avgSpeed * 5).toFixed(1);
+                // 假设每片 5MB
+                let speedMBpsVal = 0;
+                if (p.activeChunkTotal > 0) {
+                     speedMBpsVal = avgSpeed * 5;
+                } else {
+                     // avgSpeed is bytes/s
+                     speedMBpsVal = avgSpeed / 1024 / 1024;
+                }
+                const speedMBps = speedMBpsVal.toFixed(1);
                 
                 return this.formatRemainingTime(remainingSeconds, speedMBps);
+            },
+            toggleParts: function() {
+                this.showAllParts = !this.showAllParts;
+                if (this.showAllParts) {
+                    this.$nextTick(() => {
+                        if (!this.detailDialogVisible) return;
+                        const list = this.$refs.partsList;
+                        const detailContent = this.$refs.detailContent;
+                        if (!list) return;
+
+                        if (detailContent) {
+                            const detailRect = detailContent.getBoundingClientRect();
+                            const listRect = list.getBoundingClientRect();
+                            const offsetTop = Math.max(listRect.top - detailRect.top - 12, 0);
+                            const targetTop = detailContent.scrollTop + offsetTop;
+                            try {
+                                detailContent.scrollTo({ top: targetTop, behavior: 'smooth' });
+                            } catch (e) {
+                                detailContent.scrollTop = targetTop;
+                            }
+                        } else {
+                            try {
+                                list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            } catch (e) {}
+                        }
+
+                        this.clearPartsAutoScrollTimer();
+                        if (list.scrollHeight > list.clientHeight) {
+                            this.partsAutoScrollTimer = setTimeout(() => {
+                                if (!this.detailDialogVisible) return;
+                                const activeList = this.$refs.partsList;
+                                if (!activeList) return;
+                                try {
+                                    activeList.scrollTo({ top: 48, behavior: 'smooth' });
+                                } catch (e) {
+                                    activeList.scrollTop = 48;
+                                }
+                                this.partsAutoScrollTimer = null;
+                            }, 220);
+                        }
+                    });
+                }
             },
             formatRemainingTime: function(seconds, speedMBps) {
                 if (!isFinite(seconds) || seconds <= 0) return null;
@@ -2440,6 +2663,18 @@
             }
         },
         beforeDestroy: function () {
+            this.clearPartsAutoScrollTimer();
+            this.stopPolling();
+            this.stopProgressPolling();
+            if (this.$el) {
+                this.$el.removeEventListener('touchstart', this.handleTouchStart);
+                this.$el.removeEventListener('touchend', this.handleTouchEnd);
+            }
+            window.removeEventListener('resize', this.resizeHandler);
+            if (this.dialogResizeHandler) {
+                window.removeEventListener('resize', this.dialogResizeHandler);
+            }
+            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
     });
 </script>
