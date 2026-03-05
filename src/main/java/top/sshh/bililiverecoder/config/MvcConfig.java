@@ -28,7 +28,7 @@ public class MvcConfig implements WebMvcConfigurer{
                         "/img/**",
                         "/ws/**",
                         "/favicon.ico",
-                        "/.well-known/**",
+                         "/.well-known/**",
                         "/error"
                 );
     }

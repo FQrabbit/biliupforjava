@@ -1,7 +1,7 @@
-/* ========== Global Reset & Scrollbar ========== */
+/* ========== 全局重置与滚动条样式 ========== */
 /* 全局重置、滚动条美化、基础 box-sizing */
 
-/* ========== Modern Scrollbar Global Styles ========== */
+/* ========== 现代感滚动条全局样式 ========== */
 ::-webkit-scrollbar {
     width: var(--scrollbar-width);
     height: var(--scrollbar-width);

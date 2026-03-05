@@ -1,8 +1,8 @@
-/* ========== Shared Components ========== */
+/* ========== 跨页面复用的共享组件 ========== */
 /* 跨页面共享的布局、卡片、状态、按钮、复选框等业务组件 */
 /* 从 element-override.css 拆分而来 */
 
-/* ========== Container & Layout (Shared) ========== */
+/* ========== 容器与布局（共享） ========== */
 .container {
     background: var(--bg-primary);
     background-image: linear-gradient(180deg, var(--bg-primary) 0%, color-mix(in srgb, var(--bg-tertiary) 20%, var(--bg-primary)) 100%);
@@ -137,7 +137,7 @@
 
 .flex-spacer { flex: 1; }
 
-/* ========== Shared Card Grid ========== */
+/* ========== 共享的卡片网格布局 ========== */
 .room-card-grid, .data-card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -183,7 +183,7 @@
     animation: shimmer 2s infinite linear;
 }
 
-/* ========== Card Status States ========== */
+/* ========== 卡片的状态颜色（审核、失败等） ========== */
 .data-card.is-audit-failed {
     border-color: rgba(250, 173, 20, 0.8);
     box-shadow: 
@@ -256,7 +256,7 @@
     z-index: 1;
 }
 
-/* ========== Card Sub-components ========== */
+/* ========== 卡片内部的小组件 ========== */
 .card-header {
     display: flex;
     align-items: center;
@@ -344,7 +344,7 @@
     }
 }
 
-/* ========== Table Expand ========== */
+/* ========== 表格展开行样式 ========== */
 .demo-table-expand {
     font-size: 0;
 }
@@ -358,7 +358,7 @@
     width: 50%;
 }
 
-/* ========== Alert Flashing Animation ========== */
+/* ========== 警告闪烁动画 ========== */
 @keyframes flash-orange {
     0% { background-color: transparent; color: inherit; }
     50% { background-color: rgba(255, 165, 0, 0.2); color: #ff8c00; text-shadow: 0 0 5px rgba(255, 140, 0, 0.5); }

@@ -1,7 +1,7 @@
-/* ========== Design Tokens / CSS Variables ========== */
+/* ========== 样式变量，改配色看这里 ========== */
 /* 所有颜色、尺寸、阴影、动效变量集中定义于此 */
 
-/* ========== CSS Layer Order Declaration ========== */
+/* ========== CSS 层叠优先级，别乱动 ========== */
 /* 层叠优先级从低到高：reset → tokens → element-ui → components → animations → pages → effects → utilities */
 /* 在此声明顺序后，各文件可选择性地用 @layer 包裹，也可不包裹（不包裹则自动高于所有 layer） */
 @layer reset, tokens, element-ui, components, animations, pages, effects, utilities;
@@ -24,7 +24,7 @@
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02);
     --shadow-md: 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-    /* ===== Apple-style Motion System ===== */
+    /* ===== 苹果味的动画参数 ===== */
     /* macOS 系统级缓动曲线 */
     --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);         /* 标准 — 匀称自然 */
     --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);   /* 弹性 — 轻微过冲 */
@@ -80,7 +80,7 @@
     --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
 }
 
-/* ========== Dark Theme Variables ========== */
+/* ========== 深色模式的配色 ========== */
 [data-theme="dark"] {
     --primary-color: #7b8fff;
     --primary-light: #9ba8ff;

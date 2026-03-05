@@ -1,9 +1,9 @@
-﻿/* ========== Element UI Global Overrides ========== */
+/* ========== Element UI 全局样式覆盖 ========== */
 /* Element UI 组件级别覆盖样式（纯 UI 框架层） */
 /* 共享业务组件已拆分至 shared-components.css */
 /* 暗色主题覆盖已拆分至 dark-overrides.css */
 
-/* ========== Global Interaction Enhancements ========== */
+/* ========== 全局交互动效增强 ========== */
 .el-button {
     transition: transform var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast) !important;
 }

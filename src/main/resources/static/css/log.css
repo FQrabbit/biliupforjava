@@ -1031,9 +1031,18 @@
 }
 
 .sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
     padding: var(--space-sm);
     border-top: 1px solid var(--border-light);
     flex-shrink: 0;
+}
+
+.sidebar-footer .el-button {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
 }
 
 [data-theme="dark"] .sidebar-footer {
@@ -1110,6 +1119,100 @@
     line-height: 1.4;
 }
 
+/* ========== 所有詳情弹窗 - 缩放淡入动画 ========== */
+
+/* 从右侧缩放进入的关键帧 */
+@keyframes sidebar-scale-in {
+    0% {
+        opacity: 0;
+        transform: scale(0.85) translateX(100px);
+        transform-origin: right center;
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateX(0);
+        transform-origin: center center;
+    }
+}
+
+/* 淡出缩放离开的关键帧 */
+@keyframes sidebar-scale-out {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateX(0);
+        transform-origin: center center;
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.85) translateX(100px);
+        transform-origin: right center;
+    }
+}
+
+/* 应用到弹窗 */
+.all-details-dialog {
+    animation: sidebar-scale-in var(--duration-slow) var(--ease-spring) both !important;
+}
+
+.all-details-dialog.is-closing {
+    animation: sidebar-scale-out var(--duration-base) var(--ease-accel) both !important;
+}
+
+/* 弹窗内容样式 */
+.all-details-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: var(--space-md);
+    padding: 0;
+}
+
+.details-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+    gap: var(--space-md);
+}
+
+.details-filter-bar .filter-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.details-filter-bar .filter-right {
+    flex-shrink: 0;
+}
+
+.details-table-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.all-details-dialog .el-dialog__header {
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.all-details-dialog .el-dialog__body {
+    padding: var(--space-md);
+    overflow: hidden;
+}
+
+.all-details-dialog .el-table {
+    font-size: 13px;
+}
+
+.all-details-dialog .el-table td {
+    padding: 8px 0;
+}
+
 /* ========== 响应式：新增部分 ========== */
 @media (max-width: 1023px) {
     .log-alert-sidebar {
@@ -1141,5 +1244,23 @@
 
     .sidebar-toggle-btn {
         display: none;
+    }
+
+    /* 响应式支持：弹窗筛选栏 */
+    .details-filter-bar {
+        flex-wrap: wrap;
+    }
+
+    .details-filter-bar .filter-left {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .details-filter-bar .filter-right {
+        width: 100%;
+    }
+
+    .all-details-dialog .el-table {
+        font-size: 12px;
     }
 }

@@ -515,7 +515,7 @@
     </main>
 
     <!-- 详情弹窗 -->
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" :destroy-on-close="true" @closed="onDetailClosed">
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog" @closed="onDetailClosed">
         <div class="detail-content-modern" ref="detailContent" v-if="currentDetail.id" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
             <!-- 头部信息 -->
             <div class="detail-header-modern">
@@ -679,6 +679,7 @@
                 </div>
 
                 <!-- 分P进度列表 -->
+                <transition name="parts-slide">
                 <div v-show="showAllParts" class="progress-list-modern" ref="partsList">
                     <div class="progress-row-modern item" v-for="(p, idx) in mergedParts" :key="p.partId || idx">
                         <div class="progress-info-mini">
@@ -706,6 +707,7 @@
                         </div>
                     </div>
                 </div>
+                </transition>
             </div>
         </div>
         <div slot="footer" class="detail-footer" ref="detailFooter">
@@ -1695,6 +1697,7 @@
                 });
             },
             onDetailClosed: function() {
+                // 窗口关闭动画结束后，清理数据以释放内存并重置状态
                 this.clearPartsAutoScrollTimer();
                 this.stopProgressPolling();
                 this.historyUploadProgress = null;
@@ -1778,6 +1781,20 @@
                                             }
                                         });
                                     }
+                                }
+
+                                // 将从 tracker 消失的已完成分P（非失败）保留为 SUCCESS/100% 状态，
+                                // 防止 UI 在 DB 刷新前瞬间回弹到 0%
+                                if (nextResp && _this.historyUploadProgress && Array.isArray(_this.historyUploadProgress.items)) {
+                                    _this.historyUploadProgress.items.forEach(function(oldItem) {
+                                        var stillPresent = nextResp.items && Array.isArray(nextResp.items) && nextResp.items.find(function(ni) {
+                                            return (ni.partId && ni.partId === oldItem.partId) || (ni.page && ni.page === oldItem.page);
+                                        });
+                                        if (!stillPresent && oldItem.state !== 'FAILED') {
+                                            if (!nextResp.items) nextResp.items = [];
+                                            nextResp.items.push(Object.assign({}, oldItem, { state: 'SUCCESS', percent: 100 }));
+                                        }
+                                    });
                                 }
 
                                 _this.historyUploadProgress = nextResp;

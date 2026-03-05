@@ -587,12 +587,14 @@
                                 <div class="alert-sidebar-msg">{{ getBriefMessage(alert.message) }}</div>
                                 <div class="alert-sidebar-actions">
                                     <el-button size="mini" type="text" @click="showContext(alert)">上下文</el-button>
-                                    <el-button size="mini" type="text" @click="showDetail(alert.message)">详情</el-button>
                                 </div>
                             </div>
                         </div>
                         <div class="sidebar-footer">
-                            <el-button size="mini" type="danger" plain class="modern-btn" style="width:100%" @click="clearAlerts">清除所有异常</el-button>
+                            <el-button size="mini" type="primary" plain class="modern-btn" @click="showAllAlertDetails">
+                                <i class="el-icon-document"></i> 查看所有详细信息
+                            </el-button>
+                            <el-button size="mini" type="danger" plain class="modern-btn" @click="clearAlerts">清除所有异常</el-button>
                         </div>
                     </div>
                 </transition>
@@ -680,6 +682,85 @@
         </div>
         <span slot="footer" class="dialog-footer">
             <el-button class="modern-btn" size="small" @click="contextDialogVisible = false">关 闭</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 所有告警详细信息弹窗 -->
+    <el-dialog
+        title="所有告警详情"
+        :visible.sync="allDetailsDialogVisible"
+        :fullscreen="true"
+        append-to-body
+        custom-class="all-details-dialog"
+        @opened="onAllDetailsOpened">
+        <div class="all-details-content">
+            <!-- 顶部筛选栏 -->
+            <div class="details-filter-bar">
+                <div class="filter-left">
+                    <el-select v-model="detailsFilter" placeholder="筛选级别" size="small" style="width: 150px;">
+                        <el-option label="全部" :value="''"></el-option>
+                        <el-option label="ERROR" value="ERROR"></el-option>
+                        <el-option label="WARN" value="WARN"></el-option>
+                    </el-select>
+                    <el-input
+                        v-model="detailsSearch"
+                        placeholder="搜索告警..."
+                        size="small"
+                        clearable
+                        style="width: 250px; margin-left: 10px;">
+                        <i slot="prefix" class="el-icon-search"></i>
+                    </el-input>
+                </div>
+                <div class="filter-right">
+                    <span style="color: #909399; font-size: 12px;">{{ filteredAllDetails.length }} / {{ alerts.length }} 条</span>
+                </div>
+            </div>
+
+            <!-- 詳情表格 -->
+            <div class="details-table-wrapper">
+                <el-table
+                    :data="filteredAllDetails"
+                    style="width: 100%"
+                    stripe
+                    height="calc(100vh - 200px)">
+                    <el-table-column label="级别" width="80" align="center">
+                        <template slot-scope="scope">
+                            <el-tag :type="getAlertType(scope.row.type)" effect="dark">
+                                {{ scope.row.type }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="数量" width="60" align="center">
+                        <template slot-scope="scope">
+                            <span v-if="scope.row.count > 1" style="font-weight: 600;">×{{ scope.row.count }}</span>
+                            <span v-else>-</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="时间" width="160" align="center">
+                        <template slot-scope="scope">
+                            {{ formatDate(scope.row.lastTime || scope.row.timestamp) }}
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="告警信息" min-width="400">
+                        <template slot-scope="scope">
+                            <span style="font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; display: block;">
+                                {{ scope.row.message }}
+                            </span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="80" fixed="right" align="center">
+                        <template slot-scope="scope">
+                            <el-button size="mini" type="text" @click="showContext(scope.row)">上下文</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button class="modern-btn" size="small" type="primary" @click="copyAllDetails">
+                <i class="el-icon-document-copy"></i> 复制所有
+            </el-button>
+            <el-button class="modern-btn" size="small" @click="allDetailsDialogVisible = false">关 闭</el-button>
         </span>
     </el-dialog>
 </div>
@@ -1263,10 +1344,27 @@
                 contextLogs: [],
                 loadingContext: false,
                 currentAlert: null,
-                expandAlertDetails: false
+                expandAlertDetails: false,
+                allDetailsDialogVisible: false,
+                detailsFilter: '',
+                detailsSearch: ''
             };
         },
         computed: {
+            filteredAllDetails: function () {
+                var self = this;
+                return this.alerts.filter(function (alert) {
+                    if (self.detailsFilter && alert.type !== self.detailsFilter) {
+                        return false;
+                    }
+                    if (self.detailsSearch) {
+                        var s = self.detailsSearch.toLowerCase();
+                        return (alert.message && alert.message.toLowerCase().indexOf(s) >= 0) ||
+                               (alert.type && alert.type.toLowerCase().indexOf(s) >= 0);
+                    }
+                    return true;
+                });
+            },
             filteredLogs: function () {
                 var self = this;
                 var logs = this.logs.filter(function (log) {
@@ -1465,6 +1563,39 @@
             showDetail: function (message) {
                 this.currentDetail = message;
                 this.detailDialogVisible = true;
+            },
+            showAllAlertDetails: function () {
+                this.allDetailsDialogVisible = true;
+                this.detailsFilter = '';
+                this.detailsSearch = '';
+            },
+            onAllDetailsOpened: function () {},
+            showDetailContent: function (message) {
+                this.currentDetail = message;
+                this.detailDialogVisible = true;
+            },
+            copyAllDetails: function () {
+                var self = this;
+                var allContent = this.filteredAllDetails.map(function (alert) {
+                    var content = '[' + alert.type + ']';
+                    if (alert.count > 1) content += ' ×' + alert.count;
+                    content += ' ' + self.formatDate(alert.lastTime || alert.timestamp);
+                    content += '\n' + alert.message;
+                    return content;
+                }).join('\n\n' + Array(50).join('-') + '\n\n');
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(allContent).then(function () {
+                        self.$message.success('已复制所有告警详情');
+                    });
+                } else {
+                    var el = document.createElement('textarea');
+                    el.value = allContent;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(el);
+                    self.$message.success('已复制所有告警详情');
+                }
             },
             copyDetail: function () {
                 var el = document.createElement('textarea');

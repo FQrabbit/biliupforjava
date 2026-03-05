@@ -4160,6 +4160,27 @@
 
 
 
+/* 分P列表展开/收起动画 */
+.parts-slide-enter-active {
+    transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease-out;
+    overflow: hidden !important;
+}
+
+.parts-slide-leave-active {
+    transition: max-height 0.22s cubic-bezier(0.4, 0, 0.6, 1),
+                opacity 0.18s ease-in;
+    overflow: hidden !important;
+}
+
+.parts-slide-enter,
+.parts-slide-leave-to {
+    max-height: 0 !important;
+    opacity: 0;
+}
+
+
+
 .progress-row-modern.item {
 
     background: #fff;

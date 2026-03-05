@@ -1,7 +1,7 @@
-/* ========== Shared @keyframes & Vue Transitions ========== */
+/* ========== 公共动画与 Vue 过渡效果 ========== */
 /* 所有公共动画关键帧 + Vue 过渡类 + 无障碍/主题切换保护 */
 
-/* ========== @keyframes ========== */
+/* ========== 动画关键帧 (@keyframes) ========== */
 
 @keyframes shimmer {
     0% { background-position: -200% 0; }
@@ -174,7 +174,7 @@
     transition: opacity var(--duration-base) var(--ease-apple) !important;
 }
 
-/* ========== Vue Transition: fade-slide (Tab 切换) ========== */
+/* ========== Vue 过渡：fade-slide (Tab 标签页切换) ========== */
 
 /* 入场：留在正常文档流，苹果减速曲线 */
 .fade-slide-enter-active {
@@ -225,7 +225,7 @@
     transform: scale(1);
 }
 
-/* ---------- iframe（.tab-frame）过渡覆盖 ---------- */
+/* ---------- iframe 标签页过渡覆盖 ---------- */
 .fade-slide-leave.tab-frame {
     opacity: 1;
 }
@@ -241,7 +241,7 @@
     transition: none;
 }
 
-/* ========== Vue Transition: fade-transform (水平切换) ========== */
+/* ========== Vue 过渡：fade-transform (左右滑动切换) ========== */
 .fade-transform-enter-active {
     transition: opacity var(--duration-base) var(--ease-decel),
                 transform var(--duration-base) var(--ease-decel);
@@ -262,7 +262,7 @@
     transform: translateX(8px);
 }
 
-/* ========== Vue Transition: slide-left / slide-right (翻页) ========== */
+/* ========== Vue 过渡：slide-left / slide-right (翻页效果) ========== */
 .slide-left-enter-active,
 .slide-right-enter-active {
     transition: opacity var(--duration-base) var(--ease-decel),
@@ -293,7 +293,7 @@
     transform: translateX(20px);
 }
 
-/* ========== Vue Transition: count-flip (数字翻转) ========== */
+/* ========== Vue 过渡：count-flip (数字翻转效果) ========== */
 .count-flip-enter-active {
     transition: opacity var(--duration-fast) var(--ease-decel),
                 transform var(--duration-fast) var(--ease-spring);
@@ -314,7 +314,7 @@
     transform: translateY(6px) scale(0.95);
 }
 
-/* ========== Swipe Hint ========== */
+/* ========== 侧滑提示 (Swipe Hint) ========== */
 .swipe-hint {
     background: rgba(0, 0, 0, 0.7);
     color: white;
@@ -332,7 +332,7 @@
     animation: bounce-x 1.5s var(--ease-apple) infinite;
 }
 
-/* ========== prefers-reduced-motion 无障碍支持 ========== */
+/* ========== 无障碍支持 (减弱动画) ========== */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
