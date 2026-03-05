@@ -3109,7 +3109,12 @@
             },
             buildImageProxyUrl: function(url) {
                 if (!url) return '';
-                return '/room/image-proxy?url=' + encodeURIComponent(url);
+                var token = localStorage.getItem('biliup_auth');
+                var proxyUrl = '/room/image-proxy?url=' + encodeURIComponent(url);
+                if (token) {
+                    proxyUrl += '&auth=' + encodeURIComponent(token);
+                }
+                return proxyUrl;
             },
             ensureImageObjectUrl: function(cacheKey, proxyUrl) {
                 var _this = this;

@@ -1,6 +1,7 @@
-window.BILIUPFORJAVA_VERSION = 'v1.4.1-beta6.7';
+window.BILIUPFORJAVA_VERSION = 'v1.4.1-beta6.8';
 
 window.BILIUPFORJAVA_CHANGELOG = [
+    { time: '2026-03-05', version: '1.4.1-beta6.8', content: ' ' },
     { time: '2026-03-01', version: '1.4.1-beta6.7', content: '优化判定文件是否还存在都读写的逻辑，避免一直卡住无法自动投稿；投稿封面现在支持预览直播封面。' },
     { time: '2026-02-28', version: '1.4.1-beta6.6', content: '删除历史记录时提示是否有未能成功删除的文件提示；修复优化数据库性能时遗留一些小问题；合集封面目前可以预览合集封面图；优化特定情况下导致稿件被提前结束投稿的问题。' },
     { time: '2026-02-25', version: '1.4.1-beta6.5', content: '修复房间配置无法正确回显已保存的合集和小节的问题；优化数据库索引，提升历史记录加载速度；增加录制历史批量删除功能。' },

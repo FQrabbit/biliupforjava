@@ -266,4 +266,35 @@ public class BiliUserController {
             return result;
         }
     }
+
+    @GetMapping("/refresh/{id}")
+    public Map<String, Object> refresh(@PathVariable("id") Long id) {
+        Map<String, Object> result = new HashMap<>();
+        Optional<BiliBiliUser> userOptional = biliUserRepository.findById(id);
+        if (userOptional.isPresent()) {
+            BiliBiliUser user = userOptional.get();
+            try {
+                BiliApi.BiliUserCardResponseDto cardResp = BiliApi.getUserCard(user.getUid());
+                if (cardResp != null && cardResp.getCode() == 0 && cardResp.getCard() != null) {
+                    user.setUname(cardResp.getCard().getName());
+                    user.setFace(cardResp.getCard().getFace());
+                    user.setUpdateTime(LocalDateTime.now());
+                    biliUserRepository.save(user);
+                    result.put("success", true);
+                    result.put("user", user);
+                    result.put("msg", "用户信息已更新");
+                } else {
+                    result.put("success", false);
+                    result.put("msg", "获取用户信息失败: " + (cardResp != null ? cardResp.getCode() : "未知错误"));
+                }
+            } catch (Exception e) {
+                result.put("success", false);
+                result.put("msg", "更新异常: " + e.getMessage());
+            }
+        } else {
+            result.put("success", false);
+            result.put("msg", "用户不存在");
+        }
+        return result;
+    }
 }

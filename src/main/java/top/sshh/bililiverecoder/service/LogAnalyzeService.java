@@ -52,11 +52,21 @@ public class LogAnalyzeService {
         }
     }
 
-    private void addAlert(LogAlert alert) {
+    private synchronized void addAlert(LogAlert newAlert) {
+        // 检查是否存在重复日志
+        for (LogAlert alert : alerts) {
+            if (alert.getMessage().equals(newAlert.getMessage()) && alert.getType().equals(newAlert.getType())) {
+                alerts.remove(alert); // 移除旧日志
+                alert.incrementCount(); // 更新计数和时间
+                alerts.add(alert); // 重新添加到末尾（表示最新）
+                return;
+            }
+        }
+
         if (alerts.size() >= MAX_ALERTS) {
             alerts.remove(0);
         }
-        alerts.add(alert);
+        alerts.add(newAlert);
     }
 
     public List<LogAlert> getAlerts() {

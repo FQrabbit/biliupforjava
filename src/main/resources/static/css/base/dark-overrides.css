@@ -49,6 +49,244 @@
     background-color: rgba(91, 108, 255, 0.1);
 }
 
+/* ========== Dark Theme Primary Button (non-modern-btn) ========== */
+[data-theme="dark"] .el-button--primary {
+    background-color: rgba(91, 108, 255, 0.15) !important;
+    border-color: rgba(91, 108, 255, 0.5) !important;
+    color: var(--primary-light) !important;
+}
+
+[data-theme="dark"] .el-button--primary:hover {
+    background-color: rgba(91, 108, 255, 0.25) !important;
+    border-color: var(--primary-color) !important;
+}
+
+/* ========== Dark Theme Danger Button (non-modern-btn) ========== */
+[data-theme="dark"] .el-button--danger {
+    background-color: rgba(255, 77, 79, 0.15) !important;
+    border-color: rgba(255, 77, 79, 0.5) !important;
+    color: var(--danger-color) !important;
+}
+
+[data-theme="dark"] .el-button--danger:hover {
+    background-color: rgba(255, 77, 79, 0.25) !important;
+    border-color: var(--danger-color) !important;
+}
+
+/* ========== Dark Theme Warning Button (non-modern-btn) ========== */
+[data-theme="dark"] .el-button--warning {
+    background-color: rgba(250, 173, 20, 0.15) !important;
+    border-color: rgba(250, 173, 20, 0.5) !important;
+    color: var(--warning-color) !important;
+}
+
+[data-theme="dark"] .el-button--warning:hover {
+    background-color: rgba(250, 173, 20, 0.25) !important;
+    border-color: var(--warning-color) !important;
+}
+
+/* ========== Dark Theme .modern-btn Overrides ========== */
+[data-theme="dark"] .modern-btn {
+    background-color: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .modern-btn:hover {
+    background-color: rgba(91, 108, 255, 0.12) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--primary-color) !important;
+    box-shadow: 0 6px 20px rgba(91, 108, 255, 0.25) !important;
+}
+
+[data-theme="dark"] .modern-btn:active {
+    background-color: rgba(91, 108, 255, 0.2) !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--primary {
+    background-color: rgba(91, 108, 255, 0.15) !important;
+    border-color: rgba(91, 108, 255, 0.5) !important;
+    color: var(--primary-light) !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--primary:hover {
+    background-color: rgba(91, 108, 255, 0.25) !important;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 8px 24px rgba(91, 108, 255, 0.25) !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--danger {
+    background-color: rgba(255, 77, 79, 0.15) !important;
+    border-color: rgba(255, 77, 79, 0.5) !important;
+    color: var(--danger-color) !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--danger:hover {
+    background-color: rgba(255, 77, 79, 0.25) !important;
+    border-color: var(--danger-color) !important;
+    box-shadow: 0 8px 24px rgba(255, 77, 79, 0.25) !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--warning {
+    background-color: rgba(250, 173, 20, 0.15) !important;
+    border-color: rgba(250, 173, 20, 0.5) !important;
+    color: var(--warning-color) !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--warning:hover {
+    background-color: rgba(250, 173, 20, 0.25) !important;
+    border-color: var(--warning-color) !important;
+    box-shadow: 0 8px 24px rgba(250, 173, 20, 0.25) !important;
+}
+
+/* plain 变体在深色模式 - 保持可见背景 */
+[data-theme="dark"] .modern-btn.is-plain {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain:hover {
+    background-color: rgba(91, 108, 255, 0.1) !important;
+    border-color: var(--primary-color) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--primary {
+    color: var(--primary-color) !important;
+    border-color: rgba(91, 108, 255, 0.3) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--primary:hover {
+    background-color: rgba(91, 108, 255, 0.1) !important;
+    border-color: var(--primary-color) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--danger {
+    color: var(--danger-color) !important;
+    border-color: rgba(255, 77, 79, 0.3) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--danger:hover {
+    background-color: rgba(255, 77, 79, 0.1) !important;
+    border-color: var(--danger-color) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--warning {
+    color: var(--warning-color) !important;
+    border-color: rgba(250, 173, 20, 0.3) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--warning:hover {
+    background-color: rgba(250, 173, 20, 0.1) !important;
+    border-color: var(--warning-color) !important;
+}
+
+/* ========== Dark Theme Success Button ========== */
+[data-theme="dark"] .el-button--success {
+    background-color: rgba(82, 196, 26, 0.15);
+    border-color: rgba(82, 196, 26, 0.5);
+    color: #52c41a;
+}
+
+[data-theme="dark"] .el-button--success:hover {
+    background-color: rgba(82, 196, 26, 0.25);
+    border-color: #52c41a;
+    color: #52c41a;
+}
+
+[data-theme="dark"] .modern-btn.el-button--success {
+    background-color: rgba(82, 196, 26, 0.15) !important;
+    border-color: rgba(82, 196, 26, 0.5) !important;
+    color: #52c41a !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--success:hover {
+    background-color: rgba(82, 196, 26, 0.25) !important;
+    border-color: #52c41a !important;
+    box-shadow: 0 8px 24px rgba(82, 196, 26, 0.2) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--success {
+    color: #52c41a !important;
+    border-color: rgba(82, 196, 26, 0.3) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--success:hover {
+    background-color: rgba(82, 196, 26, 0.1) !important;
+    border-color: #52c41a !important;
+}
+
+/* ========== Dark Theme Text Button ========== */
+[data-theme="dark"] .el-button--text {
+    color: var(--primary-color);
+    background-color: transparent;
+    border-color: transparent;
+}
+
+[data-theme="dark"] .el-button--text:hover {
+    color: var(--primary-light);
+    background-color: transparent;
+    border-color: transparent;
+}
+
+[data-theme="dark"] .modern-btn.el-button--text {
+    color: var(--primary-color) !important;
+    background-color: transparent !important;
+    border-color: transparent !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--text:hover {
+    color: var(--primary-light) !important;
+    background-color: rgba(91, 108, 255, 0.1) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--text {
+    color: var(--primary-color) !important;
+    background-color: transparent !important;
+    border-color: transparent !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--text:hover {
+    color: var(--primary-light) !important;
+    background-color: rgba(91, 108, 255, 0.1) !important;
+}
+
+/* ========== Dark Theme Info Button ========== */
+[data-theme="dark"] .el-button--info {
+    background-color: rgba(144, 147, 153, 0.15);
+    border-color: rgba(144, 147, 153, 0.5);
+    color: #909399;
+}
+
+[data-theme="dark"] .el-button--info:hover {
+    background-color: rgba(144, 147, 153, 0.25);
+    border-color: #909399;
+    color: #909399;
+}
+
+[data-theme="dark"] .modern-btn.el-button--info {
+    background-color: rgba(144, 147, 153, 0.15) !important;
+    border-color: rgba(144, 147, 153, 0.5) !important;
+    color: #909399 !important;
+}
+
+[data-theme="dark"] .modern-btn.el-button--info:hover {
+    background-color: rgba(144, 147, 153, 0.25) !important;
+    border-color: #909399 !important;
+    box-shadow: 0 8px 24px rgba(144, 147, 153, 0.2) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--info {
+    color: #909399 !important;
+    border-color: rgba(144, 147, 153, 0.3) !important;
+}
+
+[data-theme="dark"] .modern-btn.is-plain.el-button--info:hover {
+    background-color: rgba(144, 147, 153, 0.1) !important;
+    border-color: #909399 !important;
+}
+
 [data-theme="dark"] .el-table {
     background-color: var(--bg-primary);
     color: var(--text-primary);
@@ -233,8 +471,39 @@
         0 0 0 1px rgba(82, 196, 26, 0.1) inset;
 }
 [data-theme="dark"] .data-card.is-success:hover {
-    box-shadow: 
+    box-shadow:
         0 0 30px rgba(82, 196, 26, 0.2),
         0 8px 32px rgba(0, 0, 0, 0.5),
         0 0 0 1px rgba(82, 196, 26, 0.15) inset;
+}
+
+/* ========== Dark Theme Radio Button ========== */
+[data-theme="dark"] .el-radio-button__orig-radio:checked + .el-radio-button__inner {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: #ffffff !important;
+    box-shadow: -1px 0 0 0 var(--primary-color) !important;
+}
+
+[data-theme="dark"] .el-radio-button__inner {
+    background-color: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .el-radio-button__inner:hover {
+    color: var(--primary-color) !important;
+}
+
+/* ========== Dark Theme Input Append Button ========== */
+[data-theme="dark"] .el-input__suffix .el-button {
+    background-color: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .el-input__suffix .el-button:hover {
+    background-color: rgba(91, 108, 255, 0.15) !important;
+    border-color: rgba(91, 108, 255, 0.5) !important;
+    color: var(--primary-color) !important;
 }

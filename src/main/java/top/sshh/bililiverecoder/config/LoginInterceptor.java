@@ -32,6 +32,9 @@ public class LoginInterceptor implements HandlerInterceptor {
         }
 
         String authorization = request.getHeader("Authorization");
+        if (StringUtils.isBlank(authorization)) {
+            authorization = request.getParameter("auth");
+        }
         if(this.authString.equals(authorization)){
             return true;
         }

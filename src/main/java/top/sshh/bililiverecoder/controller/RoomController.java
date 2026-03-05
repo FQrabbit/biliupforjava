@@ -646,7 +646,7 @@ public class RoomController {
 
             HttpHeaders forwardHeaders = new HttpHeaders();
             forwardHeaders.add("Referer", "https://www.bilibili.com/");
-            forwardHeaders.add("User-Agent", "Mozilla/5.0");
+            forwardHeaders.add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             forwardHeaders.add("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
             HttpEntity<Void> httpEntity = new HttpEntity<>(forwardHeaders);
 
@@ -666,11 +666,12 @@ public class RoomController {
                         .add("contentType", ct == null ? "" : ct.toString()));
                 return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
             }
-            if (ct != null && !"image".equalsIgnoreCase(ct.getType())) {
+            // 放宽 content-type 检查，允许来自信任域名的 application/octet-stream 等类型
+            if (ct != null && !"image".equalsIgnoreCase(ct.getType()) && !ct.toString().contains("octet-stream")) {
                 log.warn("[BLR] {}", LogKvs.event("ImageProxy.NonImageContentType")
                         .add("url", url)
                         .add("contentType", ct.toString()));
-                return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
+                // 暂时允许通过，由浏览器尝试渲染
             }
 
             if (ct == null) {
