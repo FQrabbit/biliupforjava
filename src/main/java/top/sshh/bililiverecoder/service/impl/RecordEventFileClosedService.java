@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -79,6 +80,13 @@ public class RecordEventFileClosedService implements RecordEventService {
             .add("durationSec", eventData.getDuration())
             .add("fileSizeBytes", eventData.getFileSize()));
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
+        if (room == null) {
+            log.info("[BLR] {}", LogKvs.event("FileClosed.NoRecording")
+                    .add("roomId", eventData.getRoomId())
+                    .add("filePath", relativePath)
+                    .add("msg", "收到文件关闭事件但本地无房间配置记录，已忽略。"));
+            return;
+        }
         if (room.getHistoryId() == null) {
             log.info("[BLR] {}", LogKvs.event("FileClosed.NoRecording")
                     .add("roomId", eventData.getRoomId())
@@ -86,11 +94,46 @@ public class RecordEventFileClosedService implements RecordEventService {
                     .add("msg", "收到文件关闭事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制。"));
             return;
         }
-        Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
         if ("blrec".equals(sessionId)) {
             relativePath = relativePath.replace(workPath, "");
         }
         String filePath = workPath + File.separator + relativePath;
+        Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
+        if (!historyOptional.isPresent()) {
+            RecordHistoryPart partByPath = historyPartRepository.findByFilePath(filePath);
+            if (partByPath != null && partByPath.getHistoryId() != null) {
+                Optional<RecordHistory> historyFromPart = historyRepository.findById(partByPath.getHistoryId());
+                if (historyFromPart.isPresent()) {
+                    if (!partByPath.getHistoryId().equals(room.getHistoryId())) {
+                        log.warn("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByPart")
+                                .add("roomId", eventData.getRoomId())
+                                .add("oldHistoryId", room.getHistoryId())
+                                .add("newHistoryId", partByPath.getHistoryId())
+                                .add("partId", partByPath.getId())
+                                .add("filePath", relativePath));
+                        room.setHistoryId(partByPath.getHistoryId());
+                        roomRepository.save(room);
+                    }
+                    historyOptional = historyFromPart;
+                }
+            }
+        }
+        if (!historyOptional.isPresent()) {
+            List<RecordHistory> activeHistoryList = historyRepository.findByRoomIdAndRecordingTrueOrderByStartTimeDesc(eventData.getRoomId());
+            if (activeHistoryList != null && !activeHistoryList.isEmpty()) {
+                RecordHistory active = activeHistoryList.get(0);
+                if (active != null) {
+                    log.warn("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByActiveHistory")
+                            .add("roomId", eventData.getRoomId())
+                            .add("oldHistoryId", room.getHistoryId())
+                            .add("newHistoryId", active.getId())
+                            .add("filePath", relativePath));
+                    room.setHistoryId(active.getId());
+                    roomRepository.save(room);
+                    historyOptional = Optional.of(active);
+                }
+            }
+        }
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
             // 正常逻辑
@@ -267,7 +310,8 @@ public class RecordEventFileClosedService implements RecordEventService {
                 log.error("[BLR] {}", LogKvs.event("FileClosed.MissingHistory")
                     .add("roomId", eventData.getRoomId())
                     .add("title", eventData.getTitle())
-                    .add("filePath", relativePath));
+                    .add("filePath", relativePath)
+                    .add("historyId", room.getHistoryId()));
             RecordHistoryPart part = new RecordHistoryPart();
             part.setStartTime(LocalDateTime.now().minusSeconds((long) eventData.getDuration()));
             part.setEventId(event.getEventId());
@@ -279,7 +323,6 @@ public class RecordEventFileClosedService implements RecordEventService {
             part.setFileSize(0L);
             part.setSessionId(sessionId);
             part.setRecording(eventData.isRecording());
-            part.setStartTime(LocalDateTime.now());
             part.setEndTime(LocalDateTime.now());
             historyPartRepository.save(part);
         }

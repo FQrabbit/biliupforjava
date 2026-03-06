@@ -118,6 +118,8 @@ public final class LogKvs {
         EVENT_ZH.put("FileClosed.CopySuccess", "文件关闭后复制文件成功");
         EVENT_ZH.put("FileClosed.CopyFailed", "文件关闭后复制文件失败");
         EVENT_ZH.put("FileClosed.MissingHistory", "文件关闭事件：找不到录制历史");
+        EVENT_ZH.put("FileClosed.HistoryRecovered.ByPart", "文件关闭事件：按分P记录自愈并修正historyId");
+        EVENT_ZH.put("FileClosed.HistoryRecovered.ByActiveHistory", "文件关闭事件：复用活跃history自愈并修正historyId");
         EVENT_ZH.put("FilePost.Received", "收到文件后处理事件");
         EVENT_ZH.put("FilePost.PartMissing", "文件后处理：找不到分P记录");
         EVENT_ZH.put("FilePost.FileMissing", "文件后处理：文件不存在");
