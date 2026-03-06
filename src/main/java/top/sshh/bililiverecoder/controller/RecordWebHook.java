@@ -27,30 +27,40 @@ public class RecordWebHook {
     public ResponseEntity<String> processing(@RequestBody RecordEventDTO recordEvent) {
         // Webhook 必须尽快响应：把耗时逻辑放到后台队列里执行，避免 servlet 线程被上传/限速/重试占满
         String lockKey = buildLockKey(recordEvent);
-        long delayMs = "SessionEnded".equals(recordEvent.getEventType()) ? 10000L : 0L;
+        String source = detectSource(recordEvent);
+        String eventType = getEffectiveEventType(recordEvent);
+        long delayMs = "SessionEnded".equals(eventType) ? 10000L : 0L;
 
         boolean accepted = webhookEventDispatcher.submit(lockKey, delayMs, () -> {
             try {
-                if (recordEvent.getEventData() != null) {
+                String roomId = getEffectiveRoomId(recordEvent);
+                String title = getEffectiveTitle(recordEvent);
+                if (eventType != null || roomId != null || title != null) {
                     log.info("[BLR] {}", LogKvs.event("Webhook.Received")
-                        .add("source", "blrec")
-                        .add("type", recordEvent.getEventType())
-                        .add("roomId", recordEvent.getEventData().getRoomId())
-                        .add("title", recordEvent.getEventData().getTitle()));
+                        .add("source", source)
+                        .add("endpoint", "/recordWebHook")
+                        .add("type", eventType)
+                        .add("roomId", roomId)
+                        .add("title", title));
                     log.debug("[BLR] {}", LogKvs.event("Webhook.Payload.Debug")
-                            .add("type", recordEvent.getEventType())
-                            .add("roomId", recordEvent.getEventData().getRoomId())
+                            .add("source", source)
+                            .add("endpoint", "/recordWebHook")
+                            .add("type", eventType)
+                            .add("roomId", roomId)
                             .add("payloadLen", JSON.toJSONString(recordEvent).length()));
                 } else {
                     log.info("[BLR] {}", LogKvs.event("Webhook.ReceivedLegacy")
-                        .add("source", "blrec")
+                        .add("source", source)
+                        .add("endpoint", "/recordWebHook")
                         .add("payload", JSON.toJSONString(recordEvent)));
                 }
                 recordEventFactory.processing(recordEvent);
             } catch (Exception e) {
                 log.error("[BLR] {}", LogKvs.event("Webhook.ProcessFailed")
-                        .add("type", recordEvent != null ? recordEvent.getEventType() : null)
-                        .add("roomId", (recordEvent != null && recordEvent.getEventData() != null) ? recordEvent.getEventData().getRoomId() : null)
+                        .add("source", source)
+                        .add("endpoint", "/recordWebHook")
+                        .add("type", eventType)
+                        .add("roomId", getEffectiveRoomId(recordEvent))
                         .add("lockKeyHash", safeLockKeyHash(lockKey))
                         .add("err", e.getMessage())
                         .add("ex", e.getClass().getSimpleName()), e);
@@ -105,6 +115,58 @@ public class RecordWebHook {
         }
         // lockKey 可能包含 relativePath，不要原样打印，避免泄露本地路径/文件名。
         return Integer.toHexString(lockKey.hashCode());
+    }
+
+    private static String detectSource(RecordEventDTO recordEvent) {
+        if (recordEvent == null) {
+            return "unknown";
+        }
+        if (recordEvent.getData() != null || recordEvent.getType() != null) {
+            return "blrec";
+        }
+        if (recordEvent.getEventData() != null || recordEvent.getEventType() != null) {
+            return "brec";
+        }
+        return "unknown";
+    }
+
+    private static String getEffectiveEventType(RecordEventDTO recordEvent) {
+        if (recordEvent == null) {
+            return null;
+        }
+        if (recordEvent.getEventType() != null) {
+            return recordEvent.getEventType();
+        }
+        return recordEvent.getType();
+    }
+
+    private static String getEffectiveRoomId(RecordEventDTO recordEvent) {
+        if (recordEvent == null) {
+            return null;
+        }
+        if (recordEvent.getEventData() != null && recordEvent.getEventData().getRoomId() != null) {
+            return recordEvent.getEventData().getRoomId();
+        }
+        if (recordEvent.getData() != null) {
+            if (recordEvent.getData().getRoomInfo() != null && recordEvent.getData().getRoomInfo().getRoomId() != null) {
+                return recordEvent.getData().getRoomInfo().getRoomId();
+            }
+            return recordEvent.getData().getRoomId();
+        }
+        return null;
+    }
+
+    private static String getEffectiveTitle(RecordEventDTO recordEvent) {
+        if (recordEvent == null) {
+            return null;
+        }
+        if (recordEvent.getEventData() != null && recordEvent.getEventData().getTitle() != null) {
+            return recordEvent.getEventData().getTitle();
+        }
+        if (recordEvent.getData() != null && recordEvent.getData().getRoomInfo() != null) {
+            return recordEvent.getData().getRoomInfo().getTitle();
+        }
+        return null;
     }
 
     @GetMapping

@@ -11,6 +11,9 @@ public class BlrecDataDTO {
     @JsonProperty("room_info")
     private BlrecRoomInfoDTO roomInfo;
 
+    @JsonProperty("room_id")
+    private String roomId;
+
     private String path;
 
     @JsonProperty("free_space")

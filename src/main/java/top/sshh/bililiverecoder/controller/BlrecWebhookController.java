@@ -35,6 +35,17 @@ public class BlrecWebhookController {
             return;
         }
 
+        String title = null;
+        if (event.getData() != null && event.getData().getRoomInfo() != null) {
+            title = event.getData().getRoomInfo().getTitle();
+        }
+        log.info("[BLR] {}", LogKvs.event("Webhook.Received")
+                .add("source", "blrec")
+                .add("endpoint", "/webhook/blrec")
+                .add("type", event.getType())
+                .add("roomId", roomId)
+                .add("title", title));
+
         // 使用房间ID进行同步，确保同一房间的事件串行处理
         synchronized (roomId.intern()) {
             try {
@@ -56,8 +67,8 @@ public class BlrecWebhookController {
             return String.valueOf(event.getData().getRoomInfo().getRoomId());
         }
         // 兼容那些 data.room_info 不存在，但 data.room_id 存在的事件 (虽然 blrec 格式里不常见)
-        if (event.getData() != null && event.getData().getRoomInfo() != null && event.getData().getRoomInfo().getRoomId() != null) {
-            return String.valueOf(event.getData().getRoomInfo().getRoomId());
+        if (event.getData() != null && event.getData().getRoomId() != null) {
+            return String.valueOf(event.getData().getRoomId());
         }
         return null;
     }
