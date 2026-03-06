@@ -1028,15 +1028,16 @@ public class RecordBiliPublishService {
                         }
 
                         try {
-                            if (room.getSectionId() != null && room.getSectionId() > 0) {
-                                String addSeasons = BiliApi.addSeasons(biliBiliUser, room.getSectionId(), aid, String.valueOf(uploadParts.get(0).getCid()), videoUploadDto.getTitle());
+                            Long sectionId = resolveSectionId(room, biliBiliUser);
+                            if (sectionId != null && sectionId > 0) {
+                                String addSeasons = BiliApi.addSeasons(biliBiliUser, sectionId, aid, String.valueOf(uploadParts.get(0).getCid()), videoUploadDto.getTitle());
                                 Integer code = JsonPath.read(addSeasons, "code");
                                 if (code == 0) {
                                     log.info("[BLR] {}", LogKvs.event("Publish.Season.Add.Success")
                                             .add("roomId", room.getRoomId())
                                             .add("uname", room.getUname())
                                             .add("historyId", history.getId())
-                                            .add("sectionId", room.getSectionId())
+                                            .add("sectionId", sectionId)
                                             .addIfNotBlank("aid", aid));
                                 }
                             }
@@ -1046,6 +1047,7 @@ public class RecordBiliPublishService {
                                     .add("uname", room.getUname())
                                     .add("historyId", history.getId())
                                     .add("sectionId", room.getSectionId())
+                                    .add("seasonId", room.getSeasonId())
                                     .addIfNotBlank("aid", aid), e);
                         }
 
@@ -1202,6 +1204,63 @@ public class RecordBiliPublishService {
 
         }
         return new DescDto(desc.toString(), resultList);
+    }
+
+    private Long resolveSectionId(RecordRoom room, BiliBiliUser biliBiliUser) {
+        if (room.getSectionId() != null && room.getSectionId() > 0) {
+            return room.getSectionId();
+        }
+        if (room.getSeasonId() == null || room.getSeasonId() <= 0) {
+            return null;
+        }
+        String raw = BiliApi.getSeasons(biliBiliUser);
+        if (StringUtils.isBlank(raw)) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Season.ResolveSectionId.Empty")
+                    .add("roomId", room.getRoomId())
+                    .add("seasonId", room.getSeasonId()));
+            return null;
+        }
+        try {
+            List<Map<String, Object>> seasons = JsonPath.read(raw, "$.data.seasons");
+            for (Map<String, Object> item : seasons) {
+                Object seasonObj = item.get("season");
+                if (!(seasonObj instanceof Map)) {
+                    continue;
+                }
+                Object seasonId = ((Map<?, ?>) seasonObj).get("id");
+                if (seasonId == null || !String.valueOf(seasonId).equals(String.valueOf(room.getSeasonId()))) {
+                    continue;
+                }
+                Object sectionsObj = item.get("sections");
+                if (!(sectionsObj instanceof Map)) {
+                    continue;
+                }
+                Object sectionsList = ((Map<?, ?>) sectionsObj).get("sections");
+                if (!(sectionsList instanceof List) || ((List<?>) sectionsList).isEmpty()) {
+                    continue;
+                }
+                Object firstSection = ((List<?>) sectionsList).get(0);
+                if (!(firstSection instanceof Map)) {
+                    continue;
+                }
+                Object sectionId = ((Map<?, ?>) firstSection).get("id");
+                if (sectionId == null) {
+                    continue;
+                }
+                Long resolved = Long.valueOf(String.valueOf(sectionId));
+                log.info("[BLR] {}", LogKvs.event("Publish.Season.ResolveSectionId.Success")
+                        .add("roomId", room.getRoomId())
+                        .add("seasonId", room.getSeasonId())
+                        .add("sectionId", resolved));
+                return resolved;
+            }
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Season.ResolveSectionId.Failed")
+                    .add("roomId", room.getRoomId())
+                    .add("seasonId", room.getSeasonId())
+                    .add("respLen", raw.length()), e);
+        }
+        return null;
     }
 
     @Data

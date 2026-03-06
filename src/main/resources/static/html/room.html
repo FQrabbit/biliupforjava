@@ -3224,13 +3224,28 @@
                     this.room.sectionId = null;
                     return;
                 }
-                let selectedSeason = this.seasonsList.find(item => item.season.id === val);
+                var selectedSeason = this.seasonsList.find(function(item) { return String(item.season.id) === String(val); });
                 if (selectedSeason && selectedSeason.sections && selectedSeason.sections.sections) {
                     this.sectionsList = selectedSeason.sections.sections;
                 } else {
                     this.sectionsList = [];
                 }
-                this.room.sectionId = null;
+                var hasSection = false;
+                if (this.room && this.room.sectionId) {
+                    for (var i = 0; i < this.sectionsList.length; i++) {
+                        if (this.sectionsList[i] && String(this.sectionsList[i].id) === String(this.room.sectionId)) {
+                            hasSection = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasSection) {
+                    if (this.sectionsList && this.sectionsList.length > 0) {
+                        this.room.sectionId = this.sectionsList[0].id;
+                    } else {
+                        this.room.sectionId = null;
+                    }
+                }
             },
             typeChange(change, nodeData) {
                 let node;
