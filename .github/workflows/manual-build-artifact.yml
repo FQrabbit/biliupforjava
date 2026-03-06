@@ -1,0 +1,59 @@
+name: Manual Build Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: "Artifact保留天数(1-90)"
+        required: true
+        default: "1"
+
+jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Current Branch
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build with Maven
+        shell: bash
+        run: mvn -B clean package --file pom.xml -DskipTests
+
+      - name: Prepare Artifact
+        id: prep
+        shell: bash
+        run: |
+          mkdir -p dist
+          BRANCH_NAME="${GITHUB_REF_NAME//\//-}"
+          FOUND=0
+          for file in target/*.war; do
+            if [ -f "$file" ] && [[ ! "$file" =~ \.original$ ]]; then
+              cp "$file" "dist/biliupforjava-${BRANCH_NAME}.war"
+              echo "artifact_path=dist/biliupforjava-${BRANCH_NAME}.war" >> "$GITHUB_OUTPUT"
+              echo "artifact_name=biliupforjava-war-${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
+              echo "Prepared artifact: dist/biliupforjava-${BRANCH_NAME}.war"
+              FOUND=1
+              break
+            fi
+          done
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo "ERROR: No WAR file found in target/"
+            ls -la target || true
+            exit 1
+          fi
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prep.outputs.artifact_name }}
+          path: ${{ steps.prep.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: ${{ github.event.inputs.retention_days }}
