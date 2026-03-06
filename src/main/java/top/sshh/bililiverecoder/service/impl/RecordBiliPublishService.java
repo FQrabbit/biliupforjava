@@ -164,6 +164,9 @@ public class RecordBiliPublishService {
             BiliVideoPartInfoResponse videoPartInfo = BiliApi.getVideoPartInfo(biliBiliUser, history.getBvId());
             Map<String, BiliVideoPartInfoResponse.Video> videoMap = videoPartInfo.getData().getVideos().stream().collect(Collectors.toMap(BiliVideoPartInfoResponse.Video::getTitle, Function.identity()));
             for (RecordHistoryPart uploadPart : uploadParts) {
+                if (isSkippedPart(uploadPart)) {
+                    continue;
+                }
                 // 正常分p不需要在重复上传
                 BiliVideoPartInfoResponse.Video video = videoMap.get(uploadPart.getTitle());
                 // video.getFailCode() == 14 && video.getXcodeState() == 1 时间戳跳变
@@ -203,7 +206,12 @@ public class RecordBiliPublishService {
                                 .add("retry", UPLOAD_RETRY_GIVE_UP));
                         continue;
                     }
-                    String filePath = uploadPart.getFilePath().intern();
+                    String filePath = normalizeFilePath(uploadPart.getFilePath());
+                    if (StringUtils.isBlank(filePath)) {
+                        continue;
+                    }
+                    uploadPart.setFilePath(filePath);
+                    filePath = filePath.intern();
                     File file = new File(filePath);
                     if (file.exists()) {
                         synchronized (filePath.intern()) {
@@ -214,7 +222,7 @@ public class RecordBiliPublishService {
                             Optional<RecordHistoryPart> partOptional = partRepository.findById(uploadPart.getId());
                             if (partOptional.isPresent()) {
                                 RecordHistoryPart part = partOptional.get();
-                                if (!part.isUpload()) {
+                                if (!part.isUpload() && !isSkippedPart(part)) {
                                     log.info("[BLR] {}", LogKvs.event("Publish.Part.NotUploaded")
                                             .add("historyId", history.getId())
                                             .add("partId", uploadPart.getId()));
@@ -226,7 +234,15 @@ public class RecordBiliPublishService {
                     }
                 }
             }
-            uploadParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+            uploadParts = filterPublishableParts(partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()));
+            if (uploadParts.isEmpty()) {
+                log.warn("[BLR] {}", LogKvs.event("Publish.Parts.Empty")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("title", history.getTitle()));
+                return;
+            }
             userOptional = biliUserRepository.findById(room.getUploadUserId());
             if (!userOptional.isPresent()) {
                 log.error("[BLR] {}", LogKvs.event("Publish.UploadUserMissing")
@@ -260,8 +276,8 @@ public class RecordBiliPublishService {
                 map.put("date", uploadPart.getStartTime());
                 map.put("${index}", Integer.valueOf(i + 1));
                 map.put("${areaName}", uploadPart.getAreaName());
-                String filePath = uploadPart.getFilePath();
-                String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
+                String filePath = normalizeFilePath(uploadPart.getFilePath());
+                String fileName = extractFileNameNoExt(filePath);
                 map.put("${fileName}", fileName);
                 dto.setTitle(this.template(room.getPartTitleTemplate(), map).getDesc());
                 //同步标题
@@ -411,13 +427,18 @@ public class RecordBiliPublishService {
                 return false;
             }
             List<RecordHistoryPart> uploadParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+            uploadParts = filterPublishableParts(uploadParts);
             if (uploadParts.size() == 0) {
                 log.warn("[BLR] {}", LogKvs.event("Publish.Parts.Empty")
                         .add("roomId", room.getRoomId())
                         .add("uname", room.getUname())
                         .add("historyId", history.getId())
                         .addIfNotBlank("title", history.getTitle()));
-                historyRepository.delete(history);
+                history.setUpload(false);
+                history.setRecording(false);
+                history.setStreaming(false);
+                history.setUpdateTime(LocalDateTime.now());
+                history = historyRepository.save(history);
                 TaskUtil.publishTask.remove(history.getId());
                 return false;
             }
@@ -464,7 +485,21 @@ public class RecordBiliPublishService {
             for (RecordHistoryPart uploadPart : uploadParts) {
                 Optional<RecordHistoryPart> flsuhPartOptional = partRepository.findById(uploadPart.getId());
                 uploadPart = flsuhPartOptional.get();
-                String filePath = uploadPart.getFilePath().intern();
+                if (isSkippedPart(uploadPart)) {
+                    continue;
+                }
+                String filePath = normalizeFilePath(uploadPart.getFilePath());
+                if (StringUtils.isBlank(filePath)) {
+                    log.error("[BLR] {}", LogKvs.event("Publish.Part.FilePathInvalid")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", history.getId())
+                            .add("partId", uploadPart.getId()));
+                    TaskUtil.publishTask.remove(history.getId());
+                    return false;
+                }
+                uploadPart.setFilePath(filePath);
+                filePath = filePath.intern();
                 File file = new File(filePath);
                 //已经上传完成就跳过
                 if (uploadPart.isUpload()) {
@@ -511,7 +546,11 @@ public class RecordBiliPublishService {
                                     .add("filePath", uploadPart.getFilePath())
                                     .add("fileSizeBytes", uploadPart.getFileSize())
                                     .add("limitMB", room.getFileSizeLimit()));
-                            partRepository.delete(uploadPart);
+                            uploadPart.setUpload(false);
+                            uploadPart.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                            uploadPart.setDeleteFailType("SKIPPED_THRESHOLD");
+                            uploadPart.setDeleteFailReason("文件低于阈值(大小/时长)已跳过上传，可在前端手动补救");
+                            partRepository.save(uploadPart);
                             continue;
                         }
                         if (uploadPart.getDuration() < room.getDurationLimit()) {
@@ -523,7 +562,11 @@ public class RecordBiliPublishService {
                                     .add("filePath", uploadPart.getFilePath())
                                     .add("durationSec", uploadPart.getDuration())
                                     .add("limitSec", room.getDurationLimit()));
-                            partRepository.delete(uploadPart);
+                            uploadPart.setUpload(false);
+                            uploadPart.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                            uploadPart.setDeleteFailType("SKIPPED_THRESHOLD");
+                            uploadPart.setDeleteFailReason("文件低于阈值(大小/时长)已跳过上传，可在前端手动补救");
+                            partRepository.save(uploadPart);
                             continue;
                         }
                     }
@@ -548,7 +591,7 @@ public class RecordBiliPublishService {
                         Optional<RecordHistoryPart> partOptional = partRepository.findById(uploadPart.getId());
                         if (partOptional.isPresent()) {
                             RecordHistoryPart part = partOptional.get();
-                            if (!part.isUpload()) {
+                            if (!part.isUpload() && !isSkippedPart(part)) {
                                 log.info("[BLR] {}", LogKvs.event("Publish.Part.NotUploaded")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
@@ -571,6 +614,9 @@ public class RecordBiliPublishService {
 
                     }
                 } else {
+                    if (isSkippedPart(uploadPart)) {
+                        continue;
+                    }
                     log.info("[BLR] {}", LogKvs.event("Publish.Part.NotUploaded")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
@@ -605,9 +651,9 @@ public class RecordBiliPublishService {
                 }
                 throw e;
             }
-            int preSize = uploadParts.size();
+            int preSize = (int) uploadParts.stream().filter(p -> !isSkippedPart(p)).count();
             //重新加载上传列表
-            uploadParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+            uploadParts = filterPublishableParts(partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()));
             if (preSize != uploadParts.size()) {
                 log.error("[BLR] {}", LogKvs.event("Publish.Parts.Changed")
                         .add("roomId", room.getRoomId())
@@ -714,8 +760,8 @@ public class RecordBiliPublishService {
                         map.put("date", uploadPart.getStartTime());
                         map.put("${index}", i + 1);
                         map.put("${areaName}", uploadPart.getAreaName());
-                        String filePath = uploadPart.getFilePath();
-                        String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
+                        String filePath = normalizeFilePath(uploadPart.getFilePath());
+                        String fileName = extractFileNameNoExt(filePath);
                         map.put("${fileName}", fileName);
                         dto.setTitle(this.template(room.getPartTitleTemplate(), map).getDesc());
                         //同步标题
@@ -947,7 +993,7 @@ public class RecordBiliPublishService {
                                         .add("code", 21588));
                                 // 标记所有未上传的分P为放弃（时间戳跳变）
                                 for (RecordHistoryPart part : uploadParts) {
-                                    if (!part.isUpload()) {
+                                    if (!part.isUpload() && !isSkippedPart(part)) {
                                         part.setUpload(false);
                                         part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
                                         part.setDeleteFailType("TIMESTAMP_JUMP");
@@ -1261,6 +1307,45 @@ public class RecordBiliPublishService {
                     .add("respLen", raw.length()), e);
         }
         return null;
+    }
+
+    private static boolean isSkippedPart(RecordHistoryPart part) {
+        if (part == null) {
+            return false;
+        }
+        String type = part.getDeleteFailType();
+        if (StringUtils.isBlank(type)) {
+            return false;
+        }
+        return "SKIPPED_THRESHOLD".equals(type) || "MANUAL_SKIP".equals(type);
+    }
+
+    private static List<RecordHistoryPart> filterPublishableParts(List<RecordHistoryPart> parts) {
+        if (parts == null || parts.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return parts.stream().filter(p -> !isSkippedPart(p)).collect(Collectors.toList());
+    }
+
+    private static String normalizeFilePath(String filePath) {
+        if (filePath == null) {
+            return null;
+        }
+        return filePath.replace("\\", "/");
+    }
+
+    private static String extractFileNameNoExt(String filePath) {
+        if (StringUtils.isBlank(filePath)) {
+            return "unknown";
+        }
+        String fp = normalizeFilePath(filePath);
+        int slash = fp.lastIndexOf("/");
+        String name = slash >= 0 ? fp.substring(slash + 1) : fp;
+        int dot = name.lastIndexOf(".");
+        if (dot > 0) {
+            return name.substring(0, dot);
+        }
+        return name;
     }
 
     @Data

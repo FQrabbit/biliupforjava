@@ -120,6 +120,13 @@ public final class LogKvs {
         EVENT_ZH.put("FileClosed.MissingHistory", "文件关闭事件：找不到录制历史");
         EVENT_ZH.put("FileClosed.HistoryRecovered.ByPart", "文件关闭事件：按分P记录自愈并修正historyId");
         EVENT_ZH.put("FileClosed.HistoryRecovered.ByActiveHistory", "文件关闭事件：复用活跃history自愈并修正historyId");
+
+        // 分P补救
+        EVENT_ZH.put("PartRepair.Rescan.Done", "分P补救：重试扫描完成");
+        EVENT_ZH.put("PartRepair.Rescan.UploadTriggerFailed", "分P补救：重试扫描触发上传失败");
+        EVENT_ZH.put("PartRepair.MarkFinished", "分P补救：已标记结束/跳过");
+        EVENT_ZH.put("PartRepair.BindFile.Done", "分P补救：补全文件完成");
+        EVENT_ZH.put("PartRepair.BindFile.UploadTriggerFailed", "分P补救：补全文件触发上传失败");
         EVENT_ZH.put("FilePost.Received", "收到文件后处理事件");
         EVENT_ZH.put("FilePost.PartMissing", "文件后处理：找不到分P记录");
         EVENT_ZH.put("FilePost.FileMissing", "文件后处理：文件不存在");
@@ -144,6 +151,7 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.Parts.TooMany.Split", "投稿异常：分P数量过多，尝试分次投稿");
         EVENT_ZH.put("Publish.Part.StillRecording", "投稿失败：存在仍在录制中的分P");
         EVENT_ZH.put("Publish.Part.FileStillWriting", "投稿：检测到文件仍在写入/未稳定，暂停本次投稿");
+        EVENT_ZH.put("Publish.Part.FilePathInvalid", "投稿异常：分P文件路径无效");
         EVENT_ZH.put("Publish.Part.EndTimeSuspicious", "投稿异常：分P结束时间异常(可能时间不同步)");
         EVENT_ZH.put("Publish.Part.SkipBelowSizeLimit", "投稿：分P文件小于忽略大小阈值，删除记录");
         EVENT_ZH.put("Publish.Part.SkipBelowDurationLimit", "投稿：分P时长小于忽略时长阈值，删除记录");

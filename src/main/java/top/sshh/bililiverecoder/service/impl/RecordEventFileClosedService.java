@@ -303,7 +303,11 @@ public class RecordEventFileClosedService implements RecordEventService {
                     .add("limitMb", room.getFileSizeLimit())
                     .add("durationSec", String.format(java.util.Locale.ROOT, "%.3f", durationSec))
                     .add("limitSec", room.getDurationLimit()));
-                historyPartRepository.delete(part);
+                part.setUpload(false);
+                part.setUploadRetryCount(9999);
+                part.setDeleteFailType("SKIPPED_THRESHOLD");
+                part.setDeleteFailReason("文件低于阈值(大小/时长)已跳过上传，可在前端手动补救");
+                historyPartRepository.save(part);
                 return;
             }
         } else {

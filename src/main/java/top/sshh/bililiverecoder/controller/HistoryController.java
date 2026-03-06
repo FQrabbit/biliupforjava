@@ -168,6 +168,87 @@ public class HistoryController {
         }
     }
 
+    @GetMapping("/{id}/candidate-files")
+    public Map<String, Object> candidateFiles(@PathVariable("id") Long id,
+                                              @RequestParam(required = false) String keyword,
+                                              @RequestParam(required = false, defaultValue = "200") int limit) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (id == null) {
+            result.put("items", List.of());
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(id);
+        if (historyOptional.isEmpty()) {
+            result.put("items", List.of());
+            return result;
+        }
+        RecordHistory history = historyOptional.get();
+        String baseDir = history.getFilePath();
+        if (StringUtils.isBlank(baseDir)) {
+            baseDir = workPath + "/" + history.getRoomId();
+        }
+        baseDir = baseDir.replace("\\", "/");
+        String normalizedWork = workPath.endsWith("/") ? workPath : (workPath + "/");
+        if (!baseDir.startsWith(normalizedWork)) {
+            result.put("items", List.of());
+            return result;
+        }
+        File dir = new File(baseDir);
+        if (!dir.exists() || !dir.isDirectory()) {
+            result.put("items", List.of());
+            return result;
+        }
+
+        String kw = keyword == null ? null : keyword.trim().toLowerCase(java.util.Locale.ROOT);
+        int max = Math.max(1, Math.min(limit, 500));
+        String[] allowedExt = new String[]{".flv", ".mp4", ".ts", ".mkv", ".mov", ".m4v"};
+
+        File[] files = dir.listFiles();
+        if (files == null || files.length == 0) {
+            result.put("items", List.of());
+            return result;
+        }
+
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (File f : files) {
+            if (!f.isFile()) {
+                continue;
+            }
+            String name = f.getName();
+            if (name == null) {
+                continue;
+            }
+            String lower = name.toLowerCase(java.util.Locale.ROOT);
+            boolean ok = false;
+            for (String ext : allowedExt) {
+                if (lower.endsWith(ext)) {
+                    ok = true;
+                    break;
+                }
+            }
+            if (!ok) {
+                continue;
+            }
+            if (kw != null && !kw.isEmpty() && lower.indexOf(kw) < 0) {
+                continue;
+            }
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", name);
+            m.put("filePath", f.getPath().replace("\\", "/"));
+            m.put("size", f.length());
+            m.put("lastModified", f.lastModified());
+            items.add(m);
+        }
+
+        items.sort((a, b) -> Long.compare(((Number) b.getOrDefault("lastModified", 0)).longValue(), ((Number) a.getOrDefault("lastModified", 0)).longValue()));
+        if (items.size() > max) {
+            items = items.subList(0, max);
+        }
+
+        result.put("items", items);
+        return result;
+    }
+
 
     @PostMapping("/update")
     public Map<String, String> update(@RequestBody RecordHistory history) {
@@ -789,6 +870,8 @@ public class HistoryController {
                         case "FILE_SIZE_INVALID" -> "分P文件大小异常";
                         case "DURATION_INVALID" -> "分P时长异常";
                         case "UPLOAD_FAILED" -> "分P上传失败";
+                        case "SKIPPED_THRESHOLD" -> "文件低于阈值已跳过";
+                        case "MANUAL_SKIP" -> "用户已标记结束/跳过";
                         default -> "上传失败/已放弃";
                     };
                 }).toList());

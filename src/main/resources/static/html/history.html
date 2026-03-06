@@ -665,9 +665,13 @@
                 </div>
 
                 <!-- 等待提醒 -->
-                <div v-if="isWaitingForUpload" class="waiting-tip" style="margin-top: 10px; color: #E6A23C; font-size: 13px; display: flex; align-items: center;">
-                    <i class="el-icon-info" style="margin-right: 5px;"></i>
+                <div v-if="isWaitingForUpload" class="waiting-tip waiting-tip--queue">
+                    <i class="el-icon-info"></i>
                     <span>正在等待其他稿件分P上传...</span>
+                </div>
+                <div v-if="partListMeta && partListMeta.hasBlockingIssues" class="waiting-tip waiting-tip--blocking">
+                    <i class="el-icon-warning"></i>
+                    <span>暂停投稿：存在 {{ partListMeta.blockingIssueCount }} 个异常分P，需要处理后继续</span>
                 </div>
 
                 <!-- 分P进度展开/收起按钮 -->
@@ -698,12 +702,17 @@
                             <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
                         </div>
                         <div class="progress-percent-text">{{ (p.percent || 0) }}%</div>
-                        <div v-if="p.stateMsg" class="progress-msg-mini">{{ p.stateMsg }}</div>
+                        <div v-if="p.stateMsg || p.issueMessage" class="progress-msg-mini">{{ p.stateMsg || p.issueMessage }}</div>
                         <div v-if="shouldShowPartFilePath(p)" class="progress-filepath-mini">
                             <el-tooltip v-if="!privacyMode" effect="dark" :content="maskTooltip(getPartFilePath(p))" placement="top">
                                 <span class="filepath-text">{{ maskText(getPartFileName(p)) }}</span>
                             </el-tooltip>
                             <span v-else class="filepath-text">***</span>
+                        </div>
+                        <div v-if="p.actions && p.actions.length > 0" class="progress-filepath-mini part-actions">
+                            <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
+                            <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">标记结束</el-button>
+                            <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
                         </div>
                     </div>
                 </div>
@@ -805,6 +814,40 @@
             <el-button type="primary" @click="handleReloadConfirm" size="small">确 定</el-button>
         </div>
     </el-dialog>
+
+    <el-dialog title="补全分P文件" :visible.sync="bindFileDialogVisible" width="600px" append-to-body>
+        <div v-if="bindTargetPart">
+            <div style="font-size: 13px; color: #606266; margin-bottom: 10px;">
+                P{{ bindTargetPart.page }} / partId={{ bindTargetPart.partId }}
+            </div>
+            <div v-if="bindTargetPart.issueMessage" style="background: #fff7e6; border: 1px solid #f3d19e; padding: 10px; border-radius: 6px; color: #E6A23C; font-size: 13px; margin-bottom: 12px;">
+                <i class="el-icon-warning"></i> {{ bindTargetPart.issueMessage }}
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+            <el-input v-model="candidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）" style="flex: 1;"></el-input>
+            <el-button size="small" @click="loadCandidateFiles" :loading="candidateFilesLoading">刷新列表</el-button>
+        </div>
+        <el-select v-model="selectedCandidateFile" filterable clearable placeholder="请选择要绑定的文件" style="width: 100%;" :loading="candidateFilesLoading">
+            <el-option v-for="f in candidateFiles" :key="f.filePath" :label="privacyMode ? '***' : (f.name + ' (' + formatSize(f.size) + ')')" :value="f.filePath">
+                <span style="float:left">{{ maskText(f.name) }}</span>
+                <span style="float:right; color:#909399; font-size:12px;">{{ formatSize(f.size) }}</span>
+            </el-option>
+        </el-select>
+        <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-size: 12px; color: #909399;">
+                文件来自服务器工作目录
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size: 12px; color: #606266;">绑定后触发上传</span>
+                <el-switch v-model="bindTriggerUpload"></el-switch>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="bindFileDialogVisible = false">取 消</el-button>
+            <el-button type="primary" :disabled="!selectedCandidateFile" @click="submitBindFile">确 定</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script>
     new Vue({
@@ -837,6 +880,7 @@
             detailDialogVisible: false,
             currentDetail: {},
             currentDetailParts: [],
+            partListMeta: { hasBlockingIssues: false, blockingIssueCount: 0 },
             showAllParts: false,
             isMobile: window.innerWidth <= 768,
             activeNames: [],
@@ -863,6 +907,13 @@
                 restartOrdinary: false,
                 restartAdvanced: false
             },
+            bindFileDialogVisible: false,
+            bindTargetPart: null,
+            candidateFiles: [],
+            candidateFilesLoading: false,
+            candidateKeyword: '',
+            selectedCandidateFile: '',
+            bindTriggerUpload: true,
             isMultiSelectMode: false,
             selectedItems: [],
             pressedCardId: null,
@@ -950,6 +1001,22 @@
                 
                 // 映射为基础对象
                 let parts = this.currentDetailParts.map((p, index) => {
+                    const issueCode = p.issueCode || null;
+                    const issueMessage = p.issueMessage || null;
+                    const actions = Array.isArray(p.actions) ? p.actions : [];
+                    const actionable = !!p.actionable;
+                    const blocking = !!p.blocking;
+                    let state = p.upload ? 'SUCCESS' : 'WAITING';
+                    let percent = p.upload ? 100 : 0;
+                    if (issueCode) {
+                        if (issueCode === 'SKIPPED_THRESHOLD' || issueCode === 'MANUAL_SKIP' || issueCode === 'GIVE_UP') {
+                            state = 'SKIPPED';
+                            percent = 100;
+                        } else if (blocking || actionable) {
+                            state = 'ISSUE';
+                            percent = 0;
+                        }
+                    }
                     return {
                         partId: p.id,
                         // 如果 page 无效 (<=0)，则使用 index + 1 作为备选
@@ -960,8 +1027,13 @@
                         fileSize: p.fileSize,
                         filePath: p.filePath,
                         // 默认状态：如果 upload=true 则 SUCCESS，否则 WAITING
-                        state: p.upload ? 'SUCCESS' : 'WAITING',
-                        percent: p.upload ? 100 : 0,
+                        state: state,
+                        percent: percent,
+                        issueCode: issueCode,
+                        issueMessage: issueMessage,
+                        actions: actions,
+                        actionable: actionable,
+                        blocking: blocking,
                         // 区分 分片进度 和 字节大小
                         activeChunkDone: 0,
                         activeChunkTotal: 0,
@@ -1006,7 +1078,7 @@
                 // 如果没有详情或已完成，则不显示
                 if (!this.currentDetail || !this.currentDetail.id) return false;
                 // 如果整体进度已完成，不显示
-                if (this.currentDetail.uploadPartCount >= this.currentDetail.partCount && this.currentDetail.partCount > 0) return false;
+                if (this.getEffectiveDoneParts() >= this.getEffectiveTotalParts() && this.getEffectiveTotalParts() > 0) return false;
                 
                 // 如果当前有活跃上传任务，则不是等待中
                 if (this.historyUploadProgress && this.historyUploadProgress.activeCount > 0) return false;
@@ -1680,6 +1752,7 @@
                 this.stopProgressPolling();
                 this.historyUploadProgress = null;
                 this.currentDetailParts = [];
+                this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
                 this.showAllParts = false;
                 this.$nextTick(() => {
                     this.currentDetail = JSON.parse(JSON.stringify(item || {}));
@@ -1688,13 +1761,57 @@
                         this.startProgressPolling(this.currentDetail.id);
                         // 获取所有分P信息
                         var _this = this;
-                        ApiUtil.post('../part/list/' + this.currentDetail.id, {}, function (data) {
-                            _this.currentDetailParts = data || [];
-                        }, function (error) {
-                            console.error('获取分P列表失败', error);
-                        });
+                        _this.fetchPartList(_this.currentDetail.id, function () {});
+                        _this.loadCandidateFiles();
                     }
                 });
+            },
+            fetchPartList: function(historyId, callback) {
+                var _this = this;
+                if (!historyId) {
+                    _this.currentDetailParts = [];
+                    _this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
+                    if (callback) callback();
+                    return;
+                }
+                ApiUtil.post('../part/list2/' + historyId, {}, function (resp) {
+                    var items = resp && resp.items ? resp.items : [];
+                    _this.currentDetailParts = items || [];
+                    _this.partListMeta = {
+                        hasBlockingIssues: !!(resp && resp.hasBlockingIssues),
+                        blockingIssueCount: Number(resp && resp.blockingIssueCount) || 0
+                    };
+                    if (callback) callback(resp);
+                }, function (error) {
+                    console.error('获取分P列表失败', error);
+                    if (callback) callback(null);
+                });
+            },
+            getEffectiveTotalParts: function() {
+                return Array.isArray(this.currentDetailParts) ? this.currentDetailParts.length : 0;
+            },
+            isSkipPartRaw: function(p) {
+                if (!p) return false;
+                var code = p.issueCode || p.deleteFailType;
+                if (code === 'SKIPPED_THRESHOLD' || code === 'MANUAL_SKIP') return true;
+                if (p.uploadRetryCount && Number(p.uploadRetryCount) >= 9999 && (code === 'GIVE_UP' || code)) {
+                    if (code === 'FILE_MISSING') return false;
+                    return true;
+                }
+                return false;
+            },
+            getEffectiveDoneParts: function() {
+                if (!Array.isArray(this.currentDetailParts)) return 0;
+                var done = 0;
+                for (var i = 0; i < this.currentDetailParts.length; i++) {
+                    var p = this.currentDetailParts[i];
+                    if (p && p.upload) {
+                        done++;
+                    } else if (this.isSkipPartRaw(p)) {
+                        done++;
+                    }
+                }
+                return done;
             },
             onDetailClosed: function() {
                 // 窗口关闭动画结束后，清理数据以释放内存并重置状态
@@ -1705,6 +1822,7 @@
                 this.currentDetailParts = [];
                 this.showAllParts = false;
                 this.showMoreActions = false;
+                this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
                 this.detailFooterOffset = this.isMobile ? 160 : 120;
                 if (this.dialogResizeHandler) {
                     window.removeEventListener('resize', this.dialogResizeHandler);
@@ -1804,9 +1922,7 @@
                                     _this.initTable(true);
                                     // 同步刷新详情中的分P列表
                                     if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === historyId) {
-                                        ApiUtil.post('../part/list/' + historyId, {}, function (data) {
-                                            _this.currentDetailParts = data || [];
-                                        });
+                                        _this.fetchPartList(historyId, function () {});
                                     }
                                 }
 
@@ -1815,9 +1931,7 @@
                                     // 最后再刷一次确保状态最终一致
                                     _this.initTable(true);
                                     if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === historyId) {
-                                        ApiUtil.post('../part/list/' + historyId, {}, function (data) {
-                                            _this.currentDetailParts = data || [];
-                                        });
+                                        _this.fetchPartList(historyId, function () {});
                                     }
                                 }
                             });
@@ -1868,10 +1982,10 @@
                 return (s / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
             },
             calcOverallUploadPercent: function() {
-                const total = Number(this.currentDetail && this.currentDetail.partCount) || 0;
+                const total = this.getEffectiveTotalParts();
                 if (total <= 0) return 0;
 
-                const uploaded = Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0;
+                const uploaded = this.getEffectiveDoneParts();
                 const items = (this.historyUploadProgress && Array.isArray(this.historyUploadProgress.items)) ? this.historyUploadProgress.items : [];
 
                 // 将“正在上传/等待重试”的分P按百分比折算为 0~1 的完成度
@@ -1905,8 +2019,8 @@
                 return null;
             },
             calcOverallUploadText: function() {
-                const total = Number(this.currentDetail && this.currentDetail.partCount) || 0;
-                const uploaded = Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0;
+                const total = this.getEffectiveTotalParts();
+                const uploaded = this.getEffectiveDoneParts();
                 const active = Number(this.historyUploadProgress && this.historyUploadProgress.activeCount) || 0;
                 const pending = Math.max(total - uploaded - active, 0);
                 if (total <= 0) {
@@ -1932,17 +2046,84 @@
                 if (state === 'RETRY_WAIT') return '等待重试';
                 if (state === 'FAILED') return '失败';
                 if (state === 'SUCCESS') return '成功';
+                if (state === 'ISSUE') return '异常';
+                if (state === 'SKIPPED') return '已跳过';
                 return state || '-';
             },
             progressBarStatus: function(state, percent) {
                 if (state === 'FAILED') return 'exception';
                 if (state === 'SUCCESS') return 'success';
                 if (state === 'RETRY_WAIT') return 'warning';
+                if (state === 'ISSUE') return 'exception';
+                if (state === 'SKIPPED') return 'success';
 
                 const p = Math.min(Math.max(Number(percent) || 0, 0), 100);
                 if (p >= 90) return 'success';
                 if (p >= 50) return 'warning';
                 return null;
+            },
+            openBindFileDialog: function(p) {
+                this.bindTargetPart = p;
+                this.selectedCandidateFile = '';
+                this.bindTriggerUpload = true;
+                this.bindFileDialogVisible = true;
+                this.loadCandidateFiles();
+            },
+            loadCandidateFiles: function() {
+                var _this = this;
+                if (!_this.currentDetail || !_this.currentDetail.id) return;
+                _this.candidateFilesLoading = true;
+                var url = '/history/' + _this.currentDetail.id + '/candidate-files?limit=200';
+                if (_this.candidateKeyword) {
+                    url += '&keyword=' + encodeURIComponent(_this.candidateKeyword);
+                }
+                ApiUtil.get(url, function(resp) {
+                    _this.candidateFiles = (resp && resp.items) ? resp.items : [];
+                    _this.candidateFilesLoading = false;
+                }, function() {
+                    _this.candidateFilesLoading = false;
+                });
+            },
+            submitBindFile: function() {
+                var _this = this;
+                if (!_this.bindTargetPart || !_this.bindTargetPart.partId) return;
+                if (!_this.selectedCandidateFile) return;
+                ApiUtil.post('../part/bindFile/' + _this.bindTargetPart.partId, {
+                    filePath: _this.selectedCandidateFile,
+                    triggerUpload: _this.bindTriggerUpload
+                }, function(resp) {
+                    _this.$message({ message: (resp && resp.msg) ? resp.msg : '操作成功', type: (resp && resp.type) ? resp.type : 'success' });
+                    _this.bindFileDialogVisible = false;
+                    _this.fetchPartList(_this.currentDetail.id, function () {});
+                }, function() {
+                    _this.$message({ message: '补全失败', type: 'warning' });
+                });
+            },
+            confirmMarkFinished: function(p) {
+                var _this = this;
+                if (!p || !p.partId) return;
+                _this.$confirm('确定要标记该分P为结束/跳过吗？标记后稿件将继续推进投稿流程（不会自动补回这段内容）。', '确认操作', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(function() {
+                    ApiUtil.post('../part/markFinished/' + p.partId, {}, function(resp) {
+                        _this.$message({ message: (resp && resp.msg) ? resp.msg : '操作成功', type: (resp && resp.type) ? resp.type : 'success' });
+                        _this.fetchPartList(_this.currentDetail.id, function () {});
+                    }, function() {
+                        _this.$message({ message: '操作失败', type: 'warning' });
+                    });
+                }).catch(function() {});
+            },
+            rescanPart: function(p) {
+                var _this = this;
+                if (!p || !p.partId) return;
+                ApiUtil.post('../part/rescan/' + p.partId, {}, function(resp) {
+                    _this.$message({ message: (resp && resp.msg) ? resp.msg : '操作成功', type: (resp && resp.type) ? resp.type : 'success' });
+                    _this.fetchPartList(_this.currentDetail.id, function () {});
+                }, function() {
+                    _this.$message({ message: '操作失败', type: 'warning' });
+                });
             },
             getPartFilePath: function(p) {
                 if (!p) return '';
@@ -1960,7 +2141,8 @@
                 const status = this.progressBarStatus(p.state, p.percent || 0);
                 const hasErrorState = status === 'exception' || p.state === 'FAILED';
                 const hasErrorMsg = p.stateMsg && (p.stateMsg.indexOf('损坏') !== -1 || p.stateMsg.indexOf('跳变') !== -1);
-                return hasErrorState || hasErrorMsg;
+                const hasIssue = p.issueCode && (p.state === 'ISSUE' || p.state === 'FAILED');
+                return hasErrorState || hasErrorMsg || hasIssue;
             },
             updateSpeedTracking: function(progressData) {
                 if (!progressData || !progressData.items) return;

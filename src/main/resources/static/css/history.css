@@ -4251,6 +4251,10 @@
 
 .part-status.RETRY_WAIT { color: var(--warning-color); }
 
+.part-status.ISSUE { color: var(--danger-color); }
+
+.part-status.SKIPPED { color: var(--text-secondary); }
+
 
 
 .part-meta {
@@ -4346,6 +4350,108 @@
     text-decoration-style: dotted;
 
     cursor: help;
+
+}
+
+.waiting-tip {
+
+    margin-top: 10px;
+
+    font-size: 13px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    padding: 8px 10px;
+
+    border-radius: var(--radius-md);
+
+    border: 1px solid transparent;
+
+}
+
+.waiting-tip > i {
+
+    font-size: 14px;
+
+}
+
+.waiting-tip--queue {
+
+    color: #b7791f;
+
+    background: rgba(230, 162, 60, 0.12);
+
+    border-color: rgba(230, 162, 60, 0.35);
+
+}
+
+.waiting-tip--blocking {
+
+    color: #c45656;
+
+    background: rgba(245, 108, 108, 0.12);
+
+    border-color: rgba(245, 108, 108, 0.35);
+
+}
+
+.part-actions {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 6px;
+
+    align-items: center;
+
+}
+
+.part-actions .el-button {
+
+    margin: 0;
+
+    min-width: 76px;
+
+    padding: 5px 10px;
+
+    border-radius: 14px;
+
+    font-weight: 500;
+
+}
+
+.part-action-btn {
+
+    transition: all 0.2s ease;
+
+}
+
+.part-action-btn:hover {
+
+    transform: translateY(-1px);
+
+}
+
+.part-action-btn--bind {
+
+    border-color: rgba(64, 158, 255, 0.5);
+
+}
+
+.part-action-btn--finish {
+
+    border-color: rgba(230, 162, 60, 0.5);
+
+}
+
+.part-action-btn--rescan {
+
+    border-color: rgba(144, 147, 153, 0.55);
 
 }
 
@@ -4766,6 +4872,24 @@
         margin: 4px 0 0 0;
 
         order: 4;
+
+    }
+
+    .part-actions {
+
+        gap: 8px;
+
+    }
+
+    .part-actions .el-button {
+
+        flex: 1 1 calc(50% - 4px);
+
+        min-width: 0;
+
+        padding-left: 8px;
+
+        padding-right: 8px;
 
     }
 
@@ -5692,6 +5816,74 @@
 [data-theme='dark'] .part-status {
 
     color: #a6a6a6;
+
+}
+
+[data-theme='dark'] .waiting-tip--queue {
+
+    color: #e6c06b;
+
+    background: rgba(230, 162, 60, 0.16);
+
+    border-color: rgba(230, 162, 60, 0.4);
+
+}
+
+[data-theme='dark'] .waiting-tip--blocking {
+
+    color: #ffb0b0;
+
+    background: rgba(245, 108, 108, 0.16);
+
+    border-color: rgba(245, 108, 108, 0.45);
+
+}
+
+[data-theme='dark'] .part-action-btn--bind {
+
+    border-color: rgba(64, 158, 255, 0.58);
+
+    color: #9ecfff;
+
+    background: rgba(64, 158, 255, 0.12);
+
+}
+
+[data-theme='dark'] .part-action-btn--bind:hover {
+
+    background: rgba(64, 158, 255, 0.2);
+
+}
+
+[data-theme='dark'] .part-action-btn--finish {
+
+    border-color: rgba(230, 162, 60, 0.55);
+
+    color: #f6cf7c;
+
+    background: rgba(230, 162, 60, 0.12);
+
+}
+
+[data-theme='dark'] .part-action-btn--finish:hover {
+
+    background: rgba(230, 162, 60, 0.2);
+
+}
+
+[data-theme='dark'] .part-action-btn--rescan {
+
+    border-color: rgba(144, 147, 153, 0.6);
+
+    color: #d1d4da;
+
+    background: rgba(144, 147, 153, 0.12);
+
+}
+
+[data-theme='dark'] .part-action-btn--rescan:hover {
+
+    background: rgba(144, 147, 153, 0.2);
 
 }
 
