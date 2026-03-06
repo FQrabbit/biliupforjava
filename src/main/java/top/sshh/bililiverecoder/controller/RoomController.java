@@ -40,9 +40,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
 @RequestMapping("/room")
@@ -64,6 +67,10 @@ public class RoomController {
             .maximumSize(1000)
             .expireAfterWrite(1, TimeUnit.DAYS)
             .build();
+    private final Map<String, CompletableFuture<CachedImage>> imageInflight = new ConcurrentHashMap<>();
+    private final Semaphore imageProxySemaphore = new Semaphore(3, true);
+    // 记录上一次请求B站的时间戳
+    private final AtomicLong lastRequestTime = new AtomicLong(0);
 
     @Data
     @AllArgsConstructor
@@ -617,14 +624,10 @@ public class RoomController {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
         try {
-            // 检查缓存
             CachedImage cached = imageCache.getIfPresent(url);
             if (cached != null) {
                 log.debug("[BLR] Image proxy cache hit: {}", url);
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(cached.getContentType());
-                headers.setCacheControl("public, max-age=604800");
-                return new ResponseEntity<>(cached.getBytes(), headers, HttpStatus.OK);
+                return buildImageResponse(cached);
             }
 
             URI uri = new URI(url);
@@ -639,59 +642,102 @@ public class RoomController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(3000);
-            factory.setReadTimeout(5000);
-            RestTemplate restTemplate = new RestTemplate(factory);
+            CompletableFuture<CachedImage> placeholder = new CompletableFuture<>();
+            CompletableFuture<CachedImage> inFlight = imageInflight.putIfAbsent(url, placeholder);
+            if (inFlight == null) {
+                boolean acquired = false;
+                try {
+                    acquired = imageProxySemaphore.tryAcquire(4, TimeUnit.SECONDS);
+                    if (!acquired) {
+                        placeholder.completeExceptionally(new RuntimeException("image_proxy_busy"));
+                        log.warn("[BLR] {}", LogKvs.event("ImageProxy.Busy").add("url", url));
+                        return new ResponseEntity<>(HttpStatus.TOO_MANY_REQUESTS);
+                    }
+                    
+                    // 增加全局请求间隔控制：每次请求回源前，强制等待至少500ms
+                    // 结合Semaphore=3，即使3个并发，也会被这个串行sleep拖慢节奏
+                    synchronized (lastRequestTime) {
+                        long now = System.currentTimeMillis();
+                        long last = lastRequestTime.get();
+                        if (now - last < 600) {
+                            try {
+                                Thread.sleep(600 - (now - last));
+                            } catch (InterruptedException ignored) {}
+                        }
+                        lastRequestTime.set(System.currentTimeMillis());
+                    }
 
-            HttpHeaders forwardHeaders = new HttpHeaders();
-            forwardHeaders.add("Referer", "https://www.bilibili.com/");
-            forwardHeaders.add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            forwardHeaders.add("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
-            HttpEntity<Void> httpEntity = new HttpEntity<>(forwardHeaders);
-
-            ResponseEntity<byte[]> resp = restTemplate.exchange(url, HttpMethod.GET, httpEntity, byte[].class);
-            byte[] imageBytes = resp.getBody();
-            MediaType ct = resp.getHeaders().getContentType();
-
-            if (!resp.getStatusCode().is2xxSuccessful()) {
-                log.warn("[BLR] {}", LogKvs.event("ImageProxy.UpstreamNon2xx")
-                        .add("url", url)
-                        .add("status", resp.getStatusCode().value()));
-                return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
+                    CachedImage loaded = loadImageFromUpstream(url, uri);
+                    placeholder.complete(loaded);
+                    return buildImageResponse(loaded);
+                } catch (Exception e) {
+                    placeholder.completeExceptionally(e);
+                    throw e;
+                } finally {
+                    if (acquired) {
+                        imageProxySemaphore.release();
+                    }
+                    imageInflight.remove(url, placeholder);
+                }
             }
-            if (imageBytes == null || imageBytes.length == 0) {
-                log.warn("[BLR] {}", LogKvs.event("ImageProxy.EmptyBody")
-                        .add("url", url)
-                        .add("contentType", ct == null ? "" : ct.toString()));
-                return new ResponseEntity<>(HttpStatus.BAD_GATEWAY);
-            }
-            // 放宽 content-type 检查，允许来自信任域名的 application/octet-stream 等类型
-            if (ct != null && !"image".equalsIgnoreCase(ct.getType()) && !ct.toString().contains("octet-stream")) {
-                log.warn("[BLR] {}", LogKvs.event("ImageProxy.NonImageContentType")
-                        .add("url", url)
-                        .add("contentType", ct.toString()));
-                // 暂时允许通过，由浏览器尝试渲染
-            }
 
-            if (ct == null) {
-                String path = uri.getPath();
-                ct = MediaTypeFactory.getMediaType(path).orElse(MediaType.IMAGE_JPEG);
-            }
-
-            // 存入缓存
-            imageCache.put(url, new CachedImage(imageBytes, ct));
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(ct);
-            headers.setCacheControl("public, max-age=604800");
-
-            return new ResponseEntity<>(imageBytes, headers, HttpStatus.OK);
+            CachedImage shared = inFlight.get(8, TimeUnit.SECONDS);
+            return buildImageResponse(shared);
         } catch (Exception e) {
             log.error("[BLR] {}", LogKvs.event("ImageProxy.Failed")
                     .add("url", url)
                     .add("err", e.getMessage()));
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private ResponseEntity<byte[]> buildImageResponse(CachedImage cachedImage) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(cachedImage.getContentType());
+        headers.setCacheControl("public, max-age=604800");
+        return new ResponseEntity<>(cachedImage.getBytes(), headers, HttpStatus.OK);
+    }
+
+    private CachedImage loadImageFromUpstream(String url, URI uri) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(3000);
+        factory.setReadTimeout(5000);
+        RestTemplate restTemplate = new RestTemplate(factory);
+
+        HttpHeaders forwardHeaders = new HttpHeaders();
+        forwardHeaders.add("Referer", "https://www.bilibili.com/");
+        forwardHeaders.add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        forwardHeaders.add("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+        HttpEntity<Void> httpEntity = new HttpEntity<>(forwardHeaders);
+
+        ResponseEntity<byte[]> resp = restTemplate.exchange(url, HttpMethod.GET, httpEntity, byte[].class);
+        byte[] imageBytes = resp.getBody();
+        MediaType ct = resp.getHeaders().getContentType();
+
+        if (!resp.getStatusCode().is2xxSuccessful()) {
+            log.warn("[BLR] {}", LogKvs.event("ImageProxy.UpstreamNon2xx")
+                    .add("url", url)
+                    .add("status", resp.getStatusCode().value()));
+            throw new RuntimeException("upstream_status_" + resp.getStatusCode().value());
+        }
+        if (imageBytes == null || imageBytes.length == 0) {
+            log.warn("[BLR] {}", LogKvs.event("ImageProxy.EmptyBody")
+                    .add("url", url)
+                    .add("contentType", ct == null ? "" : ct.toString()));
+            throw new RuntimeException("upstream_empty_body");
+        }
+        if (ct != null && !"image".equalsIgnoreCase(ct.getType()) && !ct.toString().contains("octet-stream")) {
+            log.warn("[BLR] {}", LogKvs.event("ImageProxy.NonImageContentType")
+                    .add("url", url)
+                    .add("contentType", ct.toString()));
+        }
+
+        if (ct == null) {
+            String path = uri.getPath();
+            ct = MediaTypeFactory.getMediaType(path).orElse(MediaType.IMAGE_JPEG);
+        }
+        CachedImage loaded = new CachedImage(imageBytes, ct);
+        imageCache.put(url, loaded);
+        return loaded;
     }
 }

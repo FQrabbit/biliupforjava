@@ -2697,6 +2697,13 @@
             exportConfig: {},
             seasonsList: [],
             seasonCoverObjectUrls: {},
+            seasonCoverPreloadQueue: [],
+            seasonCoverPreloadMap: {},
+            seasonCoverPreloadActive: 0,
+            seasonCoverPreloadTimer: null,
+            seasonCoverLastStartAt: 0,
+            seasonCoverPreloadMaxConcurrency: 3,
+            seasonCoverPreloadThrottleMs: 120,
             imageObjectUrlCache: {},
             imageObjectUrlLoading: {},
             roomCoverObjectUrl: '',
@@ -3142,26 +3149,79 @@
                 _this.$set(_this.imageObjectUrlLoading, cacheKey, p);
                 return p;
             },
-            preloadSeasonCover: function(item) {
-                var _this = this;
+            enqueueSeasonCoverPreload: function(item, isPriority) {
                 if (!item || !item.season) return;
                 var seasonId = item.season.id;
-                var coverUrl = _this.getSeasonCoverUrl(item);
+                var coverUrl = this.getSeasonCoverUrl(item);
                 if (!coverUrl) return;
-                var proxyUrl = _this.buildImageProxyUrl(coverUrl);
+
+                if (this.seasonCoverObjectUrls[seasonId]) return;
+                var proxyUrl = this.buildImageProxyUrl(coverUrl);
                 var cacheKey = 'season:' + seasonId + ':' + coverUrl;
-                _this.ensureImageObjectUrl(cacheKey, proxyUrl).then(function (objectUrl) {
+                if (this.imageObjectUrlCache[cacheKey] || this.imageObjectUrlLoading[cacheKey]) return;
+                if (this.seasonCoverPreloadMap[cacheKey]) return;
+
+                var task = {
+                    seasonId: seasonId,
+                    proxyUrl: proxyUrl,
+                    cacheKey: cacheKey
+                };
+                this.$set(this.seasonCoverPreloadMap, cacheKey, true);
+                if (isPriority) {
+                    this.seasonCoverPreloadQueue.unshift(task);
+                } else {
+                    this.seasonCoverPreloadQueue.push(task);
+                }
+                this.processSeasonCoverPreloadQueue();
+            },
+            processSeasonCoverPreloadQueue: function() {
+                var _this = this;
+                if (_this.seasonCoverPreloadActive >= _this.seasonCoverPreloadMaxConcurrency) return;
+                if (!_this.seasonCoverPreloadQueue || _this.seasonCoverPreloadQueue.length === 0) return;
+
+                if (_this.seasonCoverPreloadTimer) {
+                    clearTimeout(_this.seasonCoverPreloadTimer);
+                    _this.seasonCoverPreloadTimer = null;
+                }
+
+                var now = Date.now();
+                var diff = now - (_this.seasonCoverLastStartAt || 0);
+                var wait = _this.seasonCoverPreloadThrottleMs - diff;
+                if (wait > 0) {
+                    _this.seasonCoverPreloadTimer = setTimeout(function() {
+                        _this.seasonCoverPreloadTimer = null;
+                        _this.processSeasonCoverPreloadQueue();
+                    }, wait);
+                    return;
+                }
+
+                var task = _this.seasonCoverPreloadQueue.shift();
+                if (!task || !task.cacheKey || !task.proxyUrl) {
+                    _this.processSeasonCoverPreloadQueue();
+                    return;
+                }
+                _this.$delete(_this.seasonCoverPreloadMap, task.cacheKey);
+                _this.seasonCoverLastStartAt = Date.now();
+                _this.seasonCoverPreloadActive = _this.seasonCoverPreloadActive + 1;
+
+                _this.ensureImageObjectUrl(task.cacheKey, task.proxyUrl).then(function (objectUrl) {
                     if (objectUrl) {
-                        _this.$set(_this.seasonCoverObjectUrls, seasonId, objectUrl);
+                        _this.$set(_this.seasonCoverObjectUrls, task.seasonId, objectUrl);
                     }
+                }).then(function () {
+                    _this.seasonCoverPreloadActive = Math.max(0, _this.seasonCoverPreloadActive - 1);
+                    _this.processSeasonCoverPreloadQueue();
                 });
+            },
+            preloadSeasonCover: function(item) {
+                this.enqueueSeasonCoverPreload(item, true);
             },
             onSeasonDropdownVisibleChange: function(visible) {
                 if (!visible) return;
                 var list = this.seasonsList || [];
-                var max = Math.min(list.length, 12);
+                var max = Math.min(list.length, 8);
                 for (var i = 0; i < max; i++) {
-                    this.preloadSeasonCover(list[i]);
+                    this.enqueueSeasonCoverPreload(list[i], false);
                 }
             },
             refreshRoomCoverPreview: function() {
@@ -3204,6 +3264,12 @@
                 }
             },
             revokeAllImageObjectUrls: function() {
+                if (this.seasonCoverPreloadTimer) {
+                    clearTimeout(this.seasonCoverPreloadTimer);
+                    this.seasonCoverPreloadTimer = null;
+                }
+                this.seasonCoverPreloadQueue = [];
+                this.seasonCoverPreloadMap = {};
                 var cache = this.imageObjectUrlCache || {};
                 for (var k in cache) {
                     if (!Object.prototype.hasOwnProperty.call(cache, k)) continue;
