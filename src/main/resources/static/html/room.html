@@ -500,7 +500,7 @@
                                                     <div v-else class="season-cover-tooltip-loading">加载中...</div>
                                                 </div>
                                             </div>
-                                            <div class="season-option-label">{{ item.season.title }}</div>
+                                            <div class="season-option-label" @mouseenter="preloadSeasonCover(item)">{{ item.season.title }}</div>
                                         </el-tooltip>
                                     </el-option>
                                 </el-select>
