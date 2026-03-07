@@ -743,7 +743,7 @@
                                 </el-input>
                             </el-form-item>
                             <el-form-item label="Server酱3 SendKey">
-                                <el-input v-model="room.serverChanSendKey" placeholder="SCTxxxxxxxxxxxxxxxx">
+                                <el-input v-model="room.serverChanSendKey" :type="privacySecretInputType()" placeholder="SCTxxxxxxxxxxxxxxxx">
                                     <el-button slot="append" icon="el-icon-link" @click="window.open('https://sc3.ft07.com/sendkey', '_blank')"></el-button>
                                 </el-input>
                                 <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 6px;">

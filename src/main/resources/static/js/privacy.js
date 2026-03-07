@@ -163,6 +163,9 @@ Vue.mixin({
             if (!this.privacyMode) return (val == null ? '' : String(val));
             if (typeof window.__maskLogLineEnabled === 'function') return window.__maskLogLineEnabled(val);
             return '***';
+        },
+        privacySecretInputType: function () {
+            return this.privacyMode ? 'password' : 'text';
         }
     }
 });
