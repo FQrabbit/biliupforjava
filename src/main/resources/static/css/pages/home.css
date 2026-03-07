@@ -748,6 +748,26 @@
     color: var(--primary-color);
 }
 
+.upload-speed-tip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid var(--text-disabled);
+    color: var(--text-disabled);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: help;
+}
+
+[data-theme="dark"] .upload-speed-tip-icon {
+    border-color: #8b94a3;
+    color: #8b94a3;
+}
+
 .config-unit {
     margin-left: auto;
     padding: 2px 8px;
