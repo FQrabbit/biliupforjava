@@ -1,8 +1,13 @@
 name: Manual Build Artifact
+run-name: "Manual Build Artifact - ${{ inputs.build_title }}"
 
 on:
   workflow_dispatch:
     inputs:
+      build_title:
+        description: "本次手动编译标题(显示在Actions运行记录)"
+        required: true
+        default: "手动构建"
       retention_days:
         description: "Artifact保留天数(1-90)"
         required: true
