@@ -49,6 +49,9 @@ public class ChunkUploadRequest {
         if (top.sshh.bililiverecoder.service.RateLimiterService.getInstance() != null) {
             top.sshh.bililiverecoder.service.RateLimiterService rateLimiterService = top.sshh.bililiverecoder.service.RateLimiterService.getInstance();
             double speedLimit = rateLimiterService.getUploadBandwidthLimiter().getRate();
+            if (top.sshh.bililiverecoder.service.UploadFairShareService.getInstance() != null) {
+                speedLimit = top.sshh.bililiverecoder.service.UploadFairShareService.getInstance().fairShareLimit((long) speedLimit);
+            }
             
             // 如果限速值非常大（例如默认的 Double.MAX_VALUE），则视为不限速，使用原有的 Apache HttpClient (支持连接池，更稳定)
             // 阈值设为 100GB/s，超过此值视为不限速

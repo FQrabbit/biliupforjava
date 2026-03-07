@@ -20,9 +20,11 @@ import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.UploadEnums;
+import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.ChunkUploadRequest;
@@ -82,6 +84,11 @@ public class HighEnergyCutPublishService {
     private RecordRoomRepository roomRepository;
     @Autowired
     private LiveMsgRepository liveMsgRepository;
+
+    @Autowired
+    private UploadFairShareService uploadFairShareService;
+
+    private final UploadRetryBackoffPolicy uploadRetryBackoffPolicy = new UploadRetryBackoffPolicy();
 
 
     public void process(RecordHistory history) throws IOException {
@@ -403,6 +410,8 @@ public class HighEnergyCutPublishService {
         Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
         BiliBiliUser biliBiliUser = userOptional.get();
         WebCookie webCookie = Cookie.parse(biliBiliUser.getCookies());
+        uploadFairShareService.registerUploadUser(biliBiliUser.getId(), room.getRoomId(), null, "HIGH_ENERGY_CUT");
+        try {
 
         File uploadFile = new File(filePath);
         Map<String, String> preParams = new HashMap<>();
@@ -550,22 +559,25 @@ public class HighEnergyCutPublishService {
                             break;
                         } catch (Exception e) {
                             tryCount.incrementAndGet();
+                            long backoffMs = uploadRetryBackoffPolicy.nextDelayMs(tryCount.get(), e.getMessage());
                             log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.Error")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
                                     .add("filePath", filePath)
                                     .add("partIndex", finalI)
                                     .add("tryCount", tryCount.get())
+                                    .add("backoffMs", backoffMs)
                                     .addIfNotBlank("err", e.getMessage())
                                     .add("ex", e.getClass().getSimpleName()), e);
                             try {
-                        Thread.sleep(10000L);
+                                Thread.sleep(backoffMs);
                     } catch (InterruptedException ex) {
                                 log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Upload.Chunk.RetryWaitInterrupted")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
                                         .add("filePath", filePath)
-                                        .add("partIndex", finalI), ex);
+                                        .add("partIndex", finalI)
+                                        .add("sleepMs", backoffMs), ex);
                             }
                         }
                     }
@@ -588,27 +600,21 @@ public class HighEnergyCutPublishService {
         int concurrency = 3; // 默认
         if (RateLimiterService.getInstance() != null) {
             long limitRate = (long) RateLimiterService.getInstance().getUploadBandwidthLimiter().getRate();
-            // NettyUploadClient.getGlobalWriteThroughput() returns bytes/s
             long realRate = NettyUploadClient.getGlobalWriteThroughput();
-
-            if (limitRate < 100L * 1024 * 1024 * 1024) {
-                if (limitRate < 2 * 1024 * 1024) concurrency = 1;
-                else if (limitRate < 5 * 1024 * 1024) concurrency = 2;
-                else if (limitRate < 10 * 1024 * 1024) concurrency = 3;
-                else if (limitRate < 20 * 1024 * 1024) concurrency = 5;
-                else concurrency = 8;
-            } else {
-                // 无限制时，适应真实速度
-                if (realRate > 0) {
-                    if (realRate < 2 * 1024 * 1024) concurrency = 2; // 除非用户设置极低限速，否则保底2并发
-                    else if (realRate < 5 * 1024 * 1024) concurrency = 3;
-                    else if (realRate < 10 * 1024 * 1024) concurrency = 4;
-                    else if (realRate < 20 * 1024 * 1024) concurrency = 6;
-                    else concurrency = 8;
-                }
-            }
+            UploadFairShareService.FairShareDecision fairShareDecision = uploadFairShareService.fairShareLimitWithDecision(limitRate);
+            long fairShareLimit = fairShareDecision.effectiveLimitBps();
+            concurrency = uploadFairShareService.recommendConcurrency(fairShareLimit, realRate);
+            log.info("[BLR] {}", LogKvs.event("Upload.FairShare")
+                    .add("roomId", room.getRoomId())
+                    .add("uploadUserId", biliBiliUser.getId())
+                    .add("globalLimit", limitRate)
+                    .add("effectiveLimit", fairShareLimit)
+                    .add("splitApplied", fairShareDecision.splitApplied())
+                    .add("splitReason", fairShareDecision.reason())
+                    .add("activeUploadUsers", fairShareDecision.activeUploadUsers())
+                    .add("activeTasks", uploadFairShareService.getActiveUploadTasks())
+                    .add("realRate", realRate));
         }
-        // 限制在安全范围内（最多8并发）
         concurrency = Math.min(concurrency, 8);
         concurrency = Math.max(concurrency, 1);
         
@@ -676,6 +682,9 @@ public class HighEnergyCutPublishService {
 
         } catch (Exception e) {
             throw new RuntimeException("合并上传文件失败：" + e.getMessage());
+        }
+        } finally {
+            uploadFairShareService.unregisterUploadUser(biliBiliUser.getId(), room.getRoomId(), null, "HIGH_ENERGY_CUT");
         }
     }
 

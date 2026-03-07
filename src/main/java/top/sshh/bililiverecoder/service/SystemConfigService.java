@@ -57,6 +57,7 @@ public class SystemConfigService {
     }
 
     public void updateConfig(String key, String value) {
+        value = normalizeConfigValue(key, value);
         Optional<SystemConfig> configOpt = systemConfigRepository.findById(key);
         SystemConfig config = configOpt.orElse(new SystemConfig());
         config.setConfigKey(key);
@@ -73,6 +74,45 @@ public class SystemConfigService {
         log.info("[BLR] {}", LogKvs.event("SystemConfig.Updated")
                 .add("key", key)
                 .add("value", value));
+    }
+
+    private String normalizeConfigValue(String key, String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            double v = Double.parseDouble(value);
+            if (KEY_UPLOAD_SPEED_LIMIT.equals(key)) {
+                if (v < 0) {
+                    return "0";
+                }
+                if (v > 200) {
+                    return "200";
+                }
+                return String.valueOf(v);
+            }
+            if (KEY_API_RATE_LIMIT.equals(key)) {
+                if (v < 0) {
+                    return "0";
+                }
+                if (v > 1000) {
+                    return "1000";
+                }
+                return String.valueOf(v);
+            }
+            if (KEY_MERGE_INTERVAL_MINUTES.equals(key)) {
+                if (v < 1) {
+                    return "1";
+                }
+                if (v > 720) {
+                    return "720";
+                }
+                return String.valueOf((int) Math.round(v));
+            }
+            return value;
+        } catch (NumberFormatException e) {
+            return value;
+        }
     }
 
     private void applyConfig(String key, String value) {

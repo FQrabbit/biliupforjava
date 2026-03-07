@@ -62,6 +62,8 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.SkipBelowThreshold", "文件低于阈值(大小/时长)不上传，按策略处理");
         EVENT_ZH.put("Upload.ServiceError", "上传服务发生异常");
         EVENT_ZH.put("Upload.Concurrency", "分P上传：动态调整并发数");
+        EVENT_ZH.put("Upload.FairShare", "分P上传：按活跃账号决定是否分摊限速");
+        EVENT_ZH.put("Upload.FairShare.AccountState", "分P上传：活跃上传账号状态变更");
 
         // 文件检测
         EVENT_ZH.put("FileProbe.Remove.Missing", "文件检测：文件丢失，移除监控");
@@ -207,6 +209,7 @@ public final class LogKvs {
         EVENT_ZH.put("Netty.Upload.Timeout", "Netty上传：连接/传输超时");
         EVENT_ZH.put("Netty.Upload.Failed", "Netty上传：连接/传输失败");
         EVENT_ZH.put("Netty.Upload.LowSpeed", "Netty上传：传输速度过慢，已强制断开");
+        EVENT_ZH.put("Netty.Upload.RateLimitedExpected", "Netty上传：当前速度符合限速预期，继续传输");
         EVENT_ZH.put("ImageProxy.InvalidHost", "图片代理：Host不合法");
         EVENT_ZH.put("ImageProxy.InvalidScheme", "图片代理：Scheme不合法");
         EVENT_ZH.put("ImageProxy.Failed", "图片代理：请求失败");

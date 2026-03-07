@@ -28,6 +28,7 @@ import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
+import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.user.UserMy;
@@ -73,6 +74,8 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
             文件录制大小: %.3f GB
             原因: %s
             """;
+
+    private final UploadRetryBackoffPolicy uploadRetryBackoffPolicy = new UploadRetryBackoffPolicy();
     @Value("${record.wx-push-token}")
     private String wxToken;
     @Autowired
@@ -279,8 +282,9 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                                 break;
                                             } catch (Exception e) {
                                                 tryCount.incrementAndGet();
+                                                long backoffMs = uploadRetryBackoffPolicy.nextDelayMs(tryCount.get(), e.getMessage());
                                                 int count = upCount.get();
-                                                uploadProgressTracker.markRetryWait(partId, e.getMessage());
+                                                uploadProgressTracker.markRetryWait(partId, e.getMessage(), tryCount.get(), backoffMs);
                                                 log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                         .add("os", OS)
                                                         .add("roomId", room.getRoomId())
@@ -290,8 +294,17 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                                         .add("chunkIndex", finalI)
                                                         .add("done", count)
                                                         .add("total", chunkNum)
+                                                        .add("retryCount", tryCount.get())
+                                                        .add("backoffMs", backoffMs)
                                                         .add("err", e.getMessage())
                                                         .add("ex", e.getClass().getSimpleName()));
+                                                try {
+                                                    Thread.sleep(backoffMs);
+                                                } catch (InterruptedException ex) {
+                                                    Thread.currentThread().interrupt();
+                                                    tryCount.set(200);
+                                                    return;
+                                                }
                                             }
                                         }
                                     } catch (FileNotFoundException fileNotFoundException) {

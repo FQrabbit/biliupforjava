@@ -31,6 +31,8 @@ public class UploadProgressTracker {
         private int percent;
         private State state;
         private String stateMsg;
+        private Integer retryCount;
+        private Long backoffMs;
         private long updateAtMs;
 
         public boolean isActive() {
@@ -54,6 +56,8 @@ public class UploadProgressTracker {
             p.setPercent(calcPercent(p.getChunkDone(), p.getChunkTotal()));
             p.setState(State.UPLOADING);
             p.setStateMsg(null);
+            p.setRetryCount(null);
+            p.setBackoffMs(null);
             p.setUpdateAtMs(now);
             return p;
         });
@@ -72,6 +76,8 @@ public class UploadProgressTracker {
             p.setPercent(calcPercent(p.getChunkDone(), p.getChunkTotal()));
             p.setState(State.UPLOADING);
             p.setStateMsg(null);
+            p.setRetryCount(null);
+            p.setBackoffMs(null);
             p.setUpdateAtMs(now);
             return p;
         });
@@ -79,10 +85,16 @@ public class UploadProgressTracker {
     }
 
     public void markRetryWait(long partId, String msg) {
+        markRetryWait(partId, msg, null, null);
+    }
+
+    public void markRetryWait(long partId, String msg, Integer retryCount, Long backoffMs) {
         long now = System.currentTimeMillis();
         byPartId.computeIfPresent(partId, (k, p) -> {
             p.setState(State.RETRY_WAIT);
             p.setStateMsg(msg);
+            p.setRetryCount(retryCount);
+            p.setBackoffMs(backoffMs);
             p.setUpdateAtMs(now);
             return p;
         });
@@ -94,6 +106,8 @@ public class UploadProgressTracker {
         byPartId.computeIfPresent(partId, (k, p) -> {
             p.setState(State.FAILED);
             p.setStateMsg(msg);
+            p.setRetryCount(null);
+            p.setBackoffMs(null);
             p.setUpdateAtMs(now);
             return p;
         });
@@ -159,6 +173,8 @@ public class UploadProgressTracker {
         p.setPercent(src.getPercent());
         p.setState(src.getState());
         p.setStateMsg(src.getStateMsg());
+        p.setRetryCount(src.getRetryCount());
+        p.setBackoffMs(src.getBackoffMs());
         p.setUpdateAtMs(src.getUpdateAtMs());
         return p;
     }

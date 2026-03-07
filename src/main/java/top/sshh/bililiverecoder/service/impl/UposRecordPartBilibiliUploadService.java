@@ -22,10 +22,12 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
+import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.ChunkUploadRequest;
@@ -102,6 +104,11 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     @Autowired
     private UploadProgressTracker uploadProgressTracker;
+
+    @Autowired
+    private UploadFairShareService uploadFairShareService;
+
+    private final UploadRetryBackoffPolicy uploadRetryBackoffPolicy = new UploadRetryBackoffPolicy();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
 
@@ -242,6 +249,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             }
                             // 登录验证结束
                             synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
+                            uploadFairShareService.registerUploadUser(biliBiliUser.getId(), room.getRoomId(), part.getId(), "UPOS_PART");
+                            try {
                             Map<String, String> preParams = new HashMap<>();
                             preParams.put("r", uploadEnums.getOs());
                             preParams.put("profile", uploadEnums.getProfile());
@@ -448,7 +457,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     break;
                                                 }
                                                 tryCount.incrementAndGet();
-                                                uploadProgressTracker.markRetryWait(partId, e.getMessage());
+                                                long backoffMs = uploadRetryBackoffPolicy.nextDelayMs(tryCount.get(), e.getMessage());
+                                                uploadProgressTracker.markRetryWait(partId, e.getMessage(), tryCount.get(), backoffMs);
                                                 log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                         .add("roomId", room.getRoomId())
                                                         .add("title", room.getTitle())
@@ -458,10 +468,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("chunkSize", chunkSize)
                                                         .add("start", finalI * chunkSize)
                                                         .add("end", (finalI + 1) * chunkSize)
+                                                        .add("retryCount", tryCount.get())
+                                                        .add("backoffMs", backoffMs)
                                                         .add("err", e.getMessage())
                                                         .add("ex", e.getClass().getSimpleName()));
                                                 try {
-                                                    Thread.sleep(10000L);
+                                                    Thread.sleep(backoffMs);
                                                 } catch (InterruptedException ex) {
                                                     log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.RetryWaitInterrupted")
                                                             .add("roomId", room.getRoomId())
@@ -469,7 +481,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                             .add("partId", partId)
                                                             .add("historyId", historyId)
                                                             .add("chunkIndex", finalI)
-                                                            .add("sleepMs", 10000)
+                                                            .add("sleepMs", backoffMs)
                                                             .addIfNotBlank("err", ex.getMessage())
                                                             .add("ex", ex.getClass().getSimpleName()), ex);
                                                     tryCount.set(200);
@@ -510,27 +522,22 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             int concurrency = 3; // 默认
                             if (RateLimiterService.getInstance() != null) {
                                 long limitRate = (long) RateLimiterService.getInstance().getUploadBandwidthLimiter().getRate();
-                                // NettyUploadClient.getGlobalWriteThroughput() returns bytes/s
                                 long realRate = NettyUploadClient.getGlobalWriteThroughput();
-
-                                if (limitRate < 100L * 1024 * 1024 * 1024) {
-                                    if (limitRate < 2 * 1024 * 1024) concurrency = 1;
-                                    else if (limitRate < 5 * 1024 * 1024) concurrency = 2;
-                                    else if (limitRate < 10 * 1024 * 1024) concurrency = 3;
-                                    else if (limitRate < 20 * 1024 * 1024) concurrency = 5;
-                                    else concurrency = 8;
-                                } else {
-                                    // 无限制时，适应真实速度
-                                    if (realRate > 0) {
-                                        if (realRate < 2 * 1024 * 1024) concurrency = 2; // 除非用户设置极低限速，否则保底2并发
-                                        else if (realRate < 5 * 1024 * 1024) concurrency = 3;
-                                        else if (realRate < 10 * 1024 * 1024) concurrency = 4;
-                                        else if (realRate < 20 * 1024 * 1024) concurrency = 6;
-                                        else concurrency = 8;
-                                    }
-                                }
+                                UploadFairShareService.FairShareDecision fairShareDecision = uploadFairShareService.fairShareLimitWithDecision(limitRate);
+                                long fairShareLimit = fairShareDecision.effectiveLimitBps();
+                                concurrency = uploadFairShareService.recommendConcurrency(fairShareLimit, realRate);
+                                log.info("[BLR] {}", LogKvs.event("Upload.FairShare")
+                                        .add("roomId", room.getRoomId())
+                                        .add("partId", part.getId())
+                                        .add("uploadUserId", biliBiliUser.getId())
+                                        .add("globalLimit", limitRate)
+                                        .add("effectiveLimit", fairShareLimit)
+                                        .add("splitApplied", fairShareDecision.splitApplied())
+                                        .add("splitReason", fairShareDecision.reason())
+                                        .add("activeUploadUsers", fairShareDecision.activeUploadUsers())
+                                        .add("activeTasks", uploadFairShareService.getActiveUploadTasks())
+                                        .add("realRate", realRate));
                             }
-                            // 限制在安全范围内（最多8并发）
                             concurrency = Math.min(concurrency, 8);
                             concurrency = Math.max(concurrency, 1);
                             
@@ -748,6 +755,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     message.setUid(wxuid);
                                     WxPusher.send(message);
                                 }
+                            }
+                            } finally {
+                                uploadFairShareService.unregisterUploadUser(biliBiliUser.getId(), room.getRoomId(), part.getId(), "UPOS_PART");
                             }
                         }
                         }

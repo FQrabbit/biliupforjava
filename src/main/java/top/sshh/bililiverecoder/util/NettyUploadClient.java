@@ -15,6 +15,8 @@ import io.netty.handler.traffic.ChannelTrafficShapingHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.utils.URIBuilder;
+import top.sshh.bililiverecoder.util.netty.SlowSpeedJudge;
+import top.sshh.bililiverecoder.util.netty.UploadThrottlePolicy;
 
 import java.io.RandomAccessFile;
 import java.net.URI;
@@ -35,13 +37,7 @@ public class NettyUploadClient {
     // 我们将其设为 checkInterval = 100ms 以获得更平滑的效果
     private static final GlobalTrafficShapingHandler trafficHandler = new GlobalTrafficShapingHandler(group, 0, 0, 100);
 
-    private static final long LOW_SPEED_BASE_INTERVAL_MS = 3000;
-    private static final long LOW_SPEED_CONFIRM_DELAY_MS = 10000;
-    private static final long LOW_SPEED_MAX_INTERVAL_MS = 30000;
-    private static final long LOW_SPEED_RECOVERY_STEP_MS = 500;
-    private static final long LOW_SPEED_WARMUP_MS = 15000;
-    private static final long LOW_SPEED_MIN_WRITTEN_BYTES = 32 * 1024;
-    private static final AtomicLong lowSpeedCheckIntervalMs = new AtomicLong(LOW_SPEED_BASE_INTERVAL_MS);
+    private static final AtomicLong lowSpeedCheckIntervalMs = new AtomicLong(UploadThrottlePolicy.getBaseIntervalMs());
 
     /**
      * 获取全局写入吞吐量 (bytes/s)
@@ -139,7 +135,8 @@ public class NettyUploadClient {
                             p.addLast(channelTrafficHandler);
 
                             AtomicLong lowSpeedStartMs = new AtomicLong(0);
-                            ch.eventLoop().schedule(() -> scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future), 5, TimeUnit.SECONDS);
+                            SlowSpeedJudge slowSpeedJudge = new SlowSpeedJudge(UploadThrottlePolicy.getEmaSmoothWindow());
+                            ch.eventLoop().schedule(() -> scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future), 5, TimeUnit.SECONDS);
                             
                             p.addLast(new HttpClientCodec());
                             p.addLast(new HttpObjectAggregator(65536)); // 聚合响应
@@ -225,7 +222,7 @@ public class NettyUploadClient {
         }
     }
 
-    private static void scheduleLowSpeedCheck(Channel ch, ChannelTrafficShapingHandler channelTrafficHandler, AtomicLong lowSpeedStartMs, AtomicLong transferStartMs, CompletableFuture<String> future) {
+    private static void scheduleLowSpeedCheck(Channel ch, ChannelTrafficShapingHandler channelTrafficHandler, AtomicLong lowSpeedStartMs, AtomicLong transferStartMs, SlowSpeedJudge slowSpeedJudge, long writeLimit, CompletableFuture<String> future) {
         long intervalMs = lowSpeedCheckIntervalMs.get();
         ch.eventLoop().schedule(() -> {
             if (!ch.isActive()) {
@@ -233,52 +230,63 @@ public class NettyUploadClient {
             }
             long startMs = transferStartMs.get();
             if (startMs <= 0) {
-                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
                 return;
             }
             long now = System.currentTimeMillis();
-            if (now - startMs < LOW_SPEED_WARMUP_MS) {
-                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+            if (now - startMs < UploadThrottlePolicy.getWarmupMs()) {
+                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
                 return;
             }
             long writtenBytes = channelTrafficHandler.trafficCounter().cumulativeWrittenBytes();
-            if (writtenBytes < LOW_SPEED_MIN_WRITTEN_BYTES) {
-                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+            if (writtenBytes < UploadThrottlePolicy.getMinWrittenBytes()) {
+                scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
                 return;
             }
             long speed = channelTrafficHandler.trafficCounter().lastWriteThroughput();
-            if (speed < 10 * 1024) {
+            SlowSpeedJudge.Snapshot snapshot = slowSpeedJudge.evaluate(speed, writeLimit);
+            if (speed <= 0) {
                 long started = lowSpeedStartMs.get();
                 if (started == 0) {
                     lowSpeedStartMs.set(now);
-                    long current = lowSpeedCheckIntervalMs.get();
-                    long next = Math.max(current, LOW_SPEED_CONFIRM_DELAY_MS);
-                    lowSpeedCheckIntervalMs.set(Math.min(next, LOW_SPEED_MAX_INTERVAL_MS));
-                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
                     return;
                 }
-                if (now - started < LOW_SPEED_CONFIRM_DELAY_MS) {
-                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+                long zeroDurationMs = now - started;
+                if (zeroDurationMs < UploadThrottlePolicy.getZeroSpeedConfirmMs()) {
+                    scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
                     return;
                 }
                 long current = lowSpeedCheckIntervalMs.get();
-                long next = Math.min(LOW_SPEED_MAX_INTERVAL_MS, current * 2);
+                long next = Math.min(UploadThrottlePolicy.getMaxIntervalMs(), current * 2);
                 lowSpeedCheckIntervalMs.set(next);
                 log.info("[BLR] {}", LogKvs.event("Netty.Upload.LowSpeed")
-                        .add("speed", speed)
+                        .add("rawSpeed", snapshot.getRawSpeed())
+                        .add("smoothSpeed", snapshot.getSmoothSpeed())
+                        .add("threshold", snapshot.getThreshold())
+                        .add("classification", "ZERO_SPEED_TIMEOUT")
+                        .add("zeroDurationMs", zeroDurationMs)
+                        .add("writeLimit", writeLimit)
                         .add("channelId", ch.id()));
                 ch.close();
-                future.completeExceptionally(new RuntimeException("Low upload speed: " + speed + " B/s"));
+                future.completeExceptionally(new RuntimeException("Low upload speed: 0 B/s for " + zeroDurationMs + " ms"));
                 return;
-            } else {
-                lowSpeedStartMs.set(0);
-                long current = lowSpeedCheckIntervalMs.get();
-                if (current > LOW_SPEED_BASE_INTERVAL_MS) {
-                    long next = Math.max(LOW_SPEED_BASE_INTERVAL_MS, current - LOW_SPEED_RECOVERY_STEP_MS);
-                    lowSpeedCheckIntervalMs.set(next);
-                }
             }
-            scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, future);
+            lowSpeedStartMs.set(0);
+            long current = lowSpeedCheckIntervalMs.get();
+            if (current > UploadThrottlePolicy.getBaseIntervalMs()) {
+                long next = Math.max(UploadThrottlePolicy.getBaseIntervalMs(), current - UploadThrottlePolicy.getRecoveryStepMs());
+                lowSpeedCheckIntervalMs.set(next);
+            }
+            if (snapshot.getClassification() == SlowSpeedJudge.Classification.RATE_LIMITED_EXPECTED) {
+                log.debug("[BLR] {}", LogKvs.event("Netty.Upload.RateLimitedExpected")
+                        .add("rawSpeed", snapshot.getRawSpeed())
+                        .add("smoothSpeed", snapshot.getSmoothSpeed())
+                        .add("threshold", snapshot.getThreshold())
+                        .add("writeLimit", writeLimit)
+                        .add("channelId", ch.id()));
+            }
+            scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
         }, intervalMs, TimeUnit.MILLISECONDS);
     }
 }
