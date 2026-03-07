@@ -90,6 +90,16 @@ public class RecordRoom {
     private String wxuid;
 
     /**
+     * Server酱3的SendKey
+     */
+    private String serverChanSendKey;
+
+    /**
+     * Server酱3标签(可选，多个用|分隔)
+     */
+    private String serverChanChannel;
+
+    /**
      * 允许发送推送的tag
      */
     private String pushMsgTags = "开始直播,录制结束,分P上传,视频投稿,高级弹幕,视频评论,云剪辑";

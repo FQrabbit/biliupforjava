@@ -19,6 +19,7 @@ import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.PushNotifyClient;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -316,7 +317,7 @@ public class LiveMsgSendSync {
                             }
 
                             try {
-                                if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("视频评论")) {
+                                if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "视频评论")) {
                                     Message message = new Message();
                                     message.setAppToken(wxToken);
                                     message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -324,7 +325,7 @@ public class LiveMsgSendSync {
                                             LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                             reply.getMessage(), "发送成功", user.getUname() + ""));
                                     message.setUid(wxuid);
-                                    WxPusher.send(message);
+                                    PushNotifyClient.sendParallel(room, message);
                                 }
                             } catch (Exception ignored) {
 
@@ -352,7 +353,7 @@ public class LiveMsgSendSync {
                             .addIfNotBlank("err", e.getMessage())
                             .add("ex", e.getClass().getSimpleName()), e);
                     try {
-                        if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("视频评论")) {
+                        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "视频评论")) {
                             Message message = new Message();
                             message.setAppToken(wxToken);
                             message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -360,7 +361,7 @@ public class LiveMsgSendSync {
                                     LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                     JSON.toJSONString(replies), "发送失败", e.getMessage()));
                             message.setUid(wxuid);
-                            WxPusher.send(message);
+                            PushNotifyClient.sendParallel(room, message);
                         }
                     } catch (Exception ignored) {
 
@@ -505,7 +506,7 @@ public class LiveMsgSendSync {
                                         .add("partId", msg.getPartId())
                                         .add("contextLen", msg.getContext() == null ? 0 : msg.getContext().length()));
                                 try {
-                                    if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("高级弹幕")) {
+                                    if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "高级弹幕")) {
                                         Message message = new Message();
                                         message.setAppToken(wxToken);
                                         message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -513,7 +514,7 @@ public class LiveMsgSendSync {
                                                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                                 msg.getContext(), "发送失败", user.getUname() + "-->code: " + code));
                                         message.setUid(wxuid);
-                                        WxPusher.send(message);
+                                        PushNotifyClient.sendParallel(room, message);
                                     }
                                 } catch (Exception ignored) {
 
@@ -731,3 +732,5 @@ public class LiveMsgSendSync {
         return new VideoEditUploadDto.DescDto(desc.toString(), resultList);
     }
 }
+
+

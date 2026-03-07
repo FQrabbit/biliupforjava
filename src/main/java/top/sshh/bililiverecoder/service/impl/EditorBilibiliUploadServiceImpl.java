@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.EditorChunkUploadRequest;
@@ -188,7 +189,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             biliBiliUser.setLogin(false);
                             biliBiliUser = biliUserRepository.save(biliBiliUser);
                             TaskUtil.partUploadTask.remove(part.getId());
-                            if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("云剪辑")) {
+                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                                 Message message = new Message();
                                 message.setAppToken(wxToken);
                                 message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -196,7 +197,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                         part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "登录已过期，请重新登录\n" + "线路：" + uploadEnums.getLine()));
                                 message.setUid(wxuid);
-                                WxPusher.send(message);
+                                PushNotifyClient.sendParallel(room, message);
                             }
                             throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                         }
@@ -309,14 +310,14 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
                         //并发上传
                         Message message = new Message();
-                        if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("云剪辑")) {
+                        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                             message.setAppToken(wxToken);
                             message.setContentType(Message.CONTENT_TYPE_TEXT);
                             message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
                                     LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                     part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "\n线路：无"));
                             message.setUid(wxuid);
-                            WxPusher.send(message);
+                            PushNotifyClient.sendParallel(room, message);
                         }
 
                         runnableList.stream().parallel().forEach(Runnable::run);
@@ -341,14 +342,14 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             }
                             //存在异常
                             TaskUtil.partUploadTask.remove(part.getId());
-                            if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("云剪辑")) {
+                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                                 message.setAppToken(wxToken);
                                 message.setContentType(Message.CONTENT_TYPE_TEXT);
                                 message.setContent(WX_MSG_FORMAT.formatted("上传失败", room.getUname(), "开始", room.getTitle(),
                                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                         part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "并发上传失败，存在异常\n" + "线路：" + uploadEnums.getLine()));
                                 message.setUid(wxuid);
-                                WxPusher.send(message);
+                                PushNotifyClient.sendParallel(room, message);
                             }
                             throw new RuntimeException(part.getFileName() + "===并发上传失败，存在异常");
                         }
@@ -384,24 +385,24 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             .add("title", part.getTitle())
                             .add("payload", page));
                         if (Integer.valueOf(0).equals(completeUploadBean.getCode())) {
-                            if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("云剪辑")) {
+                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                                 message.setAppToken(wxToken);
                                 message.setContentType(Message.CONTENT_TYPE_TEXT);
                                 message.setContent(WX_MSG_FORMAT.formatted("上传成功", room.getUname(), "结束", room.getTitle(),
                                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                         part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), ""));
                                 message.setUid(wxuid);
-                                WxPusher.send(message);
+                                PushNotifyClient.sendParallel(room, message);
                             }
                         } else {
-                            if (StringUtils.isNotBlank(wxuid) && StringUtils.isNotBlank(pushMsgTags) && pushMsgTags.contains("云剪辑")) {
+                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                                 message.setAppToken(wxToken);
                                 message.setContentType(Message.CONTENT_TYPE_TEXT);
                                 message.setContent(WX_MSG_FORMAT.formatted("上传失败", room.getUname(), "结束", room.getTitle(),
                                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
                                         part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), ""));
                                 message.setUid(wxuid);
-                                WxPusher.send(message);
+                                PushNotifyClient.sendParallel(room, message);
                             }
                         }
                         }
@@ -421,3 +422,5 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
     }
 }
+
+

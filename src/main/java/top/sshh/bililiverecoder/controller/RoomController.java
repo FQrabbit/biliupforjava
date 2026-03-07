@@ -225,6 +225,8 @@ public class RoomController {
             dbRoom.setLine(room.getLine());
             dbRoom.setCoverUrl(room.getCoverUrl());
             dbRoom.setWxuid(room.getWxuid());
+            dbRoom.setServerChanSendKey(room.getServerChanSendKey());
+            dbRoom.setServerChanChannel(room.getServerChanChannel());
             dbRoom.setPushMsgTags(room.getPushMsgTags());
             dbRoom.setFileSizeLimit(room.getFileSizeLimit());
             dbRoom.setDurationLimit(room.getDurationLimit());

@@ -377,6 +377,10 @@ public final class LogKvs {
         EVENT_ZH.put("RoomConfig.Import.Parts.Success", "导入分P配置成功");
         EVENT_ZH.put("RoomConfig.Import.Done", "导入配置完成");
 
+        // 推送通知
+        EVENT_ZH.put("Notify.WxPusher.Send.Failed", "通知发送：WxPusher发送失败");
+        EVENT_ZH.put("Notify.ServerChan3.Send.Failed", "通知发送：Server酱3发送失败");
+
         // 高能剪辑
         EVENT_ZH.put("HighEnergyCut.Segment.Generated", "高能剪辑：生成分片成功");
         EVENT_ZH.put("HighEnergyCut.Segment.Empty", "高能剪辑：未生成任何分片");

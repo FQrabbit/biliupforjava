@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
@@ -221,7 +222,7 @@ public class HighEnergyCutPublishService {
                 message.setContent(WX_MSG_FORMAT.formatted("直播剪辑生成视频", room.getUname(), room.getTitle(),
                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), "耗时" + (System.currentTimeMillis() - currentTimeMillis) / 1000) + "秒");
                 message.setUid(wxuid);
-                WxPusher.send(message);
+                PushNotifyClient.sendParallel(room, message);
             }
             taskRunningMsg.put(history.getId(), "开始上传");
             String upload = upload(room, output);
@@ -239,7 +240,7 @@ public class HighEnergyCutPublishService {
                 message.setContent(WX_MSG_FORMAT.formatted("直播剪辑失败", room.getUname(), room.getTitle(),
                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), e));
                 message.setUid(wxuid);
-                WxPusher.send(message);
+                PushNotifyClient.sendParallel(room, message);
             }
         } finally {
             taskRunningMsg.remove(history.getId());
@@ -382,7 +383,7 @@ public class HighEnergyCutPublishService {
                 message.setContent(WX_MSG_FORMAT.formatted("直播剪辑投稿失败", room.getUname(), room.getTitle(),
                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), uploadRes));
                 message.setUid(wxuid);
-                WxPusher.send(message);
+                PushNotifyClient.sendParallel(room, message);
             }
             throw new RuntimeException(uploadRes);
         }
@@ -400,7 +401,7 @@ public class HighEnergyCutPublishService {
             message.setContent(WX_MSG_FORMAT.formatted("直播剪辑投稿成功", room.getUname(), room.getTitle(),
                     LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), uploadRes));
             message.setUid(wxuid);
-            WxPusher.send(message);
+            PushNotifyClient.sendParallel(room, message);
         }
     }
 
@@ -882,3 +883,5 @@ public class HighEnergyCutPublishService {
         return template;
     }
 }
+
+

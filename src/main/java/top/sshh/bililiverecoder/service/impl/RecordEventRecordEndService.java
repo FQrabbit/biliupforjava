@@ -17,6 +17,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.PushNotifyClient;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -144,15 +145,17 @@ public class RecordEventRecordEndService implements RecordEventService {
         }
         String wxuid = room.getWxuid();
         String pushMsgTags = room.getPushMsgTags();
-        if(StringUtils.isNotBlank(wxuid)&&StringUtils.isNotBlank(pushMsgTags)&&pushMsgTags.contains("录制结束")){
+        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "录制结束")) {
             Message message = new Message();
             message.setAppToken(wxToken);
             message.setContentType(Message.CONTENT_TYPE_TEXT);
             message.setContent(WX_MSG_FORMAT.formatted(room.getUname(),room.getTitle(),
                     eventData.getAreaNameParent(),eventData.getAreaNameChild(),LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒"))));
             message.setUid(wxuid);
-            WxPusher.send(message);
+            PushNotifyClient.sendParallel(room, message);
         }
 //        recordBiliPublishService.publishRecordHistory(history);
     }
 }
+
+
