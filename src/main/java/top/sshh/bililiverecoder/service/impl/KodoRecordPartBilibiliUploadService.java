@@ -24,6 +24,7 @@ import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -46,6 +47,7 @@ import top.sshh.bililiverecoder.service.CaptchaService;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.RandomAccessFile;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -113,22 +115,37 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Autowired
     private UploadFairShareService uploadFairShareService;
 
+    @Autowired
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
+
     private final UploadRetryBackoffPolicy uploadRetryBackoffPolicy = new UploadRetryBackoffPolicy();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
-
-    private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int CHUNK_MAX_RETRY = 200;
+    private static final int GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD = 400;
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
-        part = partRepository.findById(part.getId()).get();
+        RecordHistoryPart loadedPart = partRepository.findById(part.getId()).get();
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
                 .add("os", OS)
-                .add("partId", part.getId())
-                .add("historyId", part.getHistoryId())
-                .add("roomId", part.getRoomId())
-                .add("filePath", part.getFilePath()));
-        this.upload(part);
+                .add("partId", loadedPart.getId())
+                .add("historyId", loadedPart.getHistoryId())
+                .add("roomId", loadedPart.getRoomId())
+                .add("filePath", loadedPart.getFilePath()));
+        RecordRoom room = roomRepository.findByRoomId(loadedPart.getRoomId());
+        if (room == null || room.getUploadUserId() == null) {
+            this.upload(loadedPart);
+            return;
+        }
+        uploadUserSerialScheduler.submit(
+                room.getUploadUserId(),
+                room.getRoomId(),
+                loadedPart.getHistoryId(),
+                loadedPart.getId(),
+                OS,
+                () -> this.upload(loadedPart)
+        );
     }
 
     @Override
@@ -252,7 +269,8 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                             }
                             // 登录验证结束
-                            synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
+                            // 按 uploadUserId 串行由调度器保证，这里不再阻塞线程等待锁
+                            {
                             uploadFairShareService.registerUploadUser(biliBiliUser.getId(), room.getRoomId(), part.getId(), "KODO_PART");
                             try {
                             Map<String, String> preParams = new HashMap<>();
@@ -351,7 +369,9 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     .add("endpoint", preUploadBean != null ? preUploadBean.getEndpoint() : null));
                             // 分段上传
                             AtomicInteger upCount = new AtomicInteger(0);
-                            AtomicInteger tryCount = new AtomicInteger(0);
+                            AtomicInteger globalFailCount = new AtomicInteger(0);
+                            java.util.concurrent.atomic.AtomicBoolean globalFuseOpen = new java.util.concurrent.atomic.AtomicBoolean(false);
+                            java.util.concurrent.atomic.AtomicReference<String> globalFuseReason = new java.util.concurrent.atomic.AtomicReference<>(null);
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
                             final Integer partPage = resolveProgressPage(part);
@@ -363,7 +383,8 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 PreUploadBean finalPreUploadBean = preUploadBean;
                                 Runnable runnable = () -> {
                                     try {
-                                        while (tryCount.get() < 200) {
+                                        int chunkRetryCount = 0;
+                                        while (!globalFuseOpen.get() && chunkRetryCount < CHUNK_MAX_RETRY) {
                                             try {
                                                 // 上传
                                                 long endSize = (finalI + 1) * chunkSize;
@@ -384,7 +405,8 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     ChunkUploadBean chunkUploadBean = chunkUploadRequest.getPojo();
                                                     parts.add(new KodoPart(finalI, chunkUploadBean.getCtx()));
                                                 } catch (FileNotFoundException fileNotFoundException) {
-                                                    tryCount.set(200);
+                                                    globalFuseReason.compareAndSet(null, "UPLOAD_FILE_NOT_FOUND");
+                                                    globalFuseOpen.set(true);
                                                     log.error("[BLR] {}", LogKvs.event("Upload.Chunk.FileMissing")
                                                         .add("os", OS)
                                                         .add("roomId", room.getRoomId())
@@ -408,9 +430,13 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     .add("thread", Thread.currentThread().getName()));
                                                 break;
                                             } catch (Exception e) {
-                                                tryCount.incrementAndGet();
-                                                long backoffMs = uploadRetryBackoffPolicy.nextDelayMs(tryCount.get(), e.getMessage());
-                                                uploadProgressTracker.markRetryWait(partId, e.getMessage(), tryCount.get(), backoffMs);
+                                                chunkRetryCount++;
+                                                int globalRetryCount = globalFailCount.incrementAndGet();
+                                                UploadRetryBackoffPolicy.BackoffDecision backoffDecision =
+                                                        uploadRetryBackoffPolicy.nextDecision(chunkRetryCount, e, e.getMessage());
+                                                String uploadHost = resolveUploadHost(finalPreUploadBean);
+                                                long backoffMs = backoffDecision.delayMs();
+                                                uploadProgressTracker.markRetryWait(partId, e.getMessage(), chunkRetryCount, backoffMs);
                                                 log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
@@ -421,10 +447,32 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     .add("chunkSize", chunkSize)
                                                     .add("start", (long) finalI * chunkSize)
                                                     .add("end", (long) (finalI + 1) * chunkSize)
-                                                    .add("retryCount", tryCount.get())
+                                                    .add("chunkRetryCount", chunkRetryCount)
+                                                    .add("chunkRetryMax", CHUNK_MAX_RETRY)
+                                                    .add("globalFailCount", globalRetryCount)
+                                                    .add("globalFuseThreshold", GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD)
+                                                    .add("retryCategory", backoffDecision.retryCategory())
+                                                    .add("host", uploadHost)
                                                     .add("backoffMs", backoffMs)
                                                     .add("err", e.getMessage())
                                                     .add("ex", e.getClass().getSimpleName()));
+                                                if (globalRetryCount >= GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD) {
+                                                    globalFuseReason.compareAndSet(null, "GLOBAL_CHUNK_FAILURE_THRESHOLD_REACHED");
+                                                    globalFuseOpen.set(true);
+                                                    log.error("[BLR] {}", LogKvs.event("Upload.Chunk.GlobalFuseOpen")
+                                                            .add("os", OS)
+                                                            .add("roomId", room.getRoomId())
+                                                            .add("uname", room.getUname())
+                                                            .add("partId", partId)
+                                                            .add("historyId", historyId)
+                                                            .add("chunkIndex", finalI)
+                                                            .add("globalFailCount", globalRetryCount)
+                                                            .add("globalFuseThreshold", GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD)
+                                                            .add("reason", globalFuseReason.get())
+                                                            .addIfNotBlank("err", e.getMessage())
+                                                            .add("ex", e.getClass().getSimpleName()), e);
+                                                    break;
+                                                }
                                                 try {
                                                     Thread.sleep(backoffMs);
                                                 } catch (InterruptedException ex) {
@@ -435,14 +483,31 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                             .add("partId", partId)
                                                             .add("historyId", historyId)
                                                             .add("chunkIndex", finalI)
+                                                            .add("retryCategory", backoffDecision.retryCategory())
+                                                            .add("host", uploadHost)
                                                             .add("sleepMs", backoffMs)
                                                             .addIfNotBlank("err", ex.getMessage())
                                                             .add("ex", ex.getClass().getSimpleName()), ex);
-                                                    tryCount.set(200);
+                                                    globalFuseReason.compareAndSet(null, "RETRY_WAIT_INTERRUPTED");
+                                                    globalFuseOpen.set(true);
                                                     Thread.currentThread().interrupt();
                                                     return;
                                                 }
                                             }
+                                        }
+                                        if (chunkRetryCount >= CHUNK_MAX_RETRY && !globalFuseOpen.get()) {
+                                            globalFuseReason.compareAndSet(null, "CHUNK_RETRY_LIMIT_REACHED");
+                                            globalFuseOpen.set(true);
+                                            log.error("[BLR] {}", LogKvs.event("Upload.Chunk.GlobalFuseOpen")
+                                                    .add("os", OS)
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("uname", room.getUname())
+                                                    .add("partId", partId)
+                                                    .add("historyId", historyId)
+                                                    .add("chunkIndex", finalI)
+                                                    .add("chunkRetryCount", chunkRetryCount)
+                                                    .add("chunkRetryMax", CHUNK_MAX_RETRY)
+                                                    .add("reason", globalFuseReason.get()));
                                         }
                                     } catch (Exception e) {
                                         uploadProgressTracker.markFailed(partId, e.getMessage());
@@ -511,12 +576,24 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 customThreadPool.shutdown();
                             }
 
-                            if (tryCount.get() >= 200) {
+                            if (globalFuseOpen.get() || upCount.get() < chunkNum) {
                                 part = partRepository.findById(part.getId()).get();
                                 part.setUpload(false);
                                 part.setUploadRetryCount(part.getUploadRetryCount() + 1);
                                 part = partRepository.save(part);
-                                uploadProgressTracker.markFailed(partId, "chunk upload failed");
+                                String chunkFailReason = StringUtils.defaultIfBlank(globalFuseReason.get(), "chunk upload failed");
+                                uploadProgressTracker.markFailed(partId, chunkFailReason);
+                                log.error("[BLR] {}", LogKvs.event("Upload.Chunk.AllFailed")
+                                        .add("os", OS)
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("partId", partId)
+                                        .add("historyId", historyId)
+                                        .add("doneChunkCount", upCount.get())
+                                        .add("totalChunkCount", chunkNum)
+                                        .add("globalFailCount", globalFailCount.get())
+                                        .add("globalFuseOpen", globalFuseOpen.get())
+                                        .add("reason", chunkFailReason));
                                 if (part.getUploadRetryCount() < 2) {
                                     Thread.sleep(5000);
                                     uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
@@ -601,7 +678,8 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     }
                                 }
 
-                                if (completeUploadBean != null && checkUploadBean.getOK() != null && checkUploadBean.getOK() == 1) {
+                                if (completeUploadBean != null && checkUploadBean != null
+                                        && checkUploadBean.getOK() != null && checkUploadBean.getOK() == 1) {
                                     part = partRepository.findById(part.getId()).get();
                                     part.setUpload(true);
                                     part.setCid(preUploadBean.getBiz_id());
@@ -770,6 +848,22 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private String resolveUploadHost(PreUploadBean preUploadBean) {
+        if (preUploadBean == null || StringUtils.isBlank(preUploadBean.getEndpoint())) {
+            return "unknown";
+        }
+        String endpoint = preUploadBean.getEndpoint().trim();
+        String url = endpoint.startsWith("http") ? endpoint : "https:" + endpoint;
+        try {
+            URI uri = URI.create(url);
+            if (StringUtils.isNotBlank(uri.getHost())) {
+                return uri.getHost();
+            }
+        } catch (Exception ignored) {
+        }
+        return endpoint;
     }
 }
 
