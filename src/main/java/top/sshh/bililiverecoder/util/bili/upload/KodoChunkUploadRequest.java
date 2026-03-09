@@ -48,39 +48,46 @@ public class KodoChunkUploadRequest {
      * @throws KeyManagementException
      */
     public String getPage() throws IOException, NoSuchAlgorithmException, KeyStoreException, URISyntaxException, KeyManagementException {
-        // 使用 Netty 进行平滑限速上传
+        // 仅在开启了上传限速时使用 Netty 限速上传；不限速时走 Apache HttpClient
         if (top.sshh.bililiverecoder.service.RateLimiterService.getInstance() != null) {
             top.sshh.bililiverecoder.service.RateLimiterService rateLimiterService = top.sshh.bililiverecoder.service.RateLimiterService.getInstance();
-            double speedLimit = rateLimiterService.getUploadBandwidthLimiter().getRate();
-            if (top.sshh.bililiverecoder.service.UploadFairShareService.getInstance() != null) {
-                speedLimit = top.sshh.bililiverecoder.service.UploadFairShareService.getInstance().fairShareLimit((long) speedLimit);
+            long configuredLimit = rateLimiterService.getUploadSpeedLimitBytesPerSecond();
+            if (configuredLimit <= 0) {
+                return doApachePut();
             }
 
-            // 如果限速值非常大（例如默认的 Double.MAX_VALUE），则视为不限速，使用原有的 Apache HttpClient
-            // 阈值设为 100GB/s
-            if (speedLimit < 100L * 1024 * 1024 * 1024) {
-                // 计算超时时间 (默认 300s)
-                int timeoutMs = 300 * 1000;
-                long chunkSize = Long.parseLong(params.get("size"));
-                if (speedLimit > 0) {
-                    long expectedTimeMs = (long) ((chunkSize / speedLimit) * 1000);
-                    // 动态调整超时时间，防止因限速导致的超时
-                    timeoutMs = Math.max(timeoutMs, (int) (expectedTimeMs + 30000));
-                }
+            long speedLimit = configuredLimit;
+            if (top.sshh.bililiverecoder.service.UploadFairShareService.getInstance() != null) {
+                speedLimit = top.sshh.bililiverecoder.service.UploadFairShareService.getInstance().fairShareLimit(speedLimit);
+            }
 
-                try {
-                    long start = Long.parseLong(params.get("start"));
-                    long end = Long.parseLong(params.get("end"));
-                    // 调用 Netty 客户端
-                    return top.sshh.bililiverecoder.util.NettyUploadClient.put(
-                            URL, headers, params, file, start, end, timeoutMs, (long) speedLimit
-                    );
-                } catch (Exception e) {
-                    throw new RuntimeException("Netty upload failed", e);
-                }
+            if (speedLimit <= 0) {
+                return doApachePut();
+            }
+
+            // 计算超时时间 (默认 300s)
+            int timeoutMs = 300 * 1000;
+            long chunkSize = Long.parseLong(params.get("size"));
+            long expectedTimeMs = (long) ((chunkSize / (double) speedLimit) * 1000);
+            // 动态调整超时时间，防止因限速导致的超时
+            timeoutMs = Math.max(timeoutMs, (int) (expectedTimeMs + 30000));
+
+            try {
+                long start = Long.parseLong(params.get("start"));
+                long end = Long.parseLong(params.get("end"));
+                // 调用 Netty 客户端
+                return top.sshh.bililiverecoder.util.NettyUploadClient.put(
+                        URL, headers, params, file, start, end, timeoutMs, speedLimit
+                );
+            } catch (Exception e) {
+                throw new RuntimeException("Netty upload failed", e);
             }
         }
 
+        return doApachePut();
+    }
+
+    private String doApachePut() throws IOException, NoSuchAlgorithmException, KeyStoreException, URISyntaxException, KeyManagementException {
         ShardingInputStream inputStream = new ShardingInputStream(file, Long.parseLong(params.get("start")), Long.parseLong(params.get("end")));
         InputStreamEntity body = new InputStreamEntity(inputStream, Long.parseLong(params.get("size")));
         HttpClientResult result = HttpClientUtils.doPut(URL, headers, params, body, 300 * 1000);

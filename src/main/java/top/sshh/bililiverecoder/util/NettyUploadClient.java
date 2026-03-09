@@ -72,8 +72,9 @@ public class NettyUploadClient {
      * @return 响应内容
      */
     public static String put(String url, Map<String, String> headers, Map<String, String> params, RandomAccessFile file, long start, long end, long timeoutMs, long writeLimit) {
+        long effectiveWriteLimit = Math.max(writeLimit, 0L);
         // 更新全局写限速值
-        trafficHandler.setWriteLimit(writeLimit);
+        trafficHandler.setWriteLimit(effectiveWriteLimit);
 
         URI uri;
         try {
@@ -136,7 +137,7 @@ public class NettyUploadClient {
 
                             AtomicLong lowSpeedStartMs = new AtomicLong(0);
                             SlowSpeedJudge slowSpeedJudge = new SlowSpeedJudge(UploadThrottlePolicy.getEmaSmoothWindow());
-                            ch.eventLoop().schedule(() -> scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future), 5, TimeUnit.SECONDS);
+                            ch.eventLoop().schedule(() -> scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, effectiveWriteLimit, future), 5, TimeUnit.SECONDS);
                             
                             p.addLast(new HttpClientCodec());
                             p.addLast(new HttpObjectAggregator(65536)); // 聚合响应

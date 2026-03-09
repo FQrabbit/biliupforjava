@@ -600,7 +600,7 @@ public class HighEnergyCutPublishService {
         // 动态并发计算
         int concurrency = 3; // 默认
         if (RateLimiterService.getInstance() != null) {
-            long limitRate = (long) RateLimiterService.getInstance().getUploadBandwidthLimiter().getRate();
+            long limitRate = RateLimiterService.getInstance().getUploadSpeedLimitBytesPerSecond();
             long realRate = NettyUploadClient.getGlobalWriteThroughput();
             UploadFairShareService.FairShareDecision fairShareDecision = uploadFairShareService.fairShareLimitWithDecision(limitRate);
             long fairShareLimit = fairShareDecision.effectiveLimitBps();

@@ -18,13 +18,16 @@ public class RateLimiterService {
 
     // 上传带宽限速 (每秒字节数 Bytes) - 默认 0 (不限速)
     private final RateLimiter uploadBandwidthLimiter = RateLimiter.create(Double.MAX_VALUE);
+    // 上传限速配置原值（Bytes/s），0 表示不限速
+    private volatile long uploadSpeedLimitBytesPerSecond = 0L;
 
     @PostConstruct
     public void init() {
         instance = this;
         log.info("[BLR] {}", LogKvs.event("RateLimiter.Init")
                 .add("apiLimit", apiRateLimiter.getRate())
-                .add("uploadLimit", uploadBandwidthLimiter.getRate()));
+                .add("uploadLimit", uploadBandwidthLimiter.getRate())
+                .add("uploadLimitBytes", uploadSpeedLimitBytesPerSecond));
     }
 
     public static RateLimiterService getInstance() {
@@ -37,6 +40,10 @@ public class RateLimiterService {
 
     public RateLimiter getUploadBandwidthLimiter() {
         return uploadBandwidthLimiter;
+    }
+
+    public long getUploadSpeedLimitBytesPerSecond() {
+        return uploadSpeedLimitBytesPerSecond;
     }
 
     public void setApiRateLimit(double permitsPerSecond) {
@@ -52,20 +59,24 @@ public class RateLimiterService {
 
     public void setUploadSpeedLimit(double mbPerSecond) {
         if (mbPerSecond <= 0) {
+            uploadSpeedLimitBytesPerSecond = 0L;
             uploadBandwidthLimiter.setRate(Double.MAX_VALUE);
             // 同时更新 Netty 的全局限速器
             NettyUploadClient.updateWriteLimit(0);
             log.info("[BLR] {}", LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
-                    .add("newLimitMB", "Unlimited"));
+                    .add("newLimitMB", "Unlimited")
+                    .add("newLimitBytes", uploadSpeedLimitBytesPerSecond));
         } else {
             double bytesPerSecond = mbPerSecond * 1024 * 1024;
+            uploadSpeedLimitBytesPerSecond = (long) bytesPerSecond;
             uploadBandwidthLimiter.setRate(bytesPerSecond);
             // 同时更新 Netty 的全局限速器
-            NettyUploadClient.updateWriteLimit((long) bytesPerSecond);
+            NettyUploadClient.updateWriteLimit(uploadSpeedLimitBytesPerSecond);
             log.info("[BLR] {}", LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
-                    .add("newLimitMB", mbPerSecond));
+                    .add("newLimitMB", mbPerSecond)
+                    .add("newLimitBytes", uploadSpeedLimitBytesPerSecond));
         }
     }
 }
