@@ -1254,60 +1254,120 @@ public class RecordBiliPublishService {
     }
 
     private Long resolveSectionId(RecordRoom room, BiliBiliUser biliBiliUser) {
-        if (room.getSectionId() != null && room.getSectionId() > 0) {
-            return room.getSectionId();
-        }
-        if (room.getSeasonId() == null || room.getSeasonId() <= 0) {
+        Long seasonId = normalizePositive(room.getSeasonId());
+        Long sectionId = normalizePositive(room.getSectionId());
+        if (seasonId == null) {
+            if (sectionId != null) {
+                room.setSectionId(null);
+                roomRepository.save(room);
+                log.info("[BLR] {}", LogKvs.event("Publish.Season.Section.Corrected")
+                        .add("roomId", room.getRoomId())
+                        .add("seasonId", null)
+                        .add("oldSectionId", sectionId)
+                        .add("newSectionId", null)
+                        .add("action", "disable_no_season"));
+            }
             return null;
         }
         String raw = BiliApi.getSeasons(biliBiliUser);
         if (StringUtils.isBlank(raw)) {
             log.warn("[BLR] {}", LogKvs.event("Publish.Season.ResolveSectionId.Empty")
                     .add("roomId", room.getRoomId())
-                    .add("seasonId", room.getSeasonId()));
+                    .add("seasonId", seasonId));
             return null;
         }
         try {
             List<Map<String, Object>> seasons = JsonPath.read(raw, "$.data.seasons");
             for (Map<String, Object> item : seasons) {
                 Object seasonObj = item.get("season");
-                if (!(seasonObj instanceof Map)) {
+                if (!(seasonObj instanceof Map<?, ?> seasonMap)) {
                     continue;
                 }
-                Object seasonId = ((Map<?, ?>) seasonObj).get("id");
-                if (seasonId == null || !String.valueOf(seasonId).equals(String.valueOf(room.getSeasonId()))) {
+                Long currentSeasonId = normalizePositive(asLong(seasonMap.get("id")));
+                if (!Objects.equals(currentSeasonId, seasonId)) {
                     continue;
                 }
-                Object sectionsObj = item.get("sections");
-                if (!(sectionsObj instanceof Map)) {
-                    continue;
+                List<Long> sectionIds = extractSectionIds(item);
+                Long firstSectionId = sectionIds.isEmpty() ? null : sectionIds.get(0);
+                if (sectionId != null && sectionIds.contains(sectionId)) {
+                    return sectionId;
                 }
-                Object sectionsList = ((Map<?, ?>) sectionsObj).get("sections");
-                if (!(sectionsList instanceof List) || ((List<?>) sectionsList).isEmpty()) {
-                    continue;
+                if (firstSectionId != null) {
+                    room.setSectionId(firstSectionId);
+                    roomRepository.save(room);
+                    log.info("[BLR] {}", LogKvs.event("Publish.Season.Section.Corrected")
+                            .add("roomId", room.getRoomId())
+                            .add("seasonId", seasonId)
+                            .add("oldSectionId", sectionId)
+                            .add("newSectionId", firstSectionId)
+                            .add("action", "use_first_section"));
+                    return firstSectionId;
                 }
-                Object firstSection = ((List<?>) sectionsList).get(0);
-                if (!(firstSection instanceof Map)) {
-                    continue;
-                }
-                Object sectionId = ((Map<?, ?>) firstSection).get("id");
-                if (sectionId == null) {
-                    continue;
-                }
-                Long resolved = Long.valueOf(String.valueOf(sectionId));
-                log.info("[BLR] {}", LogKvs.event("Publish.Season.ResolveSectionId.Success")
+                room.setSeasonId(null);
+                room.setSectionId(null);
+                roomRepository.save(room);
+                log.warn("[BLR] {}", LogKvs.event("Publish.Season.Section.Disabled")
                         .add("roomId", room.getRoomId())
-                        .add("seasonId", room.getSeasonId())
-                        .add("sectionId", resolved));
-                return resolved;
+                        .add("seasonId", seasonId)
+                        .add("oldSectionId", sectionId)
+                        .add("reason", "season_without_section"));
+                return null;
             }
+            room.setSeasonId(null);
+            room.setSectionId(null);
+            roomRepository.save(room);
+            log.warn("[BLR] {}", LogKvs.event("Publish.Season.Section.Disabled")
+                    .add("roomId", room.getRoomId())
+                    .add("seasonId", seasonId)
+                    .add("oldSectionId", sectionId)
+                    .add("reason", "season_not_found"));
         } catch (Exception e) {
             log.warn("[BLR] {}", LogKvs.event("Publish.Season.ResolveSectionId.Failed")
                     .add("roomId", room.getRoomId())
-                    .add("seasonId", room.getSeasonId())
+                    .add("seasonId", seasonId)
                     .add("respLen", raw.length()), e);
         }
         return null;
+    }
+
+    private List<Long> extractSectionIds(Map<String, Object> seasonItem) {
+        Object sectionsObj = seasonItem.get("sections");
+        if (!(sectionsObj instanceof Map<?, ?> sectionsMap)) {
+            return new ArrayList<>();
+        }
+        Object sectionsListObj = sectionsMap.get("sections");
+        if (!(sectionsListObj instanceof List<?> sectionsList)) {
+            return new ArrayList<>();
+        }
+        List<Long> sectionIds = new ArrayList<>();
+        for (Object sectionObj : sectionsList) {
+            if (!(sectionObj instanceof Map<?, ?> sectionMap)) {
+                continue;
+            }
+            Long id = normalizePositive(asLong(sectionMap.get("id")));
+            if (id != null) {
+                sectionIds.add(id);
+            }
+        }
+        return sectionIds;
+    }
+
+    private Long asLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private Long normalizePositive(Long value) {
+        if (value == null || value <= 0) {
+            return null;
+        }
+        return value;
     }
 
     private static boolean isSkippedPart(RecordHistoryPart part) {

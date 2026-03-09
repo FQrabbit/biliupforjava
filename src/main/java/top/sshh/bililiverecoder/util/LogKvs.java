@@ -76,6 +76,9 @@ public final class LogKvs {
         // 录制事件
         EVENT_ZH.put("Room.AutoCreate", "房间不存在，自动创建房间配置");
         EVENT_ZH.put("Room.Seasons.FetchFailed", "房间合集列表获取失败(返回空列表)");
+        EVENT_ZH.put("Room.Update.SeasonSection.Fixed", "房间编辑保存：合集配置已校验并修正");
+        EVENT_ZH.put("Room.Update.SeasonSection.Corrected", "房间编辑保存：section不属于season，已修正为首section");
+        EVENT_ZH.put("Room.Update.SeasonSection.Disabled", "房间编辑保存：合集配置无效，已禁用合集");
         EVENT_ZH.put("RecordStarted.ReuseHistory", "录制开始：复用历史记录(继续录制)");
         EVENT_ZH.put("RecordStarted.ReuseHistory.Detail", "录制开始：复用历史记录明细(调试)");
         EVENT_ZH.put("RecordStarted.ReuseActiveHistory", "录制开始：复用活跃的历史记录");
@@ -181,6 +184,8 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.Visibility.Sync.Success", "投稿后同步视频可见性成功");
         EVENT_ZH.put("Publish.Visibility.Sync.SkipInvalid", "投稿后同步视频可见性跳过(配置非法)");
         EVENT_ZH.put("Publish.Visibility.Sync.Failed", "投稿后同步视频可见性失败");
+        EVENT_ZH.put("Publish.Season.Section.Corrected", "投稿前校验合集配置：section已修正");
+        EVENT_ZH.put("Publish.Season.Section.Disabled", "投稿前校验合集配置：已禁用合集");
         EVENT_ZH.put("Publish.Season.Add.Success", "投稿后加入合集成功");
         EVENT_ZH.put("Publish.Season.Add.Failed", "投稿后加入合集失败");
         EVENT_ZH.put("Publish.File.DeleteSuccess", "投稿后删除文件成功");

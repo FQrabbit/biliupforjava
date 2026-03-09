@@ -2967,6 +2967,9 @@
             updateRoom: function () {
                 let _this = this;
 
+                // 保存前校验：小节必须属于当前合集，不符合则自动修正
+                _this.ensureSectionBelongsSeason(true);
+
                 // 提交前强制同步封面状态
                 if (_this.room.coverType === 'live') {
                     _this.room.coverUrl = 'live';
@@ -3097,12 +3100,7 @@
                     success: function (data) {
                         _this.seasonsList = data.data.seasons;
                         _this.onSeasonDropdownVisibleChange(true);
-                        if (_this.room.seasonId) {
-                            let selectedSeason = _this.seasonsList.find(item => item.season.id === _this.room.seasonId);
-                            if (selectedSeason && selectedSeason.sections && selectedSeason.sections.sections) {
-                                _this.sectionsList = selectedSeason.sections.sections;
-                            }
-                        }
+                        _this.ensureSectionBelongsSeason(true);
                     }
                 });
             },
@@ -3302,34 +3300,60 @@
                 this.roomCoverObjectUrl = '';
                 this.liveCoverObjectUrl = '';
             },
-            changeSeason: function(val) {
-                if (!val) {
-                    this.sectionsList = [];
+            getSectionsBySeasonId: function(seasonId) {
+                if (!seasonId) return [];
+                var selectedSeason = null;
+                for (var i = 0; i < this.seasonsList.length; i++) {
+                    var seasonItem = this.seasonsList[i];
+                    if (seasonItem && seasonItem.season && String(seasonItem.season.id) === String(seasonId)) {
+                        selectedSeason = seasonItem;
+                        break;
+                    }
+                }
+                if (selectedSeason && selectedSeason.sections && selectedSeason.sections.sections) {
+                    return selectedSeason.sections.sections;
+                }
+                return [];
+            },
+            ensureSectionBelongsSeason: function(syncSectionsList) {
+                var seasonId = this.room ? this.room.seasonId : null;
+                var targetSections = [];
+                if (seasonId) {
+                    targetSections = this.getSectionsBySeasonId(seasonId);
+                }
+
+                if (syncSectionsList) {
+                    this.sectionsList = targetSections;
+                }
+
+                if (!this.room) return;
+                if (!seasonId) {
                     this.room.sectionId = null;
                     return;
                 }
-                var selectedSeason = this.seasonsList.find(function(item) { return String(item.season.id) === String(val); });
-                if (selectedSeason && selectedSeason.sections && selectedSeason.sections.sections) {
-                    this.sectionsList = selectedSeason.sections.sections;
-                } else {
-                    this.sectionsList = [];
-                }
-                var hasSection = false;
-                if (this.room && this.room.sectionId) {
-                    for (var i = 0; i < this.sectionsList.length; i++) {
-                        if (this.sectionsList[i] && String(this.sectionsList[i].id) === String(this.room.sectionId)) {
-                            hasSection = true;
+
+                var currentSectionId = this.room.sectionId;
+                var sectionValid = false;
+                if (currentSectionId) {
+                    for (var i = 0; i < targetSections.length; i++) {
+                        if (targetSections[i] && String(targetSections[i].id) === String(currentSectionId)) {
+                            sectionValid = true;
                             break;
                         }
                     }
                 }
-                if (!hasSection) {
-                    if (this.sectionsList && this.sectionsList.length > 0) {
-                        this.room.sectionId = this.sectionsList[0].id;
+
+                if (!sectionValid) {
+                    if (targetSections.length > 0) {
+                        this.room.sectionId = targetSections[0].id;
                     } else {
                         this.room.sectionId = null;
                     }
                 }
+            },
+            changeSeason: function(val) {
+                // season 变更后校验：小节必须属于当前合集
+                this.ensureSectionBelongsSeason(true);
             },
             typeChange(change, nodeData) {
                 let node;

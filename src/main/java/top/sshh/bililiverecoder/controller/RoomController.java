@@ -79,6 +79,8 @@ public class RoomController {
         private MediaType contentType;
     }
 
+    private record SeasonSectionFixResult(Long seasonId, Long sectionId, String action) {}
+
 
     @PostMapping
     public List<RecordRoom> list() {
@@ -211,8 +213,9 @@ public class RoomController {
             dbRoom.setTags(room.getTags());
             dbRoom.setUpload(room.isUpload());
             dbRoom.setUploadUserId(room.getUploadUserId());
-            dbRoom.setSeasonId(room.getSeasonId());
-            dbRoom.setSectionId(room.getSectionId());
+            SeasonSectionFixResult seasonSectionFixResult = validateAndFixSeasonSection(room.getSeasonId(), room.getSectionId(), dbRoom);
+            dbRoom.setSeasonId(seasonSectionFixResult.seasonId());
+            dbRoom.setSectionId(seasonSectionFixResult.sectionId());
             dbRoom.setHighEnergyCut(room.isHighEnergyCut());
             dbRoom.setPercentileRank(room.getPercentileRank());
             dbRoom.setIsOnlySelf(room.getIsOnlySelf());
@@ -236,9 +239,146 @@ public class RoomController {
             dbRoom.setSendDm(room.getSendDm());
             dbRoom.setSendSc(room.getSendSc());
             roomRepository.save(dbRoom);
+            log.info("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Fixed")
+                    .add("roomId", dbRoom.getRoomId())
+                    .add("id", dbRoom.getId())
+                    .add("uploadUserId", dbRoom.getUploadUserId())
+                    .add("seasonId", dbRoom.getSeasonId())
+                    .add("sectionId", dbRoom.getSectionId())
+                    .add("action", seasonSectionFixResult.action()));
             return true;
         }
         return false;
+    }
+
+    private SeasonSectionFixResult validateAndFixSeasonSection(Long inputSeasonId, Long inputSectionId, RecordRoom room) {
+        Long seasonId = normalizePositive(inputSeasonId);
+        Long sectionId = normalizePositive(inputSectionId);
+        if (seasonId == null) {
+            return new SeasonSectionFixResult(null, null, "disable_no_season");
+        }
+        Long uploadUserId = room.getUploadUserId();
+        if (uploadUserId == null) {
+            log.warn("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Disabled")
+                    .add("roomId", room.getRoomId())
+                    .add("id", room.getId())
+                    .add("seasonId", seasonId)
+                    .add("sectionId", sectionId)
+                    .add("reason", "upload_user_missing"));
+            return new SeasonSectionFixResult(null, null, "disable_upload_user_missing");
+        }
+        Optional<BiliBiliUser> userOptional = userRepository.findById(uploadUserId);
+        if (!userOptional.isPresent()) {
+            log.warn("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Disabled")
+                    .add("roomId", room.getRoomId())
+                    .add("id", room.getId())
+                    .add("seasonId", seasonId)
+                    .add("sectionId", sectionId)
+                    .add("uploadUserId", uploadUserId)
+                    .add("reason", "upload_user_not_found"));
+            return new SeasonSectionFixResult(null, null, "disable_upload_user_not_found");
+        }
+        String raw = BiliApi.getSeasons(userOptional.get());
+        if (StringUtils.isBlank(raw)) {
+            log.warn("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Disabled")
+                    .add("roomId", room.getRoomId())
+                    .add("id", room.getId())
+                    .add("seasonId", seasonId)
+                    .add("sectionId", sectionId)
+                    .add("uploadUserId", uploadUserId)
+                    .add("reason", "seasons_empty"));
+            return new SeasonSectionFixResult(null, null, "disable_seasons_empty");
+        }
+        try {
+            List<Map<String, Object>> seasons = JsonPath.read(raw, "$.data.seasons");
+            for (Map<String, Object> item : seasons) {
+                Object seasonObj = item.get("season");
+                if (!(seasonObj instanceof Map<?, ?> seasonMap)) {
+                    continue;
+                }
+                Long currentSeasonId = normalizePositive(asLong(seasonMap.get("id")));
+                if (!Objects.equals(currentSeasonId, seasonId)) {
+                    continue;
+                }
+                List<Long> sectionIds = extractSectionIds(item);
+                Long firstSectionId = sectionIds.isEmpty() ? null : sectionIds.get(0);
+                if (sectionId != null && sectionIds.contains(sectionId)) {
+                    return new SeasonSectionFixResult(seasonId, sectionId, "keep");
+                }
+                if (firstSectionId != null) {
+                    log.info("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Corrected")
+                            .add("roomId", room.getRoomId())
+                            .add("id", room.getId())
+                            .add("seasonId", seasonId)
+                            .add("oldSectionId", sectionId)
+                            .add("newSectionId", firstSectionId)
+                            .add("reason", "section_not_in_season"));
+                    return new SeasonSectionFixResult(seasonId, firstSectionId, "use_first_section");
+                }
+                log.warn("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Disabled")
+                        .add("roomId", room.getRoomId())
+                        .add("id", room.getId())
+                        .add("seasonId", seasonId)
+                        .add("sectionId", sectionId)
+                        .add("reason", "season_without_section"));
+                return new SeasonSectionFixResult(null, null, "disable_no_section");
+            }
+            log.warn("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Disabled")
+                    .add("roomId", room.getRoomId())
+                    .add("id", room.getId())
+                    .add("seasonId", seasonId)
+                    .add("sectionId", sectionId)
+                    .add("reason", "season_not_found"));
+            return new SeasonSectionFixResult(null, null, "disable_season_not_found");
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Disabled")
+                    .add("roomId", room.getRoomId())
+                    .add("id", room.getId())
+                    .add("seasonId", seasonId)
+                    .add("sectionId", sectionId)
+                    .add("reason", "seasons_parse_error"), e);
+            return new SeasonSectionFixResult(null, null, "disable_parse_error");
+        }
+    }
+
+    private List<Long> extractSectionIds(Map<String, Object> item) {
+        Object sectionsObj = item.get("sections");
+        if (!(sectionsObj instanceof Map<?, ?> sectionsMap)) {
+            return new ArrayList<>();
+        }
+        Object sectionListObj = sectionsMap.get("sections");
+        if (!(sectionListObj instanceof List<?> sectionList)) {
+            return new ArrayList<>();
+        }
+        List<Long> sectionIds = new ArrayList<>();
+        for (Object sectionObj : sectionList) {
+            if (!(sectionObj instanceof Map<?, ?> sectionMap)) {
+                continue;
+            }
+            Long id = normalizePositive(asLong(sectionMap.get("id")));
+            if (id != null) {
+                sectionIds.add(id);
+            }
+        }
+        return sectionIds;
+    }
+
+    private Long asLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private Long normalizePositive(Long value) {
+        if (value == null || value <= 0) {
+            return null;
+        }
+        return value;
     }
 
     @PostMapping("/editLiveMsgSetting")
