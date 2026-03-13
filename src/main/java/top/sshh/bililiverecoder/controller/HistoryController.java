@@ -268,9 +268,9 @@ public class HistoryController {
 
     @GetMapping("/delete/{id}")
     public Map<String, Object> delete(@PathVariable("id") Long id,
-                                      @RequestParam(required = false, defaultValue = "true") boolean deleteVideo,
-                                      @RequestParam(required = false, defaultValue = "true") boolean deleteDanmaku,
-                                      @RequestParam(required = false, defaultValue = "true") boolean deleteCover) {
+                                      @RequestParam(required = false, defaultValue = "false") boolean deleteVideo,
+                                      @RequestParam(required = false, defaultValue = "false") boolean deleteDanmaku,
+                                      @RequestParam(required = false, defaultValue = "false") boolean deleteCover) {
         Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");

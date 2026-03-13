@@ -873,6 +873,30 @@
             <el-button type="primary" :disabled="!selectedCandidateFile" @click="submitBindFile">确 定</el-button>
         </div>
     </el-dialog>
+
+    <!-- 单条删除确认弹窗 -->
+    <el-dialog title="删除记录确认" :visible.sync="singleDeleteDialogVisible" width="420px" append-to-body :close-on-click-modal="false">
+        <div style="padding: 0 4px;">
+            <div style="display:flex; align-items:flex-start; margin-bottom:16px;">
+                <i class="el-icon-warning" style="font-size:22px; color:#E6A23C; margin-right:10px; margin-top:2px; flex-shrink:0;"></i>
+                <span style="line-height:1.6; color:#303133;">此操作将永久删除该条录制历史记录（数据库数据），<strong>不可恢复</strong>。</span>
+            </div>
+            <div style="background:#f5f7fa; border-radius:6px; padding:12px 16px; margin-bottom:8px;">
+                <div style="font-size:13px; color:#606266; margin-bottom:10px;">同时删除本地文件（可选）：</div>
+                <el-checkbox v-model="singleDeleteOptions.deleteVideo" style="display:block; margin-bottom:8px;">视频文件（.mp4 / .flv / .mkv 等）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteDanmaku" style="display:block; margin-bottom:8px;">弹幕文件（.xml / .ass）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteCover" style="display:block;">封面图片（.jpg / .png 等）</el-checkbox>
+            </div>
+            <div v-if="singleDeleteOptions.deleteVideo || singleDeleteOptions.deleteDanmaku || singleDeleteOptions.deleteCover"
+                 style="font-size:12px; color:#F56C6C; margin-top:8px;">
+                ⚠ 勾选的本地文件将被永久删除，无法恢复！
+            </div>
+        </div>
+        <div slot="footer">
+            <el-button @click="singleDeleteDialogVisible = false">取 消</el-button>
+            <el-button type="danger" @click="confirmDeleteHistory">确认删除</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script>
     new Vue({
@@ -951,6 +975,13 @@
             didDragSelect: false,
             didDragSelectTimer: null,
             batchDeleteOptions: {
+                deleteVideo: false,
+                deleteDanmaku: false,
+                deleteCover: false
+            },
+            singleDeleteDialogVisible: false,
+            singleDeleteId: null,
+            singleDeleteOptions: {
                 deleteVideo: false,
                 deleteDanmaku: false,
                 deleteCover: false
@@ -2716,48 +2747,47 @@
                 }).catch(() => {});
             },
             deleteHistory: function (id) {
+                this.singleDeleteId = id;
+                this.singleDeleteOptions.deleteVideo = false;
+                this.singleDeleteOptions.deleteDanmaku = false;
+                this.singleDeleteOptions.deleteCover = false;
+                this.singleDeleteDialogVisible = true;
+            },
+            confirmDeleteHistory: function () {
                 let _this = this;
-                this.$confirm('此操作将永久删除该条录制历史记录，并同时删除本地的视频文件和弹幕文件！此操作不可恢复！<br/><br/>确定要删除吗？', '删除记录确认', {
-                    dangerouslyUseHTMLString: true,
-                    confirmButtonText: '删除',
-                    cancelButtonText: '保留',
-                    confirmButtonClass: 'el-button--danger',
-                    cancelButtonClass: 'el-button--success',
-                    type: 'warning'
-                }).then(() => {
-                    const loading = _this.$loading({
-                        lock: true,
-                        text: '正在删除记录...',
-                        spinner: 'el-icon-loading',
-                        background: 'rgba(0, 0, 0, 0.7)'
-                    });
-                    $.ajax({
-                        url: '/history/delete/' + id,
-                        contentType: 'application/json;charset=utf-8',
-                        type: 'get',
-                        dataType: 'json',
-                        success: function (data) {
-                            loading.close();
-                            _this.$message({
-                                message: data.msg,
-                                type: data.type
+                this.singleDeleteDialogVisible = false;
+                const loading = _this.$loading({
+                    lock: true,
+                    text: '正在删除记录...',
+                    spinner: 'el-icon-loading',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                $.ajax({
+                    url: '/history/delete/' + _this.singleDeleteId,
+                    type: 'get',
+                    data: _this.singleDeleteOptions,
+                    dataType: 'json',
+                    success: function (data) {
+                        loading.close();
+                        _this.$message({
+                            message: data.msg,
+                            type: data.type
+                        });
+                        var files = data && data.data && Array.isArray(data.data.notDeletedFiles) ? data.data.notDeletedFiles : [];
+                        if (files.length > 0) {
+                            _this.$alert(_this.buildNotDeletedFilesHtml([{ historyId: _this.singleDeleteId, files: files }]), '部分本地文件未删除', {
+                                dangerouslyUseHTMLString: true,
+                                confirmButtonText: '知道了',
+                                type: 'warning'
                             });
-                            var files = data && data.data && Array.isArray(data.data.notDeletedFiles) ? data.data.notDeletedFiles : [];
-                            if (files.length > 0) {
-                                _this.$alert(_this.buildNotDeletedFilesHtml([{ historyId: id, files: files }]), '部分本地文件未删除', {
-                                    dangerouslyUseHTMLString: true,
-                                    confirmButtonText: '知道了',
-                                    type: 'warning'
-                                });
-                            }
-                            _this.initTable();
-                        },
-                        error: function() {
-                            loading.close();
-                            _this.$message.error('删除失败');
                         }
-                    });
-                }).catch(() => {});
+                        _this.initTable();
+                    },
+                    error: function() {
+                        loading.close();
+                        _this.$message.error('删除失败');
+                    }
+                });
             },
             deleteHistoryMsg: function (id) {
                 let _this = this;
