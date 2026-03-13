@@ -74,6 +74,8 @@ public class PartController {
     public Map<String, Object> list2(@PathVariable("id") Long id) {
         Map<String, Object> resp = new LinkedHashMap<>();
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(id);
+        Optional<RecordHistory> histOpt = historyRepository.findById(id);
+        boolean historyPublished = histOpt.isPresent() && histOpt.get().isPublish();
         List<Map<String, Object>> items = new ArrayList<>();
         int blocking = 0;
         long nowMs = System.currentTimeMillis();
@@ -108,11 +110,11 @@ public class PartController {
                 issueCode = isBlank(p.getDeleteFailType()) ? "GIVE_UP" : p.getDeleteFailType();
                 issueMessage = isBlank(p.getDeleteFailReason()) ? "该分P已被标记为跳过/放弃上传" : p.getDeleteFailReason();
                 actionable = "SKIPPED_THRESHOLD".equals(issueCode) || "MANUAL_SKIP".equals(issueCode);
-                if (actionable) {
+                if (actionable && !historyPublished) {
                     actions.add("BIND_FILE");
                     actions.add("MARK_FINISHED");
                 }
-            } else {
+            } else if (!historyPublished) {
                 String fp = p.getFilePath();
                 File f = fp == null ? null : new File(fp);
                 boolean fileExists = f != null && f.exists();
@@ -211,7 +213,8 @@ public class PartController {
 
         boolean triggered = false;
         Optional<RecordHistory> historyOptional = part.getHistoryId() == null ? Optional.empty() : historyRepository.findById(part.getHistoryId());
-        if (!shutdownState.isShuttingDown() && historyOptional.isPresent() && historyOptional.get().isUpload()) {
+        if (!shutdownState.isShuttingDown() && historyOptional.isPresent()
+                && historyOptional.get().isUpload() && !historyOptional.get().isPublish()) {
             RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
             if (room != null) {
                 try {
@@ -249,6 +252,15 @@ public class PartController {
             return result;
         }
         RecordHistoryPart part = partOptional.get();
+        // 已投稿稿件不允许修改分P状态
+        if (part.getHistoryId() != null) {
+            Optional<RecordHistory> histOpt = historyRepository.findById(part.getHistoryId());
+            if (histOpt.isPresent() && histOpt.get().isPublish()) {
+                result.put("type", "warning");
+                result.put("msg", "该稿件已投稿，不允许修改分P状态");
+                return result;
+            }
+        }
         if (part.isRecording()) {
             part.setRecording(false);
         }
@@ -292,6 +304,15 @@ public class PartController {
             return result;
         }
         RecordHistoryPart part = partOptional.get();
+        // 已投稿稿件不允许补全文件
+        if (part.getHistoryId() != null) {
+            Optional<RecordHistory> histOpt = historyRepository.findById(part.getHistoryId());
+            if (histOpt.isPresent() && histOpt.get().isPublish()) {
+                result.put("type", "warning");
+                result.put("msg", "该稿件已投稿，不允许补全文件");
+                return result;
+            }
+        }
         String filePath = body == null ? null : String.valueOf(body.get("filePath"));
         if (filePath != null) {
             filePath = filePath.replace("\\", "/");

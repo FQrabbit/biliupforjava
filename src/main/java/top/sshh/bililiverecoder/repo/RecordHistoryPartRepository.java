@@ -54,7 +54,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     List<RecordHistoryPart> findByRoomIdAndRecordingIsFalseAndUploadIsFalseAndEndTimeBetweenOrderByEndTimeAsc(
         String roomId, LocalDateTime startTime, LocalDateTime endTime);
 
-    // 分P上传补偿任务专用：仅返回所属history存在且已开启上传(upload=true)的分P，避免无意义重复扫描
+    // 分P上传补偿任务专用：仅返回所属history存在且已开启上传(upload=true)且未投稿(publish=false)的分P
     @Query("""
         select p from RecordHistoryPart p
         where p.roomId = :roomId
@@ -66,6 +66,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
               select 1 from RecordHistory h
               where h.id = p.historyId
                 and h.upload = true
+                and h.publish = false
           )
         order by p.endTime asc
         """)
