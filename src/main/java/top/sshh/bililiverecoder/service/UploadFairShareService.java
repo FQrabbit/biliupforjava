@@ -66,6 +66,13 @@ public class UploadFairShareService {
                 concurrency = 8;
             }
         }
+        // 按全局连接预算压低 ForkJoinPool 大小，避免过多线程阻塞在信号量上
+        UploadConnectionBudgetService budget = UploadConnectionBudgetService.getInstance();
+        if (budget != null) {
+            int activeUsers = Math.max(1, getActiveUploadUserCount());
+            int perUserBudget = Math.max(1, (int) Math.ceil((double) budget.getMaxConnections() / activeUsers));
+            concurrency = Math.min(concurrency, perUserBudget);
+        }
         return Math.max(1, Math.min(concurrency, 8));
     }
 

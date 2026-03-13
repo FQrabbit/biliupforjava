@@ -164,14 +164,30 @@
                                         短时间开播合并时间
                                         <span class="config-unit">分钟</span>
                                     </label>
-                                    <el-input 
-                                        v-model="systemConfig.mergeIntervalMinutes" 
-                                        @input="validateNumber($event, 'mergeIntervalMinutes', false)" 
-                                        placeholder="请输入数字" 
+                                    <el-input
+                                        v-model="systemConfig.mergeIntervalMinutes"
+                                        @input="validateNumber($event, 'mergeIntervalMinutes', false)"
+                                        placeholder="请输入数字"
                                         size="small"
                                         class="config-input">
                                     </el-input>
                                     <div class="config-help">下播后等待多长时间再投稿，同时间隔多少分钟内开播算同一次直播，避免短时间开播下播拆分稿件</div>
+                                </div>
+
+                                <div class="config-item">
+                                    <label class="config-label">
+                                        <i class="el-icon-sort"></i>
+                                        上传并发连接数
+                                        <span class="config-unit">个</span>
+                                    </label>
+                                    <el-input
+                                        v-model="systemConfig.maxConnections"
+                                        @input="validateNumber($event, 'maxConnections', false)"
+                                        placeholder="请输入数字"
+                                        size="small"
+                                        class="config-input">
+                                    </el-input>
+                                    <div class="config-help">限制同时进行的上传连接数(1-16)，值越小对网络占用越少。多账号同时上传时建议保持较低值避免网络拥塞影响其他应用</div>
                                 </div>
                             </div>
                             
@@ -778,7 +794,8 @@
             systemConfig: {
                 apiQps: 5.0,
                 uploadMb: 0,
-                mergeIntervalMinutes: 20
+                mergeIntervalMinutes: 20,
+                maxConnections: 3
             },
             configLoading: false,
             configExpanded: false,
@@ -875,11 +892,13 @@
                 var originalApiQps = parseFloat(self.originalConfig.apiQps) || 0;
                 var originalUploadMb = parseFloat(self.originalConfig.uploadMb) || 0;
                 var originalMergeIntervalMinutes = parseInt(self.originalConfig.mergeIntervalMinutes) || 20;
+                var originalMaxConnections = parseInt(self.originalConfig.maxConnections) || 3;
                 var currentApiQps = parseFloat(self.systemConfig.apiQps) || 0;
                 var currentUploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
                 var currentMergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
-                
-                self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes);
+                var currentMaxConnections = parseInt(self.systemConfig.maxConnections) || 3;
+
+                self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections);
             },
             resetConfig: function() {
                 // 重置配置
@@ -887,6 +906,7 @@
                 self.systemConfig.apiQps = self.originalConfig.apiQps;
                 self.systemConfig.uploadMb = self.originalConfig.uploadMb;
                 self.systemConfig.mergeIntervalMinutes = self.originalConfig.mergeIntervalMinutes;
+                self.systemConfig.maxConnections = self.originalConfig.maxConnections;
                 self.hasConfigChanges = false;
             },
             loadSystemConfig: function() {
@@ -900,6 +920,8 @@
                                 self.systemConfig.uploadMb = parseFloat(item.configValue);
                             } else if (item.configKey === 'bili.publish.merge-interval-minutes') {
                                 self.systemConfig.mergeIntervalMinutes = parseInt(item.configValue);
+                            } else if (item.configKey === 'upload.max-concurrent-connections') {
+                                self.systemConfig.maxConnections = parseInt(item.configValue);
                             }
                         });
                     }
@@ -907,7 +929,8 @@
                     self.originalConfig = {
                         apiQps: self.systemConfig.apiQps,
                         uploadMb: self.systemConfig.uploadMb,
-                        mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes
+                        mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
+                        maxConnections: self.systemConfig.maxConnections
                     };
                 }, function(e) {
                     console.error('Failed to load system config', e);
@@ -921,6 +944,7 @@
                 var apiQps = parseFloat(self.systemConfig.apiQps) || 0;
                 var uploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
                 var mergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
+                var maxConnections = parseInt(self.systemConfig.maxConnections) || 3;
                 
                 if (mergeIntervalMinutes > 1440) {
                     this.configLoading = false;
@@ -931,7 +955,8 @@
                 var updates = [
                     { key: 'bili.limit.api-qps', value: String(apiQps) },
                     { key: 'bili.limit.upload-mb', value: String(uploadMb) },
-                    { key: 'bili.publish.merge-interval-minutes', value: String(mergeIntervalMinutes) }
+                    { key: 'bili.publish.merge-interval-minutes', value: String(mergeIntervalMinutes) },
+                    { key: 'upload.max-concurrent-connections', value: String(maxConnections) }
                 ];
                 
                 var promises = updates.map(function(item) {
@@ -945,7 +970,8 @@
                     self.originalConfig = {
                         apiQps: self.systemConfig.apiQps,
                         uploadMb: self.systemConfig.uploadMb,
-                        mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes
+                        mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
+                        maxConnections: self.systemConfig.maxConnections
                     };
                     self.hasConfigChanges = false;
                     self.$message.success('系统配置已保存并生效');
