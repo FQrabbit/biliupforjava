@@ -6370,4 +6370,35 @@
 }
 
 
+/* ========== 已跳过分P 提示框 ========== */
+.detail-skip-box {
+    background: rgba(230, 162, 60, 0.08);
+    border: 1px solid rgba(230, 162, 60, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+}
+
+.detail-skip-box .skip-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e6a23c;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.detail-skip-box .skip-note {
+    font-size: 12px;
+    font-weight: normal;
+    color: var(--text-muted, #909399);
+}
+
+.dark-mode .detail-skip-box {
+    background: rgba(230, 162, 60, 0.06);
+    border-color: rgba(230, 162, 60, 0.25);
+}
+
+
 

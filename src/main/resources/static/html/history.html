@@ -333,7 +333,7 @@
                 <div class="data-card"
                      :class="{
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
-                        'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (item.giveUpPartCount > 0),
+                        'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (abnormalPartCount(item) > 0),
                         'is-success': item.publish && (item.code == 0 || item.code == -50),
                         'is-selected': isMultiSelectMode && isSelected(item),
                         'press-anim': pressedCardId === item.id
@@ -355,8 +355,11 @@
                                 <!-- 统一状态显示 -->
                                 <span class="status-chip" :class="getStatusColor(item.status)">{{ item.status }}</span>
                                 
-                                <el-tooltip v-if="item.giveUpPartCount && item.giveUpPartCount > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
-                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ item.giveUpPartCount }}</span>
+                                <el-tooltip v-if="abnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
+                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ abnormalPartCount(item) }}</span>
+                                </el-tooltip>
+                                <el-tooltip v-if="skippedOnlyCount(item) > 0" effect="dark" content="文件低于配置阈值，已自动跳过" placement="top">
+                                    <span class="status-chip" style="background: rgba(230, 162, 60, 0.15); color: #e6a23c;">已跳过 {{ skippedOnlyCount(item) }}</span>
                                 </el-tooltip>
                             </div>
                             <div class="card-meta">
@@ -407,7 +410,8 @@
                     <el-table-column label="已上传分P" prop="uploadPartCount" width="80"></el-table-column>
                     <el-table-column label="异常分P" prop="giveUpPartCount" width="80">
                         <template slot-scope="scope">
-                            <el-tag v-if="scope.row.giveUpPartCount && scope.row.giveUpPartCount > 0" size="mini" type="danger">{{ scope.row.giveUpPartCount }}</el-tag>
+                            <el-tag v-if="abnormalPartCount(scope.row) > 0" size="mini" type="danger">{{ abnormalPartCount(scope.row) }}</el-tag>
+                            <el-tag v-else-if="skippedOnlyCount(scope.row) > 0" size="mini" type="warning">跳过{{ skippedOnlyCount(scope.row) }}</el-tag>
                             <span v-else style="color: #909399;">0</span>
                         </template>
                     </el-table-column>
@@ -629,23 +633,44 @@
             </div>
 
             <!-- 异常信息 -->
-            <div class="detail-exception-box" v-if="currentDetail.giveUpPartCount && currentDetail.giveUpPartCount > 0">
+            <div class="detail-exception-box" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => !isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
                 <div class="exception-header">
                     <div class="exception-header-left">
-                        <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartCount }})
+                        <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => !isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
                     </div>
                     <div class="exception-header-right" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length > 0">
-                        <span v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="'reason-' + idx" class="exception-reason-badge">
-                            {{ formatGiveUpType(idx) }}：{{ getGiveUpReason(idx, p) }}
-                        </span>
+                        <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                            <span v-if="!isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" :key="'reason-' + idx" class="exception-reason-badge">
+                                {{ formatGiveUpType(idx) }}：{{ getGiveUpReason(idx, p) }}
+                            </span>
+                        </template>
                     </div>
                 </div>
                 <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
-                    <div class="exception-item" v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx">
-                        <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
-                            <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
-                        </el-tooltip>
-                    </div>
+                    <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                        <div v-if="!isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="idx">
+                            <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
+                                <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                            </el-tooltip>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 已跳过分P（低于阈值，符合预期） -->
+            <div class="detail-skip-box" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
+                <div class="skip-header">
+                    <i class="el-icon-warning"></i> 已跳过分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
+                    <span class="skip-note">文件低于配置阈值，已自动跳过</span>
+                </div>
+                <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
+                    <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                        <div v-if="isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="'skip-' + idx">
+                            <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
+                                <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                            </el-tooltip>
+                        </div>
+                    </template>
                 </div>
             </div>
 
@@ -1137,6 +1162,22 @@
             document.addEventListener('visibilitychange', this.handleVisibilityChange);
         },
         methods: {
+            // 是否是"预期跳过"类型（不是真正的异常）
+            isSkippedType: function(type) {
+                return type === 'SKIPPED_THRESHOLD' || type === 'MANUAL_SKIP';
+            },
+            // 真正异常分P的数量（排除预期跳过类型）
+            abnormalPartCount: function(item) {
+                if (!item || !item.giveUpPartCount || item.giveUpPartCount <= 0) return 0;
+                var types = item.giveUpPartTypes || [];
+                var skipped = types.filter(t => this.isSkippedType(t)).length;
+                return item.giveUpPartCount - skipped;
+            },
+            // 预期跳过分P的数量
+            skippedOnlyCount: function(item) {
+                if (!item || !item.giveUpPartTypes) return 0;
+                return item.giveUpPartTypes.filter(t => this.isSkippedType(t)).length;
+            },
             // 防抖函数工具
             debounce: function(func, delay) {
                 let timeoutId;
@@ -1567,6 +1608,8 @@
                 if (t === 'FILE_SIZE_INVALID') return '文件大小异常';
                 if (t === 'DURATION_INVALID') return '时长异常';
                 if (t === 'UPLOAD_FAILED') return '上传失败';
+                if (t === 'SKIPPED_THRESHOLD') return '低于阈值';
+                if (t === 'MANUAL_SKIP') return '手动跳过';
                 return t;
             },
             formatDateTime: function(val) {
