@@ -23,6 +23,7 @@
     <script src="js/vue.min.js"></script>
     <script src="js/element-ui.js"></script>
     <script src="js/version.js"></script>
+    <script src="js/theme-tokens.js"></script>
     <script src="js/api.js"></script>
     <script src="js/mixins.js"></script>
     <script src="js/privacy.js"></script>
@@ -98,9 +99,10 @@
                 <div class="privacy-toggle" :class="{ 'is-active': privacyMode }" @click="toggleGlobalPrivacyMode" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
                     <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
                 </div>
-                <!-- 主题切换按钮 -->
-                <div class="theme-toggle" @click="toggleTheme" title="切换主题">
-                    <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+                <div class="theme-popover-wrap">
+                    <div class="theme-toggle" id="themeToggleBtn" @click.stop="toggleThemePanel" title="主题设置">
+                        <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+                    </div>
                 </div>
             </div>
         </div>
@@ -113,6 +115,27 @@
             <div class="subnav-placeholder"></div>
         </div>
     </header>
+    <transition name="fade">
+        <div v-if="showThemePanel" class="theme-popover-backdrop" @click="showThemePanel = false"></div>
+    </transition>
+    <transition name="theme-pop">
+        <div v-if="showThemePanel" class="theme-popover-panel" :style="themePanelStyle" @click.stop>
+            <div class="theme-popover-title">主题外观</div>
+            <div class="theme-popover-row">
+                <span class="theme-popover-label">模式</span>
+                <el-radio-group v-model="theme" size="mini" @change="applyTheme">
+                    <el-radio-button label="light">浅色</el-radio-button>
+                    <el-radio-button label="dark">深色</el-radio-button>
+                </el-radio-group>
+            </div>
+            <div class="theme-popover-row">
+                <span class="theme-popover-label">配色</span>
+                <el-select v-model="themePalette" size="mini" class="theme-palette-select" @change="applyThemePalette" :popper-append-to-body="false" placeholder="配色">
+                    <el-option v-for="item in themePaletteOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+                </el-select>
+            </div>
+        </div>
+    </transition>
     
     <!-- 主内容区域 -->
     <main class="app-main">
@@ -831,7 +854,10 @@
             currentVersion: window.BILIUPFORJAVA_VERSION || '读取版本号异常',
             hasNewVersion: false,
             releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
+            showThemePanel: false,
+            themePanelStyle: {},
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+            themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'classic',
             hasAlerts: false,
             versions: window.BILIUPFORJAVA_CHANGELOG || [],
             navIndicatorStyle: { left: '0px', width: '0px', opacity: 0 },
@@ -857,6 +883,12 @@
                 return this.versions.slice().sort(function (a, b) {
                     return new Date(b.time) - new Date(a.time);
                 });
+            },
+            themePaletteOptions: function () {
+                if (window.ThemeTokens && typeof window.ThemeTokens.getThemeOptions === 'function') {
+                    return window.ThemeTokens.getThemeOptions();
+                }
+                return [{ value: 'classic', label: 'classic' }];
             },
             tabSrc: function () {
                 var baseUrl = '';
@@ -910,6 +942,19 @@
             }
         },
         methods: {
+            toggleThemePanel: function() {
+                if (!this.showThemePanel) {
+                    var btn = document.getElementById('themeToggleBtn');
+                    if (btn) {
+                        var rect = btn.getBoundingClientRect();
+                        this.themePanelStyle = {
+                            top: (rect.bottom + 8) + 'px',
+                            right: (window.innerWidth - rect.right) + 'px'
+                        };
+                    }
+                }
+                this.showThemePanel = !this.showThemePanel;
+            },
             getCurrentScrollTop: function() {
                 if (this.activeName === 'log') {
                     return 0;
@@ -1343,6 +1388,16 @@
                     }
                 }, 400);
             },
+            applyThemePalette: function(paletteName) {
+                if (window.ThemeTokens && typeof window.ThemeTokens.setPalette === 'function') {
+                    var ok = window.ThemeTokens.setPalette(paletteName);
+                    if (!ok) {
+                        return;
+                    }
+                }
+                this.themePalette = paletteName;
+                this.applyTheme(this.theme);
+            },
             toggleGlobalPrivacyMode: function() {
                 this.privacyMode = !this.privacyMode;
                 this.syncIframePrivacyMode();
@@ -1594,6 +1649,7 @@
                 this.startScrollStateMonitor();
             },
             switchTab: function(tab) {
+                this.showThemePanel = false;
                 if (this.activeName === tab) {
                     return;
                 }
@@ -1618,11 +1674,20 @@
                 }
             },
             applyTheme: function(theme) {
-                document.documentElement.setAttribute('data-theme', theme);
-                localStorage.setItem('theme', theme);
+                var nextTheme = theme === 'dark' ? 'dark' : 'light';
+                if (window.ThemeTokens && typeof window.ThemeTokens.applyCurrent === 'function') {
+                    window.ThemeTokens.applyCurrent(document, nextTheme);
+                } else {
+                    document.documentElement.setAttribute('data-theme', nextTheme);
+                }
+                localStorage.setItem('theme', nextTheme);
                 var iframe = document.querySelector('iframe');
                 if (iframe && iframe.contentDocument) {
-                    iframe.contentDocument.documentElement.setAttribute('data-theme', theme);
+                    if (window.ThemeTokens && typeof window.ThemeTokens.applyCurrent === 'function') {
+                        window.ThemeTokens.applyCurrent(iframe.contentDocument, nextTheme);
+                    } else {
+                        iframe.contentDocument.documentElement.setAttribute('data-theme', nextTheme);
+                    }
                 }
             },
             updateNavIndicator: function() {

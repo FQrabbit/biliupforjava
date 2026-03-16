@@ -28,16 +28,16 @@
 /* ---------- Neon Glow 霓虹发光 ---------- */
 /*
 .neon-glow {
-    box-shadow: 0 0 calc(8px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.4),
-                0 0 calc(20px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.2),
-                0 0 calc(40px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.1);
+    box-shadow: 0 0 calc(8px * var(--neon-glow-intensity)) var(--brand-accent-border-strong),
+                0 0 calc(20px * var(--neon-glow-intensity)) var(--brand-soft-bg-active),
+                0 0 calc(40px * var(--neon-glow-intensity)) var(--brand-soft-bg);
     transition: box-shadow var(--transition-base);
 }
 
 .neon-glow:hover {
-    box-shadow: 0 0 calc(12px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.6),
-                0 0 calc(30px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.3),
-                0 0 calc(60px * var(--neon-glow-intensity)) rgba(91, 108, 255, 0.15);
+    box-shadow: 0 0 calc(12px * var(--neon-glow-intensity)) var(--brand-accent-border-strong),
+                0 0 calc(30px * var(--neon-glow-intensity)) var(--brand-accent-border),
+                0 0 calc(60px * var(--neon-glow-intensity)) var(--brand-soft-bg-strong);
 }
 */
 
@@ -52,9 +52,9 @@
     content: '';
     position: absolute;
     inset: 0;
-    background-image: radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.4) 0%, transparent 100%),
-                       radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
-                       radial-gradient(1px 1px at 80% 20%, rgba(255,255,255,0.35) 0%, transparent 100%);
+    background-image: radial-gradient(1px 1px at 20% 30%, var(--glass-border) 0%, transparent 100%),
+                       radial-gradient(1px 1px at 60% 70%, var(--glass-bg) 0%, transparent 100%),
+                       radial-gradient(1px 1px at 80% 20%, var(--glass-border) 0%, transparent 100%);
     animation: breathe 4s ease-in-out infinite;
     pointer-events: none;
 }
@@ -63,20 +63,20 @@
 /* ---------- Depth Shadow 深度阴影 ---------- */
 /*
 .depth-shadow {
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04),
-                0 2px 4px rgba(0,0,0,0.04),
-                0 4px 8px rgba(0,0,0,0.04),
-                0 8px 16px rgba(0,0,0,0.04),
-                0 16px 32px rgba(0,0,0,0.04);
+    box-shadow: var(--shadow-sm),
+                var(--shadow-sm),
+                var(--shadow-md),
+                var(--shadow-md),
+                var(--shadow-lg);
     transition: box-shadow var(--transition-base), transform var(--transition-base);
 }
 
 .depth-shadow:hover {
     transform: translateY(-4px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04),
-                0 4px 8px rgba(0,0,0,0.04),
-                0 8px 16px rgba(0,0,0,0.04),
-                0 16px 32px rgba(0,0,0,0.04),
-                0 32px 64px rgba(0,0,0,0.06);
+    box-shadow: var(--shadow-sm),
+                var(--shadow-md),
+                var(--shadow-md),
+                var(--shadow-lg),
+                var(--shadow-lg);
 }
 */

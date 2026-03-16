@@ -23,10 +23,10 @@
 .log-toolbar-card {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-light);
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--bg-primary);
     backdrop-filter: blur(var(--blur-md));
     -webkit-backdrop-filter: blur(var(--blur-md));
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow-sm), inset 0 1px 0 var(--glass-border);
     transition: transform var(--transition-base),
                 box-shadow var(--transition-base),
                 border-color var(--transition-base);
@@ -35,18 +35,18 @@
 .log-toolbar-card:hover {
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
-    border-color: rgba(91, 108, 255, 0.2);
+    border-color: var(--brand-accent-border-light);
 }
 
 [data-theme="dark"] .log-toolbar-card {
-    background: rgba(39, 39, 42, 0.45);
-    border-color: rgba(91, 108, 255, 0.2);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background: var(--bg-tertiary);
+    border-color: var(--brand-accent-border-light);
+    box-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-border);
 }
 
 [data-theme="dark"] .log-toolbar-card:hover {
-    box-shadow: 0 8px 24px rgba(91, 108, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    border-color: rgba(91, 108, 255, 0.4);
+    box-shadow: 0 8px 24px var(--brand-soft-bg-strong), inset 0 1px 0 var(--glass-border);
+    border-color: var(--brand-accent-border-strong);
 }
 
 /* ========== 工具栏布局 ========== */
@@ -179,13 +179,13 @@
     font-size: 13px;
     line-height: 1.6;
     transition: var(--transition-base);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: inset 0 1px 2px var(--glass-border);
 }
 
 [data-theme="dark"] .log-console {
     background: var(--bg-tertiary);
-    border-color: rgba(63, 63, 70, 0.5);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+    border-color: var(--border-color);
+    box-shadow: inset 0 1px 3px var(--glass-border);
 }
 
 .log-list {
@@ -229,11 +229,11 @@
 }
 
 .log-line.selection-mode:hover {
-    background-color: rgba(91, 108, 255, 0.1);
+    background-color: var(--brand-soft-bg);
 }
 
 .log-line.selected {
-    background-color: rgba(91, 108, 255, 0.2);
+    background-color: var(--brand-soft-bg-active);
     border-left: 3px solid var(--primary-color);
     padding-left: calc(var(--space-sm) - 3px);
 }
@@ -245,11 +245,11 @@
 
 @keyframes log-flash-in {
     0% {
-        background-color: rgba(91, 108, 255, 0.3);
+        background-color: var(--brand-soft-bg-strong);
         transform: translateX(-4px);
     }
     50% {
-        background-color: rgba(91, 108, 255, 0.15);
+        background-color: var(--brand-soft-bg-strong);
     }
     100% {
         background-color: transparent;
@@ -301,26 +301,26 @@
 /* ========== 日志级别颜色 ========== */
 .level-INFO {
     color: var(--primary-color);
-    background: rgba(91, 108, 255, 0.15);
+    background: var(--brand-soft-bg-strong);
 }
 
 .level-WARN {
     color: var(--warning-color);
-    background: rgba(250, 173, 20, 0.15);
+    background: var(--warning-soft-bg);
 }
 
 .level-ERROR {
     color: var(--danger-color);
-    background: rgba(255, 77, 79, 0.15);
+    background: var(--danger-soft-bg);
 }
 
 .level-DEBUG {
     color: var(--text-secondary);
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--bg-tertiary);
 }
 
 [data-theme="dark"] .level-DEBUG {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--glass-bg);
 }
 
 /* ========== 语法高亮 ========== */
@@ -380,7 +380,7 @@
 }
 
 .alert-table .el-table__body tr:hover > td {
-    background-color: rgba(91, 108, 255, 0.05) !important;
+    background-color: var(--brand-soft-bg-faint) !important;
 }
 
 [data-theme="dark"] .alert-table .el-table__header {
@@ -406,7 +406,7 @@
 }
 
 [data-theme="dark"] .alert-brief {
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--bg-secondary);
 }
 
 .alert-actions {
@@ -444,7 +444,7 @@
 
 [data-theme="dark"] .detail-content {
     background: var(--bg-tertiary);
-    border-color: rgba(63, 63, 70, 0.5);
+    border-color: var(--border-color);
 }
 
 .detail-pre {
@@ -483,7 +483,7 @@
 
 [data-theme="dark"] .context-content {
     background: var(--bg-tertiary);
-    border-color: rgba(63, 63, 70, 0.5);
+    border-color: var(--border-color);
 }
 
 .log-line-item {
@@ -495,11 +495,11 @@
 }
 
 .log-line-item:hover {
-    background: rgba(91, 108, 255, 0.08);
+    background: var(--brand-soft-bg-hover);
 }
 
 .highlight-line {
-    background: rgba(250, 173, 20, 0.15);
+    background: var(--warning-soft-bg);
     border-left: 3px solid var(--warning-color);
     padding-left: calc(var(--space-sm) - 3px);
     font-weight: 500;
@@ -526,7 +526,7 @@
 }
 
 [data-theme="dark"] .dialog-footer {
-    border-top-color: rgba(63, 63, 70, 0.5);
+    border-top-color: var(--border-color);
 }
 
 /* ========== 响应式对话框 ========== */
@@ -597,15 +597,15 @@
 }
 
 .log-console::-webkit-scrollbar-thumb:hover {
-    background: rgba(91, 108, 255, 0.3);
+    background: var(--brand-accent-border);
 }
 
 [data-theme="dark"] .log-console::-webkit-scrollbar-thumb {
-    background: rgba(63, 63, 70, 0.6);
+    background: var(--border-color);
 }
 
 [data-theme="dark"] .log-console::-webkit-scrollbar-thumb:hover {
-    background: rgba(91, 108, 255, 0.5);
+    background: var(--brand-accent-border-strong);
 }
 
 /* ========== 动画过渡 ========== */
@@ -677,27 +677,27 @@
 
 /* 各类型颜色 */
 .stat-info {
-    border-color: rgba(91, 108, 255, 0.25);
+    border-color: var(--brand-accent-border-light);
     color: var(--primary-color);
 }
 .stat-info:hover, .stat-info:not(.inactive) {
-    background: rgba(91, 108, 255, 0.08);
+    background: var(--brand-soft-bg-hover);
 }
 
 .stat-warn {
-    border-color: rgba(250, 173, 20, 0.25);
+    border-color: var(--warning-border);
     color: var(--warning-color);
 }
 .stat-warn:hover, .stat-warn:not(.inactive) {
-    background: rgba(250, 173, 20, 0.08);
+    background: var(--warning-soft-bg-faint);
 }
 
 .stat-error {
-    border-color: rgba(255, 77, 79, 0.25);
+    border-color: var(--danger-border-soft);
     color: var(--danger-color);
 }
 .stat-error:hover, .stat-error:not(.inactive) {
-    background: rgba(255, 77, 79, 0.08);
+    background: var(--danger-soft-bg-faint);
 }
 
 .stat-freq {
@@ -723,7 +723,7 @@
 }
 
 [data-theme="dark"] .stat-card {
-    background: rgba(39, 39, 42, 0.6);
+    background: var(--bg-tertiary);
 }
 
 /* ========== 日志频率图表 ========== */
@@ -739,7 +739,7 @@
     flex: 1;
     min-height: 2px;
     border-radius: 2px 2px 0 0;
-    background: rgba(91, 108, 255, 0.5);
+    background: var(--brand-soft-bg-strong);
     transition: height 0.4s var(--ease-spring), filter 0.15s ease, transform 0.15s ease;
     cursor: crosshair;
     /* 向上扩展感应区 10px，桶较小时也容易触发 hover */
@@ -749,23 +749,23 @@
 }
 
 .log-freq-bar.bar-error {
-    background: rgba(255, 77, 79, 0.7);
+    background: var(--danger-soft-bg-strong-heavy);
 }
 
 .log-freq-bar.bar-warn {
-    background: rgba(250, 173, 20, 0.7);
+    background: var(--warning-soft-bg-strong);
 }
 
 .log-freq-bar.bar-empty {
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--border-light);
 }
 
 [data-theme="dark"] .log-freq-bar {
-    background: rgba(91, 108, 255, 0.45);
+    background: var(--brand-soft-bg-strong);
 }
 
 [data-theme="dark"] .log-freq-bar.bar-empty {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--glass-border);
 }
 
 .log-freq-bar.bar-hovered {
@@ -815,13 +815,13 @@
 
 .freq-range-pill:hover {
     color: var(--primary-color);
-    background: rgba(91, 108, 255, 0.08);
+    background: var(--brand-soft-bg-hover);
 }
 
 .freq-range-pill.active {
     color: var(--primary-color);
-    background: rgba(91, 108, 255, 0.12);
-    border-color: rgba(91, 108, 255, 0.3);
+    background: var(--brand-soft-bg-active);
+    border-color: var(--brand-accent-border);
 }
 
 /* ========== 级别 Pill 过滤按钮 ========== */
@@ -862,38 +862,38 @@
     opacity: 1;
 }
 
-.pill-info  { color: var(--primary-color); border-color: rgba(91, 108, 255, 0.35); background: rgba(91, 108, 255, 0.08); }
-.pill-warn  { color: var(--warning-color); border-color: rgba(250, 173, 20, 0.35); background: rgba(250, 173, 20, 0.08); }
-.pill-error { color: var(--danger-color);  border-color: rgba(255, 77, 79, 0.35);  background: rgba(255, 77, 79, 0.08); }
-.pill-debug { color: var(--text-secondary); border-color: rgba(144, 147, 153, 0.35); background: rgba(144, 147, 153, 0.08); }
+.pill-info  { color: var(--primary-color); border-color: var(--brand-accent-border); background: var(--brand-soft-bg-hover); }
+.pill-warn  { color: var(--warning-color); border-color: var(--warning-border-strong); background: var(--warning-soft-bg-faint); }
+.pill-error { color: var(--danger-color);  border-color: var(--danger-border-strong);  background: var(--danger-soft-bg-faint); }
+.pill-debug { color: var(--text-secondary); border-color: var(--border-color); background: var(--bg-tertiary); }
 
 /* ========== 日志行级别着色 ========== */
 .log-line.line-warn {
-    border-left: 3px solid rgba(250, 173, 20, 0.6);
-    background: rgba(250, 173, 20, 0.04);
+    border-left: 3px solid var(--warning-line);
+    background: var(--warning-soft-bg-faint);
     padding-left: calc(var(--space-sm) - 3px);
 }
 
 .log-line.line-error {
-    border-left: 3px solid rgba(255, 77, 79, 0.6);
-    background: rgba(255, 77, 79, 0.04);
+    border-left: 3px solid var(--danger-line);
+    background: var(--danger-soft-bg-faint);
     padding-left: calc(var(--space-sm) - 3px);
 }
 
 .log-line.line-warn:hover {
-    background: rgba(250, 173, 20, 0.08);
+    background: var(--warning-soft-bg-hover);
 }
 
 .log-line.line-error:hover {
-    background: rgba(255, 77, 79, 0.08);
+    background: var(--danger-soft-bg-hover);
 }
 
 [data-theme="dark"] .log-line.line-warn {
-    background: rgba(250, 173, 20, 0.06);
+    background: var(--warning-soft-bg-faint);
 }
 
 [data-theme="dark"] .log-line.line-error {
-    background: rgba(255, 77, 79, 0.06);
+    background: var(--danger-soft-bg-faint);
 }
 
 /* ========== 右侧异常面板 ========== */
@@ -911,8 +911,8 @@
 
 [data-theme="dark"] .log-alert-sidebar {
     background: var(--bg-tertiary);
-    border-color: rgba(63, 63, 70, 0.5);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    border-color: var(--border-color);
+    box-shadow: var(--shadow-md);
 }
 
 .sidebar-header {
@@ -921,13 +921,13 @@
     justify-content: space-between;
     padding: var(--space-sm) var(--space-md);
     border-bottom: 1px solid var(--border-light);
-    background: rgba(250, 173, 20, 0.08);
+    background: var(--warning-soft-bg-faint);
     flex-shrink: 0;
 }
 
 [data-theme="dark"] .sidebar-header {
-    background: rgba(250, 173, 20, 0.06);
-    border-bottom-color: rgba(63, 63, 70, 0.5);
+    background: var(--warning-soft-bg-faint);
+    border-bottom-color: var(--border-color);
 }
 
 .sidebar-title {
@@ -977,13 +977,13 @@
 }
 
 [data-theme="dark"] .alert-sidebar-item {
-    background: rgba(24, 24, 27, 0.6);
-    border-color: rgba(63, 63, 70, 0.4);
+    background: var(--bg-primary);
+    border-color: var(--border-color);
 }
 
 .alert-sidebar-item:hover {
-    border-color: rgba(250, 173, 20, 0.4);
-    box-shadow: 0 2px 8px rgba(250, 173, 20, 0.1);
+    border-color: var(--warning-border-strong);
+    box-shadow: 0 2px 8px var(--warning-shadow-soft);
 }
 
 .alert-sidebar-meta {
@@ -1046,7 +1046,7 @@
 }
 
 [data-theme="dark"] .sidebar-footer {
-    border-top-color: rgba(63, 63, 70, 0.5);
+    border-top-color: var(--border-color);
 }
 
 /* 侧边栏滑入动画 */
@@ -1091,7 +1091,7 @@
 }
 
 [data-theme="dark"] .setting-item {
-    border-bottom-color: rgba(63, 63, 70, 0.4);
+    border-bottom-color: var(--border-color);
 }
 
 .setting-label {

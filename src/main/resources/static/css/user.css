@@ -41,7 +41,7 @@
 
     padding: 20px 24px;
 
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--bg-primary);
 
     backdrop-filter: blur(12px);
 
@@ -75,9 +75,9 @@
 
 [data-theme="dark"] .user-header {
 
-    background: rgba(39, 39, 42, 0.7);
+    background: var(--bg-tertiary);
 
-    border-color: rgba(63, 63, 70, 0.5);
+    border-color: var(--border-color);
 
 }
 
@@ -244,7 +244,7 @@
 
     border-radius: var(--radius-md) !important;
 
-    box-shadow: 0 4px 15px rgba(91, 108, 255, 0.3);
+    box-shadow: var(--brand-shadow-md);
 
     transition: transform var(--transition-base), box-shadow var(--transition-base) !important;
 
@@ -256,7 +256,7 @@
 
     transform: translateY(-2px);
 
-    box-shadow: 0 6px 20px rgba(91, 108, 255, 0.4);
+    box-shadow: var(--brand-shadow-lg);
 
 }
 
@@ -364,15 +364,15 @@
 
 .user-card.is-active {
 
-    border-color: rgba(82, 196, 26, 0.3);
+    border-color: var(--success-glow-strong);
 
     box-shadow: 
 
         var(--shadow-sm),
 
-        0 0 20px rgba(82, 196, 26, 0.15),
+        0 0 20px var(--success-glow),
 
-        inset 0 1px 0 rgba(82, 196, 26, 0.1);
+        inset 0 1px 0 var(--success-soft-bg);
 
 }
 
@@ -380,7 +380,7 @@
 
 .user-card.is-active::before {
 
-    background: linear-gradient(90deg, var(--success-color), #95de64);
+    background: linear-gradient(90deg, var(--success-color), var(--success-light));
 
     opacity: 1;
 
@@ -390,13 +390,13 @@
 
 .user-card.is-active:hover {
 
-    border-color: rgba(82, 196, 26, 0.5);
+    border-color: var(--success-border);
 
     box-shadow: 
 
         var(--shadow-md),
 
-        0 0 30px rgba(82, 196, 26, 0.25);
+        0 0 30px var(--success-glow-strong);
 
 }
 
@@ -406,13 +406,13 @@
 
 .user-card.is-warning {
 
-    border-color: rgba(255, 77, 79, 0.3);
+    border-color: var(--danger-shadow-strong);
 
     box-shadow: 
 
         var(--shadow-sm),
 
-        0 0 15px rgba(255, 77, 79, 0.1);
+        0 0 15px var(--danger-shadow-soft);
 
 }
 
@@ -420,7 +420,7 @@
 
 .user-card.is-warning::before {
 
-    background: linear-gradient(90deg, var(--danger-color), #ff7875);
+    background: linear-gradient(90deg, var(--danger-color), var(--danger-light));
 
     opacity: 1;
 
@@ -430,13 +430,13 @@
 
 .user-card.is-warning:hover {
 
-    border-color: rgba(255, 77, 79, 0.5);
+    border-color: var(--danger-border);
 
     box-shadow: 
 
         var(--shadow-md),
 
-        0 0 25px rgba(255, 77, 79, 0.2);
+        0 0 25px var(--danger-shadow);
 
 }
 
@@ -446,9 +446,9 @@
 
 .user-card.is-warning .user-avatar {
 
-    background: linear-gradient(135deg, var(--danger-color), #ff7875);
+    background: linear-gradient(135deg, var(--danger-color), var(--danger-light));
 
-    box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3);
+    box-shadow: 0 4px 12px var(--danger-shadow-strong);
 
 }
 
@@ -458,9 +458,9 @@
 
 .user-card.is-active .user-avatar {
 
-    background: linear-gradient(135deg, var(--success-color), #95de64);
+    background: linear-gradient(135deg, var(--success-color), var(--success-light));
 
-    box-shadow: 0 4px 12px rgba(82, 196, 26, 0.3);
+    box-shadow: 0 4px 12px var(--success-glow-strong);
 
 }
 
@@ -504,11 +504,11 @@
 
     font-weight: 700;
 
-    color: white;
+    color: var(--text-inverse);
 
     flex-shrink: 0;
 
-    box-shadow: 0 4px 12px rgba(91, 108, 255, 0.3);
+    box-shadow: var(--brand-shadow-md);
 
     overflow: hidden;
 
@@ -642,7 +642,7 @@
 
 .status-icon.success {
 
-    background: rgba(82, 196, 26, 0.15);
+    background: var(--success-soft-bg-strong);
 
     color: var(--success-color);
 
@@ -652,7 +652,7 @@
 
 .status-icon.danger {
 
-    background: rgba(255, 77, 79, 0.15);
+    background: var(--danger-soft-bg-strong);
 
     color: var(--danger-color);
 
@@ -959,11 +959,11 @@
 
     padding: 16px;
 
-    background: white;
+    background: var(--bg-primary);
 
     border-radius: var(--radius-lg);
 
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
 
 }
 
@@ -1101,9 +1101,9 @@
 
 [data-theme="dark"] .user-card {
 
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--glass-bg);
 
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--glass-border);
 
 }
 
@@ -1111,9 +1111,9 @@
 
 [data-theme="dark"] .user-card:hover {
 
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--glass-border);
 
-    border-color: rgba(91, 108, 255, 0.3);
+    border-color: var(--brand-accent-border);
 
 }
 
@@ -1121,15 +1121,15 @@
 
 [data-theme="dark"] .user-card.is-active {
 
-    background: rgba(82, 196, 26, 0.03);
+    background: var(--success-soft-bg-faint);
 
-    border-color: rgba(82, 196, 26, 0.4);
+    border-color: var(--success-border);
 
     box-shadow: 
 
-        0 0 25px rgba(82, 196, 26, 0.15),
+        0 0 25px var(--success-glow),
 
-        inset 0 1px 0 rgba(82, 196, 26, 0.1);
+        inset 0 1px 0 var(--success-soft-bg);
 
 }
 
@@ -1137,9 +1137,9 @@
 
 [data-theme="dark"] .user-card.is-active:hover {
 
-    background: rgba(82, 196, 26, 0.05);
+    background: var(--success-soft-bg);
 
-    box-shadow: 0 0 35px rgba(82, 196, 26, 0.25);
+    box-shadow: 0 0 35px var(--success-glow-strong);
 
 }
 
@@ -1147,11 +1147,11 @@
 
 [data-theme="dark"] .user-card.is-warning {
 
-    background: rgba(255, 77, 79, 0.03);
+    background: var(--danger-soft-bg-faint);
 
-    border-color: rgba(255, 77, 79, 0.4);
+    border-color: var(--danger-border-strong);
 
-    box-shadow: 0 0 20px rgba(255, 77, 79, 0.12);
+    box-shadow: 0 0 20px var(--danger-shadow-soft);
 
 }
 
@@ -1159,9 +1159,9 @@
 
 [data-theme="dark"] .user-card.is-warning:hover {
 
-    background: rgba(255, 77, 79, 0.05);
+    background: var(--danger-soft-bg);
 
-    box-shadow: 0 0 30px rgba(255, 77, 79, 0.2);
+    box-shadow: 0 0 30px var(--danger-shadow);
 
 }
 
@@ -1169,7 +1169,7 @@
 
 [data-theme="dark"] .user-card-header {
 
-    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.03), transparent);
+    background: linear-gradient(to bottom, var(--glass-border), transparent);
 
 }
 
@@ -1177,9 +1177,9 @@
 
 [data-theme="dark"] .user-header {
 
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--glass-bg);
 
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--glass-border);
 
 }
 
@@ -1187,7 +1187,7 @@
 
 [data-theme="dark"] .status-item {
 
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--glass-border);
 
 }
 
@@ -1195,7 +1195,7 @@
 
 [data-theme="dark"] .status-item:hover {
 
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--glass-border);
 
 }
 
@@ -1203,7 +1203,7 @@
 
 [data-theme="dark"] .user-card-footer {
 
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--bg-secondary);
 
 }
 
@@ -1211,7 +1211,7 @@
 
 [data-theme="dark"] .qr-container {
 
-    background: white;
+    background: var(--bg-primary);
 
 }
 
@@ -1219,7 +1219,7 @@
 
 [data-theme="dark"] .table-wrapper {
 
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--glass-bg);
 
 }
 
@@ -1227,9 +1227,9 @@
 
 [data-theme="dark"] .empty-state {
 
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--glass-bg);
 
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--glass-border);
 
 }
 
