@@ -31,72 +31,87 @@
 <body>
 <div id="app" class="app-container">
     <!-- 顶部导航栏 -->
-    <header class="app-header">
-        <div class="header-brand">
-            <div class="logo-wrapper">
-                 <img src="img/icon.svg" alt="Logo" class="brand-logo">
-                 <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
-                     <i class="el-icon-warning connection-alert mobile-only-alert"></i>
-                 </el-tooltip>
-                 <a v-if="hasNewVersion" :href="releaseUrl" target="_blank" class="mobile-new-badge" title="发现新版本">NEW</a>
-             </div>
-            <div class="brand-info">
-                <div class="brand-title-wrapper">
-                    <h1 class="brand-title">录播姬上传插件</h1>
-                    <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
-                        <i class="el-icon-warning connection-alert"></i>
-                    </el-tooltip>
+    <header class="app-header" :class="{ 'is-compact': headerCompact }">
+        <div class="header-top">
+            <div class="header-brand">
+                <div class="logo-wrapper">
+                     <img src="img/icon.svg" alt="Logo" class="brand-logo">
+                     <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
+                         <i class="el-icon-warning connection-alert mobile-only-alert"></i>
+                     </el-tooltip>
+                     <a v-if="hasNewVersion" :href="releaseUrl" target="_blank" class="mobile-new-badge" title="发现新版本">NEW</a>
+                 </div>
+                <div class="brand-info">
+                    <div class="brand-title-wrapper">
+                        <h1 class="brand-title">录播姬上传插件</h1>
+                        <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
+                            <i class="el-icon-warning connection-alert"></i>
+                        </el-tooltip>
+                    </div>
+                    <a v-if="hasNewVersion" 
+                       :href="releaseUrl" 
+                       target="_blank" 
+                       class="brand-version link-type"
+                       title="发现新版本，点击查看">
+                        {{ currentVersion }}
+                        <span class="new-badge">NEW</span>
+                    </a>
+                    <span v-else class="brand-version">{{ currentVersion }}</span>
                 </div>
-                <a v-if="hasNewVersion" 
-                   :href="releaseUrl" 
-                   target="_blank" 
-                   class="brand-version link-type"
-                   title="发现新版本，点击查看">
-                    {{ currentVersion }}
-                    <span class="new-badge">NEW</span>
-                </a>
-                <span v-else class="brand-version">{{ currentVersion }}</span>
+            </div>
+            <nav class="header-nav" ref="headerNav">
+                <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
+                <div class="nav-item" ref="navRoom"
+                     :class="{ 'is-active': activeName === 'room' }"
+                     @click="switchTab('room')">
+                    <i class="el-icon-video-camera"></i>
+                    <span>直播间</span>
+                </div>
+                <div class="nav-item" ref="navUser"
+                     :class="{ 'is-active': activeName === 'user' }"
+                     @click="switchTab('user')">
+                    <i class="el-icon-user"></i>
+                    <span>用户</span>
+                </div>
+                <div class="nav-item" ref="navHistory"
+                     :class="{ 'is-active': activeName === 'history' }"
+                     @click="switchTab('history')">
+                    <i class="el-icon-time"></i>
+                    <span>录制历史</span>
+                </div>
+                <div class="nav-item" ref="navLog"
+                     :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts }"
+                     @click="switchTab('log')">
+                    <i class="el-icon-monitor"></i>
+                    <span>日志</span>
+                    <span v-if="hasAlerts" class="alert-badge"></span>
+                </div>
+                <div class="nav-item" ref="navHome"
+                     :class="{ 'is-active': activeName === 'home' }"
+                     @click="switchTab('home')">
+                    <i class="el-icon-document"></i>
+                    <span>更新日志</span>
+                </div>
+            </nav>
+
+            <div class="header-actions">
+                <div class="privacy-toggle" :class="{ 'is-active': privacyMode }" @click="toggleGlobalPrivacyMode" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
+                    <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
+                </div>
+                <!-- 主题切换按钮 -->
+                <div class="theme-toggle" @click="toggleTheme" title="切换主题">
+                    <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+                </div>
             </div>
         </div>
-        <nav class="header-nav" ref="headerNav">
-            <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
-            <div class="nav-item" ref="navHome"
-                 :class="{ 'is-active': activeName === 'home' }"
-                 @click="switchTab('home')">
-                <i class="el-icon-document"></i>
-                <span>更新日志</span>
-            </div>
-            <div class="nav-item" ref="navRoom"
-                 :class="{ 'is-active': activeName === 'room' }"
-                 @click="switchTab('room')">
-                <i class="el-icon-video-camera"></i>
-                <span>直播间</span>
-            </div>
-            <div class="nav-item" ref="navUser"
-                 :class="{ 'is-active': activeName === 'user' }"
-                 @click="switchTab('user')">
-                <i class="el-icon-user"></i>
-                <span>用户</span>
-            </div>
-            <div class="nav-item" ref="navHistory"
-                 :class="{ 'is-active': activeName === 'history' }"
-                 @click="switchTab('history')">
-                <i class="el-icon-time"></i>
-                <span>录制历史</span>
-            </div>
-            <div class="nav-item" ref="navLog"
-                 :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts }"
-                 @click="switchTab('log')">
-                <i class="el-icon-monitor"></i>
-                <span>日志</span>
-                <span v-if="hasAlerts" class="alert-badge"></span>
-            </div>
 
-            <!-- 主题切换按钮 -->
-            <div class="theme-toggle" @click="toggleTheme" title="切换主题">
-                <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+        <div class="header-subnav" v-if="activeName !== 'home'">
+            <div class="module-meta">
+                <span class="module-meta-title">{{ currentModuleMeta.title }}</span>
+                <span class="module-meta-desc">{{ currentModuleMeta.desc }}</span>
             </div>
-        </nav>
+            <div class="subnav-placeholder"></div>
+        </div>
     </header>
     
     <!-- 主内容区域 -->
@@ -281,6 +296,12 @@
                 </div>
             </div>
         </transition>
+
+        <transition name="el-fade-in">
+            <button v-if="showBackToTop && activeName !== 'log'" class="back-top-fab" @click="scrollToTopCurrent" title="回到顶部">
+                <i class="el-icon-arrow-up"></i>
+            </button>
+        </transition>
     </main>
 </div>
 
@@ -309,9 +330,6 @@
             <el-button class="modern-btn" @click="getLoginImage();dialogLoginVisible = true" icon="el-icon-plus" type="primary">
                 添加账号
             </el-button>
-            <el-tooltip effect="dark" :content="privacyMode ? '隐私模式：开' : '隐私模式：关'" placement="top">
-                <el-button class="modern-btn" type="primary" @click="togglePrivacyMode" :icon="privacyMode ? 'el-icon-lock' : 'el-icon-view'">隐私</el-button>
-            </el-tooltip>
             <el-radio-group v-model="viewMode" size="small">
                 <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
                 <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
@@ -665,13 +683,6 @@
             </div>
             <div class="setting-item">
                 <div class="setting-label">
-                    <div class="setting-name"><i class="el-icon-view"></i> 隐私模式</div>
-                    <div class="setting-desc">隐藏 BV 号、路径等敏感信息</div>
-                </div>
-                <el-switch :value="privacyMode" @change="togglePrivacyMode"></el-switch>
-            </div>
-            <div class="setting-item">
-                <div class="setting-label">
                     <div class="setting-name"><i class="el-icon-document-checked"></i> 多选模式</div>
                     <div class="setting-desc">点击日志行可多选并复制</div>
                 </div>
@@ -791,6 +802,12 @@
         el: '#app',
         data: {
             activeName: 'home',
+            moduleMetaMap: {
+                room: { title: '直播间监控', desc: '主模块负责房间状态监控与配置管理' },
+                user: { title: '用户管理', desc: '管理投稿账号状态、导入导出与登录会话' },
+                history: { title: '录制历史', desc: '查看录制投稿工作进度记录并执行补充处理操作' },
+                log: { title: '日志中心', desc: '实时日志和告警追踪' }
+            },
             systemConfig: {
                 apiQps: 5.0,
                 uploadMb: 0,
@@ -818,10 +835,21 @@
             hasAlerts: false,
             versions: window.BILIUPFORJAVA_CHANGELOG || [],
             navIndicatorStyle: { left: '0px', width: '0px', opacity: 0 },
+            headerCompact: false,
+            showBackToTop: false,
+            lastScrollTop: 0,
+            upScrollDistance: 0,
+            downScrollDistance: 0,
+            lastHeaderToggleAt: 0,
+            headerToggleCooldownMs: 260,
+            scrollObserver: [],
             // 已组件化的页面列表（不走 iframe）
             componentPages: ['user', 'log']
         },
         computed: {
+            currentModuleMeta: function() {
+                return this.moduleMetaMap[this.activeName] || { title: '', desc: '' };
+            },
             sortedVersions: function () {
                 return this.versions.slice().sort(function (a, b) {
                     return new Date(b.time) - new Date(a.time);
@@ -840,9 +868,7 @@
                     default:
                         return '';
                 }
-                // 使用 handleClick 时记录的时间戳防止缓存，不依赖 pageLoading
-                // 避免 pageLoading 变化时 tabSrc 改变导致 iframe 双重加载
-                return baseUrl + '?t=' + (this._tabLoadTimestamp || '0');
+                return baseUrl;
             },
             isIframeReady: function() {
                 return (!this.pageLoading && !this.connectionError && this.connectionReady) || this.keepIframeOnDisconnect();
@@ -858,10 +884,25 @@
             // 初始化导航指示器
             this.$nextTick(function() {
                 self.updateNavIndicator();
+                self.bindScrollObserver();
             });
             window.addEventListener('resize', function() {
                 self.updateNavIndicator();
             });
+        },
+        watch: {
+            activeName: function() {
+                var self = this;
+                this.headerCompact = false;
+                this.showBackToTop = false;
+                this.lastScrollTop = 0;
+                this.upScrollDistance = 0;
+                this.downScrollDistance = 0;
+                this.lastHeaderToggleAt = 0;
+                this.$nextTick(function() {
+                    self.bindScrollObserver();
+                });
+            }
         },
         methods: {
             validateNumber: function(value, field, allowDecimal) {
@@ -1076,6 +1117,8 @@
             },
             onIframeLoad: function() {
                 var self = this;
+                this.syncIframePrivacyMode();
+                this.bindScrollObserver();
                 setTimeout(function() {
                     if (self.connectionReady) {
                         self.pageLoading = false;
@@ -1243,6 +1286,25 @@
                     }
                 }, 400);
             },
+            toggleGlobalPrivacyMode: function() {
+                this.privacyMode = !this.privacyMode;
+                this.syncIframePrivacyMode();
+            },
+            syncIframePrivacyMode: function() {
+                var iframe = document.querySelector('.tab-frame');
+                if (!iframe || !iframe.contentWindow) {
+                    return;
+                }
+                try {
+                    if (typeof iframe.contentWindow.setPrivacyMode === 'function') {
+                        iframe.contentWindow.setPrivacyMode(!!this.privacyMode);
+                    } else {
+                        iframe.contentWindow.dispatchEvent(new CustomEvent('privacy-mode-changed', { detail: !!this.privacyMode }));
+                    }
+                } catch (e) {
+                    // 忽略跨上下文同步异常
+                }
+            },
             goToRelease: function() {
                 var self = this;
                 this.$confirm('即将跳转到 GitHub Release 页面查看最新版本及更新日志，是否继续？', '提示', {
@@ -1261,7 +1323,160 @@
             isComponentPage: function(tab) {
                 return this.componentPages.indexOf(tab) >= 0;
             },
+            removeScrollObserver: function() {
+                if (!this.scrollObserver || !this.scrollObserver.length) {
+                    return;
+                }
+                for (var i = 0; i < this.scrollObserver.length; i++) {
+                    var sub = this.scrollObserver[i];
+                    if (sub && sub.target && sub.handler) {
+                        sub.target.removeEventListener('scroll', sub.handler);
+                    }
+                }
+                this.scrollObserver = [];
+            },
+            bindScrollObserver: function() {
+                var self = this;
+                this.removeScrollObserver();
+
+                if (this.activeName === 'log') {
+                    this.headerCompact = false;
+                    this.showBackToTop = false;
+                    return;
+                }
+
+                var bindElementScroll = function(el) {
+                    if (!el) {
+                        return false;
+                    }
+                    var handler = function() {
+                        self.handleContentScroll(el.scrollTop || 0);
+                    };
+                    el.addEventListener('scroll', handler, { passive: true });
+                    self.scrollObserver.push({ target: el, handler: handler });
+                    self.handleContentScroll(el.scrollTop || 0);
+                    return true;
+                };
+
+                if (this.activeName === 'home') {
+                    bindElementScroll(this.$el.querySelector('.changelog-container'));
+                    return;
+                }
+
+                if (this.activeName === 'user') {
+                    bindElementScroll(this.$el.querySelector('.user-container'));
+                    return;
+                }
+
+                if (this.activeName === 'room' || this.activeName === 'history') {
+                    var iframe = this.$el.querySelector('.tab-frame');
+                    if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+                        return;
+                    }
+                    var doc = iframe.contentDocument;
+                    var iframeScrollable = null;
+                    if (this.activeName === 'room') {
+                        iframeScrollable = doc.querySelector('.room-container');
+                    }
+                    if (this.activeName === 'history') {
+                        iframeScrollable = doc.querySelector('.history-main') || doc.querySelector('.history-container');
+                    }
+                    if (bindElementScroll(iframeScrollable)) {
+                        return;
+                    }
+                    var fallbackHandler = function() {
+                        var top = iframe.contentWindow.pageYOffset || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+                        self.handleContentScroll(top);
+                    };
+                    iframe.contentWindow.addEventListener('scroll', fallbackHandler, { passive: true });
+                    this.scrollObserver.push({ target: iframe.contentWindow, handler: fallbackHandler });
+                    fallbackHandler();
+                }
+            },
+            handleContentScroll: function(top) {
+                if (this.activeName === 'log') {
+                    this.headerCompact = false;
+                    this.showBackToTop = false;
+                    this.lastScrollTop = 0;
+                    this.upScrollDistance = 0;
+                    this.downScrollDistance = 0;
+                    this.lastHeaderToggleAt = 0;
+                    return;
+                }
+
+                if (top <= 4) {
+                    this.headerCompact = false;
+                    this.showBackToTop = false;
+                    this.lastScrollTop = 0;
+                    this.upScrollDistance = 0;
+                    this.downScrollDistance = 0;
+                    this.lastHeaderToggleAt = 0;
+                    return;
+                }
+
+                this.showBackToTop = top > 120;
+
+                var delta = top - this.lastScrollTop;
+                if (Math.abs(delta) < 1.5) {
+                    this.lastScrollTop = top;
+                    return;
+                }
+                var now = Date.now();
+                var inCooldown = (now - this.lastHeaderToggleAt) < this.headerToggleCooldownMs;
+                if (delta > 0) {
+                    this.downScrollDistance = this.downScrollDistance + delta;
+                    this.upScrollDistance = 0;
+                    if (!inCooldown && !this.headerCompact && top > 60 && this.downScrollDistance >= 18) {
+                        this.headerCompact = true;
+                        this.downScrollDistance = 0;
+                        this.lastHeaderToggleAt = now;
+                    }
+                } else if (delta < 0) {
+                    this.upScrollDistance = this.upScrollDistance + Math.abs(delta);
+                    this.downScrollDistance = 0;
+                    if (!inCooldown && this.headerCompact && this.upScrollDistance >= 54) {
+                        this.headerCompact = false;
+                        this.upScrollDistance = 0;
+                        this.lastHeaderToggleAt = now;
+                    }
+                }
+
+                this.lastScrollTop = top;
+            },
+            scrollToTopCurrent: function() {
+                if (this.activeName === 'home') {
+                    var homeContainer = this.$el.querySelector('.changelog-container');
+                    if (homeContainer && typeof homeContainer.scrollTo === 'function') {
+                        homeContainer.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                } else if (this.activeName === 'user') {
+                    var userContainer = this.$el.querySelector('.user-container');
+                    if (userContainer && typeof userContainer.scrollTo === 'function') {
+                        userContainer.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                } else if (this.activeName === 'room' || this.activeName === 'history') {
+                    var iframe = this.$el.querySelector('.tab-frame');
+                    if (iframe && iframe.contentWindow && iframe.contentDocument) {
+                        var doc = iframe.contentDocument;
+                        var target = null;
+                        if (this.activeName === 'room') {
+                            target = doc.querySelector('.room-container');
+                        } else {
+                            target = doc.querySelector('.history-main') || doc.querySelector('.history-container');
+                        }
+                        if (target && typeof target.scrollTo === 'function') {
+                            target.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else if (typeof iframe.contentWindow.scrollTo === 'function') {
+                            iframe.contentWindow.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
+                    }
+                }
+            },
             switchTab: function(tab) {
+                if (this.activeName === tab) {
+                    return;
+                }
+
                 // 如果当前已经处于连接断开状态，拦截切换请求，直接显示错误遮罩
                 if (this.connectionLost || this.connectionError) {
                     this.connectionError = true;
@@ -1306,7 +1521,6 @@
             },
             handleClick: function () {
                 var self = this;
-                this._tabLoadTimestamp = Date.now(); // 记录时间戳供 tabSrc 使用
                 this.connectionReady = false;
                 this.connectionLost = false;
                 this.connectionError = false;

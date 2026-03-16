@@ -87,23 +87,7 @@
 
 .user-header::before {
 
-    content: '';
-
-    position: absolute;
-
-    top: 0;
-
-    left: 0;
-
-    right: 0;
-
-    height: 3px;
-
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #00d4ff 100%);
-
-    opacity: 0.8;
-
-    animation: gradientShift 4s linear infinite;
+    display: none;
 
 }
 

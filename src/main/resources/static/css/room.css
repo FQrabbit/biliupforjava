@@ -85,23 +85,7 @@
 
 .room-header::before {
 
-    content: '';
-
-    position: absolute;
-
-    top: 0;
-
-    left: 0;
-
-    right: 0;
-
-    height: 3px;
-
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #00d4ff 100%);
-
-    opacity: 0.8;
-
-    animation: gradientShift 4s linear infinite;
+    display: none;
 
 }
 
@@ -424,7 +408,15 @@
 
     transition: transform var(--transition-base);
 
-    cursor: default;
+    cursor: pointer;
+
+    padding: 4px 10px;
+
+    border-radius: 10px;
+
+    border: 1px solid transparent;
+
+    user-select: none;
 
 }
 
@@ -433,6 +425,18 @@
 .room-stat-item:hover {
 
     transform: translateY(-2px);
+
+    background: rgba(91, 108, 255, 0.06);
+
+    border-color: rgba(91, 108, 255, 0.2);
+
+}
+
+.room-stat-item.is-active {
+
+    background: rgba(91, 108, 255, 0.12);
+
+    border-color: rgba(91, 108, 255, 0.3);
 
 }
 

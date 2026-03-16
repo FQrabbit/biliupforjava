@@ -82,9 +82,6 @@
                 <button class="view-btn" :class="{ 'is-active': viewMode === 'table' }" @click="viewMode = 'table'" title="表格视图">
                     <i class="el-icon-s-grid"></i>
                 </button>
-                <button class="view-btn" :class="{ 'is-active': privacyMode }" @click="togglePrivacyMode()" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
-                    <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
-                </button>
             </div>
         </div>
     </header>
