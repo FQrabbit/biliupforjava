@@ -2,7 +2,6 @@ package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.jayway.jsonpath.JsonPath;
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
@@ -19,6 +18,7 @@ import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -40,6 +40,9 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Component
@@ -82,6 +85,8 @@ public class RecordBiliPublishService {
     private RecordRoomRepository roomRepository;
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
+    @Autowired
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
     @Autowired
     private HighEnergyCutPublishService highEnergyCutPublishService;
     @Autowired
@@ -236,7 +241,7 @@ public class RecordBiliPublishService {
                                     log.info("[BLR] {}", LogKvs.event("Publish.Part.NotUploaded")
                                             .add("historyId", history.getId())
                                             .add("partId", uploadPart.getId()));
-                                    uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                                    uploadPartWithUserSerialBlocking(room, uploadPart);
                                 }
                             }
 
@@ -598,7 +603,7 @@ public class RecordBiliPublishService {
                                         .add("uname", room.getUname())
                                         .add("historyId", history.getId())
                                         .add("partId", uploadPart.getId()));
-                                uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                                uploadPartWithUserSerialBlocking(room, uploadPart);
                                 try {
                                     log.info("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldown")
                                             .add("historyId", history.getId())
@@ -623,7 +628,7 @@ public class RecordBiliPublishService {
                             .add("uname", room.getUname())
                             .add("historyId", history.getId())
                             .add("partId", uploadPart.getId()));
-                    uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                    uploadPartWithUserSerialBlocking(room, uploadPart);
                     try {
                         log.info("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldown")
                                 .add("historyId", history.getId())
@@ -1034,7 +1039,7 @@ public class RecordBiliPublishService {
                         try {
                             int desiredVisibility = room.getIsOnlySelf();
                             if (desiredVisibility == 0 || desiredVisibility == 1) {
-                                String visRes = BiliApi.updateVideoVisibility(biliBiliUser, Long.parseLong(aid), desiredVisibility);
+                                BiliApi.updateVideoVisibility(biliBiliUser, Long.parseLong(aid), desiredVisibility);
                                 log.info("[BLR] {}", LogKvs.event("Publish.Visibility.Sync.Success")
                                         .add("roomId", room.getRoomId())
                                         .add("historyId", history.getId())
@@ -1197,6 +1202,46 @@ public class RecordBiliPublishService {
             TaskUtil.publishTask.remove(history.getId());
         }
         return true;
+    }
+
+    private void uploadPartWithUserSerialBlocking(RecordRoom room, RecordHistoryPart part) {
+        if (room == null || room.getUploadUserId() == null) {
+            uploadServiceFactory.getUploadService(room != null ? room.getLine() : null).upload(part);
+            return;
+        }
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<RuntimeException> runtimeRef = new AtomicReference<>();
+        uploadUserSerialScheduler.submit(
+                room.getUploadUserId(),
+                room.getRoomId(),
+                part.getHistoryId(),
+                part.getId(),
+                "publish-sync",
+                () -> {
+                    try {
+                        uploadServiceFactory.getUploadService(room.getLine()).upload(part);
+                    } catch (RuntimeException e) {
+                        runtimeRef.set(e);
+                        throw e;
+                    } finally {
+                        done.countDown();
+                    }
+                }
+        );
+        try {
+            while (!done.await(1, TimeUnit.SECONDS)) {
+                if (shutdownState.isShuttingDown()) {
+                    throw new RuntimeException("UPLOAD_INTERRUPTED_BY_SHUTDOWN");
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("UPLOAD_INTERRUPTED", e);
+        }
+        RuntimeException ex = runtimeRef.get();
+        if (ex != null) {
+            throw ex;
+        }
     }
 
     public DescDto template(String template, Map<String, Object> map) {

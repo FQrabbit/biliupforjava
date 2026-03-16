@@ -9,11 +9,16 @@ import org.apache.commons.lang3.StringUtils;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,15 +28,86 @@ public final class PushNotifyClient {
     private static final String SERVER_CHAN3_SEND_URL = "https://%s.push.ft07.com/send/%s.send";
     private static final Pattern SERVER_CHAN3_UID_PATTERN = Pattern.compile("^sctp(\\d+)t.*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern BV_ID_PATTERN = Pattern.compile("(?i)BV[0-9A-Z]+", Pattern.CASE_INSENSITIVE);
+    private static final List<String> KNOWN_PUSH_TAGS = Arrays.asList(
+            "开始直播", "录制结束", "分P上传", "视频投稿", "高级弹幕", "视频评论", "云剪辑"
+    );
 
     private PushNotifyClient() {
     }
 
     public static boolean canSend(RecordRoom room, String wxuid, String pushMsgTags, String tag) {
-        if (StringUtils.isBlank(pushMsgTags) || !pushMsgTags.contains(tag)) {
+        if (!isTagEnabled(pushMsgTags, tag)) {
             return false;
         }
         return hasAnyChannel(room, wxuid);
+    }
+
+    public static String normalizePushMsgTags(String pushMsgTags) {
+        Set<String> enabled = parseEnabledTags(pushMsgTags);
+        if (enabled.isEmpty()) {
+            return "";
+        }
+        return KNOWN_PUSH_TAGS.stream().filter(enabled::contains).collect(Collectors.joining(","));
+    }
+
+    private static boolean isTagEnabled(String pushMsgTags, String tag) {
+        if (StringUtils.isBlank(pushMsgTags) || StringUtils.isBlank(tag)) {
+            return false;
+        }
+        Set<String> enabled = parseEnabledTags(pushMsgTags);
+        String target = normalizeTag(tag);
+        return enabled.contains(target);
+    }
+
+    private static Set<String> parseEnabledTags(String rawTags) {
+        if (StringUtils.isBlank(rawTags)) {
+            return Collections.emptySet();
+        }
+        String normalizedRaw = normalizeSeparators(rawTags);
+        String[] pieces = normalizedRaw.split(",");
+        Set<String> enabled = new LinkedHashSet<>();
+        for (String piece : pieces) {
+            String token = normalizeTag(piece);
+            if (StringUtils.isNotBlank(token) && KNOWN_PUSH_TAGS.contains(token)) {
+                enabled.add(token);
+            }
+        }
+        if (!enabled.isEmpty()) {
+            return enabled;
+        }
+
+        // 兼容极旧数据：如直接拼接成一个长字符串（无分隔符），按已知标签做回退识别。
+        String compact = normalizeTag(normalizedRaw);
+        for (String knownTag : KNOWN_PUSH_TAGS) {
+            if (compact.contains(normalizeTag(knownTag))) {
+                enabled.add(knownTag);
+            }
+        }
+        return enabled;
+    }
+
+    private static String normalizeSeparators(String raw) {
+        return StringUtils.defaultString(raw)
+                .replace("，", ",")
+                .replace("、", ",")
+                .replace("|", ",")
+                .replace("；", ",")
+                .replace(";", ",")
+                .replace("\n", ",")
+                .replace("\r", ",")
+                .replace("\t", ",")
+                .trim();
+    }
+
+    private static String normalizeTag(String raw) {
+        String value = StringUtils.defaultString(raw).trim();
+        while (value.startsWith("[") || value.startsWith("\"") || value.startsWith("'")) {
+            value = value.substring(1).trim();
+        }
+        while (value.endsWith("]") || value.endsWith("\"") || value.endsWith("'")) {
+            value = value.substring(0, value.length() - 1).trim();
+        }
+        return value.replace(" ", "").replace("　", "");
     }
 
     public static boolean hasAnyChannel(RecordRoom room, String wxuid) {

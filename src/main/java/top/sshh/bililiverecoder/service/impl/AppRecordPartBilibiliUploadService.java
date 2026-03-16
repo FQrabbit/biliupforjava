@@ -2,13 +2,11 @@ package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -355,15 +353,17 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             }
 
                             //并发上传
-
                             Message message = new Message();
-                            message.setAppToken(wxToken);
-                            message.setContentType(Message.CONTENT_TYPE_TEXT);
-                            message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                    part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname()));
-                            message.setUid(wxuid);
-                            PushNotifyClient.sendParallel(room, message);
+
+                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
+                                message.setAppToken(wxToken);
+                                message.setContentType(Message.CONTENT_TYPE_TEXT);
+                                message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
+                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
+                                        part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int) part.getDuration() / 60, ((float) part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname()));
+                                message.setUid(wxuid);
+                                PushNotifyClient.sendParallel(room, message);
+                            }
 
                             runnableList.stream().parallel().forEach(Runnable::run);
                             if (tryCount.get() >= 200) {

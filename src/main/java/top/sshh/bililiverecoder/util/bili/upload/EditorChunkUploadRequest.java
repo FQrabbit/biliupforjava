@@ -19,7 +19,6 @@ public class EditorChunkUploadRequest {
 
     private final String URL;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private EditorPreUploadBean preUploadBean;
     private Map<String, String> params;
     private RandomAccessFile file;
 
@@ -28,7 +27,6 @@ public class EditorChunkUploadRequest {
         this.URL = preUploadBean.getData().getUpload_urls()[Integer.parseInt(params.get("index"))];
         headers.clear();
         headers.put("Content-Type", "application/octet-stream");
-        this.preUploadBean = preUploadBean;
         this.params = params;
         this.file = file;
     }

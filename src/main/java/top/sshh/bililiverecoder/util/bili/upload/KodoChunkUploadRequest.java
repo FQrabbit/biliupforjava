@@ -22,7 +22,6 @@ public class KodoChunkUploadRequest {
 
     private final String URL;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private PreUploadBean preUploadBean;
     private Map<String, String> params;
     private RandomAccessFile file;
 
@@ -32,7 +31,6 @@ public class KodoChunkUploadRequest {
         headers.clear();
         headers.put("Authorization", preUploadBean.getUptoken());
         headers.put("Content-Type", "application/octet-stream");
-        this.preUploadBean = preUploadBean;
         this.params = params;
         this.file = file;
     }

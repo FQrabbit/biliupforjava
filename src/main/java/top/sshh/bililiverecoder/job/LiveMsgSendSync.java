@@ -1,10 +1,8 @@
 package top.sshh.bililiverecoder.job;
 
 import com.alibaba.fastjson.JSON;
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -16,7 +14,6 @@ import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
-import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
@@ -28,7 +25,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -72,7 +68,6 @@ public class LiveMsgSendSync {
 
     public static Set<Long> skipOrdinaryPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static Set<Long> skipAdvancedPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
-    private final Map<Long, Long> missingCidLogTime = new ConcurrentHashMap<>();
 
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
     public void sndMsgProcess() {
@@ -676,61 +671,6 @@ public class LiveMsgSendSync {
 
     }
 
-    private VideoEditUploadDto.DescDto generateDesc(String template, Map<String, Object> map) {
-        List<DescV2Dto> resultList = new ArrayList<>();
-        StringBuilder desc = new StringBuilder();
-        List<String> stringList = RecordBiliPublishService.splitTemplateByUid(template);
-        for (String s : stringList) {
-            if (s.startsWith("${@")) {
-                long uid = Long.parseLong(s.substring(3, s.length() - 1));
-                try {
-                    BiliApi.BiliUserCardResponseDto userCard = BiliApi.getUserCard(uid);
-                    if (userCard != null && userCard.getCode() == 0) {
-                        //必须带个空格，否则报错简介过长
-                        desc.append("@").append(userCard.getCard().getName() + " ");
-                        DescV2Dto descV2Dto = new DescV2Dto();
-                        descV2Dto.setBiz_id(String.valueOf(uid));
-                        descV2Dto.setRaw_text(userCard.getCard().getName());
-                        descV2Dto.setType(2);
-                        resultList.add(descV2Dto);
-                    }
-
-                } catch (Exception e) {
-                    log.error("[BLR] {}", LogKvs.event("Template.AtUser.Failed")
-                            .add("uid", uid)
-                            .addIfNotBlank("err", e.getMessage())
-                            .add("ex", e.getClass().getSimpleName()), e);
-                }
-            } else {
-                s = s.replace("${uname}", map.get("${uname}") != null ? map.get("${uname}").toString() : "")
-                        .replace("${title}", map.get("${title}") != null ? map.get("${title}").toString() : "")
-                        .replace("${index}", map.get("${index}") != null ? map.get("${index}").toString() : "")
-                        .replace("${areaName}", map.get("${areaName}") != null ? map.get("${areaName}").toString() : "")
-                        .replace("${roomId}", map.get("${roomId}") != null ? map.get("${roomId}").toString() : "");
-                if (s.contains("${")) {
-                    try {
-                        LocalDateTime localDateTime = (LocalDateTime)map.get("date");
-                        String substring = s.substring(s.indexOf("${"));
-                        String date = substring.substring(0, substring.indexOf("}") + 1);
-                        String format = localDateTime.format(DateTimeFormatter.ofPattern(date.substring(2, date.length() - 1)));
-                        s = s.replace(date, format);
-                    } catch (Exception e) {
-                        log.error("[BLR] {}", LogKvs.event("Template.DateFormat.Failed")
-                                .addIfNotBlank("template", template));
-                    }
-                }
-                s = s.replace(",,", ",");
-
-                DescV2Dto descV2Dto = new DescV2Dto();
-                descV2Dto.setRaw_text(s);
-                descV2Dto.setType(1);
-                resultList.add(descV2Dto);
-                desc.append(s);
-            }
-
-        }
-        return new VideoEditUploadDto.DescDto(desc.toString(), resultList);
-    }
 }
 
 

@@ -21,15 +21,11 @@ public class EdtiorTranscodeRequest {
 
     private final String URL = "https://api.bilibili.com/studio/video-editor-interface/video-editor/resource/transcode";
 
-    private Cookie cookie;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private EditorPreUploadBean preUploadBean;
 
     private Map<String, String> params = new HashMap<>();
 
     public EdtiorTranscodeRequest(Cookie cookie, EditorPreUploadBean preUploadBean) {
-        this.preUploadBean = preUploadBean;
-        this.cookie = cookie;
         cookie.toHeaderCookie(headers);
         this.params.put("resource_id", preUploadBean.getData().getResource_id());
         this.params.put("task_type", "1");

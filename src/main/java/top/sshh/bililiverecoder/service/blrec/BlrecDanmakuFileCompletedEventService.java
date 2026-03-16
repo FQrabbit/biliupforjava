@@ -3,18 +3,14 @@ package top.sshh.bililiverecoder.service.blrec;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.blrec.BlrecDataDTO;
 import top.sshh.bililiverecoder.entity.blrec.BlrecEventDTO;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
-import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.LogKvs;
-
-import java.util.Optional;
 
 @Slf4j
 @Service("blrecDanmakuFileCompletedEventService")
@@ -22,9 +18,6 @@ public class BlrecDanmakuFileCompletedEventService implements BlrecEventService 
 
     @Autowired
     private RecordRoomRepository roomRepository;
-
-    @Autowired
-    private RecordHistoryRepository historyRepository;
 
     @Autowired
     private RecordHistoryPartRepository partRepository;

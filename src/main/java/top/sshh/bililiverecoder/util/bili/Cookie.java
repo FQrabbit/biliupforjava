@@ -14,7 +14,7 @@ import java.util.function.BiConsumer;
  * 所有Cookie的父类，Cookie以键值对的形式进行存储
  * 任何cookie都可以被父类存储，子类则可以对一个已确定的cookie进行操作
  */
-public abstract class Cookie extends HashMap<String, String> implements Serializable {
+public abstract class Cookie extends HashMap<String, String> {
     private static final long serialVersionUID = 2168152194164783950L;
 
     /**

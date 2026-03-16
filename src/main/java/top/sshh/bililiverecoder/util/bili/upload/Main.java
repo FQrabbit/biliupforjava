@@ -64,7 +64,7 @@ public class Main {
         String page1 = checkUploadRequest.getPage();
         System.out.println(page1);
         String body = "{\"cover\":\"https://archive.biliimg.com/bfs/archive/2320ee63a428d8ee66a4abfe885569b1e4f66248.jpg\",\"title\":\"test1\",\"copyright\":1,\"tid\":21,\"tag\":\"自用\",\"desc_format_id\":0,\"desc\":\"1\",\"recreate\":-1,\"dynamic\":\"\",\"interactive\":0,\"videos\":[{\"filename\":\"" + uploadBean.getFileName() + "\",\"title\":\"test1\",\"desc\":\"\"}],\"act_reserve_create\":0,\"no_disturbance\":0,\"no_reprint\":1,\"open_elec\":1,\"subtitle\":{\"open\":0,\"lan\":\"\"},\"dolby\":0,\"lossless_music\":0,\"up_selection_reply\":false,\"up_close_reply\":false,\"up_close_danmu\":false,\"web_os\":1,\"csrf\":\"" + cookie.getCsrf() + "\"}";
-        PublishVideoRequest publishVideoRequest = new PublishVideoRequest(cookie, body);
+        new PublishVideoRequest(cookie, body);
         // String page2 = publishVideoRequest.getPage();
         // System.out.println(page2);
     }

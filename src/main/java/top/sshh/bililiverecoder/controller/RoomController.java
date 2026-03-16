@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.UploadEnums;
 
 import javax.imageio.ImageIO;
@@ -34,8 +35,6 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -230,7 +229,7 @@ public class RoomController {
             dbRoom.setWxuid(room.getWxuid());
             dbRoom.setServerChanSendKey(room.getServerChanSendKey());
             dbRoom.setServerChanChannel(room.getServerChanChannel());
-            dbRoom.setPushMsgTags(room.getPushMsgTags());
+            dbRoom.setPushMsgTags(PushNotifyClient.normalizePushMsgTags(room.getPushMsgTags()));
             dbRoom.setFileSizeLimit(room.getFileSizeLimit());
             dbRoom.setDurationLimit(room.getDurationLimit());
             dbRoom.setDeleteType(room.getDeleteType());
@@ -720,8 +719,13 @@ public class RoomController {
                             Map<String, Object> obj = JSON.parseObject(raw, new TypeReference<Map<String, Object>>() {});
                             Object dataObj = obj.get("data");
                             Map<String, Object> data;
-                            if (dataObj instanceof Map) {
-                                data = (Map<String, Object>) dataObj;
+                            if (dataObj instanceof Map<?, ?> rawMap) {
+                                data = new HashMap<>();
+                                for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                                    if (entry.getKey() instanceof String key) {
+                                        data.put(key, entry.getValue());
+                                    }
+                                }
                             } else {
                                 data = new HashMap<>();
                                 obj.put("data", data);

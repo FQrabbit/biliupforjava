@@ -10,13 +10,11 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
-import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -87,7 +85,7 @@ public class WebhookEventDispatcher {
             if (!serialExecutor.tryReserve()) {
                 return false;
             }
-            scheduler.schedule(() -> serialExecutor.executeReserved(wrapped), new Date(System.currentTimeMillis() + delayMs));
+            scheduler.schedule(() -> serialExecutor.executeReserved(wrapped), Instant.now().plusMillis(delayMs));
             return true;
         }
 

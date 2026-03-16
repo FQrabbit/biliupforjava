@@ -9,7 +9,6 @@ import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.data.BiliLiveMasterInfoResponse;
 import top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
-import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -28,9 +27,6 @@ public class RoomStatusSyncJob {
 
     @Autowired
     private RecordHistoryRepository historyRepository;
-
-    @Autowired
-    private RecordHistoryPartRepository partRepository;
 
     @Autowired
     private ShutdownState shutdownState;

@@ -257,7 +257,6 @@ public class JsonSerializeUtil {
 
             //将路经入栈
             Object jsonRoot = json;
-            int i = 0;
             for (String s : split) {
                 if ("".equals(s)) continue;
                 String read = read(jsonRoot, s);

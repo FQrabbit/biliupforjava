@@ -23,7 +23,6 @@ public class CompleteUploadRequest {
 
     private final String URL;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private PreUploadBean preUploadBean;
     private String body;
 
     private Map<String, String> params;
@@ -33,7 +32,6 @@ public class CompleteUploadRequest {
         headers.clear();
         headers.put("X-Upos-Auth", preUploadBean.getAuth());
         headers.put("Content-Type", "application/json");
-        this.preUploadBean = preUploadBean;
         this.body = body;
         this.params = params;
     }

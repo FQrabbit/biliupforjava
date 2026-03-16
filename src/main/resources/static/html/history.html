@@ -355,6 +355,11 @@
                                 <!-- 统一状态显示 -->
                                 <span class="status-chip" :class="getStatusColor(item.status)">{{ item.status }}</span>
                                 
+                                <!-- 仅自己可见标签 -->
+                                <el-tag v-if="item.code === -50" size="mini" class="private-tag" effect="dark">
+                                    <i class="el-icon-view"></i> 仅自己可见
+                                </el-tag>
+                                
                                 <el-tooltip v-if="abnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
                                     <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ abnormalPartCount(item) }}</span>
                                 </el-tooltip>
@@ -439,7 +444,7 @@
                         <template slot-scope="scope">
                             <el-tag size="mini" type="info" v-if="!scope.row.publish">未审核</el-tag>
                             <el-tag size="mini" type="success" v-else-if="scope.row.code == 0">通过</el-tag>
-                            <el-tag size="mini" type="success" v-else-if="scope.row.code == -50">仅自己可见</el-tag>
+                            <el-tag size="mini" class="private-tag" effect="dark" v-else-if="scope.row.code == -50"><i class="el-icon-view"></i> 仅自己可见</el-tag>
                             <el-tag size="mini" type="warning" v-else-if="scope.row.code == -1">审核中</el-tag>
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == -2">被退回</el-tag>
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == -4">被锁定</el-tag>
@@ -2326,16 +2331,21 @@
                         const detailContent = this.$refs.detailContent;
                         if (!list) return;
 
-                        if (detailContent) {
+                        const scrollDetailToList = () => {
+                            if (!detailContent) return;
                             const detailRect = detailContent.getBoundingClientRect();
                             const listRect = list.getBoundingClientRect();
-                            const offsetTop = Math.max(listRect.top - detailRect.top - 12, 0);
+                            const offsetTop = Math.max(listRect.top - detailRect.top - 10, 0);
                             const targetTop = detailContent.scrollTop + offsetTop;
                             try {
                                 detailContent.scrollTo({ top: targetTop, behavior: 'smooth' });
                             } catch (e) {
                                 detailContent.scrollTop = targetTop;
                             }
+                        };
+
+                        if (detailContent) {
+                            scrollDetailToList();
                         } else {
                             try {
                                 list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2343,19 +2353,30 @@
                         }
 
                         this.clearPartsAutoScrollTimer();
-                        if (list.scrollHeight > list.clientHeight) {
-                            this.partsAutoScrollTimer = setTimeout(() => {
-                                if (!this.detailDialogVisible) return;
-                                const activeList = this.$refs.partsList;
-                                if (!activeList) return;
+                        this.partsAutoScrollTimer = setTimeout(() => {
+                            if (!this.detailDialogVisible) return;
+                            const activeList = this.$refs.partsList;
+                            const activeDetail = this.$refs.detailContent;
+                            if (activeList && activeDetail) {
+                                const detailRect = activeDetail.getBoundingClientRect();
+                                const listRect = activeList.getBoundingClientRect();
+                                const offsetTop = Math.max(listRect.top - detailRect.top - 10, 0);
+                                const targetTop = activeDetail.scrollTop + offsetTop;
                                 try {
-                                    activeList.scrollTo({ top: 48, behavior: 'smooth' });
+                                    activeDetail.scrollTo({ top: targetTop, behavior: 'smooth' });
                                 } catch (e) {
-                                    activeList.scrollTop = 48;
+                                    activeDetail.scrollTop = targetTop;
                                 }
-                                this.partsAutoScrollTimer = null;
-                            }, 220);
-                        }
+                            }
+                            if (activeList && activeList.scrollHeight > activeList.clientHeight) {
+                                try {
+                                    activeList.scrollTo({ top: 0, behavior: 'smooth' });
+                                } catch (e) {
+                                    activeList.scrollTop = 0;
+                                }
+                            }
+                            this.partsAutoScrollTimer = null;
+                        }, 260);
                     });
                 }
             },

@@ -112,6 +112,7 @@ public class UserMyRootBean {
          * 主页头图链接
          */
         private String top_photo;
+        @SuppressWarnings("deprecation")
         private Theme theme;
         /**
          * 系统通知

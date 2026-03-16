@@ -8,12 +8,8 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordEventData;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
-import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
-import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
-import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
-import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
@@ -26,22 +22,7 @@ public class RecordEventFilePostService implements RecordEventService {
     private String workPath;
 
     @Autowired
-    private BiliUserRepository biliUserRepository;
-
-    @Autowired
-    private RecordRoomRepository roomRepository;
-
-    @Autowired
-    private RecordHistoryRepository historyRepository;
-
-    @Autowired
     private RecordHistoryPartRepository historyPartRepository;
-
-    @Autowired
-    private UploadServiceFactory uploadServiceFactory;
-
-    @Autowired
-    private LiveMsgService liveMsgService;
 
     @PostConstruct
     public void initWorkPath() {

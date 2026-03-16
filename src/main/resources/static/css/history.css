@@ -1548,6 +1548,27 @@
 
 
 
+/* 仅自己可见标签样式 */
+.private-tag {
+    background-color: rgba(165, 121, 220, 0.15) !important;
+    border-color: rgba(165, 121, 220, 0.3) !important;
+    color: #a579dc !important;
+    font-weight: 500;
+}
+
+.private-tag i {
+    margin-right: 4px;
+}
+
+/* 暗色模式下的仅自己可见标签 */
+[data-theme="dark"] .private-tag {
+    background-color: rgba(165, 121, 220, 0.2) !important;
+    border-color: rgba(165, 121, 220, 0.4) !important;
+    color: #d3b1ff !important;
+}
+
+
+
 .card-info-right {
 
     display: flex;

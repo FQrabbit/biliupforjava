@@ -22,13 +22,11 @@ public class EdtiorSpaceRequest {
 
     private final String URL = "https://api.bilibili.com/studio/video-editor-interface/video-editor/resource/space";
 
-    private Cookie cookie;
     private HashMap<String, String> headers = new HashMap<String, String>();
 
     private Map<String, String> params = new HashMap<String, String>();
 
     public EdtiorSpaceRequest(Cookie cookie) {
-        this.cookie = cookie;
         cookie.toHeaderCookie(headers);
     }
 
