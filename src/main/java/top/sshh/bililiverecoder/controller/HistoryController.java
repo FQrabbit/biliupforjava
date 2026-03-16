@@ -850,8 +850,18 @@ public class HistoryController {
                     .add("historyId", history.getId())
                     .add("err", e.getMessage()), e);
         }
-        history.setGiveUpPartCount(giveUpCount);
-        if (giveUpCount > 0) {
+        history.setGiveUpPartCount(giveUpCount);        
+        // 计算真正的异常分P数量（排除低于阈值和手动跳过的）
+        int abnormalCount = 0;
+        try {
+            abnormalCount = partRepository.countAbnormalPartsByHistoryId(history.getId());
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("History.AbnormalCount.QueryFailed")
+                    .add("historyId", history.getId())
+                    .add("err", e.getMessage()), e);
+        }
+        history.setAbnormalPartCount(abnormalCount);
+                if (giveUpCount > 0) {
             try {
                 List<RecordHistoryPart> giveUpParts = partRepository.findGiveUpPartsByHistoryId(history.getId());
                 history.setGiveUpPartFiles(giveUpParts.stream().map(RecordHistoryPart::getFilePath).toList());

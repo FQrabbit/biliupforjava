@@ -20,6 +20,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -72,19 +73,36 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
 
+    @Autowired
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
+
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final Integer UPLOAD_RETRY_GIVE_UP = 9999;
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
+        part = partRepository.findById(part.getId()).get();
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
                 .add("os", OS)
                 .add("partId", part.getId())
                 .add("historyId", part.getHistoryId())
                 .add("roomId", part.getRoomId())
                 .add("filePath", part.getFilePath()));
-        this.upload(part);
+        RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
+        if (room == null || room.getUploadUserId() == null) {
+            this.upload(part);
+            return;
+        }
+        RecordHistoryPart finalPart = part;
+        uploadUserSerialScheduler.submit(
+                room.getUploadUserId(),
+                room.getRoomId(),
+                finalPart.getHistoryId(),
+                finalPart.getId(),
+                OS,
+                () -> this.upload(finalPart)
+        );
     }
 
     @Override

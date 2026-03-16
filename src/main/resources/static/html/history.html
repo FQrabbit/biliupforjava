@@ -1200,7 +1200,13 @@
             },
             // 真正异常分P的数量（排除预期跳过类型）
             abnormalPartCount: function(item) {
-                if (!item || !item.giveUpPartCount || item.giveUpPartCount <= 0) return 0;
+                if (!item) return 0;
+                // 优先使用后端返回的 abnormalPartCount 字段
+                if (item.abnormalPartCount !== undefined && item.abnormalPartCount !== null) {
+                    return item.abnormalPartCount;
+                }
+                // 回退到前端计算（兼容旧版本）
+                if (!item.giveUpPartCount || item.giveUpPartCount <= 0) return 0;
                 var types = item.giveUpPartTypes || [];
                 var skipped = types.filter(t => this.isSkippedType(t)).length;
                 return item.giveUpPartCount - skipped;

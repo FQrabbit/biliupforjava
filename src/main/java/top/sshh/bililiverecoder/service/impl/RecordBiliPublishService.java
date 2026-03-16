@@ -157,8 +157,17 @@ public class RecordBiliPublishService {
             return;
         }
 
-        // 发布任务入队列
-        TaskUtil.publishTask.put(history.getId(), Thread.currentThread());
+        // 发布任务入队列（原子占位，避免同一稿件并发发布）
+        Thread existed = TaskUtil.publishTask.putIfAbsent(history.getId(), Thread.currentThread());
+        if (existed != null && existed != Thread.currentThread()) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Task.AlreadyRunning")
+                .add("historyId", history.getId())
+                .add("roomId", history.getRoomId())
+                .addIfNotBlank("title", history.getTitle())
+                .add("ownerThread", existed.getName())
+                .add("currentThread", Thread.currentThread().getName()));
+            return;
+        }
         StringBuilder errMsg = new StringBuilder("\n");
         try {
             List<RecordHistoryPart> uploadParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
@@ -386,26 +395,17 @@ public class RecordBiliPublishService {
                     .add("retryCount", history.getUploadRetryCount()));
             return false;
         }
-        Thread publishThread = TaskUtil.publishTask.get(history.getId());
-        if (publishThread != null) {
-            //正在发布，直接退出
+        Thread publishThread = TaskUtil.publishTask.putIfAbsent(history.getId(), Thread.currentThread());
+        if (publishThread != null && publishThread != Thread.currentThread()) {
+            // 正在发布，直接退出
             log.warn("[BLR] {}", LogKvs.event("Publish.Task.AlreadyRunning")
-                    .add("historyId", history.getId())
-                    .add("roomId", history.getRoomId())
-                    .addIfNotBlank("title", history.getTitle()));
+                .add("historyId", history.getId())
+                .add("roomId", history.getRoomId())
+                .addIfNotBlank("title", history.getTitle())
+                .add("ownerThread", publishThread.getName())
+                .add("currentThread", Thread.currentThread().getName()));
             return false;
         }
-        publishThread = TaskUtil.publishTask.get(history.getId());
-        if (publishThread != null) {
-            //正在发布，直接退出
-            log.warn("[BLR] {}", LogKvs.event("Publish.Task.AlreadyRunning")
-                    .add("historyId", history.getId())
-                    .add("roomId", history.getRoomId())
-                    .addIfNotBlank("title", history.getTitle()));
-            return false;
-        }
-        // 发布任务入队列
-        TaskUtil.publishTask.put(history.getId(), Thread.currentThread());
         try {
 
             RecordRoom room = roomRepository.findByRoomId(history.getRoomId());

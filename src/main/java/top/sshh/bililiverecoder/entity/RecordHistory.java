@@ -82,7 +82,9 @@ public class RecordHistory {
     // 分P上传补偿任务中“永久放弃”的分P（例如无法读取时长/大小）
     @Transient
     private int giveUpPartCount;
-
+    // 真正异常的分P数量（排除低于阈值SKIPPED_THRESHOLD和手动跳过MANUAL_SKIP的分P）
+    @Transient
+    private int abnormalPartCount;
     // 是否处于等待投稿状态（分P已上传完毕，等待合并间隔时间）
     @Transient
     private boolean waitingForPublish;
@@ -150,7 +152,8 @@ public class RecordHistory {
             return "正在录制";
         }
         
-        if (giveUpPartCount > 0) {
+        // 只有真正的异常（不包括低于阈值的跳过）时才显示"存在异常"
+        if (abnormalPartCount > 0) {
             return "存在异常";
         }
 

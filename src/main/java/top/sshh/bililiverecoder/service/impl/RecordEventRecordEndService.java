@@ -16,6 +16,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
 
@@ -38,7 +39,7 @@ public class RecordEventRecordEndService implements RecordEventService {
             父分区: %s
             子分区: %s
             时间: %s
-            若十分钟内未收到录制开始事件，
+            若%d分钟(可配置)内未收到录制开始事件，
             则在上传完成后发布视频。
             """;
     @Autowired
@@ -51,6 +52,9 @@ public class RecordEventRecordEndService implements RecordEventService {
 
     @Autowired
     private RecordBiliPublishService recordBiliPublishService;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
 
 
     @Override
@@ -146,15 +150,37 @@ public class RecordEventRecordEndService implements RecordEventService {
         String wxuid = room.getWxuid();
         String pushMsgTags = room.getPushMsgTags();
         if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "录制结束")) {
+            int mergeIntervalMinutes = getMergeIntervalMinutes(eventData.getRoomId());
             Message message = new Message();
             message.setAppToken(wxToken);
             message.setContentType(Message.CONTENT_TYPE_TEXT);
             message.setContent(WX_MSG_FORMAT.formatted(room.getUname(),room.getTitle(),
-                    eventData.getAreaNameParent(),eventData.getAreaNameChild(),LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒"))));
+                    eventData.getAreaNameParent(),eventData.getAreaNameChild(),LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
+                    mergeIntervalMinutes));
             message.setUid(wxuid);
             PushNotifyClient.sendParallel(room, message);
         }
 //        recordBiliPublishService.publishRecordHistory(history);
+    }
+
+    private int getMergeIntervalMinutes(String roomId) {
+        int mergeIntervalMinutes = 20;
+        try {
+            String mergeIntervalConfig = systemConfigService.getAllConfigsMap().get(SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
+            if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
+                mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
+                if (mergeIntervalMinutes < 1) {
+                    mergeIntervalMinutes = 1;
+                } else if (mergeIntervalMinutes > 1440) {
+                    mergeIntervalMinutes = 1440;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("RecordEnd.ParseMergeIntervalFailed")
+                    .add("roomId", roomId)
+                    .add("error", e.getMessage()));
+        }
+        return mergeIntervalMinutes;
     }
 }
 

@@ -103,6 +103,7 @@ public final class LogKvs {
         EVENT_ZH.put("RecordEnd.NoRecording", "录制结束事件：本地无活跃录制记录");
         EVENT_ZH.put("RecordEnd.PartHeal.Done", "录制结束：分P纠偏/修复成功");
         EVENT_ZH.put("RecordEnd.PartHeal.Failed", "录制结束：分P纠偏/修复失败");
+        EVENT_ZH.put("RecordEnd.ParseMergeIntervalFailed", "录制结束：解析合并间隔配置失败");
         EVENT_ZH.put("FileOpen.Received", "收到文件打开事件");
         EVENT_ZH.put("FileOpen.RoomNotFound.AutoCreate", "文件打开事件：房间不存在，自动创建");
         EVENT_ZH.put("FileOpen.FATAL.HistoryStillNotFound", "文件打开事件：致命错误，自愈后仍未找到录制历史");

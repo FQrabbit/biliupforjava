@@ -737,7 +737,17 @@
                                     <el-input type="number" v-model="room.percentileRank" :min="0.5" :max="0.99" :step="0.01" size="mini" style="width: 90px"></el-input>
                                 </div>
                             </div>
-                            <el-form-item label="微信通知UID" style="margin-top: 10px;">
+                        </div>
+                    </div>
+
+                    <!-- 推送设置 -->
+                    <div class="config-card">
+                        <div class="card-header">
+                            <i class="el-icon-bell"></i>
+                            <span>推送设置</span>
+                        </div>
+                        <div class="card-body">
+                            <el-form-item label="微信通知UID">
                                 <el-input v-model="room.wxuid" placeholder="UID">
                                     <el-button slot="append" icon="el-icon-full-screen" @click="wxDialogVisible = true"></el-button>
                                 </el-input>
@@ -754,6 +764,17 @@
                                 <el-input v-model="room.serverChanChannel" placeholder="例如：服务器报警|录播通知"></el-input>
                                 <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 6px;">
                                     标签将作为 tags 参数发送，多个标签请使用 | 分隔；不填则不传 tags。
+                                </div>
+                            </el-form-item>
+                            <el-divider style="margin: 12px 0;"></el-divider>
+                            <el-form-item label="推送触发条件">
+                                <el-checkbox-group v-model="pushMsgTagsArray" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; margin-top: 8px;">
+                                    <el-checkbox v-for="tag in pushMsgTagsOptions" :key="tag.value" :label="tag.value" style="margin: 0;">
+                                        {{ tag.label }}
+                                    </el-checkbox>
+                                </el-checkbox-group>
+                                <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 10px;">
+                                    💡 选择启用的推送类型，系统将在对应事件发生时向已配置的渠道发送通知。未选择任何选项时不会发送推送。
                                 </div>
                             </el-form-item>
                         </div>
@@ -1157,6 +1178,21 @@
             <el-button type="primary" @click="handleManualPaste">应 用</el-button>
         </div>
     </el-dialog>
+
+    <el-dialog :visible.sync="pasteConfirmDialogVisible" title="确认粘贴配置" width="400px" append-to-body>
+        <div style="margin-bottom: 20px;">
+            <div style="color: #606266; line-height: 1.6;">
+                <p>粘贴将会覆盖当前配置的大部分参数。</p>
+                <p style="color: #909399; font-size: 12px; margin-top: 10px;">
+                    💡 提示：某些参数（如房间ID、直播间ID等）将被保留，不会被覆盖。
+                </p>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="pasteConfirmDialogVisible = false">取 消</el-button>
+            <el-button type="primary" @click="confirmPaste">确 认 粘 贴</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script>
     new Vue({
@@ -1165,7 +1201,19 @@
             pollingTimer: null,
             manualPasteDialogVisible: false,
             manualPasteContent: '',
+            pasteConfirmDialogVisible: false,
+            pendingPasteConfig: null,
             loading: false,
+            pushMsgTagsArray: [],
+            pushMsgTagsOptions: [
+                { label: '开始直播', value: '开始直播' },
+                { label: '录制结束', value: '录制结束' },
+                { label: '分P上传', value: '分P上传' },
+                { label: '视频投稿', value: '视频投稿' },
+                { label: '高级弹幕', value: '高级弹幕' },
+                { label: '视频评论', value: '视频评论' },
+                { label: '云剪辑', value: '云剪辑' }
+            ],
             sectionsList: [],
             typeList: [
                     {
@@ -2785,7 +2833,7 @@
                 this.dialogFormVisible = false;
             },
             copyConfig() {
-                // 复制当前房间配置到剪贴板（排除id和roomId等唯一标识）
+                // 复制当前房间配置到剪贴板（排除id和roomId等唯一标识以及合集、小节参数）
                 const config = JSON.parse(JSON.stringify(this.room));
                 // 移除不应复制的字段
                 delete config.id;
@@ -2796,12 +2844,14 @@
                 delete config.recording;
                 delete config.startTime;
                 delete config.coverUrl; // 封面通常不复制
+                delete config.seasonId; // 不复制合集
+                delete config.sectionId; // 不复制小节
                 
                 const configStr = JSON.stringify(config);
                 
                 if (navigator.clipboard) {
                     navigator.clipboard.writeText(configStr).then(() => {
-                        this.$message.success('配置已复制到剪贴板');
+                        this.$message.success('配置已复制到剪贴板（已排除合集和小节参数）');
                     }).catch(err => {
                         console.error('Failed to copy: ', err);
                         this.$message.error('复制失败');
@@ -2825,7 +2875,7 @@
             pasteConfig() {
                 if (navigator.clipboard && navigator.clipboard.readText) {
                     navigator.clipboard.readText().then(text => {
-                        this.applyPastedConfig(text);
+                        this.showPasteConfirmation(text);
                     }).catch(err => {
                         console.error('Failed to read clipboard: ', err);
                         // 读取失败时，尝试打开手动粘贴对话框
@@ -2843,8 +2893,8 @@
                     this.$message.warning('请先粘贴配置内容');
                     return;
                 }
-                this.applyPastedConfig(this.manualPasteContent);
                 this.manualPasteDialogVisible = false;
+                this.showPasteConfirmation(this.manualPasteContent);
             },
             showPasteHelp() {
                  const flagUrl = 'chrome://flags/#unsafely-treat-insecure-origin-as-secure';
@@ -2878,6 +2928,30 @@
                     width: '600px'
                 });
             },
+            showPasteConfirmation(text) {
+                try {
+                    const config = JSON.parse(text);
+                    if (typeof config !== 'object') {
+                        throw new Error('Invalid config format');
+                    }
+                    
+                    // 保存待粘贴的配置
+                    this.pendingPasteConfig = text;
+                    
+                    // 显示确认对话框
+                    this.pasteConfirmDialogVisible = true;
+                } catch (e) {
+                    console.error(e);
+                    this.$message.error('配置格式不正确：' + e.message);
+                }
+            },
+            confirmPaste() {
+                if (this.pendingPasteConfig) {
+                    this.applyPastedConfig(this.pendingPasteConfig);
+                    this.pasteConfirmDialogVisible = false;
+                    this.pendingPasteConfig = null;
+                }
+            },
             applyPastedConfig(text) {
                 try {
                     const config = JSON.parse(text);
@@ -2886,18 +2960,28 @@
                         throw new Error('Invalid config format');
                     }
                     
-                    // 保留当前房间的唯一标识
+                    // 保留当前房间的唯一标识和特定参数（不应被覆盖的）
                     const currentId = this.room.id;
                     const currentRoomId = this.room.roomId;
                     const currentUname = this.room.uname;
+                    const currentSeasonId = this.room.seasonId; // 保留合集
+                    const currentSectionId = this.room.sectionId; // 保留小节
+                    
+                    // 过滤掉不应该复制的字段
+                    const fieldsToExclude = ['id', 'roomId', 'uname', 'title', 'streaming', 'recording', 'startTime', 'coverUrl', 'seasonId', 'sectionId'];
+                    for (let key of fieldsToExclude) {
+                        delete config[key];
+                    }
                     
                     // 合并配置
                     this.room = { ...this.room, ...config };
                     
-                    // 恢复唯一标识
+                    // 恢复唯一标识和特定参数
                     this.room.id = currentId;
                     this.room.roomId = currentRoomId;
                     this.room.uname = currentUname;
+                    this.room.seasonId = currentSeasonId;
+                    this.room.sectionId = currentSectionId;
                     
                     // 强制更新视图
                     this.room = JSON.parse(JSON.stringify(this.room));
@@ -2953,6 +3037,8 @@
             },
             handleEdit: function (index, row) {
                 this.room = JSON.parse(JSON.stringify(row));
+                // 转换推送标签字符串为数组
+                this.pushMsgTagsArray = this.room.pushMsgTags ? this.room.pushMsgTags.split(',').filter(t => t.trim()) : [];
                 this.dialogFormVisible = true;
                 this.getSeasons(row.id);
                 this.$nextTick(() => {
@@ -2969,6 +3055,9 @@
 
                 // 保存前校验：小节必须属于当前合集，不符合则自动修正
                 _this.ensureSectionBelongsSeason(true);
+
+                // 转换推送标签数组为字符串
+                _this.room.pushMsgTags = _this.pushMsgTagsArray.join(',');
 
                 // 提交前强制同步封面状态
                 if (_this.room.coverType === 'live') {
