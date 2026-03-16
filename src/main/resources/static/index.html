@@ -843,6 +843,9 @@
             lastHeaderToggleAt: 0,
             headerToggleCooldownMs: 260,
             scrollObserver: [],
+            scrollBindRetryTimer: null,
+            scrollBindRetryCount: 0,
+            scrollStateTimer: null,
             // 已组件化的页面列表（不走 iframe）
             componentPages: ['user', 'log']
         },
@@ -885,6 +888,7 @@
             this.$nextTick(function() {
                 self.updateNavIndicator();
                 self.bindScrollObserver();
+                self.startScrollStateMonitor();
             });
             window.addEventListener('resize', function() {
                 self.updateNavIndicator();
@@ -901,10 +905,62 @@
                 this.lastHeaderToggleAt = 0;
                 this.$nextTick(function() {
                     self.bindScrollObserver();
+                    self.startScrollStateMonitor();
                 });
             }
         },
         methods: {
+            getCurrentScrollTop: function() {
+                if (this.activeName === 'log') {
+                    return 0;
+                }
+
+                if (this.activeName === 'home') {
+                    var homeContainer = this.$el.querySelector('.changelog-container');
+                    return homeContainer ? (homeContainer.scrollTop || 0) : 0;
+                }
+
+                if (this.activeName === 'user') {
+                    var userContainer = this.$el.querySelector('.user-container');
+                    return userContainer ? (userContainer.scrollTop || 0) : 0;
+                }
+
+                if (this.activeName === 'room' || this.activeName === 'history') {
+                    var iframe = this.$el.querySelector('.tab-frame');
+                    if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+                        return 0;
+                    }
+                    var doc = iframe.contentDocument;
+                    var target = null;
+                    if (this.activeName === 'room') {
+                        target = doc.querySelector('.room-container');
+                    } else {
+                        target = doc.querySelector('.history-main') || doc.querySelector('.history-container');
+                    }
+                    if (target) {
+                        return target.scrollTop || 0;
+                    }
+                    return iframe.contentWindow.pageYOffset || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+                }
+
+                return 0;
+            },
+            startScrollStateMonitor: function() {
+                var self = this;
+                if (this.scrollStateTimer) {
+                    clearInterval(this.scrollStateTimer);
+                    this.scrollStateTimer = null;
+                }
+                if (this.activeName === 'log') {
+                    this.showBackToTop = false;
+                    return;
+                }
+
+                this.scrollStateTimer = setInterval(function() {
+                    var top = self.getCurrentScrollTop();
+                    self.showBackToTop = self.activeName !== 'log' && top > 6;
+                }, 180);
+            },
             validateNumber: function(value, field, allowDecimal) {
                 // 验证输入是否为数字
                 var self = this;
@@ -1119,6 +1175,7 @@
                 var self = this;
                 this.syncIframePrivacyMode();
                 this.bindScrollObserver();
+                this.startScrollStateMonitor();
                 setTimeout(function() {
                     if (self.connectionReady) {
                         self.pageLoading = false;
@@ -1324,6 +1381,14 @@
                 return this.componentPages.indexOf(tab) >= 0;
             },
             removeScrollObserver: function() {
+                if (this.scrollBindRetryTimer) {
+                    clearTimeout(this.scrollBindRetryTimer);
+                    this.scrollBindRetryTimer = null;
+                }
+                if (this.scrollStateTimer) {
+                    clearInterval(this.scrollStateTimer);
+                    this.scrollStateTimer = null;
+                }
                 if (!this.scrollObserver || !this.scrollObserver.length) {
                     return;
                 }
@@ -1335,6 +1400,48 @@
                 }
                 this.scrollObserver = [];
             },
+            scheduleScrollBindRetry: function() {
+                var self = this;
+                if (this.scrollBindRetryCount >= 8) {
+                    return;
+                }
+                if (this.scrollBindRetryTimer) {
+                    clearTimeout(this.scrollBindRetryTimer);
+                }
+                this.scrollBindRetryCount = this.scrollBindRetryCount + 1;
+                this.scrollBindRetryTimer = setTimeout(function() {
+                    self.scrollBindRetryTimer = null;
+                    self.bindScrollObserver();
+                }, 120);
+            },
+            detectScrollableContainer: function(doc, preferredSelectors) {
+                if (!doc) {
+                    return null;
+                }
+                for (var i = 0; i < preferredSelectors.length; i++) {
+                    var preferred = doc.querySelector(preferredSelectors[i]);
+                    if (preferred && preferred.scrollHeight > preferred.clientHeight + 4) {
+                        return preferred;
+                    }
+                }
+
+                var all = doc.querySelectorAll('main, .container, .content, .page, div');
+                for (var j = 0; j < all.length; j++) {
+                    var el = all[j];
+                    if (!el || !el.scrollHeight || !el.clientHeight) {
+                        continue;
+                    }
+                    if (el.scrollHeight <= el.clientHeight + 12) {
+                        continue;
+                    }
+                    var style = window.getComputedStyle(el);
+                    var overflowY = style ? style.overflowY : '';
+                    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
+                        return el;
+                    }
+                }
+                return null;
+            },
             bindScrollObserver: function() {
                 var self = this;
                 this.removeScrollObserver();
@@ -1342,6 +1449,7 @@
                 if (this.activeName === 'log') {
                     this.headerCompact = false;
                     this.showBackToTop = false;
+                    this.scrollBindRetryCount = 0;
                     return;
                 }
 
@@ -1355,32 +1463,35 @@
                     el.addEventListener('scroll', handler, { passive: true });
                     self.scrollObserver.push({ target: el, handler: handler });
                     self.handleContentScroll(el.scrollTop || 0);
+                    self.scrollBindRetryCount = 0;
                     return true;
                 };
 
                 if (this.activeName === 'home') {
-                    bindElementScroll(this.$el.querySelector('.changelog-container'));
+                    if (!bindElementScroll(this.$el.querySelector('.changelog-container'))) {
+                        this.scheduleScrollBindRetry();
+                    }
                     return;
                 }
 
                 if (this.activeName === 'user') {
-                    bindElementScroll(this.$el.querySelector('.user-container'));
+                    if (!bindElementScroll(this.$el.querySelector('.user-container'))) {
+                        this.scheduleScrollBindRetry();
+                    }
                     return;
                 }
 
                 if (this.activeName === 'room' || this.activeName === 'history') {
                     var iframe = this.$el.querySelector('.tab-frame');
                     if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+                        this.scheduleScrollBindRetry();
                         return;
                     }
                     var doc = iframe.contentDocument;
-                    var iframeScrollable = null;
-                    if (this.activeName === 'room') {
-                        iframeScrollable = doc.querySelector('.room-container');
-                    }
-                    if (this.activeName === 'history') {
-                        iframeScrollable = doc.querySelector('.history-main') || doc.querySelector('.history-container');
-                    }
+                    var preferredSelectors = (this.activeName === 'room')
+                        ? ['.room-container', 'main', '.app-container']
+                        : ['.history-main', '.history-container', 'main', '.app-container'];
+                    var iframeScrollable = this.detectScrollableContainer(doc, preferredSelectors);
                     if (bindElementScroll(iframeScrollable)) {
                         return;
                     }
@@ -1391,6 +1502,7 @@
                     iframe.contentWindow.addEventListener('scroll', fallbackHandler, { passive: true });
                     this.scrollObserver.push({ target: iframe.contentWindow, handler: fallbackHandler });
                     fallbackHandler();
+                    this.scheduleScrollBindRetry();
                 }
             },
             handleContentScroll: function(top) {
@@ -1471,6 +1583,15 @@
                         }
                     }
                 }
+
+                this.headerCompact = false;
+                this.showBackToTop = false;
+                this.lastScrollTop = 0;
+                this.upScrollDistance = 0;
+                this.downScrollDistance = 0;
+                this.lastHeaderToggleAt = 0;
+                this.bindScrollObserver();
+                this.startScrollStateMonitor();
             },
             switchTab: function(tab) {
                 if (this.activeName === tab) {
