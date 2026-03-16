@@ -5052,6 +5052,101 @@
 
 
 
+/* ========== SKIPPED 状态分P样式 ========== */
+
+/* 已跳过分P的进度条 - 灰色禁用样式 */
+
+.progress-bar-mini.skipped .el-progress-bar__outer {
+
+    background-color: #e4e7eb !important;
+
+}
+
+
+
+.progress-bar-mini.skipped .el-progress-bar__inner {
+
+    background: repeating-linear-gradient(
+
+        45deg,
+
+        #d3d6db,
+
+        #d3d6db 10px,
+
+        #e4e7eb 10px,
+
+        #e4e7eb 20px
+
+    ) !important;
+
+    box-shadow: none !important;
+
+    opacity: 0.6;
+
+}
+
+
+
+.progress-bar-mini.skipped .el-progress-bar__inner::before {
+
+    display: none !important;
+
+    animation: none !important;
+
+}
+
+
+
+/* 已跳过分P的百分比文本 */
+
+.progress-percent-text.skipped-text {
+
+    color: #909399;
+
+    opacity: 0.7;
+
+}
+
+
+
+/* 深色主题下的SKIPPED进度条样式 */
+
+[data-theme='dark'] .progress-bar-mini.skipped .el-progress-bar__outer {
+
+    background-color: #464646 !important;
+
+}
+
+
+
+[data-theme='dark'] .progress-bar-mini.skipped .el-progress-bar__inner {
+
+    background: repeating-linear-gradient(
+
+        45deg,
+
+        #3a3a3a,
+
+        #3a3a3a 10px,
+
+        #464646 10px,
+
+        #464646 20px
+
+    ) !important;
+
+}
+
+
+
+[data-theme='dark'] .progress-percent-text.skipped-text {
+
+    color: #909399;
+
+    opacity: 0.6;
+
+}
 
 
 

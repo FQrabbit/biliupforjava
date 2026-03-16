@@ -72,4 +72,17 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         """)
     List<RecordHistoryPart> findPendingUploadPartsWithHistoryUploadEnabled(
         String roomId, LocalDateTime startTime, LocalDateTime endTime);
+
+    // 查询所属稿件已投稿(publish=true 或 bvId不为空)但自身未上传且未放弃的分P（孤立分P清理用）
+    @Query("""
+        select p from RecordHistoryPart p
+        where p.upload = false
+          and p.uploadRetryCount < 9999
+          and exists (
+              select 1 from RecordHistory h
+              where h.id = p.historyId
+                and (h.publish = true or (h.bvId is not null and trim(h.bvId) <> ''))
+          )
+        """)
+    List<RecordHistoryPart> findOrphanedPartsOfPublishedHistories();
 }

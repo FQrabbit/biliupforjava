@@ -60,7 +60,8 @@ public class publishJob {
     @Qualifier("myAsyncPool")
     ThreadPoolTaskExecutor asyncThreadPool;
 
-    private static final java.util.concurrent.ConcurrentHashMap<Long, Long> uploadFailureMap = new java.util.concurrent.ConcurrentHashMap<>();
+    // value: [nextRetryTimestamp, compensateFailCount]
+    private static final java.util.concurrent.ConcurrentHashMap<Long, long[]> uploadFailureMap = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.concurrent.ConcurrentHashMap<String, FileProbe> fileProbeMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
@@ -68,7 +69,7 @@ public class publishJob {
     @Value("${publish.compensate.max-trigger-per-round:12}")
     private int compensateMaxTriggerPerRound;
 
-    @Value("${publish.compensate.max-trigger-per-user-per-round:2}")
+    @Value("${publish.compensate.max-trigger-per-user-per-round:6}")
     private int compensateMaxTriggerPerUserPerRound;
 
     @Value("${publish.compensate.async-queue-usage-threshold:0.7}")
@@ -79,6 +80,9 @@ public class publishJob {
 
     @Value("${publish.compensate.trigger-throttle-ms:5000}")
     private long compensateTriggerThrottleMs;
+
+    @Value("${publish.compensate.max-compensate-retries:8}")
+    private int compensateMaxRetries;
 
     private static final class FileProbe {
         private final long size;
@@ -330,6 +334,33 @@ public class publishJob {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return;
         }
+        // 清理已投稿稿件中残留的未上传分P，防止对已投稿稿件继续触发上传
+        try {
+            List<RecordHistoryPart> orphanedParts = partRepository.findOrphanedPartsOfPublishedHistories();
+            if (!orphanedParts.isEmpty()) {
+                log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.CleanOrphanedParts")
+                        .add("count", orphanedParts.size()));
+                for (RecordHistoryPart orphan : orphanedParts) {
+                    orphan.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    orphan.setDeleteFailReason("所属稿件已投稿，不再补偿上传");
+                    orphan.setDeleteFailType("HISTORY_ALREADY_PUBLISHED");
+                    try {
+                        partRepository.save(orphan);
+                        // 同时清除内存中的冷却记录
+                        uploadFailureMap.remove(orphan.getId());
+                    } catch (Exception ignored) {
+                    }
+                    log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.OrphanedPartMarked")
+                            .add("partId", orphan.getId())
+                            .add("historyId", orphan.getHistoryId())
+                            .add("filePath", orphan.getFilePath()));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.CleanOrphanedPartsFailed")
+                    .addIfNotBlank("err", e.getMessage()));
+        }
+
         List<RecordRoom> roomList = roomRepository.findByUpload(true);
         LocalDateTime now = LocalDateTime.now();
         int roundTriggeredCount = 0;
@@ -361,11 +392,11 @@ public class publishJob {
                     log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipByUserQuota")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
-                            .add("partId", part.getId())
                             .add("uploadUserId", uploadUserId)
                             .add("userTriggered", userTriggered)
-                            .add("userQuota", Math.max(1, compensateMaxTriggerPerUserPerRound)));
-                    continue;
+                            .add("userQuota", Math.max(1, compensateMaxTriggerPerUserPerRound))
+                            .add("remainingParts", pendingParts.size() - triggeredCount));
+                    break;
                 }
                 if (isAsyncPoolBusy()) {
                     log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipByAsyncPoolPressure")
@@ -384,8 +415,8 @@ public class publishJob {
                 }
                 // 检查失败冷却时间
                 if (uploadFailureMap.containsKey(part.getId())) {
-                    long nextRetry = uploadFailureMap.get(part.getId());
-                    if (System.currentTimeMillis() < nextRetry) {
+                    long[] entry = uploadFailureMap.get(part.getId());
+                    if (entry != null && System.currentTimeMillis() < entry[0]) {
                         continue;
                     }
                     uploadFailureMap.remove(part.getId());
@@ -449,7 +480,7 @@ public class publishJob {
                             .add("filePath", filePath)
                             .add("lastModified", file.lastModified())
                             .add("fileSizeBytes", file.length()));
-                    uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 5 * 60 * 1000);
+                    uploadFailureMap.put(part.getId(), new long[]{System.currentTimeMillis() + 5 * 60 * 1000, 0});
                     continue;
                 }
 
@@ -462,7 +493,7 @@ public class publishJob {
                             .add("partId", part.getId())
                             .add("filePath", filePath)
                             .add("fileSizeBytes", actualFileSize));
-                    uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 10 * 60 * 1000);
+                    uploadFailureMap.put(part.getId(), new long[]{System.currentTimeMillis() + 10 * 60 * 1000, 0});
                     continue;
                 }
                 if (part.getFileSize() != actualFileSize && actualFileSize > 0) {
@@ -490,10 +521,10 @@ public class publishJob {
                             .add("partId", part.getId())
                             .add("filePath", filePath)
                             .add("durationSec", actualDuration));
-                    uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 10 * 60 * 1000);
+                    uploadFailureMap.put(part.getId(), new long[]{System.currentTimeMillis() + 10 * 60 * 1000, 0});
                     continue;
                 }
-                
+
                 // 检查文件大小和时长是否符合要求
                 long minBytes = 1024L * 1024L * room.getFileSizeLimit();
                 if (actualFileSize < minBytes) {
@@ -516,7 +547,20 @@ public class publishJob {
                             .add("limitSec", room.getDurationLimit()));
                     continue;
                 }
-                
+
+                // 已经在正常上传流程中失败过的分P，首次被补偿任务扫到时先设初始冷却，避免立即重试
+                int retryCount = part.getUploadRetryCount();
+                if (retryCount > 0 && !uploadFailureMap.containsKey(part.getId())) {
+                    long initialBackoffMs = retryCount * 2L * 60 * 1000L;
+                    uploadFailureMap.put(part.getId(), new long[]{System.currentTimeMillis() + initialBackoffMs, 0});
+                    log.debug("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.InitialBackoff")
+                            .add("roomId", room.getRoomId())
+                            .add("partId", part.getId())
+                            .add("retryCount", retryCount)
+                            .add("backoffMs", initialBackoffMs));
+                    continue;
+                }
+
                 log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.TriggerUpload")
                         .add("roomId", room.getRoomId())
                         .add("uname", room.getUname())
@@ -528,25 +572,57 @@ public class publishJob {
                 try {
                     uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
                 } catch (Exception e) {
-                    if (isRejectedException(e)) {
-                        log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.UploadRejectedRetryLater")
+                    long[] prev = uploadFailureMap.getOrDefault(part.getId(), new long[]{0, 0});
+                    long failCount = prev[1] + 1;
+                    int maxRetries = Math.max(1, compensateMaxRetries);
+
+                    if (failCount >= maxRetries) {
+                        // 补偿重试次数耗尽，持久化标记放弃
+                        log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.CompensateExhausted")
                                 .add("roomId", room.getRoomId())
                                 .add("uname", room.getUname())
                                 .add("partId", part.getId())
                                 .add("filePath", filePath)
-                                .addIfNotBlank("err", e.getMessage())
-                                .add("ex", e.getClass().getSimpleName())
-                                .add("nextRetryMs", 120000L), e);
-                        uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 2 * 60 * 1000);
+                                .add("failCount", failCount)
+                                .add("maxRetries", maxRetries)
+                                .addIfNotBlank("lastErr", e.getMessage())
+                                .add("ex", e.getClass().getSimpleName()));
+                        part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                        part.setDeleteFailReason("补偿上传失败次数过多(" + failCount + "次)，已放弃");
+                        part.setDeleteFailType("COMPENSATE_EXHAUSTED");
+                        try {
+                            partRepository.save(part);
+                            LogAnalyzeService.getInstance().processLog(
+                                "补偿上传失败次数过多，已放弃: partId=" + part.getId() + " file=" + filePath, "ERROR");
+                        } catch (Exception ignored) {
+                        }
+                        uploadFailureMap.remove(part.getId());
                     } else {
-                        log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.UploadFailed")
-                                .add("roomId", room.getRoomId())
-                                .add("uname", room.getUname())
-                                .add("partId", part.getId())
-                                .add("filePath", filePath)
-                                .addIfNotBlank("err", e.getMessage())
-                                .add("ex", e.getClass().getSimpleName()), e);
-                        uploadFailureMap.put(part.getId(), System.currentTimeMillis() + 20 * 60 * 1000);
+                        // 指数退避: 2min → 4min → 8min → 16min → 32min → 60min(封顶)
+                        long backoffMs = Math.min(60 * 60 * 1000L,
+                                2 * 60 * 1000L * (1L << Math.min(failCount - 1, 5)));
+                        if (isRejectedException(e)) {
+                            log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.UploadRejectedRetryLater")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("partId", part.getId())
+                                    .add("filePath", filePath)
+                                    .add("failCount", failCount)
+                                    .add("backoffMs", backoffMs)
+                                    .addIfNotBlank("err", e.getMessage())
+                                    .add("ex", e.getClass().getSimpleName()));
+                        } else {
+                            log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.UploadFailed")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("partId", part.getId())
+                                    .add("filePath", filePath)
+                                    .add("failCount", failCount)
+                                    .add("backoffMs", backoffMs)
+                                    .addIfNotBlank("err", e.getMessage())
+                                    .add("ex", e.getClass().getSimpleName()), e);
+                        }
+                        uploadFailureMap.put(part.getId(), new long[]{System.currentTimeMillis() + backoffMs, failCount});
                     }
                 }
 

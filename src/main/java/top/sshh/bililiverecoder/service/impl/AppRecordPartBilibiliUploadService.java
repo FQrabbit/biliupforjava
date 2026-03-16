@@ -113,18 +113,20 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
     @Override
     public void upload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
-        Thread thread = TaskUtil.partUploadTask.get(part.getId());
-        if (thread != null && thread != Thread.currentThread()) {
-            log.info("[BLR] {}", LogKvs.event("Upload.Part.AlreadyUploading")
-                    .add("os", OS)
-                    .add("partId", part.getId())
-                    .add("historyId", part.getHistoryId())
-                    .add("roomId", part.getRoomId())
-                    .add("ownerThread", thread.getName())
-                    .add("currentThread", Thread.currentThread().getName()));
-            return;
+        synchronized (TaskUtil.partUploadTask) {
+            Thread thread = TaskUtil.partUploadTask.get(part.getId());
+            if (thread != null && thread != Thread.currentThread()) {
+                log.info("[BLR] {}", LogKvs.event("Upload.Part.AlreadyUploading")
+                        .add("os", OS)
+                        .add("partId", part.getId())
+                        .add("historyId", part.getHistoryId())
+                        .add("roomId", part.getRoomId())
+                        .add("ownerThread", thread.getName())
+                        .add("currentThread", Thread.currentThread().getName()));
+                return;
+            }
+            TaskUtil.partUploadTask.put(part.getId(), Thread.currentThread());
         }
-        TaskUtil.partUploadTask.put(part.getId(), Thread.currentThread());
         try {
 
             RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
