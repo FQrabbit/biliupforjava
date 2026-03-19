@@ -57,12 +57,17 @@
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
     <script src="../js/api.js"></script>
+    <script src="../js/theme-tokens.js"></script>
     <script src="../js/mixins.js"></script>
     <script src="../js/privacy.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-            document.documentElement.setAttribute('data-theme', theme);
+            if (window.ThemeTokens && typeof window.ThemeTokens.applyCurrent === 'function') {
+                window.ThemeTokens.applyCurrent(document, theme);
+            } else {
+                document.documentElement.setAttribute('data-theme', theme);
+            }
         })();
     </script>
 </head>
@@ -115,19 +120,19 @@
                 </el-tooltip>
             </div>
             <div class="room-stats">
-                <div class="room-stat-item">
+                <div class="room-stat-item" :class="{ 'is-active': roomFilter === 'all' }" @click="setRoomFilter('all')">
                     <transition name="count-flip" mode="out-in">
                         <div class="room-stat-value" :key="'total-' + tableData.length">{{ tableData.length }}</div>
                     </transition>
                     <div class="room-stat-label">总房间</div>
                 </div>
-                <div class="room-stat-item">
+                <div class="room-stat-item" :class="{ 'is-active': roomFilter === 'live' }" @click="setRoomFilter('live')">
                     <transition name="count-flip" mode="out-in">
                         <div class="room-stat-value live" :key="'live-' + tableData.filter(r => r.streaming).length">{{ tableData.filter(r => r.streaming).length }}</div>
                     </transition>
                     <div class="room-stat-label">直播中</div>
                 </div>
-                <div class="room-stat-item">
+                <div class="room-stat-item" :class="{ 'is-active': roomFilter === 'recording' }" @click="setRoomFilter('recording')">
                     <transition name="count-flip" mode="out-in">
                         <div class="room-stat-value recording" :key="'rec-' + tableData.filter(r => r.recording).length">{{ tableData.filter(r => r.recording).length }}</div>
                     </transition>
@@ -139,9 +144,6 @@
             <el-button class="modern-btn" type="primary" @click="addRoomDialog = true" icon="el-icon-plus">
                 添加房间
             </el-button>
-            <el-tooltip effect="dark" :content="privacyMode ? '隐私模式：开' : '隐私模式：关'" placement="top">
-                <el-button class="modern-btn" type="primary" @click="togglePrivacyMode" :icon="privacyMode ? 'el-icon-lock' : 'el-icon-view'">隐私</el-button>
-            </el-tooltip>
             <el-tooltip content="导出用户后若程序继续运行，则用户登录状态会失效" effect="dark" placement="top">
                 <el-button class="modern-btn" type="primary" @click="exportConfigDialog=true" icon="el-icon-download">
                     导出配置
@@ -184,10 +186,10 @@
         </div>
 
         <!-- 空状态 -->
-        <div v-else-if="tableData.length === 0 && !loading" class="room-empty" key="empty">
+        <div v-else-if="filteredTableData.length === 0 && !loading" class="room-empty" key="empty">
             <i class="el-icon-video-camera room-empty-icon"></i>
-            <h3 class="room-empty-title">还没有添加直播间</h3>
-            <p class="room-empty-desc">点击"添加房间"按钮，开始监控房间</p>
+            <h3 class="room-empty-title">{{ roomFilter === 'all' ? '还没有添加直播间' : '当前筛选下暂无房间' }}</h3>
+            <p class="room-empty-desc">{{ roomFilter === 'all' ? '点击"添加房间"按钮，开始监控房间' : '请切换筛选查看全部房间，或等待状态变化后再查看' }}</p>
             <el-button class="modern-btn" type="primary" @click="addRoomDialog = true" icon="el-icon-plus">
                 添加房间
             </el-button>
@@ -202,7 +204,7 @@
                  }"
                  data-stagger
                  :style="{ animationDelay: index * 40 + 'ms' }"
-                 v-for="(item, index) in tableData" :key="item.id" @click="showDetail(item)">
+                      v-for="(item, index) in filteredTableData" :key="item.id" @click="showDetail(item)">
                 
                 <div class="room-card-header">
                     <div class="room-avatar">
@@ -268,7 +270,7 @@
 
         <!-- 表格视图 -->
         <div v-else class="room-table-wrapper" key="table">
-        <el-table :data="tableData" border style="width: 100%">
+        <el-table :data="filteredTableData" border style="width: 100%">
             <el-table-column type="expand">
                 <template slot-scope="props">
                     <el-form class="demo-table-expand" inline label-position="left">
@@ -2775,6 +2777,7 @@
             roomCoverObjectUrl: '',
             liveCoverObjectUrl: '',
             tableData: [],
+            roomFilter: 'all',
             lines: [],
             lineStats: {},
             lineSpeeds: {},
@@ -2801,6 +2804,15 @@
             currentDetail: {}
         },
         computed: {
+            filteredTableData: function () {
+                if (this.roomFilter === 'live') {
+                    return this.tableData.filter(function (item) { return !!item.streaming; });
+                }
+                if (this.roomFilter === 'recording') {
+                    return this.tableData.filter(function (item) { return !!item.recording; });
+                }
+                return this.tableData;
+            }
         },
         methods: {
             showDetail(item) {
@@ -3017,6 +3029,17 @@
             resolveUser: function (id) {
                 var u = this.users.find(function(item){ return item.id === id;});
                 return u ? u.uname : '未知用户';
+            },
+            setRoomFilter: function (filterKey) {
+                if (this.roomFilter === filterKey) {
+                    return;
+                }
+                this.roomFilter = filterKey;
+                try {
+                    var searchParams = new URLSearchParams(window.location.search || '');
+                    searchParams.set('roomFilter', filterKey);
+                    window.history.replaceState(null, '', window.location.pathname + '?' + searchParams.toString());
+                } catch (e) {}
             },
             formatDelete: function (row) {
                 switch(row.deleteType){
@@ -3667,6 +3690,15 @@
         },
         created: function created() {
             let _this = this;
+            try {
+                var searchParams = new URLSearchParams(window.location.search || '');
+                var filterParam = searchParams.get('roomFilter');
+                if (filterParam === 'live' || filterParam === 'recording' || filterParam === 'all') {
+                    this.roomFilter = filterParam;
+                }
+            } catch (e) {
+                this.roomFilter = 'all';
+            }
             // setPageReady 由 initTable 成功回调中的 setConnectionStatus(false) 触发
             // 确保数据加载完成后再通知父页面显示 iframe，避免卡片动画闪烁
             $.ajax({

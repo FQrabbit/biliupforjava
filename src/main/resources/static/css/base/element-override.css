@@ -23,7 +23,7 @@
 
 .el-input__inner:focus, .el-textarea__inner:focus {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(91, 108, 255, 0.1);
+    box-shadow: 0 4px 12px var(--brand-soft-bg);
 }
 
 .el-card {

@@ -23,7 +23,7 @@
     gap: 10px;
     padding: 12px 0 16px;
     margin-bottom: 12px;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-primary);
     backdrop-filter: blur(6px);
 }
 
@@ -36,30 +36,30 @@
     font-weight: 600;
     font-size: 12px;
     line-height: 1.2;
-    background: #f5f7ff;
-    color: #3553ff;
+    background: var(--brand-soft-bg-faint);
+    color: var(--primary-color);
 }
 
 .status-chip.success {
-    background: #f0fff4;
-    color: #1f8a3d;
+    background: var(--success-soft-bg-faint);
+    color: var(--success-color);
 }
 
 .status-chip.danger {
-    background: #fff2f0;
-    color: #c24030;
+    background: var(--danger-soft-bg);
+    color: var(--danger-color);
 }
 
 .status-chip.warn {
-    background: #fff7e6;
-    color: #d46b08;
+    background: var(--warning-soft-bg);
+    color: var(--warning-color);
 }
 
 .filter-card {
     position: sticky;
     top: 0;
     z-index: 8;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-primary);
     backdrop-filter: blur(6px);
     border-radius: 12px;
     padding: 12px;
@@ -151,7 +151,7 @@
     border: 1px solid var(--border-light);
     border-radius: 16px;
     padding: 18px;
-    box-shadow: var(--shadow-sm), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    box-shadow: var(--shadow-sm), 0 0 0 1px var(--glass-border) inset;
     transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -161,8 +161,8 @@
 
 .room-card:hover, .data-card:hover {
     transform: translateY(-2px) scale(1.005);
-    box-shadow: var(--shadow-md), 0 10px 30px -15px rgba(91, 108, 255, 0.15);
-    border-color: rgba(91, 108, 255, 0.3);
+    box-shadow: var(--shadow-md), 0 10px 30px -15px var(--brand-soft-bg-strong);
+    border-color: var(--brand-accent-border);
 }
 
 .room-card::before, .data-card::before {
@@ -185,74 +185,74 @@
 
 /* ========== 卡片的状态颜色（审核、失败等） ========== */
 .data-card.is-audit-failed {
-    border-color: rgba(250, 173, 20, 0.8);
+    border-color: var(--warning-line);
     box-shadow: 
-        inset 0 0 8px rgba(250, 173, 20, 0.1),
-        0 0 10px rgba(250, 173, 20, 0.3),
-        0 4px 20px rgba(250, 173, 20, 0.1);
+        inset 0 0 8px var(--warning-shadow-soft),
+        0 0 10px var(--warning-border-strong),
+        0 4px 20px var(--warning-shadow-soft);
 }
 
 .data-card.is-audit-failed:hover {
     transform: translateY(-2px) scale(1.005);
-    border-color: #faad14;
+    border-color: var(--warning-color);
     box-shadow: 
-        inset 0 0 12px rgba(250, 173, 20, 0.2),
-        0 0 18px rgba(250, 173, 20, 0.5),
-        0 8px 28px rgba(250, 173, 20, 0.2);
+        inset 0 0 12px var(--warning-soft-bg),
+        0 0 18px var(--warning-line),
+        0 8px 28px var(--warning-soft-bg);
     z-index: 2;
 }
 
 /* 处理中状态（蓝色）- 审核中、转码中 */
 .data-card.is-processing {
-    border-color: rgba(91, 108, 255, 0.8);
+    border-color: var(--brand-accent-border-strong);
     box-shadow: 
-        inset 0 0 8px rgba(91, 108, 255, 0.1),
-        0 0 10px rgba(91, 108, 255, 0.3),
-        0 4px 20px rgba(91, 108, 255, 0.1);
+        inset 0 0 8px var(--brand-soft-bg),
+        0 0 10px var(--brand-accent-border),
+        0 4px 20px var(--brand-soft-bg);
 }
 .data-card.is-processing:hover {
     transform: translateY(-2px) scale(1.005);
-    border-color: #5b6cff;
+    border-color: var(--primary-color);
     box-shadow: 
-        inset 0 0 12px rgba(91, 108, 255, 0.2),
-        0 0 18px rgba(91, 108, 255, 0.5),
-        0 8px 28px rgba(91, 108, 255, 0.2);
+        inset 0 0 12px var(--brand-soft-bg-active),
+        0 0 18px var(--brand-accent-border-strong),
+        0 8px 28px var(--brand-soft-bg-active);
     z-index: 1;
 }
 
 /* 失败状态（红色）- 已拒绝、已锁定 */
 .data-card.is-failed {
-    border-color: rgba(255, 77, 79, 0.8);
+    border-color: var(--danger-line);
     box-shadow: 
-        inset 0 0 8px rgba(255, 77, 79, 0.1),
-        0 0 10px rgba(255, 77, 79, 0.3),
-        0 4px 20px rgba(255, 77, 79, 0.1);
+        inset 0 0 8px var(--danger-shadow-soft),
+        0 0 10px var(--danger-border-strong),
+        0 4px 20px var(--danger-shadow-soft);
 }
 .data-card.is-failed:hover {
     transform: translateY(-2px) scale(1.005);
-    border-color: #ff4d4f;
+    border-color: var(--danger-color);
     box-shadow: 
-        inset 0 0 12px rgba(255, 77, 79, 0.2),
-        0 0 18px rgba(255, 77, 79, 0.5),
-        0 8px 28px rgba(255, 77, 79, 0.2);
+        inset 0 0 12px var(--danger-soft-bg-strong),
+        0 0 18px var(--danger-line),
+        0 8px 28px var(--danger-soft-bg-strong);
     z-index: 1;
 }
 
 /* 成功状态（绿色）- 已通过 */
 .data-card.is-success {
-    border-color: rgba(82, 196, 26, 0.8);
+    border-color: var(--success-line);
     box-shadow: 
-        inset 0 0 8px rgba(82, 196, 26, 0.1),
-        0 0 10px rgba(82, 196, 26, 0.3),
-        0 4px 20px rgba(82, 196, 26, 0.1);
+        inset 0 0 8px var(--success-glow-soft),
+        0 0 10px var(--success-glow-strong),
+        0 4px 20px var(--success-glow-soft);
 }
 .data-card.is-success:hover {
     transform: translateY(-2px) scale(1.005);
-    border-color: #52c41a;
+    border-color: var(--success-color);
     box-shadow: 
-        inset 0 0 12px rgba(82, 196, 26, 0.2),
-        0 0 18px rgba(82, 196, 26, 0.5),
-        0 8px 28px rgba(82, 196, 26, 0.2);
+        inset 0 0 12px var(--success-soft-bg-strong),
+        0 0 18px var(--success-line),
+        0 8px 28px var(--success-soft-bg-strong);
     z-index: 1;
 }
 
@@ -350,7 +350,7 @@
 }
 .demo-table-expand label {
     width: 150px;
-    color: #99a9bf;
+    color: var(--text-disabled);
 }
 .demo-table-expand .el-form-item {
     margin-right: 0;
@@ -361,7 +361,7 @@
 /* ========== 警告闪烁动画 ========== */
 @keyframes flash-orange {
     0% { background-color: transparent; color: inherit; }
-    50% { background-color: rgba(255, 165, 0, 0.2); color: #ff8c00; text-shadow: 0 0 5px rgba(255, 140, 0, 0.5); }
+    50% { background-color: var(--warning-soft-bg); color: var(--warning-color); text-shadow: 0 0 5px var(--warning-shadow-soft); }
     100% { background-color: transparent; color: inherit; }
 }
 
@@ -379,14 +379,14 @@
     transition: transform var(--duration-base) var(--ease-spring),
                 box-shadow var(--duration-base) var(--ease-apple),
                 background-color var(--duration-base) var(--ease-apple) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    box-shadow: var(--shadow-sm) !important;
     position: relative;
     overflow: hidden;
 }
 
 .modern-btn:hover {
     transform: translateY(-2px) scale(1.02) !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+    box-shadow: var(--shadow-md) !important;
 }
 
 .modern-btn:active {
@@ -410,7 +410,7 @@
     width: 0;
     height: 0;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--glass-border);
     transform: translate(-50%, -50%);
     transition: width 0.5s var(--ease-apple), height 0.5s var(--ease-apple);
 }
@@ -428,7 +428,7 @@
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    background: linear-gradient(90deg, transparent, var(--glass-border), transparent);
     transition: left var(--duration-slow) var(--ease-apple);
 }
 
@@ -439,27 +439,27 @@
 /* 按钮颜色变体 */
 .modern-btn.el-button--danger:hover,
 .modern-btn.el-button--danger.is-plain:hover {
-    box-shadow: 0 4px 16px rgba(244, 67, 54, 0.3) !important;
+    box-shadow: 0 4px 16px var(--danger-shadow) !important;
 }
 
 .modern-btn.el-button--warning:hover,
 .modern-btn.el-button--warning.is-plain:hover {
-    box-shadow: 0 4px 16px rgba(255, 152, 0, 0.3) !important;
+    box-shadow: 0 4px 16px var(--warning-shadow-soft) !important;
 }
 
 .modern-btn.el-button--success:hover,
 .modern-btn.el-button--success.is-plain:hover {
-    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.3) !important;
+    box-shadow: 0 4px 16px var(--success-glow) !important;
 }
 
 .modern-btn.el-button--primary:hover,
 .modern-btn.el-button--primary.is-plain:hover {
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3) !important;
+    box-shadow: 0 4px 16px var(--brand-soft-bg-strong) !important;
 }
 
 .modern-btn.el-button--info:hover,
 .modern-btn.el-button--info.is-plain:hover {
-    box-shadow: 0 4px 16px rgba(144, 147, 153, 0.3) !important;
+    box-shadow: var(--shadow-md) !important;
 }
 
 /* 徽章脉冲动画 */
@@ -482,28 +482,28 @@
                 background var(--duration-base) var(--ease-apple),
                 border-color var(--duration-base) var(--ease-apple),
                 color var(--duration-base) var(--ease-apple) !important;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(249, 250, 251, 0.8)) !important;
-    border: 1px solid rgba(0, 0, 0, 0.08) !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-primary) 80%, transparent), color-mix(in srgb, var(--bg-secondary) 80%, transparent)) !important;
+    border: 1px solid var(--border-light) !important;
+    box-shadow: var(--shadow-sm) !important;
     position: relative;
 }
 
 [data-theme="dark"] .modern-checkbox.el-checkbox.is-bordered {
-    background: linear-gradient(135deg, rgba(39, 39, 42, 0.6), rgba(49, 49, 52, 0.6)) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-tertiary) 60%, transparent), color-mix(in srgb, var(--bg-primary) 60%, transparent)) !important;
+    border-color: var(--glass-border) !important;
 }
 
 .modern-checkbox.el-checkbox.is-bordered:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
-    border-color: #667eea !important;
+    box-shadow: var(--shadow-md) !important;
+    border-color: var(--primary-color) !important;
 }
 
 .modern-checkbox.el-checkbox.is-bordered.is-checked {
-    background: linear-gradient(135deg, #667eea, #764ba2) !important;
-    border-color: #667eea !important;
-    color: white !important;
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4) !important;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light)) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--text-inverse) !important;
+    box-shadow: var(--brand-shadow-lg) !important;
 }
 
 .modern-checkbox.el-checkbox.is-bordered.is-checked:hover {
@@ -519,7 +519,7 @@
 }
 
 .modern-checkbox.el-checkbox.is-bordered.is-checked .el-checkbox__label {
-    color: white !important;
+    color: var(--text-inverse) !important;
 }
 
 .modern-checkbox .el-checkbox__label i {
@@ -546,7 +546,7 @@
     position: absolute;
     inset: -2px;
     border-radius: 22px;
-    background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #4facfe);
+    background: linear-gradient(45deg, var(--primary-color), var(--primary-light), var(--warning-color), var(--success-color));
     background-size: 300% 300%;
     opacity: 0;
     transition: opacity var(--duration-base) var(--ease-apple);

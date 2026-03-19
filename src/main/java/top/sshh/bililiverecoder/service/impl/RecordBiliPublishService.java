@@ -1211,7 +1211,7 @@ public class RecordBiliPublishService {
         }
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<RuntimeException> runtimeRef = new AtomicReference<>();
-        uploadUserSerialScheduler.submit(
+        boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
                 room.getUploadUserId(),
                 room.getRoomId(),
                 part.getHistoryId(),
@@ -1228,6 +1228,14 @@ public class RecordBiliPublishService {
                     }
                 }
         );
+        if (!enqueued) {
+            log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.WaitQueued")
+                    .add("roomId", room.getRoomId())
+                    .add("historyId", part.getHistoryId())
+                    .add("partId", part.getId()));
+            waitExistingPartUpload(part);
+            return;
+        }
         try {
             long timeoutMinutes = 5;
             long startTime = System.currentTimeMillis();
@@ -1260,6 +1268,38 @@ public class RecordBiliPublishService {
         if (ex != null) {
             throw ex;
         }
+    }
+
+    private void waitExistingPartUpload(RecordHistoryPart part) {
+        long timeoutMs = 30L * 60L * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (shutdownState.isShuttingDown()) {
+                throw new RuntimeException("UPLOAD_INTERRUPTED_BY_SHUTDOWN");
+            }
+            Optional<RecordHistoryPart> latestOpt = partRepository.findById(part.getId());
+            if (!latestOpt.isPresent()) {
+                return;
+            }
+            RecordHistoryPart latest = latestOpt.get();
+            if (latest.isUpload() || isSkippedPart(latest)) {
+                return;
+            }
+            if (!uploadUserSerialScheduler.hasPendingPart(latest.getId())) {
+                throw new RuntimeException("UPLOAD_QUEUE_DRAINED_BUT_NOT_UPLOADED");
+            }
+            try {
+                Thread.sleep(1000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("UPLOAD_INTERRUPTED", e);
+            }
+        }
+        log.warn("[BLR] {}", LogKvs.event("Publish.PartUpload.WaitTimeout")
+                .add("historyId", part.getHistoryId())
+                .add("partId", part.getId())
+                .add("timeoutMs", timeoutMs));
+        throw new RuntimeException("UPLOAD_WAIT_TIMEOUT");
     }
 
     public DescDto template(String template, Map<String, Object> map) {

@@ -30,6 +30,8 @@ public final class LogKvs {
         // 上传
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");
         EVENT_ZH.put("Upload.Part.AlreadyUploading", "分P正在上传中，跳过重复触发");
+        EVENT_ZH.put("Upload.Part.AlreadyQueued", "分P已在串行队列中，跳过重复入队");
+        EVENT_ZH.put("Upload.Part.SkipAlreadyUploaded", "分P已上传完成，跳过重复上传");
         EVENT_ZH.put("Upload.Part.MissingHistory", "找不到录制历史(history)，取消上传");
         EVENT_ZH.put("Upload.Part.FileMissing", "待上传文件不存在，取消上传/可能会触发重试");
         EVENT_ZH.put("Upload.Part.NoUploadUser", "房间未配置上传用户，无法上传");
@@ -73,6 +75,7 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.SerialScheduler.TailRecovered", "分P上传串行调度：前置任务异常已隔离");
         EVENT_ZH.put("Upload.SerialScheduler.RequeueOnRejected", "分P上传串行调度：线程池拒绝，已兜底重排队");
         EVENT_ZH.put("Upload.SerialScheduler.RequeueGiveUp", "分P上传串行调度：重排队次数过多，放弃");
+        EVENT_ZH.put("Upload.SerialScheduler.DuplicatePartSkipped", "分P上传串行调度：分P已在队列中，跳过重复入队");
 
         // 文件检测
         EVENT_ZH.put("FileProbe.Remove.Missing", "文件检测：文件丢失，移除监控");
@@ -155,6 +158,8 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.TimestampJump.MarkPartGiveUp", "投稿：标记分P为时间戳跳变放弃");
         EVENT_ZH.put("Publish.PartUploadLock.Acquired", "投稿：获取分P上传锁成功");
         EVENT_ZH.put("Publish.Part.NotUploaded", "投稿：分P未上传完成，等待/触发上传");
+            EVENT_ZH.put("Publish.PartUpload.WaitQueued", "投稿流程：分P已在队列中，等待现有上传结果");
+            EVENT_ZH.put("Publish.PartUpload.WaitTimeout", "投稿流程：等待队列中分P上传超时");
         EVENT_ZH.put("Publish.Republish.Response", "投稿：重新投稿响应");
         EVENT_ZH.put("Publish.Task.SuspendedSkip", "投稿任务已暂停，跳过本次执行");
         EVENT_ZH.put("Publish.History.AlreadyPublished", "投稿历史已标记为发布，跳过");
@@ -300,6 +305,7 @@ public final class LogKvs {
         EVENT_ZH.put("PublishJob.WaitNextInterrupted", "定时任务：等待下一轮被中断");
 
         EVENT_ZH.put("PublishJob.PartCompensate.AlreadyUploading", "补偿任务：分P正在上传中，跳过");
+        EVENT_ZH.put("PublishJob.PartCompensate.AlreadyQueued", "补偿任务：分P已在队列中，跳过");
         EVENT_ZH.put("PublishJob.PartCompensate.FilePathMissing", "补偿任务：文件路径为空，放弃上传");
         EVENT_ZH.put("PublishJob.PartCompensate.FileMissing", "补偿任务：文件丢失，放弃上传");
         EVENT_ZH.put("PublishJob.PartCompensate.Skip.FileStillWriting", "补偿任务：文件仍在写入/未稳定，跳过");
@@ -308,6 +314,7 @@ public final class LogKvs {
         EVENT_ZH.put("PublishJob.PartCompensate.SkipBelowSizeLimit", "补偿任务：文件小于大小阈值，跳过");
         EVENT_ZH.put("PublishJob.PartCompensate.SkipBelowDurationLimit", "补偿任务：文件小于时长阈值，跳过");
         EVENT_ZH.put("PublishJob.PartCompensate.TriggerUpload", "补偿任务：触发分P上传");
+        EVENT_ZH.put("PublishJob.PartCompensate.DuplicateRejected", "补偿任务：分P重复触发被去重拒绝");
         EVENT_ZH.put("PublishJob.PartCompensate.UploadFailed", "补偿任务：触发上传失败");
         EVENT_ZH.put("PublishJob.PartCompensate.UploadRejectedRetryLater", "补偿任务：线程池拥塞导致触发被拒，稍后重试");
         EVENT_ZH.put("PublishJob.PartCompensate.SkipByAsyncPoolPressure", "补偿任务：线程池压力过高，跳过本轮触发");

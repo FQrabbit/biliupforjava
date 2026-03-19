@@ -17,6 +17,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
@@ -49,6 +50,9 @@ public class publishJob {
 
     @Autowired
     UploadServiceFactory uploadServiceFactory;
+
+    @Autowired
+    UploadUserSerialScheduler uploadUserSerialScheduler;
 
     @Autowired
     top.sshh.bililiverecoder.service.SystemConfigService systemConfigService;
@@ -413,6 +417,15 @@ public class publishJob {
                 if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
                     return;
                 }
+                if (uploadUserSerialScheduler.hasPendingPart(part.getId())) {
+                    log.debug("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.AlreadyQueued")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("historyId", part.getHistoryId())
+                            .add("filePath", part.getFilePath()));
+                    continue;
+                }
                 // 检查失败冷却时间
                 if (uploadFailureMap.containsKey(part.getId())) {
                     long[] entry = uploadFailureMap.get(part.getId());
@@ -566,11 +579,20 @@ public class publishJob {
                         .add("uname", room.getUname())
                         .add("partId", part.getId())
                         .add("filePath", filePath));
-                triggeredCount++;
-                roundTriggeredCount++;
-                userTriggeredCount.put(uploadUserId, userTriggered + 1);
                 try {
-                    uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                    boolean accepted = uploadServiceFactory.getUploadService(room.getLine()).asyncUploadIfNeeded(part);
+                    if (!accepted) {
+                        log.debug("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.DuplicateRejected")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("partId", part.getId())
+                                .add("historyId", part.getHistoryId())
+                                .add("filePath", filePath));
+                        continue;
+                    }
+                    triggeredCount++;
+                    roundTriggeredCount++;
+                    userTriggeredCount.put(uploadUserId, userTriggered + 1);
                 } catch (Exception e) {
                     long[] prev = uploadFailureMap.getOrDefault(part.getId(), new long[]{0, 0});
                     long failCount = prev[1] + 1;

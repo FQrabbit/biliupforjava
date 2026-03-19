@@ -143,14 +143,14 @@
 [data-theme="dark"] .skeleton-avatar,
 [data-theme="dark"] .skeleton-tag,
 [data-theme="dark"] .skeleton-btn {
-    background: linear-gradient(90deg, rgba(39, 39, 42, 0.8) 25%, rgba(63, 63, 70, 0.5) 50%, rgba(39, 39, 42, 0.8) 75%);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--bg-tertiary) 80%, transparent) 25%, color-mix(in srgb, var(--border-color) 50%, transparent) 50%, color-mix(in srgb, var(--bg-tertiary) 80%, transparent) 75%);
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.8s linear infinite;
 }
 
 [data-theme="dark"] .skeleton-card {
-    background: rgba(39, 39, 42, 0.5);
-    border-color: rgba(63, 63, 70, 0.4);
+    background: var(--glass-bg);
+    border-color: var(--border-color);
 }
 
 /* ========== 统一对话框入退场动画 (Apple sheet 风格) ========== */
@@ -316,8 +316,8 @@
 
 /* ========== 侧滑提示 (Swipe Hint) ========== */
 .swipe-hint {
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
+    background: var(--overlay-color);
+    color: var(--text-inverse);
     padding: 8px 16px;
     border-radius: 20px;
     font-size: 12px;
@@ -406,10 +406,10 @@ html.theme-transitioning .fade-leave-active {
 /* 呼吸灯 — 用于等待投稿等状态按钮 */
 @keyframes breathing-light {
     0%, 100% {
-        box-shadow: 0 0 5px rgba(255, 193, 7, 0.5), 0 0 10px rgba(255, 193, 7, 0.3);
+        box-shadow: 0 0 5px var(--warning-border-strong), 0 0 10px var(--warning-soft-bg);
     }
     50% {
-        box-shadow: 0 0 15px rgba(255, 193, 7, 0.8), 0 0 25px rgba(255, 193, 7, 0.5);
+        box-shadow: 0 0 15px var(--warning-soft-bg-strong), 0 0 25px var(--warning-border-strong);
     }
 }
 
