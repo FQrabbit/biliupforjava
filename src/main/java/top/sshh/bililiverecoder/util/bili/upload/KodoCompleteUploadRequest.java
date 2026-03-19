@@ -26,7 +26,6 @@ public class KodoCompleteUploadRequest {
     private static final Base64.Encoder ENCODE_64 = Base64.getEncoder();
     private final String URL;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private PreUploadBean preUploadBean;
     private String body;
 
     private Map<String, String> params;
@@ -36,7 +35,6 @@ public class KodoCompleteUploadRequest {
         headers.clear();
         headers.put("Authorization", preUploadBean.getUptoken());
         headers.put("Content-Type", "application/json");
-        this.preUploadBean = preUploadBean;
         this.body = body;
         this.params = params;
     }

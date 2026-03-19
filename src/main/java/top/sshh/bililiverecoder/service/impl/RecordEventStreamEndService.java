@@ -7,7 +7,8 @@ import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordEventData;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordRoom;
-import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
+import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
@@ -19,20 +20,10 @@ import java.util.Optional;
 public class RecordEventStreamEndService implements RecordEventService {
 
     @Autowired
-    private BiliUserRepository biliUserRepository;
-
-    @Autowired
     private RecordRoomRepository roomRepository;
 
     @Autowired
     private RecordHistoryRepository historyRepository;
-
-    @Autowired
-    private RecordHistoryPartRepository historyPartRepository;
-
-    @Autowired
-    private LiveMsgRepository liveMsgRepository;
-
 
     @Override
     public void processing(RecordEventDTO event) {

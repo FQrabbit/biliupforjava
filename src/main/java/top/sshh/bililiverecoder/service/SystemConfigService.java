@@ -20,12 +20,16 @@ public class SystemConfigService {
     public static final String KEY_API_RATE_LIMIT = "bili.limit.api-qps";
     public static final String KEY_UPLOAD_SPEED_LIMIT = "bili.limit.upload-mb";
     public static final String KEY_MERGE_INTERVAL_MINUTES = "bili.publish.merge-interval-minutes";
+    public static final String KEY_UPLOAD_MAX_CONNECTIONS = "upload.max-concurrent-connections";
 
     @Autowired
     private SystemConfigRepository systemConfigRepository;
 
     @Autowired
     private RateLimiterService rateLimiterService;
+
+    @Autowired
+    private UploadConnectionBudgetService uploadConnectionBudgetService;
 
     @PostConstruct
     public void init() {
@@ -37,6 +41,8 @@ public class SystemConfigService {
         loadOrInitConfig(KEY_UPLOAD_SPEED_LIMIT, "0", "视频上传带宽限速 (MB/s) 0:不限速");
         // 加载短时间开播合并时间
         loadOrInitConfig(KEY_MERGE_INTERVAL_MINUTES, "20", "短时间开播合并时间 (分钟) - 下播后等待多长时间再投稿，同时间隔多少分钟内开播算同一次直播，避免短时间开播下播拆分稿件");
+        // 加载上传最大并发连接数
+        loadOrInitConfig(KEY_UPLOAD_MAX_CONNECTIONS, "3", "上传最大并发连接数 (1-16) 控制同时进行的分片上传连接数，值越小网络占用越少");
     }
 
     private void loadOrInitConfig(String key, String defaultValue, String description) {
@@ -66,6 +72,7 @@ public class SystemConfigService {
             if (KEY_API_RATE_LIMIT.equals(key)) config.setDescription("Bilibili API 请求限速 (QPS)");
             if (KEY_UPLOAD_SPEED_LIMIT.equals(key)) config.setDescription("视频上传带宽限速 (MB/s)");
             if (KEY_MERGE_INTERVAL_MINUTES.equals(key)) config.setDescription("短时间开播合并时间 (分钟)");
+            if (KEY_UPLOAD_MAX_CONNECTIONS.equals(key)) config.setDescription("上传最大并发连接数 (1-16)");
         }
         systemConfigRepository.save(config);
         
@@ -109,6 +116,16 @@ public class SystemConfigService {
                 }
                 return String.valueOf((int) Math.round(v));
             }
+            if (KEY_UPLOAD_MAX_CONNECTIONS.equals(key)) {
+                int iv = (int) Math.round(v);
+                if (iv < 1) {
+                    return "1";
+                }
+                if (iv > 16) {
+                    return "16";
+                }
+                return String.valueOf(iv);
+            }
             return value;
         } catch (NumberFormatException e) {
             return value;
@@ -122,6 +139,8 @@ public class SystemConfigService {
                 rateLimiterService.setApiRateLimit(doubleValue);
             } else if (KEY_UPLOAD_SPEED_LIMIT.equals(key)) {
                 rateLimiterService.setUploadSpeedLimit(doubleValue);
+            } else if (KEY_UPLOAD_MAX_CONNECTIONS.equals(key)) {
+                uploadConnectionBudgetService.updateMaxConnections((int) Math.round(doubleValue));
             }
         } catch (NumberFormatException e) {
             log.error("[BLR] {}", LogKvs.event("SystemConfig.ApplyFailed")

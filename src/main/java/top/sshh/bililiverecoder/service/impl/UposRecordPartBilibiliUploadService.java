@@ -1,12 +1,10 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -23,6 +21,7 @@ import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -45,6 +44,7 @@ import top.sshh.bililiverecoder.service.CaptchaService;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.RandomAccessFile;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -109,37 +109,75 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Autowired
     private UploadFairShareService uploadFairShareService;
 
+    @Autowired
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
+
     private final UploadRetryBackoffPolicy uploadRetryBackoffPolicy = new UploadRetryBackoffPolicy();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
-
-    private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int CHUNK_MAX_RETRY = 200;
+    private static final int GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD = 400;
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
-        part = partRepository.findById(part.getId()).get();
+        asyncUploadIfNeeded(part);
+        }
+
+        @Override
+        public boolean asyncUploadIfNeeded(RecordHistoryPart part) {
+        RecordHistoryPart loadedPart = partRepository.findById(part.getId()).get();
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
-                .add("partId", part.getId())
-                .add("historyId", part.getHistoryId())
-                .add("roomId", part.getRoomId())
-                .add("filePath", part.getFilePath()));
-        this.upload(part);
+                .add("partId", loadedPart.getId())
+                .add("historyId", loadedPart.getHistoryId())
+                .add("roomId", loadedPart.getRoomId())
+                .add("filePath", loadedPart.getFilePath()));
+        RecordRoom room = roomRepository.findByRoomId(loadedPart.getRoomId());
+        if (room == null || room.getUploadUserId() == null) {
+            this.upload(loadedPart);
+            return true;
+        }
+        boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
+                room.getUploadUserId(),
+                room.getRoomId(),
+                loadedPart.getHistoryId(),
+                loadedPart.getId(),
+                OS,
+                () -> this.upload(loadedPart)
+        );
+        if (!enqueued) {
+            log.debug("[BLR] {}", LogKvs.event("Upload.Part.AlreadyQueued")
+                .add("os", OS)
+                .add("partId", loadedPart.getId())
+                .add("historyId", loadedPart.getHistoryId())
+                .add("roomId", loadedPart.getRoomId()));
+        }
+        return enqueued;
     }
 
     @Override
     public void upload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
-        Thread thread = TaskUtil.partUploadTask.get(part.getId());
-        if (thread != null && thread != Thread.currentThread()) {
-            log.info("[BLR] {}", LogKvs.event("Upload.Part.AlreadyUploading")
+        if (part.isUpload()) {
+            log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
+                    .add("os", OS)
                     .add("partId", part.getId())
                     .add("historyId", part.getHistoryId())
-                    .add("roomId", part.getRoomId())
-                    .add("ownerThread", thread.getName())
-                    .add("currentThread", Thread.currentThread().getName()));
+                    .add("roomId", part.getRoomId()));
             return;
         }
-        TaskUtil.partUploadTask.put(part.getId(), Thread.currentThread());
+        synchronized (TaskUtil.partUploadTask) {
+            Thread thread = TaskUtil.partUploadTask.get(part.getId());
+            if (thread != null && thread != Thread.currentThread()) {
+                log.info("[BLR] {}", LogKvs.event("Upload.Part.AlreadyUploading")
+                        .add("partId", part.getId())
+                        .add("historyId", part.getHistoryId())
+                        .add("roomId", part.getRoomId())
+                        .add("ownerThread", thread.getName())
+                        .add("currentThread", Thread.currentThread().getName()));
+                return;
+            }
+            TaskUtil.partUploadTask.put(part.getId(), Thread.currentThread());
+        }
         try {
             RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
 
@@ -249,7 +287,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                             }
                             // 登录验证结束
-                            synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
+                            // 按 uploadUserId 串行由调度器保证，这里不再阻塞线程等待锁
+                            {
                             uploadFairShareService.registerUploadUser(biliBiliUser.getId(), room.getRoomId(), part.getId(), "UPOS_PART");
                             try {
                             Map<String, String> preParams = new HashMap<>();
@@ -382,12 +421,14 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             }
                             // 分段上传
                             AtomicInteger upCount = new AtomicInteger(0);
-                            AtomicInteger tryCount = new AtomicInteger(0);
+                            AtomicInteger globalFailCount = new AtomicInteger(0);
+                            java.util.concurrent.atomic.AtomicBoolean globalFuseOpen = new java.util.concurrent.atomic.AtomicBoolean(false);
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
                             final Integer partPage = resolveProgressPage(part);
                             uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
                             java.util.concurrent.atomic.AtomicReference<String> gatewayError = new java.util.concurrent.atomic.AtomicReference<>(null);
+                            java.util.concurrent.atomic.AtomicReference<String> globalFuseReason = new java.util.concurrent.atomic.AtomicReference<>(null);
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
                                 long finalI = i;
@@ -395,8 +436,11 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 PreUploadBean finalPreUploadBean = preUploadBean;
                                 Runnable runnable = () -> {
                                     try {
-                                        while (tryCount.get() < 200) {
+                                        int chunkRetryCount = 0;
+                                        while (!globalFuseOpen.get() && chunkRetryCount < CHUNK_MAX_RETRY) {
                                             if (gatewayError.get() != null) {
+                                                globalFuseReason.compareAndSet(null, "UPLOAD_GATEWAY_ERROR");
+                                                globalFuseOpen.set(true);
                                                 break;
                                             }
                                             try {
@@ -423,7 +467,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     ChunkUploadRequest chunkUploadRequest = new ChunkUploadRequest(finalPreUploadBean, chunkParams, randomAccessFile);
                                                     chunkUploadRequest.getPage();
                                                 } catch (FileNotFoundException fileNotFoundException) {
-                                                    tryCount.set(200);
+                                                    globalFuseReason.compareAndSet(null, "UPLOAD_FILE_NOT_FOUND");
+                                                    globalFuseOpen.set(true);
                                                     log.error("[BLR] {}", LogKvs.event("Upload.Chunk.FileMissing")
                                                             .add("roomId", room.getRoomId())
                                                             .add("uname", room.getUname())
@@ -445,21 +490,28 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("thread", Thread.currentThread().getName()));
                                                 break;
                                             } catch (Exception e) {
-                                                if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("504"))) {
+                                                chunkRetryCount++;
+                                                int globalRetryCount = globalFailCount.incrementAndGet();
+                                                UploadRetryBackoffPolicy.BackoffDecision backoffDecision =
+                                                        uploadRetryBackoffPolicy.nextDecision(chunkRetryCount, e, e.getMessage());
+                                                String uploadHost = resolveUploadHost(finalPreUploadBean);
+                                                if ("GATEWAY_5XX".equals(backoffDecision.retryCategory())) {
                                                     log.error("[BLR] {}", LogKvs.event("Upload.GatewayErrorPause")
                                                             .add("roomId", room.getRoomId())
                                                             .add("uname", room.getUname())
                                                             .add("partId", partId)
                                                             .add("historyId", historyId)
+                                                            .add("retryCategory", backoffDecision.retryCategory())
+                                                            .add("host", uploadHost)
                                                             .add("err", e.getMessage())
                                                             .add("ex", e.getClass().getSimpleName()));
                                                     gatewayError.set(e.getMessage());
-                                                    tryCount.set(200); // 停止其他线程的重试
+                                                    globalFuseReason.compareAndSet(null, "UPLOAD_GATEWAY_ERROR");
+                                                    globalFuseOpen.set(true);
                                                     break;
                                                 }
-                                                tryCount.incrementAndGet();
-                                                long backoffMs = uploadRetryBackoffPolicy.nextDelayMs(tryCount.get(), e.getMessage());
-                                                uploadProgressTracker.markRetryWait(partId, e.getMessage(), tryCount.get(), backoffMs);
+                                                long backoffMs = backoffDecision.delayMs();
+                                                uploadProgressTracker.markRetryWait(partId, e.getMessage(), chunkRetryCount, backoffMs);
                                                 log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
                                                         .add("roomId", room.getRoomId())
                                                         .add("title", room.getTitle())
@@ -469,10 +521,31 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("chunkSize", chunkSize)
                                                         .add("start", finalI * chunkSize)
                                                         .add("end", (finalI + 1) * chunkSize)
-                                                        .add("retryCount", tryCount.get())
+                                                        .add("chunkRetryCount", chunkRetryCount)
+                                                        .add("chunkRetryMax", CHUNK_MAX_RETRY)
+                                                        .add("globalFailCount", globalRetryCount)
+                                                        .add("globalFuseThreshold", GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD)
+                                                        .add("retryCategory", backoffDecision.retryCategory())
+                                                        .add("host", uploadHost)
                                                         .add("backoffMs", backoffMs)
                                                         .add("err", e.getMessage())
                                                         .add("ex", e.getClass().getSimpleName()));
+                                                if (globalRetryCount >= GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD) {
+                                                    globalFuseReason.compareAndSet(null, "GLOBAL_CHUNK_FAILURE_THRESHOLD_REACHED");
+                                                    globalFuseOpen.set(true);
+                                                    log.error("[BLR] {}", LogKvs.event("Upload.Chunk.GlobalFuseOpen")
+                                                            .add("roomId", room.getRoomId())
+                                                            .add("uname", room.getUname())
+                                                            .add("partId", partId)
+                                                            .add("historyId", historyId)
+                                                            .add("chunkIndex", finalI)
+                                                            .add("globalFailCount", globalRetryCount)
+                                                            .add("globalFuseThreshold", GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD)
+                                                            .add("reason", globalFuseReason.get())
+                                                            .addIfNotBlank("err", e.getMessage())
+                                                            .add("ex", e.getClass().getSimpleName()), e);
+                                                    break;
+                                                }
                                                 try {
                                                     Thread.sleep(backoffMs);
                                                 } catch (InterruptedException ex) {
@@ -482,14 +555,30 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                             .add("partId", partId)
                                                             .add("historyId", historyId)
                                                             .add("chunkIndex", finalI)
+                                                            .add("retryCategory", backoffDecision.retryCategory())
+                                                            .add("host", uploadHost)
                                                             .add("sleepMs", backoffMs)
                                                             .addIfNotBlank("err", ex.getMessage())
                                                             .add("ex", ex.getClass().getSimpleName()), ex);
-                                                    tryCount.set(200);
+                                                    globalFuseReason.compareAndSet(null, "RETRY_WAIT_INTERRUPTED");
+                                                    globalFuseOpen.set(true);
                                                     Thread.currentThread().interrupt();
                                                     return;
                                                 }
                                             }
+                                        }
+                                        if (chunkRetryCount >= CHUNK_MAX_RETRY && !globalFuseOpen.get()) {
+                                            globalFuseReason.compareAndSet(null, "CHUNK_RETRY_LIMIT_REACHED");
+                                            globalFuseOpen.set(true);
+                                            log.error("[BLR] {}", LogKvs.event("Upload.Chunk.GlobalFuseOpen")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("uname", room.getUname())
+                                                    .add("partId", partId)
+                                                    .add("historyId", historyId)
+                                                    .add("chunkIndex", finalI)
+                                                    .add("chunkRetryCount", chunkRetryCount)
+                                                    .add("chunkRetryMax", CHUNK_MAX_RETRY)
+                                                    .add("reason", globalFuseReason.get()));
                                         }
                                     } catch (Exception e) {
                                         uploadProgressTracker.markFailed(partId, e.getMessage());
@@ -509,15 +598,17 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             }
 
                             //并发上传
-
                             Message message = new Message();
-                            message.setAppToken(wxToken);
-                            message.setContentType(Message.CONTENT_TYPE_TEXT);
-                            message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                    part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "\n线路：" + uploadEnums.getLine()));
-                            message.setUid(wxuid);
-                            PushNotifyClient.sendParallel(room, message);
+
+                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
+                                message.setAppToken(wxToken);
+                                message.setContentType(Message.CONTENT_TYPE_TEXT);
+                                message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
+                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
+                                        part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int) part.getDuration() / 60, ((float) part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "\n线路：" + uploadEnums.getLine()));
+                                message.setUid(wxuid);
+                                PushNotifyClient.sendParallel(room, message);
+                            }
 
                             // 动态并发计算
                             int concurrency = 3; // 默认
@@ -560,12 +651,23 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("UPLOAD_GATEWAY_ERROR:" + gatewayError.get());
                             }
 
-                            if (tryCount.get() >= 200) {
+                            if (globalFuseOpen.get() || upCount.get() < chunkNum) {
                                 part = partRepository.findById(part.getId()).get();
                                 part.setUpload(false);
                                 part.setUploadRetryCount(part.getUploadRetryCount() + 1);
                                 part = partRepository.save(part);
-                                uploadProgressTracker.markFailed(partId, "chunk upload failed");
+                                String chunkFailReason = StringUtils.defaultIfBlank(globalFuseReason.get(), "chunk upload failed");
+                                uploadProgressTracker.markFailed(partId, chunkFailReason);
+                                log.error("[BLR] {}", LogKvs.event("Upload.Chunk.AllFailed")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("partId", partId)
+                                        .add("historyId", historyId)
+                                        .add("doneChunkCount", upCount.get())
+                                        .add("totalChunkCount", chunkNum)
+                                        .add("globalFailCount", globalFailCount.get())
+                                        .add("globalFuseOpen", globalFuseOpen.get())
+                                        .add("reason", chunkFailReason));
                                 if (part.getUploadRetryCount() < 2) {
                                     Thread.sleep(5000);
                                     uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
@@ -804,6 +906,22 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private String resolveUploadHost(PreUploadBean preUploadBean) {
+        if (preUploadBean == null || StringUtils.isBlank(preUploadBean.getEndpoint())) {
+            return "unknown";
+        }
+        String endpoint = preUploadBean.getEndpoint().trim();
+        String url = endpoint.startsWith("http") ? endpoint : "https:" + endpoint;
+        try {
+            URI uri = URI.create(url);
+            if (StringUtils.isNotBlank(uri.getHost())) {
+                return uri.getHost();
+            }
+        } catch (Exception ignored) {
+        }
+        return endpoint;
     }
 }
 

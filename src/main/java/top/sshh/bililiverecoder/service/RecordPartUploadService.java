@@ -8,5 +8,10 @@ public interface RecordPartUploadService {
     @Async("myAsyncPool")
     void asyncUpload(RecordHistoryPart part);
 
+    default boolean asyncUploadIfNeeded(RecordHistoryPart part) {
+        asyncUpload(part);
+        return true;
+    }
+
     void upload(RecordHistoryPart part);
 }

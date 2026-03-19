@@ -23,15 +23,11 @@ public class EdtiorCompleteUploadRequest {
 
     private final String URL = "https://api.bilibili.com/studio/video-editor-interface/video-editor/resource/create/complete";
 
-    private Cookie cookie;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private EditorPreUploadBean preUploadBean;
 
     private Map<String, String> params;
 
     public EdtiorCompleteUploadRequest(Cookie cookie, EditorPreUploadBean preUploadBean, Map<String, String> params) {
-        this.preUploadBean = preUploadBean;
-        this.cookie = cookie;
         cookie.toHeaderCookie(headers);
         this.params = params;
         this.params.put("resource_id", preUploadBean.getData().getResource_id());

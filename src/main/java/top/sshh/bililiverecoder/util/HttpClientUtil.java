@@ -3,7 +3,6 @@ package top.sshh.bililiverecoder.util;
 import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
-import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.IOException;
 import java.net.CookieManager;
@@ -44,7 +43,7 @@ public class HttpClientUtil {
 
     public static String post(String url, Map<String, String> headers, String json) {
         try {
-            RequestBody requestBody = RequestBody.create(MediaType.parse("application/json"), json);
+            RequestBody requestBody = RequestBody.create(json, MediaType.parse("application/json"));
             Request build = new Request.Builder()
                     .headers(Headers.of(headers))
                     .url(url)

@@ -470,7 +470,6 @@ public class HttpClientUtils {
             // 执行请求
             httpResponse = httpClient.execute(httpMethod);
 
-            InputStream input = null;
             // 获取返回结果
             if (httpResponse != null && httpResponse.getStatusLine() != null) {
                 HttpClientResult httpClientResult = new HttpClientResult(httpResponse.getStatusLine().getStatusCode(), httpResponse, httpClient);
@@ -528,8 +527,6 @@ public class HttpClientUtils {
     public static String httpGet(String url, String charsetName) throws IOException {
         //创建HttpClient实例
         CloseableHttpClient httpClient = HttpClients.custom().setSSLSocketFactory(buildSSL()).build();
-        StringBuffer stringBuffer = new StringBuffer();
-
         InputStream inputStream = null;
         try {
             //创建get方法连接实例，在get方法中传入待连接地址

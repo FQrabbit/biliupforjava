@@ -268,9 +268,9 @@ public class HistoryController {
 
     @GetMapping("/delete/{id}")
     public Map<String, Object> delete(@PathVariable("id") Long id,
-                                      @RequestParam(required = false, defaultValue = "true") boolean deleteVideo,
-                                      @RequestParam(required = false, defaultValue = "true") boolean deleteDanmaku,
-                                      @RequestParam(required = false, defaultValue = "true") boolean deleteCover) {
+                                      @RequestParam(required = false, defaultValue = "false") boolean deleteVideo,
+                                      @RequestParam(required = false, defaultValue = "false") boolean deleteDanmaku,
+                                      @RequestParam(required = false, defaultValue = "false") boolean deleteCover) {
         Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -850,8 +850,18 @@ public class HistoryController {
                     .add("historyId", history.getId())
                     .add("err", e.getMessage()), e);
         }
-        history.setGiveUpPartCount(giveUpCount);
-        if (giveUpCount > 0) {
+        history.setGiveUpPartCount(giveUpCount);        
+        // 计算真正的异常分P数量（排除低于阈值和手动跳过的）
+        int abnormalCount = 0;
+        try {
+            abnormalCount = partRepository.countAbnormalPartsByHistoryId(history.getId());
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("History.AbnormalCount.QueryFailed")
+                    .add("historyId", history.getId())
+                    .add("err", e.getMessage()), e);
+        }
+        history.setAbnormalPartCount(abnormalCount);
+                if (giveUpCount > 0) {
             try {
                 List<RecordHistoryPart> giveUpParts = partRepository.findGiveUpPartsByHistoryId(history.getId());
                 history.setGiveUpPartFiles(giveUpParts.stream().map(RecordHistoryPart::getFilePath).toList());

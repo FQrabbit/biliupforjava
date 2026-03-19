@@ -1,16 +1,14 @@
 package top.sshh.bililiverecoder.service.impl;
 
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordEventData;
 import top.sshh.bililiverecoder.entity.RecordRoom;
-import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
@@ -34,19 +32,7 @@ public class RecordEventStreamStartService implements RecordEventService {
             """;
 
     @Autowired
-    private BiliUserRepository biliUserRepository;
-
-    @Autowired
     private RecordRoomRepository roomRepository;
-
-    @Autowired
-    private RecordHistoryRepository historyRepository;
-
-    @Autowired
-    private RecordHistoryPartRepository historyPartRepository;
-
-    @Autowired
-    private LiveMsgRepository liveMsgRepository;
 
 
     @Override

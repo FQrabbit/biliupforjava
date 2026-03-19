@@ -22,7 +22,6 @@ public class KodoFetchUploadRequest {
 
     private final String URL;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private PreUploadBean preUploadBean;
     private Map<String, String> params = new HashMap<>();
 
     public KodoFetchUploadRequest(PreUploadBean preUploadBean) {
@@ -31,7 +30,6 @@ public class KodoFetchUploadRequest {
         this.headers.putAll(preUploadBean.getFetch_headers());
         this.headers.put("Content-Type", "application/json");
         this.params.put("biz_id", String.valueOf(preUploadBean.getBiz_id()));
-        this.preUploadBean = preUploadBean;
     }
 
 

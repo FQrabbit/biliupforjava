@@ -18,12 +18,17 @@
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
     <script src="../js/api.js"></script>
+    <script src="../js/theme-tokens.js"></script>
     <script src="../js/mixins.js"></script>
     <script src="../js/privacy.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-            document.documentElement.setAttribute('data-theme', theme);
+            if (window.ThemeTokens && typeof window.ThemeTokens.applyCurrent === 'function') {
+                window.ThemeTokens.applyCurrent(document, theme);
+            } else {
+                document.documentElement.setAttribute('data-theme', theme);
+            }
         })();
     </script>
 </head>
@@ -81,9 +86,6 @@
                 </button>
                 <button class="view-btn" :class="{ 'is-active': viewMode === 'table' }" @click="viewMode = 'table'" title="表格视图">
                     <i class="el-icon-s-grid"></i>
-                </button>
-                <button class="view-btn" :class="{ 'is-active': privacyMode }" @click="togglePrivacyMode()" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
-                    <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
                 </button>
             </div>
         </div>
@@ -333,7 +335,7 @@
                 <div class="data-card"
                      :class="{
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
-                        'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (item.giveUpPartCount > 0),
+                        'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (abnormalPartCount(item) > 0),
                         'is-success': item.publish && (item.code == 0 || item.code == -50),
                         'is-selected': isMultiSelectMode && isSelected(item),
                         'press-anim': pressedCardId === item.id
@@ -343,6 +345,9 @@
                      v-for="item in tableData" :key="item.id" :data-id="item.id" @click="handleCardClick(item)">
                     <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
                         <i class="el-icon-delete selection-icon"></i>
+                    </div>
+                    <div style="position: absolute; top: 6px; left: 10px; font-size: 11px; color: var(--text-tertiary, #909399); opacity: 0.5; pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ID: {{ item.id }}
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
@@ -355,8 +360,16 @@
                                 <!-- 统一状态显示 -->
                                 <span class="status-chip" :class="getStatusColor(item.status)">{{ item.status }}</span>
                                 
-                                <el-tooltip v-if="item.giveUpPartCount && item.giveUpPartCount > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
-                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ item.giveUpPartCount }}</span>
+                                <!-- 仅自己可见标签 -->
+                                <el-tag v-if="item.code === -50" size="mini" class="private-tag" effect="dark">
+                                    <i class="el-icon-view"></i> 仅自己可见
+                                </el-tag>
+                                
+                                <el-tooltip v-if="abnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
+                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ abnormalPartCount(item) }}</span>
+                                </el-tooltip>
+                                <el-tooltip v-if="skippedOnlyCount(item) > 0" effect="dark" content="文件低于配置阈值，已自动跳过" placement="top">
+                                    <span class="status-chip" style="background: rgba(230, 162, 60, 0.15); color: #e6a23c;">已跳过 {{ skippedOnlyCount(item) }}</span>
                                 </el-tooltip>
                             </div>
                             <div class="card-meta">
@@ -407,7 +420,8 @@
                     <el-table-column label="已上传分P" prop="uploadPartCount" width="80"></el-table-column>
                     <el-table-column label="异常分P" prop="giveUpPartCount" width="80">
                         <template slot-scope="scope">
-                            <el-tag v-if="scope.row.giveUpPartCount && scope.row.giveUpPartCount > 0" size="mini" type="danger">{{ scope.row.giveUpPartCount }}</el-tag>
+                            <el-tag v-if="abnormalPartCount(scope.row) > 0" size="mini" type="danger">{{ abnormalPartCount(scope.row) }}</el-tag>
+                            <el-tag v-else-if="skippedOnlyCount(scope.row) > 0" size="mini" type="warning">跳过{{ skippedOnlyCount(scope.row) }}</el-tag>
                             <span v-else style="color: #909399;">0</span>
                         </template>
                     </el-table-column>
@@ -435,7 +449,7 @@
                         <template slot-scope="scope">
                             <el-tag size="mini" type="info" v-if="!scope.row.publish">未审核</el-tag>
                             <el-tag size="mini" type="success" v-else-if="scope.row.code == 0">通过</el-tag>
-                            <el-tag size="mini" type="success" v-else-if="scope.row.code == -50">仅自己可见</el-tag>
+                            <el-tag size="mini" class="private-tag" effect="dark" v-else-if="scope.row.code == -50"><i class="el-icon-view"></i> 仅自己可见</el-tag>
                             <el-tag size="mini" type="warning" v-else-if="scope.row.code == -1">审核中</el-tag>
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == -2">被退回</el-tag>
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == -4">被锁定</el-tag>
@@ -629,24 +643,52 @@
             </div>
 
             <!-- 异常信息 -->
-            <div class="detail-exception-box" v-if="currentDetail.giveUpPartCount && currentDetail.giveUpPartCount > 0">
+            <div class="detail-exception-box" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => !isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
                 <div class="exception-header">
                     <div class="exception-header-left">
-                        <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartCount }})
+                        <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => !isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
                     </div>
                     <div class="exception-header-right" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length > 0">
-                        <span v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="'reason-' + idx" class="exception-reason-badge">
-                            {{ formatGiveUpType(idx) }}：{{ getGiveUpReason(idx, p) }}
-                        </span>
+                        <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                            <span v-if="!isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" :key="'reason-' + idx" class="exception-reason-badge">
+                                {{ formatGiveUpType(idx) }}：{{ getGiveUpReason(idx, p) }}
+                            </span>
+                        </template>
                     </div>
                 </div>
                 <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
-                    <div class="exception-item" v-for="(p, idx) in currentDetail.giveUpPartFiles" :key="idx">
-                        <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
-                            <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
-                        </el-tooltip>
-                    </div>
+                    <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                        <div v-if="!isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="idx">
+                            <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
+                                <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                            </el-tooltip>
+                        </div>
+                    </template>
                 </div>
+            </div>
+
+            <!-- 已跳过分P（低于阈值，符合预期） -->
+            <div class="detail-skip-box" :class="{ 'is-expanded': showSkipParts }" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
+                <div class="skip-header is-clickable" @click="showSkipParts = !showSkipParts">
+                    <div class="skip-header-left">
+                        <i class="el-icon-warning"></i> 已跳过分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
+                        <span class="skip-note">文件低于配置阈值，已自动跳过</span>
+                    </div>
+                    <i :class="showSkipParts ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="skip-toggle-icon"></i>
+                </div>
+                <el-collapse-transition>
+                    <div v-show="showSkipParts" class="skip-content">
+                        <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
+                            <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                                <div v-if="isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="'skip-' + idx">
+                                    <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
+                                        <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                                    </el-tooltip>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </el-collapse-transition>
             </div>
 
             <!-- 上传进度 -->
@@ -691,18 +733,19 @@
                             <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
                             <span class="part-meta">
                                  <span v-if="p.state === 'SUCCESS' || p.percent >= 100">{{ formatSize(p.fileSize) }}</span>
+                                 <span v-else-if="p.state === 'SKIPPED'">{{ formatSize(p.fileSize) }}</span>
                                  <span v-else>
                                     {{ p.activeChunkDone }}/{{ p.activeChunkTotal }} 分片
                                     <span v-if="p.fileSize > 0" style="margin-left: 5px; opacity: 0.8;">({{ formatSize(p.fileSize) }})</span>
                                  </span>
                             </span>
-                            <span v-if="p.state !== 'SUCCESS' && calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
+                            <span v-if="p.state !== 'SUCCESS' && p.state !== 'SKIPPED' && calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
                         </div>
-                        <div class="progress-bar-mini">
-                            <el-progress :percentage="p.percent || 0" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
+                        <div class="progress-bar-mini" :class="p.state === 'SKIPPED' ? 'skipped' : ''">
+                            <el-progress :percentage="p.state === 'SKIPPED' ? 0 : (p.percent || 0)" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
                         </div>
-                        <div class="progress-percent-text">{{ (p.percent || 0) }}%</div>
-                        <div v-if="p.stateMsg || p.issueMessage" class="progress-msg-mini">{{ p.stateMsg || p.issueMessage }}</div>
+                        <div class="progress-percent-text" :class="p.state === 'SKIPPED' ? 'skipped-text' : ''">{{ p.state === 'SKIPPED' ? '-' : ((p.percent || 0) + '%') }}</div>
+                        <div v-if="(p.stateMsg || p.issueMessage) && p.state !== 'SKIPPED'" class="progress-msg-mini">{{ p.stateMsg || p.issueMessage }}</div>
                         <div v-if="shouldShowPartFilePath(p)" class="progress-filepath-mini">
                             <el-tooltip v-if="!privacyMode" effect="dark" :content="maskTooltip(getPartFilePath(p))" placement="top">
                                 <span class="filepath-text">{{ maskText(getPartFileName(p)) }}</span>
@@ -848,6 +891,30 @@
             <el-button type="primary" :disabled="!selectedCandidateFile" @click="submitBindFile">确 定</el-button>
         </div>
     </el-dialog>
+
+    <!-- 单条删除确认弹窗 -->
+    <el-dialog title="删除记录确认" :visible.sync="singleDeleteDialogVisible" width="420px" append-to-body :close-on-click-modal="false">
+        <div style="padding: 0 4px;">
+            <div style="display:flex; align-items:flex-start; margin-bottom:16px;">
+                <i class="el-icon-warning" style="font-size:22px; color:#E6A23C; margin-right:10px; margin-top:2px; flex-shrink:0;"></i>
+                <span style="line-height:1.6; color:var(--text-primary);">此操作将永久删除该条录制历史记录（数据库数据），<strong>不可恢复</strong>。</span>
+            </div>
+            <div style="background:var(--bg-tertiary); border-radius:6px; padding:12px 16px; margin-bottom:8px;">
+                <div style="font-size:13px; color:var(--text-secondary); margin-bottom:10px;">同时删除本地文件（可选）：</div>
+                <el-checkbox v-model="singleDeleteOptions.deleteVideo" style="display:block; margin-bottom:8px;">视频文件（.mp4 / .flv / .mkv 等）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteDanmaku" style="display:block; margin-bottom:8px;">弹幕文件（.xml / .ass）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteCover" style="display:block;">封面图片（.jpg / .png 等）</el-checkbox>
+            </div>
+            <div v-if="singleDeleteOptions.deleteVideo || singleDeleteOptions.deleteDanmaku || singleDeleteOptions.deleteCover"
+                 style="font-size:12px; color:#F56C6C; margin-top:8px;">
+                ⚠ 勾选的本地文件将被永久删除，无法恢复！
+            </div>
+        </div>
+        <div slot="footer">
+            <el-button @click="singleDeleteDialogVisible = false">取 消</el-button>
+            <el-button type="danger" @click="confirmDeleteHistory">确认删除</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script>
     new Vue({
@@ -882,6 +949,7 @@
             currentDetailParts: [],
             partListMeta: { hasBlockingIssues: false, blockingIssueCount: 0 },
             showAllParts: false,
+            showSkipParts: false,
             isMobile: window.innerWidth <= 768,
             activeNames: [],
             viewMode: 'card',
@@ -926,6 +994,13 @@
             didDragSelect: false,
             didDragSelectTimer: null,
             batchDeleteOptions: {
+                deleteVideo: false,
+                deleteDanmaku: false,
+                deleteCover: false
+            },
+            singleDeleteDialogVisible: false,
+            singleDeleteId: null,
+            singleDeleteOptions: {
                 deleteVideo: false,
                 deleteDanmaku: false,
                 deleteCover: false
@@ -1137,6 +1212,28 @@
             document.addEventListener('visibilitychange', this.handleVisibilityChange);
         },
         methods: {
+            // 是否是"预期跳过"类型（不是真正的异常）
+            isSkippedType: function(type) {
+                return type === 'SKIPPED_THRESHOLD' || type === 'MANUAL_SKIP';
+            },
+            // 真正异常分P的数量（排除预期跳过类型）
+            abnormalPartCount: function(item) {
+                if (!item) return 0;
+                // 优先使用后端返回的 abnormalPartCount 字段
+                if (item.abnormalPartCount !== undefined && item.abnormalPartCount !== null) {
+                    return item.abnormalPartCount;
+                }
+                // 回退到前端计算（兼容旧版本）
+                if (!item.giveUpPartCount || item.giveUpPartCount <= 0) return 0;
+                var types = item.giveUpPartTypes || [];
+                var skipped = types.filter(t => this.isSkippedType(t)).length;
+                return item.giveUpPartCount - skipped;
+            },
+            // 预期跳过分P的数量
+            skippedOnlyCount: function(item) {
+                if (!item || !item.giveUpPartTypes) return 0;
+                return item.giveUpPartTypes.filter(t => this.isSkippedType(t)).length;
+            },
             // 防抖函数工具
             debounce: function(func, delay) {
                 let timeoutId;
@@ -1567,6 +1664,8 @@
                 if (t === 'FILE_SIZE_INVALID') return '文件大小异常';
                 if (t === 'DURATION_INVALID') return '时长异常';
                 if (t === 'UPLOAD_FAILED') return '上传失败';
+                if (t === 'SKIPPED_THRESHOLD') return '低于阈值';
+                if (t === 'MANUAL_SKIP') return '手动跳过';
                 return t;
             },
             formatDateTime: function(val) {
@@ -1754,6 +1853,7 @@
                 this.currentDetailParts = [];
                 this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
                 this.showAllParts = false;
+                this.showSkipParts = false;
                 this.$nextTick(() => {
                     this.currentDetail = JSON.parse(JSON.stringify(item || {}));
                     this.updateDetailFooterOffset();
@@ -2055,7 +2155,7 @@
                 if (state === 'SUCCESS') return 'success';
                 if (state === 'RETRY_WAIT') return 'warning';
                 if (state === 'ISSUE') return 'exception';
-                if (state === 'SKIPPED') return 'success';
+                if (state === 'SKIPPED') return null;
 
                 const p = Math.min(Math.max(Number(percent) || 0, 0), 100);
                 if (p >= 90) return 'success';
@@ -2245,16 +2345,21 @@
                         const detailContent = this.$refs.detailContent;
                         if (!list) return;
 
-                        if (detailContent) {
+                        const scrollDetailToList = () => {
+                            if (!detailContent) return;
                             const detailRect = detailContent.getBoundingClientRect();
                             const listRect = list.getBoundingClientRect();
-                            const offsetTop = Math.max(listRect.top - detailRect.top - 12, 0);
+                            const offsetTop = Math.max(listRect.top - detailRect.top - 10, 0);
                             const targetTop = detailContent.scrollTop + offsetTop;
                             try {
                                 detailContent.scrollTo({ top: targetTop, behavior: 'smooth' });
                             } catch (e) {
                                 detailContent.scrollTop = targetTop;
                             }
+                        };
+
+                        if (detailContent) {
+                            scrollDetailToList();
                         } else {
                             try {
                                 list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2262,19 +2367,30 @@
                         }
 
                         this.clearPartsAutoScrollTimer();
-                        if (list.scrollHeight > list.clientHeight) {
-                            this.partsAutoScrollTimer = setTimeout(() => {
-                                if (!this.detailDialogVisible) return;
-                                const activeList = this.$refs.partsList;
-                                if (!activeList) return;
+                        this.partsAutoScrollTimer = setTimeout(() => {
+                            if (!this.detailDialogVisible) return;
+                            const activeList = this.$refs.partsList;
+                            const activeDetail = this.$refs.detailContent;
+                            if (activeList && activeDetail) {
+                                const detailRect = activeDetail.getBoundingClientRect();
+                                const listRect = activeList.getBoundingClientRect();
+                                const offsetTop = Math.max(listRect.top - detailRect.top - 10, 0);
+                                const targetTop = activeDetail.scrollTop + offsetTop;
                                 try {
-                                    activeList.scrollTo({ top: 48, behavior: 'smooth' });
+                                    activeDetail.scrollTo({ top: targetTop, behavior: 'smooth' });
                                 } catch (e) {
-                                    activeList.scrollTop = 48;
+                                    activeDetail.scrollTop = targetTop;
                                 }
-                                this.partsAutoScrollTimer = null;
-                            }, 220);
-                        }
+                            }
+                            if (activeList && activeList.scrollHeight > activeList.clientHeight) {
+                                try {
+                                    activeList.scrollTo({ top: 0, behavior: 'smooth' });
+                                } catch (e) {
+                                    activeList.scrollTop = 0;
+                                }
+                            }
+                            this.partsAutoScrollTimer = null;
+                        }, 260);
                     });
                 }
             },
@@ -2673,48 +2789,47 @@
                 }).catch(() => {});
             },
             deleteHistory: function (id) {
+                this.singleDeleteId = id;
+                this.singleDeleteOptions.deleteVideo = false;
+                this.singleDeleteOptions.deleteDanmaku = false;
+                this.singleDeleteOptions.deleteCover = false;
+                this.singleDeleteDialogVisible = true;
+            },
+            confirmDeleteHistory: function () {
                 let _this = this;
-                this.$confirm('此操作将永久删除该条录制历史记录，并同时删除本地的视频文件和弹幕文件！此操作不可恢复！<br/><br/>确定要删除吗？', '删除记录确认', {
-                    dangerouslyUseHTMLString: true,
-                    confirmButtonText: '删除',
-                    cancelButtonText: '保留',
-                    confirmButtonClass: 'el-button--danger',
-                    cancelButtonClass: 'el-button--success',
-                    type: 'warning'
-                }).then(() => {
-                    const loading = _this.$loading({
-                        lock: true,
-                        text: '正在删除记录...',
-                        spinner: 'el-icon-loading',
-                        background: 'rgba(0, 0, 0, 0.7)'
-                    });
-                    $.ajax({
-                        url: '/history/delete/' + id,
-                        contentType: 'application/json;charset=utf-8',
-                        type: 'get',
-                        dataType: 'json',
-                        success: function (data) {
-                            loading.close();
-                            _this.$message({
-                                message: data.msg,
-                                type: data.type
+                this.singleDeleteDialogVisible = false;
+                const loading = _this.$loading({
+                    lock: true,
+                    text: '正在删除记录...',
+                    spinner: 'el-icon-loading',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                $.ajax({
+                    url: '/history/delete/' + _this.singleDeleteId,
+                    type: 'get',
+                    data: _this.singleDeleteOptions,
+                    dataType: 'json',
+                    success: function (data) {
+                        loading.close();
+                        _this.$message({
+                            message: data.msg,
+                            type: data.type
+                        });
+                        var files = data && data.data && Array.isArray(data.data.notDeletedFiles) ? data.data.notDeletedFiles : [];
+                        if (files.length > 0) {
+                            _this.$alert(_this.buildNotDeletedFilesHtml([{ historyId: _this.singleDeleteId, files: files }]), '部分本地文件未删除', {
+                                dangerouslyUseHTMLString: true,
+                                confirmButtonText: '知道了',
+                                type: 'warning'
                             });
-                            var files = data && data.data && Array.isArray(data.data.notDeletedFiles) ? data.data.notDeletedFiles : [];
-                            if (files.length > 0) {
-                                _this.$alert(_this.buildNotDeletedFilesHtml([{ historyId: id, files: files }]), '部分本地文件未删除', {
-                                    dangerouslyUseHTMLString: true,
-                                    confirmButtonText: '知道了',
-                                    type: 'warning'
-                                });
-                            }
-                            _this.initTable();
-                        },
-                        error: function() {
-                            loading.close();
-                            _this.$message.error('删除失败');
                         }
-                    });
-                }).catch(() => {});
+                        _this.initTable();
+                    },
+                    error: function() {
+                        loading.close();
+                        _this.$message.error('删除失败');
+                    }
+                });
             },
             deleteHistoryMsg: function (id) {
                 let _this = this;

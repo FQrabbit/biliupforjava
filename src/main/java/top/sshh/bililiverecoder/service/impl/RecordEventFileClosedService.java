@@ -10,7 +10,6 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.entity.*;
-import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
@@ -37,9 +36,6 @@ public class RecordEventFileClosedService implements RecordEventService {
     private String workPath;
 
     @Autowired
-    private BiliUserRepository biliUserRepository;
-
-    @Autowired
     private RecordRoomRepository roomRepository;
 
     @Autowired
@@ -57,9 +53,6 @@ public class RecordEventFileClosedService implements RecordEventService {
 
     @Autowired
     private ShutdownState shutdownState;
-
-    @Autowired
-    private LiveMsgService liveMsgService;
 
     @PostConstruct
     public void initWorkPath() {

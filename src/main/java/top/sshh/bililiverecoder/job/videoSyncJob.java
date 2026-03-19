@@ -1,6 +1,5 @@
 package top.sshh.bililiverecoder.job;
 
-import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +10,6 @@ import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.BiliVideoInfoResponse;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
-import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
@@ -27,9 +25,6 @@ public class videoSyncJob {
 
     @Value("${record.work-path}")
     private String workPath;
-
-    @Autowired
-    private RecordBiliPublishService publishService;
 
     @Autowired
     private RecordRoomRepository roomRepository;

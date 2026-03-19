@@ -82,7 +82,9 @@ public class RecordHistory {
     // 分P上传补偿任务中“永久放弃”的分P（例如无法读取时长/大小）
     @Transient
     private int giveUpPartCount;
-
+    // 真正异常的分P数量（排除低于阈值SKIPPED_THRESHOLD和手动跳过MANUAL_SKIP的分P）
+    @Transient
+    private int abnormalPartCount;
     // 是否处于等待投稿状态（分P已上传完毕，等待合并间隔时间）
     @Transient
     private boolean waitingForPublish;
@@ -150,7 +152,8 @@ public class RecordHistory {
             return "正在录制";
         }
         
-        if (giveUpPartCount > 0) {
+        // 只有真正的异常（不包括低于阈值的跳过）时才显示"存在异常"
+        if (abnormalPartCount > 0) {
             return "存在异常";
         }
 
@@ -173,6 +176,12 @@ public class RecordHistory {
         // 已经发布(publish=true)，根据B站稿件状态code判断
         // 0: 开放浏览, -50: 仅自己可见
         if (code == 0 || code == -50) {
+            // 仅自己可见的稿件(-50)不能直接发送普通弹幕，弹幕处理被主动跳过
+            // 所以直接返回"已完成"，避免状态卡在"弹幕发送中"
+            if (code == -50) {
+                return "已完成";
+            }
+
             // 说明：sendReply 在数据库里表示“SC/上舰评论是否已发送”（历史字段名沿用，不改表）
             // 普通/高级弹幕是否发送，由房间开关决定；待发送数量由 Controller 统计后回填到 transient 字段
             // 如果没有回填房间开关（例如某些非列表接口直接返回 entity），则保持旧逻辑，避免误判

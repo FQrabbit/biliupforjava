@@ -22,7 +22,6 @@ public class KodoChunkUploadRequest {
 
     private final String URL;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private PreUploadBean preUploadBean;
     private Map<String, String> params;
     private RandomAccessFile file;
 
@@ -32,7 +31,6 @@ public class KodoChunkUploadRequest {
         headers.clear();
         headers.put("Authorization", preUploadBean.getUptoken());
         headers.put("Content-Type", "application/octet-stream");
-        this.preUploadBean = preUploadBean;
         this.params = params;
         this.file = file;
     }
@@ -48,6 +46,28 @@ public class KodoChunkUploadRequest {
      * @throws KeyManagementException
      */
     public String getPage() throws IOException, NoSuchAlgorithmException, KeyStoreException, URISyntaxException, KeyManagementException {
+        top.sshh.bililiverecoder.service.UploadConnectionBudgetService budget =
+                top.sshh.bililiverecoder.service.UploadConnectionBudgetService.getInstance();
+        boolean acquired = false;
+        if (budget != null) {
+            try {
+                budget.acquire();
+                acquired = true;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Upload interrupted while waiting for connection permit", e);
+            }
+        }
+        try {
+            return doUpload();
+        } finally {
+            if (acquired) {
+                budget.release();
+            }
+        }
+    }
+
+    private String doUpload() throws IOException, NoSuchAlgorithmException, KeyStoreException, URISyntaxException, KeyManagementException {
         // 仅在开启了上传限速时使用 Netty 限速上传；不限速时走 Apache HttpClient
         if (top.sshh.bililiverecoder.service.RateLimiterService.getInstance() != null) {
             top.sshh.bililiverecoder.service.RateLimiterService rateLimiterService = top.sshh.bililiverecoder.service.RateLimiterService.getInstance();

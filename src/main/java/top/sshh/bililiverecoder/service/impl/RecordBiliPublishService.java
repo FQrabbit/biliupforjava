@@ -2,7 +2,6 @@ package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.jayway.jsonpath.JsonPath;
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
@@ -19,6 +18,7 @@ import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -40,6 +40,9 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Component
@@ -82,6 +85,8 @@ public class RecordBiliPublishService {
     private RecordRoomRepository roomRepository;
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
+    @Autowired
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
     @Autowired
     private HighEnergyCutPublishService highEnergyCutPublishService;
     @Autowired
@@ -157,8 +162,17 @@ public class RecordBiliPublishService {
             return;
         }
 
-        // 发布任务入队列
-        TaskUtil.publishTask.put(history.getId(), Thread.currentThread());
+        // 发布任务入队列（原子占位，避免同一稿件并发发布）
+        Thread existed = TaskUtil.publishTask.putIfAbsent(history.getId(), Thread.currentThread());
+        if (existed != null && existed != Thread.currentThread()) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Task.AlreadyRunning")
+                .add("historyId", history.getId())
+                .add("roomId", history.getRoomId())
+                .addIfNotBlank("title", history.getTitle())
+                .add("ownerThread", existed.getName())
+                .add("currentThread", Thread.currentThread().getName()));
+            return;
+        }
         StringBuilder errMsg = new StringBuilder("\n");
         try {
             List<RecordHistoryPart> uploadParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
@@ -227,7 +241,7 @@ public class RecordBiliPublishService {
                                     log.info("[BLR] {}", LogKvs.event("Publish.Part.NotUploaded")
                                             .add("historyId", history.getId())
                                             .add("partId", uploadPart.getId()));
-                                    uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                                    uploadPartWithUserSerialBlocking(room, uploadPart);
                                 }
                             }
 
@@ -386,26 +400,17 @@ public class RecordBiliPublishService {
                     .add("retryCount", history.getUploadRetryCount()));
             return false;
         }
-        Thread publishThread = TaskUtil.publishTask.get(history.getId());
-        if (publishThread != null) {
-            //正在发布，直接退出
+        Thread publishThread = TaskUtil.publishTask.putIfAbsent(history.getId(), Thread.currentThread());
+        if (publishThread != null && publishThread != Thread.currentThread()) {
+            // 正在发布，直接退出
             log.warn("[BLR] {}", LogKvs.event("Publish.Task.AlreadyRunning")
-                    .add("historyId", history.getId())
-                    .add("roomId", history.getRoomId())
-                    .addIfNotBlank("title", history.getTitle()));
+                .add("historyId", history.getId())
+                .add("roomId", history.getRoomId())
+                .addIfNotBlank("title", history.getTitle())
+                .add("ownerThread", publishThread.getName())
+                .add("currentThread", Thread.currentThread().getName()));
             return false;
         }
-        publishThread = TaskUtil.publishTask.get(history.getId());
-        if (publishThread != null) {
-            //正在发布，直接退出
-            log.warn("[BLR] {}", LogKvs.event("Publish.Task.AlreadyRunning")
-                    .add("historyId", history.getId())
-                    .add("roomId", history.getRoomId())
-                    .addIfNotBlank("title", history.getTitle()));
-            return false;
-        }
-        // 发布任务入队列
-        TaskUtil.publishTask.put(history.getId(), Thread.currentThread());
         try {
 
             RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
@@ -598,7 +603,7 @@ public class RecordBiliPublishService {
                                         .add("uname", room.getUname())
                                         .add("historyId", history.getId())
                                         .add("partId", uploadPart.getId()));
-                                uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                                uploadPartWithUserSerialBlocking(room, uploadPart);
                                 try {
                                     log.info("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldown")
                                             .add("historyId", history.getId())
@@ -623,7 +628,7 @@ public class RecordBiliPublishService {
                             .add("uname", room.getUname())
                             .add("historyId", history.getId())
                             .add("partId", uploadPart.getId()));
-                    uploadServiceFactory.getUploadService(room.getLine()).upload(uploadPart);
+                    uploadPartWithUserSerialBlocking(room, uploadPart);
                     try {
                         log.info("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldown")
                                 .add("historyId", history.getId())
@@ -1034,7 +1039,7 @@ public class RecordBiliPublishService {
                         try {
                             int desiredVisibility = room.getIsOnlySelf();
                             if (desiredVisibility == 0 || desiredVisibility == 1) {
-                                String visRes = BiliApi.updateVideoVisibility(biliBiliUser, Long.parseLong(aid), desiredVisibility);
+                                BiliApi.updateVideoVisibility(biliBiliUser, Long.parseLong(aid), desiredVisibility);
                                 log.info("[BLR] {}", LogKvs.event("Publish.Visibility.Sync.Success")
                                         .add("roomId", room.getRoomId())
                                         .add("historyId", history.getId())
@@ -1197,6 +1202,104 @@ public class RecordBiliPublishService {
             TaskUtil.publishTask.remove(history.getId());
         }
         return true;
+    }
+
+    private void uploadPartWithUserSerialBlocking(RecordRoom room, RecordHistoryPart part) {
+        if (room == null || room.getUploadUserId() == null) {
+            uploadServiceFactory.getUploadService(room != null ? room.getLine() : null).upload(part);
+            return;
+        }
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<RuntimeException> runtimeRef = new AtomicReference<>();
+        boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
+                room.getUploadUserId(),
+                room.getRoomId(),
+                part.getHistoryId(),
+                part.getId(),
+                "publish-sync",
+                () -> {
+                    try {
+                        uploadServiceFactory.getUploadService(room.getLine()).upload(part);
+                    } catch (RuntimeException e) {
+                        runtimeRef.set(e);
+                        throw e;
+                    } finally {
+                        done.countDown();
+                    }
+                }
+        );
+        if (!enqueued) {
+            log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.WaitQueued")
+                    .add("roomId", room.getRoomId())
+                    .add("historyId", part.getHistoryId())
+                    .add("partId", part.getId()));
+            waitExistingPartUpload(part);
+            return;
+        }
+        try {
+            long timeoutMinutes = 5;
+            long startTime = System.currentTimeMillis();
+            long timeoutMs = timeoutMinutes * 60 * 1000;
+            
+            while (!done.await(1, TimeUnit.SECONDS)) {
+                if (shutdownState.isShuttingDown()) {
+                    throw new RuntimeException("UPLOAD_INTERRUPTED_BY_SHUTDOWN");
+                }
+                
+                long elapsedMs = System.currentTimeMillis() - startTime;
+                if (elapsedMs > timeoutMs) {
+                    log.error("[BLR] {}", LogKvs.event("Publish.PartUpload.Timeout")
+                            .add("historyId", part.getHistoryId())
+                            .add("partId", part.getId())
+                            .add("roomId", part.getRoomId())
+                            .add("timeoutMinutes", timeoutMinutes)
+                            .add("elapsedMs", elapsedMs));
+                    throw new RuntimeException("UPLOAD_WAIT_TIMEOUT: 分P上传超时，超过" + timeoutMinutes + "分钟未完成");
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("[BLR] {}", LogKvs.event("Publish.PartUpload.Interrupted")
+                    .add("historyId", part.getHistoryId())
+                    .add("partId", part.getId()), e);
+            throw new RuntimeException("UPLOAD_INTERRUPTED", e);
+        }
+        RuntimeException ex = runtimeRef.get();
+        if (ex != null) {
+            throw ex;
+        }
+    }
+
+    private void waitExistingPartUpload(RecordHistoryPart part) {
+        long timeoutMs = 30L * 60L * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (shutdownState.isShuttingDown()) {
+                throw new RuntimeException("UPLOAD_INTERRUPTED_BY_SHUTDOWN");
+            }
+            Optional<RecordHistoryPart> latestOpt = partRepository.findById(part.getId());
+            if (!latestOpt.isPresent()) {
+                return;
+            }
+            RecordHistoryPart latest = latestOpt.get();
+            if (latest.isUpload() || isSkippedPart(latest)) {
+                return;
+            }
+            if (!uploadUserSerialScheduler.hasPendingPart(latest.getId())) {
+                throw new RuntimeException("UPLOAD_QUEUE_DRAINED_BUT_NOT_UPLOADED");
+            }
+            try {
+                Thread.sleep(1000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("UPLOAD_INTERRUPTED", e);
+            }
+        }
+        log.warn("[BLR] {}", LogKvs.event("Publish.PartUpload.WaitTimeout")
+                .add("historyId", part.getHistoryId())
+                .add("partId", part.getId())
+                .add("timeoutMs", timeoutMs));
+        throw new RuntimeException("UPLOAD_WAIT_TIMEOUT");
     }
 
     public DescDto template(String template, Map<String, Object> map) {

@@ -2,14 +2,12 @@ package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.jayway.jsonpath.JsonPath;
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
 import net.bramp.ffmpeg.FFmpeg;
 import net.bramp.ffmpeg.FFmpegExecutor;
 import net.bramp.ffmpeg.builder.FFmpegBuilder;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -96,6 +94,7 @@ public class HighEnergyCutPublishService {
         List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         String wxuid = room.getWxuid();
+        String pushMsgTags = room.getPushMsgTags();
         // 初始化 FFmpeg
         FFmpeg ffmpeg = new FFmpeg();
         FFmpegExecutor executor = new FFmpegExecutor(ffmpeg);
@@ -215,7 +214,7 @@ public class HighEnergyCutPublishService {
                     .addIfNotBlank("title", history.getTitle())
                     .add("costSec", (System.currentTimeMillis() - currentTimeMillis) / 1000)
                     .add("output", output));
-            if (StringUtils.isNotBlank(wxuid)) {
+            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                 Message message = new Message();
                 message.setAppToken(wxToken);
                 message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -233,7 +232,7 @@ public class HighEnergyCutPublishService {
                     .add("historyId", history.getId())
                     .add("roomId", history.getRoomId())
                     .addIfNotBlank("title", history.getTitle()), e);
-            if (StringUtils.isNotBlank(wxuid)) {
+            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                 Message message = new Message();
                 message.setAppToken(wxToken);
                 message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -255,6 +254,7 @@ public class HighEnergyCutPublishService {
     public void publish(RecordHistory history, String fileName) throws InterruptedException {
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         String wxuid = room.getWxuid();
+        String pushMsgTags = room.getPushMsgTags();
         Map<String, Object> map = new HashMap<>();
         LocalDateTime startTime = history.getStartTime();
         map.put("date", startTime);
@@ -376,7 +376,7 @@ public class HighEnergyCutPublishService {
                     .add("uname", room.getUname())
                     .add("historyId", history.getId())
                     .add("respLen", uploadRes == null ? 0 : uploadRes.length()));
-            if (StringUtils.isNotBlank(wxuid)) {
+            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
                 Message message = new Message();
                 message.setAppToken(wxToken);
                 message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -394,7 +394,7 @@ public class HighEnergyCutPublishService {
                 .addIfNotBlank("title", history.getTitle())
                 .addIfNotBlank("bvid", bvid)
                 .addIfNotBlank("aid", aid));
-        if (StringUtils.isNotBlank(wxuid)) {
+        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
             Message message = new Message();
             message.setAppToken(wxToken);
             message.setContentType(Message.CONTENT_TYPE_TEXT);

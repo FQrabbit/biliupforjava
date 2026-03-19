@@ -74,7 +74,9 @@ public class DmTest {
         BiliBiliUser biliUser = biliUserRepository.findByUid(10043269L);
         File file = new File("D:/tmp/1.jpg");
         byte [] bytes = new byte[(int)file.length()];
-        new FileInputStream(file).read(bytes);
+        try (FileInputStream inputStream = new FileInputStream(file)) {
+            inputStream.read(bytes);
+        }
         String uploadCover = BiliApi.uploadCover(biliUser,file.getName(), bytes);
         System.out.println(uploadCover);
     }

@@ -23,7 +23,6 @@ public class LineUploadRequest {
     private final String URL;
     private Cookie cookie;
     private HashMap<String, String> headers = new HashMap<String, String>();
-    private PreUploadBean preUploadBean;
 
     public LineUploadRequest(Cookie cookie, PreUploadBean preUploadBean) {
         this.URL = "https:" + preUploadBean.getEndpoint() + preUploadBean.getUpUrl() + "?uploads&output=json";
@@ -31,7 +30,6 @@ public class LineUploadRequest {
         headers.clear();
         headers.put("X-Upos-Auth", preUploadBean.getAuth());
         cookie.toHeaderCookie(headers);
-        this.preUploadBean = preUploadBean;
     }
 
 

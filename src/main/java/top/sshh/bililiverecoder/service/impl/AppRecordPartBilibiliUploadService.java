@@ -2,13 +2,11 @@ package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.Message;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -24,6 +22,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -94,12 +93,20 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
     @Autowired
     private UploadProgressTracker uploadProgressTracker;
 
+    @Autowired
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
+
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
+        asyncUploadIfNeeded(part);
+    }
+
+    @Override
+    public boolean asyncUploadIfNeeded(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
                 .add("os", OS)
@@ -107,24 +114,55 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                 .add("historyId", part.getHistoryId())
                 .add("roomId", part.getRoomId())
                 .add("filePath", part.getFilePath()));
-        this.upload(part);
+        RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
+        if (room == null || room.getUploadUserId() == null) {
+            this.upload(part);
+            return true;
+        }
+        RecordHistoryPart finalPart = part;
+        boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
+                room.getUploadUserId(),
+                room.getRoomId(),
+                finalPart.getHistoryId(),
+                finalPart.getId(),
+                OS,
+                () -> this.upload(finalPart)
+        );
+        if (!enqueued) {
+            log.debug("[BLR] {}", LogKvs.event("Upload.Part.AlreadyQueued")
+                .add("os", OS)
+                .add("partId", finalPart.getId())
+                .add("historyId", finalPart.getHistoryId())
+                .add("roomId", finalPart.getRoomId()));
+        }
+        return enqueued;
     }
 
     @Override
     public void upload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
-        Thread thread = TaskUtil.partUploadTask.get(part.getId());
-        if (thread != null && thread != Thread.currentThread()) {
-            log.info("[BLR] {}", LogKvs.event("Upload.Part.AlreadyUploading")
+        if (part.isUpload()) {
+            log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
                     .add("os", OS)
                     .add("partId", part.getId())
                     .add("historyId", part.getHistoryId())
-                    .add("roomId", part.getRoomId())
-                    .add("ownerThread", thread.getName())
-                    .add("currentThread", Thread.currentThread().getName()));
+                    .add("roomId", part.getRoomId()));
             return;
         }
-        TaskUtil.partUploadTask.put(part.getId(), Thread.currentThread());
+        synchronized (TaskUtil.partUploadTask) {
+            Thread thread = TaskUtil.partUploadTask.get(part.getId());
+            if (thread != null && thread != Thread.currentThread()) {
+                log.info("[BLR] {}", LogKvs.event("Upload.Part.AlreadyUploading")
+                        .add("os", OS)
+                        .add("partId", part.getId())
+                        .add("historyId", part.getHistoryId())
+                        .add("roomId", part.getRoomId())
+                        .add("ownerThread", thread.getName())
+                        .add("currentThread", Thread.currentThread().getName()));
+                return;
+            }
+            TaskUtil.partUploadTask.put(part.getId(), Thread.currentThread());
+        }
         try {
 
             RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
@@ -336,15 +374,17 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             }
 
                             //并发上传
-
                             Message message = new Message();
-                            message.setAppToken(wxToken);
-                            message.setContentType(Message.CONTENT_TYPE_TEXT);
-                            message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                    part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname()));
-                            message.setUid(wxuid);
-                            PushNotifyClient.sendParallel(room, message);
+
+                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
+                                message.setAppToken(wxToken);
+                                message.setContentType(Message.CONTENT_TYPE_TEXT);
+                                message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
+                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
+                                        part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int) part.getDuration() / 60, ((float) part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname()));
+                                message.setUid(wxuid);
+                                PushNotifyClient.sendParallel(room, message);
+                            }
 
                             runnableList.stream().parallel().forEach(Runnable::run);
                             if (tryCount.get() >= 200) {
