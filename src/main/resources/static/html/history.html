@@ -346,6 +346,9 @@
                     <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
                         <i class="el-icon-delete selection-icon"></i>
                     </div>
+                    <div style="position: absolute; top: 6px; left: 10px; font-size: 11px; color: var(--text-tertiary, #909399); opacity: 0.5; pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ID: {{ item.id }}
+                    </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
                             <div class="card-title">{{ maskText(item.title || '无标题') }}</div>
@@ -665,20 +668,27 @@
             </div>
 
             <!-- 已跳过分P（低于阈值，符合预期） -->
-            <div class="detail-skip-box" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
-                <div class="skip-header">
-                    <i class="el-icon-warning"></i> 已跳过分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
-                    <span class="skip-note">文件低于配置阈值，已自动跳过</span>
+            <div class="detail-skip-box" :class="{ 'is-expanded': showSkipParts }" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
+                <div class="skip-header is-clickable" @click="showSkipParts = !showSkipParts">
+                    <div class="skip-header-left">
+                        <i class="el-icon-warning"></i> 已跳过分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
+                        <span class="skip-note">文件低于配置阈值，已自动跳过</span>
+                    </div>
+                    <i :class="showSkipParts ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="skip-toggle-icon"></i>
                 </div>
-                <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
-                    <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
-                        <div v-if="isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="'skip-' + idx">
-                            <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
-                                <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
-                            </el-tooltip>
+                <el-collapse-transition>
+                    <div v-show="showSkipParts" class="skip-content">
+                        <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
+                            <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                                <div v-if="isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="'skip-' + idx">
+                                    <el-tooltip effect="dark" :content="maskTooltip(p)" placement="top">
+                                        <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                                    </el-tooltip>
+                                </div>
+                            </template>
                         </div>
-                    </template>
-                </div>
+                    </div>
+                </el-collapse-transition>
             </div>
 
             <!-- 上传进度 -->
@@ -939,6 +949,7 @@
             currentDetailParts: [],
             partListMeta: { hasBlockingIssues: false, blockingIssueCount: 0 },
             showAllParts: false,
+            showSkipParts: false,
             isMobile: window.innerWidth <= 768,
             activeNames: [],
             viewMode: 'card',
@@ -1842,6 +1853,7 @@
                 this.currentDetailParts = [];
                 this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
                 this.showAllParts = false;
+                this.showSkipParts = false;
                 this.$nextTick(() => {
                     this.currentDetail = JSON.parse(JSON.stringify(item || {}));
                     this.updateDetailFooterOffset();

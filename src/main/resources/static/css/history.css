@@ -6421,8 +6421,28 @@
     color: var(--warning-color);
     display: flex;
     align-items: center;
+    justify-content: space-between;
+}
+
+.detail-skip-box .skip-header-left {
+    display: flex;
+    align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+}
+
+.detail-skip-box .skip-header.is-clickable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.detail-skip-box .skip-toggle-icon {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.detail-skip-box.is-expanded .skip-header {
+    margin-bottom: 12px;
 }
 
 .detail-skip-box .skip-note {
