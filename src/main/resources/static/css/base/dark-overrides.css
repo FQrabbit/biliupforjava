@@ -399,6 +399,21 @@
     border-bottom: 1px solid var(--border-color);
 }
 
+/* ========== 深色模式下的筛选按钮 ========== */
+/* 覆盖硬编码的渐变背景，使查询按钮在暗色模式中清晰可见 */
+[data-theme="dark"] .filter-footer .el-button--primary {
+    background: var(--btn-primary-bg) !important;
+    border: 1px solid var(--primary-light) !important;
+    color: var(--text-inverse) !important;
+    box-shadow: var(--btn-primary-shadow) !important;
+}
+
+[data-theme="dark"] .filter-footer .el-button--primary:hover {
+    transform: translateY(-2px) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    box-shadow: var(--btn-primary-shadow-hover) !important;
+}
+
 [data-theme="dark"] .room-card,
 [data-theme="dark"] .data-card {
     background: var(--bg-tertiary);

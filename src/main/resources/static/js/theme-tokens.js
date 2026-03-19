@@ -6,7 +6,7 @@
         ocean: { label: '海洋蓝' }
     };
 
-    // 先保留一套默认盘 + 一套示例盘，后面按这个结构继续加就行。
+    // 先保留一套默认盘 + 一套示例盘，后面按这个结构继续加就行
     var THEMES = {
         classic: {
             light: {
@@ -72,6 +72,10 @@
                 '--brand-shadow-sm': '0 2px 8px rgba(91, 108, 255, 0.3)',
                 '--brand-shadow-md': '0 4px 12px rgba(91, 108, 255, 0.3)',
                 '--brand-shadow-lg': '0 6px 20px rgba(91, 108, 255, 0.4)',
+                '--btn-primary-bg': 'linear-gradient(135deg, #5b6cff 0%, #7b8fff 100%)',
+                '--btn-primary-bg-hover': 'linear-gradient(135deg, #7b8fff 0%, #9ba8ff 100%)',
+                '--btn-primary-shadow': '0 4px 12px rgba(91, 108, 255, 0.3)',
+                '--btn-primary-shadow-hover': '0 6px 20px rgba(91, 108, 255, 0.4)',
                 '--brand-ring': '0 0 0 3px rgba(91, 108, 255, 0.15)',
                 '--login-bg-primary-soft': 'rgba(91, 108, 255, 0.20)',
                 '--login-bg-primary-mid': 'rgba(91, 108, 255, 0.55)',
@@ -151,6 +155,10 @@
                 '--brand-shadow-sm': '0 2px 10px rgba(123, 143, 255, 0.35)',
                 '--brand-shadow-md': '0 4px 14px rgba(123, 143, 255, 0.32)',
                 '--brand-shadow-lg': '0 6px 22px rgba(123, 143, 255, 0.42)',
+                '--btn-primary-bg': 'linear-gradient(135deg, #7b8fff 0%, #9ba8ff 100%)',
+                '--btn-primary-bg-hover': 'linear-gradient(135deg, #9ba8ff 0%, #bac4ff 100%)',
+                '--btn-primary-shadow': '0 4px 12px rgba(123, 143, 255, 0.35)',
+                '--btn-primary-shadow-hover': '0 6px 20px rgba(123, 143, 255, 0.45)',
                 '--brand-ring': '0 0 0 3px rgba(123, 143, 255, 0.2)',
                 '--login-bg-primary-soft': 'rgba(123, 143, 255, 0.22)',
                 '--login-bg-primary-mid': 'rgba(123, 143, 255, 0.58)',
@@ -224,6 +232,10 @@
                 '--brand-shadow-sm': '0 2px 8px rgba(15, 144, 255, 0.3)',
                 '--brand-shadow-md': '0 4px 12px rgba(15, 144, 255, 0.3)',
                 '--brand-shadow-lg': '0 6px 20px rgba(15, 144, 255, 0.42)',
+                '--btn-primary-bg': 'linear-gradient(135deg, #0f90ff 0%, #41a8ff 100%)',
+                '--btn-primary-bg-hover': 'linear-gradient(135deg, #41a8ff 0%, #6abaff 100%)',
+                '--btn-primary-shadow': '0 4px 12px rgba(15, 144, 255, 0.3)',
+                '--btn-primary-shadow-hover': '0 6px 20px rgba(15, 144, 255, 0.42)',
                 '--brand-ring': '0 0 0 3px rgba(15, 144, 255, 0.16)',
                 '--login-bg-primary-soft': 'rgba(15, 144, 255, 0.22)',
                 '--login-bg-primary-mid': 'rgba(15, 144, 255, 0.56)',
@@ -292,6 +304,10 @@
                 '--brand-shadow-sm': '0 2px 10px rgba(88, 184, 255, 0.35)',
                 '--brand-shadow-md': '0 4px 14px rgba(88, 184, 255, 0.34)',
                 '--brand-shadow-lg': '0 6px 22px rgba(88, 184, 255, 0.45)',
+                '--btn-primary-bg': 'linear-gradient(135deg, #58b8ff 0%, #7ec8ff 100%)',
+                '--btn-primary-bg-hover': 'linear-gradient(135deg, #7ec8ff 0%, #9ed6ff 100%)',
+                '--btn-primary-shadow': '0 4px 12px rgba(88, 184, 255, 0.35)',
+                '--btn-primary-shadow-hover': '0 6px 22px rgba(88, 184, 255, 0.45)',
                 '--brand-ring': '0 0 0 3px rgba(88, 184, 255, 0.2)',
                 '--login-bg-primary-soft': 'rgba(88, 184, 255, 0.22)',
                 '--login-bg-primary-mid': 'rgba(88, 184, 255, 0.58)',
@@ -405,3 +421,4 @@
         }
     };
 })(window);
+
