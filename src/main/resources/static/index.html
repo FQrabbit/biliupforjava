@@ -101,7 +101,7 @@
                 </div>
                 <div class="theme-popover-wrap">
                     <div class="theme-toggle" id="themeToggleBtn" :class="{ 'is-open': showThemePanel }" @click.stop="toggleThemePanel" title="主题设置">
-                        <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+                        <i class="el-icon-magic-stick"></i>
                     </div>
                 </div>
             </div>
@@ -122,7 +122,7 @@
         <div v-if="showThemePanel" class="theme-popover-panel" :style="themePanelStyle" @click.stop>
             <div class="theme-popover-title">主题外观</div>
             <div class="theme-popover-row">
-                <span class="theme-popover-label">暗色模式</span>
+                <span class="theme-popover-label">模式</span>
                 <div class="theme-switch-container">
                     <el-switch v-model="theme" active-value="dark" inactive-value="light" @change="applyTheme" class="theme-switch">
                         <template slot="activeText"><i class="el-icon-moon"></i></template>
