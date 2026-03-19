@@ -80,6 +80,11 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
+        asyncUploadIfNeeded(part);
+        }
+
+        @Override
+        public boolean asyncUploadIfNeeded(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
                 .add("os", OS)
@@ -90,10 +95,10 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
         if (room == null || room.getUploadUserId() == null) {
             this.upload(part);
-            return;
+            return true;
         }
         RecordHistoryPart finalPart = part;
-        uploadUserSerialScheduler.submit(
+        boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
                 room.getUploadUserId(),
                 room.getRoomId(),
                 finalPart.getHistoryId(),
@@ -101,10 +106,27 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                 OS,
                 () -> this.upload(finalPart)
         );
+        if (!enqueued) {
+            log.debug("[BLR] {}", LogKvs.event("Upload.Part.AlreadyQueued")
+                .add("os", OS)
+                .add("partId", finalPart.getId())
+                .add("historyId", finalPart.getHistoryId())
+                .add("roomId", finalPart.getRoomId()));
+        }
+        return enqueued;
     }
 
     @Override
     public void upload(RecordHistoryPart part) {
+        part = partRepository.findById(part.getId()).orElse(part);
+        if (part.isUpload()) {
+            log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
+                    .add("os", OS)
+                    .add("partId", part.getId())
+                    .add("historyId", part.getHistoryId())
+                    .add("roomId", part.getRoomId()));
+            return;
+        }
         synchronized (TaskUtil.partUploadTask) {
             Thread thread = TaskUtil.partUploadTask.get(part.getId());
             if (thread != null && thread != Thread.currentThread()) {

@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -21,6 +22,7 @@ public class UploadUserSerialScheduler {
     private final Executor asyncExecutor;
     private final ConcurrentHashMap<Long, CompletableFuture<Void>> tails = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, AtomicInteger> pendingCounts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, AtomicInteger> pendingPartCounts = new ConcurrentHashMap<>();
     private final ScheduledExecutorService rejectFallbackScheduler =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "upload-serial-requeue");
@@ -35,19 +37,64 @@ public class UploadUserSerialScheduler {
     }
 
     public void submit(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task) {
-        submitInternal(uploadUserId, roomId, historyId, partId, os, task, 0, true);
+        submitInternal(uploadUserId, roomId, historyId, partId, os, task, 0, true, false);
     }
 
-    private void submitInternal(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task, int requeueAttempt, boolean countAsNew) {
+    public boolean submitIfPartNotPending(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task) {
+        return submitInternal(uploadUserId, roomId, historyId, partId, os, task, 0, true, true);
+    }
+
+    public boolean hasPendingPart(Long partId) {
+        if (partId == null) {
+            return false;
+        }
+        AtomicInteger counter = pendingPartCounts.get(partId);
+        return counter != null && counter.get() > 0;
+    }
+
+    private boolean submitInternal(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task, int requeueAttempt, boolean countAsNew, boolean dedupeByPart) {
         if (uploadUserId == null) {
             try {
                 CompletableFuture.runAsync(task, asyncExecutor);
             } catch (RejectedExecutionException rejected) {
-                scheduleRequeue(uploadUserId, roomId, historyId, partId, os, task, requeueAttempt, "DIRECT_REJECTED", rejected);
+                scheduleRequeue(uploadUserId, roomId, historyId, partId, os, task, requeueAttempt, "DIRECT_REJECTED", rejected, dedupeByPart);
             }
-            return;
+            return true;
         }
         AtomicInteger counter = pendingCounts.computeIfAbsent(uploadUserId, k -> new AtomicInteger(0));
+        int pendingPartQueueDepth = 0;
+        if (partId != null && countAsNew) {
+            if (dedupeByPart) {
+                AtomicBoolean duplicated = new AtomicBoolean(false);
+                AtomicInteger partCounter = pendingPartCounts.compute(partId, (id, existing) -> {
+                    if (existing == null) {
+                        return new AtomicInteger(1);
+                    }
+                    int current = existing.get();
+                    if (current > 0) {
+                        duplicated.set(true);
+                        return existing;
+                    }
+                    existing.incrementAndGet();
+                    return existing;
+                });
+                if (duplicated.get()) {
+                    int depth = partCounter == null ? 1 : Math.max(1, partCounter.get());
+                    log.debug("[BLR] {}", LogKvs.event("Upload.SerialScheduler.DuplicatePartSkipped")
+                            .add("os", os)
+                            .add("uploadUserId", uploadUserId)
+                            .add("roomId", roomId)
+                            .add("historyId", historyId)
+                            .add("partId", partId)
+                            .add("pendingPartQueueDepth", depth));
+                    return false;
+                }
+                pendingPartQueueDepth = partCounter == null ? 1 : Math.max(1, partCounter.get());
+            } else {
+                AtomicInteger partCounter = pendingPartCounts.computeIfAbsent(partId, k -> new AtomicInteger(0));
+                pendingPartQueueDepth = partCounter.incrementAndGet();
+            }
+        }
         int queueDepth = countAsNew ? counter.incrementAndGet() : Math.max(counter.get(), 1);
         log.info("[BLR] {}", LogKvs.event("Upload.SerialScheduler.Enqueued")
                 .add("os", os)
@@ -56,6 +103,7 @@ public class UploadUserSerialScheduler {
                 .add("historyId", historyId)
                 .add("partId", partId)
                 .add("queueDepth", queueDepth)
+                .add("pendingPartQueueDepth", pendingPartQueueDepth)
                 .add("requeueAttempt", requeueAttempt));
 
         CompletableFuture<Void> next = tails.compute(uploadUserId, (uid, tail) -> {
@@ -85,7 +133,7 @@ public class UploadUserSerialScheduler {
         next.whenComplete((ok, ex) -> {
             if (isRejectedException(ex)) {
                 if (requeueAttempt < MAX_REQUEUE_ATTEMPTS) {
-                    scheduleRequeue(uploadUserId, roomId, historyId, partId, os, task, requeueAttempt, "ASYNC_REJECTED", ex);
+                    scheduleRequeue(uploadUserId, roomId, historyId, partId, os, task, requeueAttempt, "ASYNC_REJECTED", ex, dedupeByPart);
                     return;
                 }
                 log.error("[BLR] {}", LogKvs.event("Upload.SerialScheduler.RequeueGiveUp")
@@ -105,6 +153,15 @@ public class UploadUserSerialScheduler {
                 left = c.decrementAndGet();
                 if (left <= 0) {
                     pendingCounts.remove(uploadUserId, c);
+                }
+            }
+            if (partId != null) {
+                AtomicInteger pc = pendingPartCounts.get(partId);
+                if (pc != null) {
+                    int partLeft = pc.decrementAndGet();
+                    if (partLeft <= 0) {
+                        pendingPartCounts.remove(partId, pc);
+                    }
                 }
             }
             if (ex == null) {
@@ -127,9 +184,10 @@ public class UploadUserSerialScheduler {
                         .add("ex", ex.getClass().getSimpleName()), ex);
             }
         });
+        return true;
     }
 
-    private void scheduleRequeue(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task, int requeueAttempt, String rejectStage, Throwable ex) {
+    private void scheduleRequeue(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task, int requeueAttempt, String rejectStage, Throwable ex, boolean dedupeByPart) {
         int nextAttempt = requeueAttempt + 1;
         log.warn("[BLR] {}", LogKvs.event("Upload.SerialScheduler.RequeueOnRejected")
                 .add("os", os)
@@ -143,7 +201,7 @@ public class UploadUserSerialScheduler {
                 .addIfNotBlank("err", ex != null ? ex.getMessage() : null)
                 .add("ex", ex != null ? ex.getClass().getSimpleName() : "unknown"), ex);
         rejectFallbackScheduler.schedule(
-                () -> submitInternal(uploadUserId, roomId, historyId, partId, os, task, nextAttempt, false),
+            () -> submitInternal(uploadUserId, roomId, historyId, partId, os, task, nextAttempt, false, dedupeByPart),
                 REQUEUE_DELAY_MS,
                 TimeUnit.MILLISECONDS
         );
