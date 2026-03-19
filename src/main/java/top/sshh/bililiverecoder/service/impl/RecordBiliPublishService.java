@@ -1229,13 +1229,31 @@ public class RecordBiliPublishService {
                 }
         );
         try {
+            long timeoutMinutes = 5;
+            long startTime = System.currentTimeMillis();
+            long timeoutMs = timeoutMinutes * 60 * 1000;
+            
             while (!done.await(1, TimeUnit.SECONDS)) {
                 if (shutdownState.isShuttingDown()) {
                     throw new RuntimeException("UPLOAD_INTERRUPTED_BY_SHUTDOWN");
                 }
+                
+                long elapsedMs = System.currentTimeMillis() - startTime;
+                if (elapsedMs > timeoutMs) {
+                    log.error("[BLR] {}", LogKvs.event("Publish.PartUpload.Timeout")
+                            .add("historyId", part.getHistoryId())
+                            .add("partId", part.getId())
+                            .add("roomId", part.getRoomId())
+                            .add("timeoutMinutes", timeoutMinutes)
+                            .add("elapsedMs", elapsedMs));
+                    throw new RuntimeException("UPLOAD_WAIT_TIMEOUT: 分P上传超时，超过" + timeoutMinutes + "分钟未完成");
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn("[BLR] {}", LogKvs.event("Publish.PartUpload.Interrupted")
+                    .add("historyId", part.getHistoryId())
+                    .add("partId", part.getId()), e);
             throw new RuntimeException("UPLOAD_INTERRUPTED", e);
         }
         RuntimeException ex = runtimeRef.get();
