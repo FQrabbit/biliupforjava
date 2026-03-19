@@ -100,7 +100,7 @@
                     <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
                 </div>
                 <div class="theme-popover-wrap">
-                    <div class="theme-toggle" id="themeToggleBtn" @click.stop="toggleThemePanel" title="主题设置">
+                    <div class="theme-toggle" id="themeToggleBtn" :class="{ 'is-open': showThemePanel }" @click.stop="toggleThemePanel" title="主题设置">
                         <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
                     </div>
                 </div>
@@ -122,11 +122,13 @@
         <div v-if="showThemePanel" class="theme-popover-panel" :style="themePanelStyle" @click.stop>
             <div class="theme-popover-title">主题外观</div>
             <div class="theme-popover-row">
-                <span class="theme-popover-label">模式</span>
-                <el-radio-group v-model="theme" size="mini" @change="applyTheme">
-                    <el-radio-button label="light">浅色</el-radio-button>
-                    <el-radio-button label="dark">深色</el-radio-button>
-                </el-radio-group>
+                <span class="theme-popover-label">暗色模式</span>
+                <div class="theme-switch-container">
+                    <el-switch v-model="theme" active-value="dark" inactive-value="light" @change="applyTheme" class="theme-switch">
+                        <template slot="activeText"><i class="el-icon-moon"></i></template>
+                        <template slot="inactiveText"><i class="el-icon-sunny"></i></template>
+                    </el-switch>
+                </div>
             </div>
             <div class="theme-popover-row">
                 <span class="theme-popover-label">配色</span>
