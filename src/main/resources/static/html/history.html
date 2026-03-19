@@ -589,7 +589,25 @@
                     </div>
                 </div>
                 <div class="status-connector" :class="getAuditStatusClass(currentDetail)"></div>
-                <div class="status-item-modern" :class="getAuditStatusClass(currentDetail)">
+                <el-tooltip
+                        v-if="canShowAuditRejectInfo"
+                        effect="dark"
+                        placement="top"
+                        :content="auditRejectSummaryText">
+                    <div class="status-item-modern"
+                         :class="[getAuditStatusClass(currentDetail), {'audit-clickable': canShowAuditRejectInfo, 'audit-breathing': shouldHighlightAuditReject}]"
+                         @click="openAuditRejectDetail">
+                        <div class="status-icon"><i class="el-icon-s-check"></i></div>
+                        <div class="status-info">
+                            <div class="status-label">审核状态</div>
+                            <div class="status-value">
+                                {{ getAuditStatusText(currentDetail) }}
+                                <span class="status-badge-mini" v-if="canShowAuditRejectInfo">查看详情</span>
+                            </div>
+                        </div>
+                    </div>
+                </el-tooltip>
+                <div v-else class="status-item-modern" :class="getAuditStatusClass(currentDetail)">
                     <div class="status-icon"><i class="el-icon-s-check"></i></div>
                     <div class="status-info">
                         <div class="status-label">审核状态</div>
@@ -1106,6 +1124,10 @@
                         percent: percent,
                         issueCode: issueCode,
                         issueMessage: issueMessage,
+                        reviewFailCode: (p.reviewFailCode !== undefined && p.reviewFailCode !== null) ? p.reviewFailCode : null,
+                        reviewXcodeState: (p.reviewXcodeState !== undefined && p.reviewXcodeState !== null) ? p.reviewXcodeState : null,
+                        reviewFailDesc: p.reviewFailDesc || null,
+                        reviewReasonSource: p.reviewReasonSource || null,
                         actions: actions,
                         actionable: actionable,
                         blocking: blocking,
@@ -1148,6 +1170,55 @@
                 // 按分P排序
                 parts.sort((a, b) => a.page - b.page);
                 return parts;
+            },
+            isAuditRejected: function() {
+                if (!this.currentDetail || !this.currentDetail.publish) return false;
+                return Number(this.currentDetail.code) === -2;
+            },
+            auditRejectDetails: function() {
+                if (!this.currentDetailParts || this.currentDetailParts.length === 0) return [];
+                const list = this.currentDetailParts
+                    .map((p, idx) => {
+                        const page = (p.page && p.page > 0) ? p.page : (idx + 1);
+                        const reviewFailDesc = p.reviewFailDesc || '';
+                        const issueMessage = p.issueMessage || '';
+                        const reviewFailCode = (p.reviewFailCode !== undefined && p.reviewFailCode !== null) ? Number(p.reviewFailCode) : null;
+                        const reviewXcodeState = (p.reviewXcodeState !== undefined && p.reviewXcodeState !== null) ? Number(p.reviewXcodeState) : null;
+                        const hasReviewFailSignal = ((reviewFailCode !== null && reviewFailCode !== 0) || (reviewXcodeState !== null && reviewXcodeState !== 0));
+                        let detail = '';
+                        if (reviewFailDesc && hasReviewFailSignal) {
+                            detail = reviewFailDesc;
+                        } else if (issueMessage && issueMessage.indexOf('B站审核提示') !== -1) {
+                            detail = issueMessage.replace(/^B站审核提示\(P\d+\):\s*/g, '').replace(/^B站审核提示:\s*/g, '');
+                        }
+                        const hasDetail = !!(detail && String(detail).trim());
+                        return {
+                            page: page,
+                            title: p.title || ('P' + page),
+                            detail: detail,
+                            hasDetail: hasDetail,
+                            reviewFailCode: (p.reviewFailCode !== undefined && p.reviewFailCode !== null) ? p.reviewFailCode : null,
+                            reviewXcodeState: (p.reviewXcodeState !== undefined && p.reviewXcodeState !== null) ? p.reviewXcodeState : null,
+                            reviewReasonSource: p.reviewReasonSource || null
+                        };
+                    })
+                    .filter(item => item.hasDetail)
+                    .sort((a, b) => a.page - b.page);
+                return list;
+            },
+            canShowAuditRejectInfo: function() {
+                return this.isAuditRejected && this.auditRejectDetails.length > 0;
+            },
+            shouldHighlightAuditReject: function() {
+                return this.canShowAuditRejectInfo;
+            },
+            auditRejectSummaryText: function() {
+                if (!this.canShowAuditRejectInfo) return '';
+                const top = this.auditRejectDetails.slice(0, 2).map(item => 'P' + item.page + ' ' + item.detail).join('；');
+                if (this.auditRejectDetails.length > 2) {
+                    return top + '；共 ' + this.auditRejectDetails.length + ' 个分P存在审核提示，点击查看详情';
+                }
+                return top + '；点击查看详情';
             },
             isWaitingForUpload: function() {
                 // 如果没有详情或已完成，则不显示
@@ -1598,6 +1669,44 @@
                 if (!item.publish || (item.code !== 0 && item.code !== -50)) return '待发布';
                 if (item.sendReply) return '已完成';
                 return '发送中';
+            },
+            openAuditRejectDetail: function() {
+                if (!this.canShowAuditRejectInfo) return;
+                const esc = function(s) {
+                    return String(s == null ? '' : s)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                };
+                let html = '<div style="max-height:52vh;overflow:auto;line-height:1.7;">';
+                html += '<div style="margin-bottom:8px;color:#909399;font-size:12px;">该稿件审核被退回，以下为分P级提示（仅展示含 failCode/xcodeState 异常信号的条目）：</div>';
+                html += '<ul style="margin:0;padding-left:18px;">';
+                this.auditRejectDetails.forEach(item => {
+                    const codes = [];
+                    if (item.reviewFailCode !== null && item.reviewFailCode !== undefined) {
+                        codes.push('failCode=' + item.reviewFailCode);
+                    }
+                    if (item.reviewXcodeState !== null && item.reviewXcodeState !== undefined) {
+                        codes.push('xcodeState=' + item.reviewXcodeState);
+                    }
+                    html += '<li style="margin:6px 0;">';
+                    html += '<div><strong>P' + esc(item.page) + '</strong> ' + esc(item.title) + '</div>';
+                    html += '<div style="color:#606266;">' + esc(item.detail) + '</div>';
+                    if (codes.length > 0) {
+                        html += '<div style="color:#909399;font-size:12px;">' + esc(codes.join(' / ')) + '</div>';
+                    }
+                    html += '</li>';
+                });
+                html += '</ul>';
+                html += '<div style="margin-top:10px;color:#909399;font-size:12px;">说明：以上内容来源于创作中心分P处理提示（vupre failDesc），用于排障参考，最终审核结论以B站后台为准。</div>';
+                html += '</div>';
+                this.$alert(html, '审核退回详情', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '我知道了',
+                    type: 'warning'
+                });
             },
             getDurationClass: function(seconds) {
                 const sec = Number(seconds) || 0;

@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
+import top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
@@ -19,6 +20,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
@@ -76,6 +78,41 @@ public class PartController {
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(id);
         Optional<RecordHistory> histOpt = historyRepository.findById(id);
         boolean historyPublished = histOpt.isPresent() && histOpt.get().isPublish();
+        boolean historyRejected = histOpt.isPresent() && histOpt.get().isPublish() && histOpt.get().getCode() == -2;
+        Map<Integer, BiliVideoPartInfoResponse.Video> reviewByPage = new HashMap<>();
+        Map<String, BiliVideoPartInfoResponse.Video> reviewByTitle = new HashMap<>();
+        if (historyPublished && histOpt.isPresent()) {
+            RecordHistory history = histOpt.get();
+            if (!isBlank(history.getBvId())) {
+                try {
+                    RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+                    if (room != null && room.getUploadUserId() != null) {
+                        Optional<BiliBiliUser> userOpt = userRepository.findById(room.getUploadUserId());
+                        if (userOpt.isPresent() && userOpt.get().isLogin()) {
+                            BiliVideoPartInfoResponse partInfo = BiliApi.getVideoPartInfo(userOpt.get(), history.getBvId());
+                            if (partInfo != null && partInfo.getCode() == 0 && partInfo.getData() != null && partInfo.getData().getVideos() != null) {
+                                for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+                                    if (video.getPage() > 0) {
+                                        reviewByPage.put(video.getPage(), video);
+                                    }
+                                    if (!isBlank(video.getTitle())) {
+                                        reviewByTitle.put(video.getTitle(), video);
+                                    }
+                                    if (!isBlank(video.getPart())) {
+                                        reviewByTitle.put(video.getPart(), video);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("[BLR] {}", LogKvs.event("Part.List2.ReviewInfo.FetchFailed")
+                            .add("historyId", id)
+                            .add("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()));
+                }
+            }
+        }
         List<Map<String, Object>> items = new ArrayList<>();
         int blocking = 0;
         long nowMs = System.currentTimeMillis();
@@ -105,6 +142,28 @@ public class PartController {
             boolean actionable = false;
             boolean blockingIssue = false;
             List<String> actions = new ArrayList<>();
+
+            BiliVideoPartInfoResponse.Video reviewVideo = null;
+            if (!reviewByPage.isEmpty() || !reviewByTitle.isEmpty()) {
+                if (p.getPage() > 0) {
+                    reviewVideo = reviewByPage.get(p.getPage());
+                }
+                if (reviewVideo == null && !isBlank(p.getTitle())) {
+                    reviewVideo = reviewByTitle.get(p.getTitle());
+                }
+            }
+
+            if (reviewVideo != null) {
+                m.put("reviewFailCode", reviewVideo.getFailCode());
+                m.put("reviewXcodeState", reviewVideo.getXcodeState());
+                m.put("reviewFailDesc", reviewVideo.getFailDesc());
+                m.put("reviewReasonSource", "vupre_fail_desc");
+            } else {
+                m.put("reviewFailCode", null);
+                m.put("reviewXcodeState", null);
+                m.put("reviewFailDesc", null);
+                m.put("reviewReasonSource", null);
+            }
 
             if (!isBlank(p.getDeleteFailType()) || p.getUploadRetryCount() >= 9999) {
                 issueCode = isBlank(p.getDeleteFailType()) ? "GIVE_UP" : p.getDeleteFailType();
@@ -136,6 +195,18 @@ public class PartController {
                     blockingIssue = true;
                     actions.add("BIND_FILE");
                     actions.add("MARK_FINISHED");
+                }
+            }
+
+            boolean hasReviewFailSignal = reviewVideo != null
+                    && (reviewVideo.getFailCode() != 0 || reviewVideo.getXcodeState() != 0)
+                    && !isBlank(reviewVideo.getFailDesc());
+            if (historyRejected && isBlank(issueMessage) && hasReviewFailSignal) {
+                issueCode = isBlank(issueCode) ? "BILI_REVIEW_FAIL" : issueCode;
+                if (reviewVideo.getPage() > 0) {
+                    issueMessage = "B站审核提示(P" + reviewVideo.getPage() + "): " + reviewVideo.getFailDesc();
+                } else {
+                    issueMessage = "B站审核提示: " + reviewVideo.getFailDesc();
                 }
             }
 
