@@ -63,32 +63,37 @@
             <nav class="header-nav" ref="headerNav">
                 <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
                 <div class="nav-item" ref="navRoom"
-                     :class="{ 'is-active': activeName === 'room' }"
+                     :class="{ 'is-active': activeName === 'room', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '直播间'"
                      @click="switchTab('room')">
                     <i class="el-icon-video-camera"></i>
                     <span>直播间</span>
                 </div>
                 <div class="nav-item" ref="navUser"
-                     :class="{ 'is-active': activeName === 'user' }"
+                     :class="{ 'is-active': activeName === 'user', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '用户'"
                      @click="switchTab('user')">
                     <i class="el-icon-user"></i>
                     <span>用户</span>
                 </div>
                 <div class="nav-item" ref="navHistory"
-                     :class="{ 'is-active': activeName === 'history' }"
+                     :class="{ 'is-active': activeName === 'history', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '录制历史'"
                      @click="switchTab('history')">
                     <i class="el-icon-time"></i>
                     <span>录制历史</span>
                 </div>
                 <div class="nav-item" ref="navLog"
-                     :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts }"
+                     :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts, 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '日志'"
                      @click="switchTab('log')">
                     <i class="el-icon-monitor"></i>
                     <span>日志</span>
                     <span v-if="hasAlerts" class="alert-badge"></span>
                 </div>
                 <div class="nav-item" ref="navHome"
-                     :class="{ 'is-active': activeName === 'home' }"
+                     :class="{ 'is-active': activeName === 'home', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '更新日志'"
                      @click="switchTab('home')">
                     <i class="el-icon-document"></i>
                     <span>更新日志</span>
@@ -874,8 +879,13 @@
             scrollBindRetryTimer: null,
             scrollBindRetryCount: 0,
             scrollStateTimer: null,
+            isScrollingToTop: false,  // 标记正在回顶的状态，此期间禁用冷却时间
+            scrollToTopTimer: null,   // 回顶动画完成后清除标志
             // 已组件化的页面列表（不走 iframe）
-            componentPages: ['user', 'log']
+            componentPages: ['user', 'log'],
+            // iframe 子页面批量操作状态
+            iframeOperating: false,
+            iframeOperatingMessage: ''
         },
         computed: {
             currentModuleMeta: function() {
@@ -926,6 +936,19 @@
             });
             window.addEventListener('resize', function() {
                 self.updateNavIndicator();
+            });
+            
+            // 监听来自 iframe 的消息（批量操作状态）
+            window.addEventListener('message', function(event) {
+                // 只接受同源消息
+                if (event.origin !== window.location.origin) {
+                    return;
+                }
+                
+                if (event.data && event.data.type === 'batchOperationStatus') {
+                    self.iframeOperating = event.data.operating || false;
+                    self.iframeOperatingMessage = event.data.message || '批量操作';
+                }
             });
         },
         watch: {
@@ -1005,7 +1028,34 @@
 
                 this.scrollStateTimer = setInterval(function() {
                     var top = self.getCurrentScrollTop();
-                    self.showBackToTop = self.activeName !== 'log' && top > 6;
+                    // 当滚动位置接近顶部时，强制恢复导航栏显示
+                    if (top <= 4) {
+                        self.headerCompact = false;
+                        self.showBackToTop = false;
+                        self.upScrollDistance = 0;
+                        self.downScrollDistance = 0;
+                        self.lastHeaderToggleAt = 0;
+                    } else {
+                        // 正常情况下，根据滚动距离显示回顶按钮
+                        self.showBackToTop = top > 6;
+                        
+                        // 额外补充判断：如果用户已实际滚动到120px以下但导航栏还是显示，主动隐藏
+                        // 这是对scroll事件处理的补充，防止偶发状态不同步
+                        if (top > 120 && !self.headerCompact && !self.isScrollingToTop) {
+                            self.headerCompact = true;
+                            self.downScrollDistance = 0;
+                            self.upScrollDistance = 0;
+                            self.lastHeaderToggleAt = Date.now();
+                        }
+                        
+                        // 反向补充判断：如果用户滚动回较近顶部（60px以内）但导航栏还是隐藏，恢复显示
+                        if (top <= 60 && self.headerCompact && !self.isScrollingToTop) {
+                            self.headerCompact = false;
+                            self.upScrollDistance = 0;
+                            self.downScrollDistance = 0;
+                            self.lastHeaderToggleAt = Date.now();
+                        }
+                    }
                 }, 180);
             },
             validateNumber: function(value, field, allowDecimal) {
@@ -1591,7 +1641,8 @@
                     return;
                 }
                 var now = Date.now();
-                var inCooldown = (now - this.lastHeaderToggleAt) < this.headerToggleCooldownMs;
+                // 正在回顶中时禁用冷却时间，确保状态能及时更新
+                var inCooldown = !this.isScrollingToTop && (now - this.lastHeaderToggleAt) < this.headerToggleCooldownMs;
                 if (delta > 0) {
                     this.downScrollDistance = this.downScrollDistance + delta;
                     this.upScrollDistance = 0;
@@ -1613,6 +1664,10 @@
                 this.lastScrollTop = top;
             },
             scrollToTopCurrent: function() {
+                var self = this;
+                // 标记正在回顶，禁用冷却时间
+                this.isScrollingToTop = true;
+                
                 if (this.activeName === 'home') {
                     var homeContainer = this.$el.querySelector('.changelog-container');
                     if (homeContainer && typeof homeContainer.scrollTo === 'function') {
@@ -1641,18 +1696,33 @@
                     }
                 }
 
-                this.headerCompact = false;
-                this.showBackToTop = false;
+                // 立即应用顶部状态而不等待定时器触发
+                this.handleContentScroll(0);
                 this.lastScrollTop = 0;
                 this.upScrollDistance = 0;
                 this.downScrollDistance = 0;
                 this.lastHeaderToggleAt = 0;
                 this.bindScrollObserver();
                 this.startScrollStateMonitor();
+                
+                // 600ms后清除回顶标志，允许冷却时间恢复
+                if (this.scrollToTopTimer) {
+                    clearTimeout(this.scrollToTopTimer);
+                }
+                this.scrollToTopTimer = setTimeout(function() {
+                    self.isScrollingToTop = false;
+                    self.scrollToTopTimer = null;
+                }, 600);
             },
             switchTab: function(tab) {
                 this.showThemePanel = false;
                 if (this.activeName === tab) {
+                    return;
+                }
+
+                // 检查 iframe 中是否正在进行批量操作
+                if (this.iframeOperating) {
+                    this.$message.warning('iframe 中正在进行 ' + (this.iframeOperatingMessage || '批量操作') + '，请稍候完成后再切换标签页');
                     return;
                 }
 

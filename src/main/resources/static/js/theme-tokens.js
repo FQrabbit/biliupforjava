@@ -89,6 +89,17 @@
                 '--privacy-active-shadow-pulse': '0 0 0 1px rgba(91, 108, 255, 0.38), 0 0 24px rgba(91, 108, 255, 0.75), 0 0 36px rgba(65, 184, 255, 0.55)',
                 '--glow-primary': '0 0 20px rgba(91, 108, 255, 0.3)',
                 '--glow-success': '0 0 20px rgba(82, 196, 26, 0.3)',
+                '--batch-progress-float-bg': 'rgba(255, 255, 255, 0.88)',
+                '--batch-progress-float-border': 'rgba(91, 108, 255, 0.22)',
+                '--batch-progress-float-shadow': '0 12px 32px rgba(27, 38, 49, 0.15), 0 0 0 0.5px rgba(91, 108, 255, 0.18)',
+                '--batch-progress-title-color': '#1f2937',
+                '--batch-progress-meta-color': '#6b7280',
+                '--batch-progress-overlay-start': 'rgba(255, 255, 255, 0.20)',
+                '--batch-progress-overlay-end': 'rgba(255, 255, 255, 0.04)',
+                '--batch-progress-stripe-a': 'rgba(255, 255, 255, 0.25)',
+                '--batch-progress-stripe-b': 'rgba(255, 255, 255, 0.06)',
+                '--batch-progress-gradient-start': '#52c41a',
+                '--batch-progress-gradient-end': '#5b6cff',
                 '--scrollbar-thumb': 'rgba(0, 0, 0, 0.15)',
                 '--scrollbar-thumb-hover': 'rgba(0, 0, 0, 0.25)'
             },
@@ -172,6 +183,17 @@
                 '--privacy-active-shadow-pulse': '0 0 0 1px rgba(123, 143, 255, 0.4), 0 0 26px rgba(123, 143, 255, 0.8), 0 0 40px rgba(72, 192, 255, 0.58)',
                 '--glow-primary': '0 0 25px rgba(123, 143, 255, 0.4)',
                 '--glow-success': '0 0 25px rgba(82, 196, 26, 0.4)',
+                '--batch-progress-float-bg': 'rgba(24, 24, 27, 0.92)',
+                '--batch-progress-float-border': 'rgba(123, 143, 255, 0.35)',
+                '--batch-progress-float-shadow': '0 14px 34px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(123, 143, 255, 0.24)',
+                '--batch-progress-title-color': '#f3f4f6',
+                '--batch-progress-meta-color': '#9ca3af',
+                '--batch-progress-overlay-start': 'rgba(255, 255, 255, 0.16)',
+                '--batch-progress-overlay-end': 'rgba(255, 255, 255, 0.03)',
+                '--batch-progress-stripe-a': 'rgba(255, 255, 255, 0.18)',
+                '--batch-progress-stripe-b': 'rgba(255, 255, 255, 0.05)',
+                '--batch-progress-gradient-start': '#52c41a',
+                '--batch-progress-gradient-end': '#7b8fff',
                 '--scrollbar-thumb': 'rgba(255, 255, 255, 0.15)',
                 '--scrollbar-thumb-hover': 'rgba(255, 255, 255, 0.25)'
             }
@@ -247,7 +269,18 @@
                 '--privacy-active-shadow': '0 0 0 1px rgba(15, 144, 255, 0.26), 0 0 16px rgba(15, 144, 255, 0.56), 0 0 28px rgba(48, 201, 232, 0.34)',
                 '--privacy-active-shadow-hover': '0 0 0 1px rgba(15, 144, 255, 0.3), 0 0 20px rgba(15, 144, 255, 0.66), 0 0 32px rgba(48, 201, 232, 0.45)',
                 '--privacy-active-shadow-pulse': '0 0 0 1px rgba(15, 144, 255, 0.38), 0 0 24px rgba(15, 144, 255, 0.76), 0 0 36px rgba(48, 201, 232, 0.56)',
-                '--glow-primary': '0 0 20px rgba(15, 144, 255, 0.28)'
+                '--glow-primary': '0 0 20px rgba(15, 144, 255, 0.28)',
+                '--batch-progress-float-bg': 'rgba(255, 255, 255, 0.9)',
+                '--batch-progress-float-border': 'rgba(15, 144, 255, 0.24)',
+                '--batch-progress-float-shadow': '0 12px 32px rgba(17, 40, 58, 0.16), 0 0 0 0.5px rgba(15, 144, 255, 0.2)',
+                '--batch-progress-title-color': '#163047',
+                '--batch-progress-meta-color': '#5f7384',
+                '--batch-progress-overlay-start': 'rgba(255, 255, 255, 0.2)',
+                '--batch-progress-overlay-end': 'rgba(255, 255, 255, 0.04)',
+                '--batch-progress-stripe-a': 'rgba(255, 255, 255, 0.24)',
+                '--batch-progress-stripe-b': 'rgba(255, 255, 255, 0.06)',
+                '--batch-progress-gradient-start': '#2fbf71',
+                '--batch-progress-gradient-end': '#0f90ff'
             },
             dark: {
                 '--primary-color': '#58b8ff',
@@ -319,7 +352,18 @@
                 '--privacy-active-shadow': '0 0 0 1px rgba(88, 184, 255, 0.3), 0 0 18px rgba(88, 184, 255, 0.62), 0 0 32px rgba(55, 211, 236, 0.45)',
                 '--privacy-active-shadow-hover': '0 0 0 1px rgba(88, 184, 255, 0.35), 0 0 22px rgba(88, 184, 255, 0.72), 0 0 36px rgba(55, 211, 236, 0.52)',
                 '--privacy-active-shadow-pulse': '0 0 0 1px rgba(88, 184, 255, 0.42), 0 0 26px rgba(88, 184, 255, 0.82), 0 0 40px rgba(55, 211, 236, 0.58)',
-                '--glow-primary': '0 0 24px rgba(88, 184, 255, 0.38)'
+                '--glow-primary': '0 0 24px rgba(88, 184, 255, 0.38)',
+                '--batch-progress-float-bg': 'rgba(12, 20, 30, 0.92)',
+                '--batch-progress-float-border': 'rgba(88, 184, 255, 0.36)',
+                '--batch-progress-float-shadow': '0 14px 34px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(88, 184, 255, 0.24)',
+                '--batch-progress-title-color': '#eaf6ff',
+                '--batch-progress-meta-color': '#9fb4c6',
+                '--batch-progress-overlay-start': 'rgba(255, 255, 255, 0.16)',
+                '--batch-progress-overlay-end': 'rgba(255, 255, 255, 0.03)',
+                '--batch-progress-stripe-a': 'rgba(255, 255, 255, 0.18)',
+                '--batch-progress-stripe-b': 'rgba(255, 255, 255, 0.05)',
+                '--batch-progress-gradient-start': '#4ccc86',
+                '--batch-progress-gradient-end': '#58b8ff'
             }
         }
     };

@@ -95,15 +95,15 @@
     <main class="history-main">
         
         <!-- 分类标签页 -->
-        <div class="category-tabs-container" :class="{ 'is-disabled': isMultiSelectMode }">
+        <div class="category-tabs-container" :class="{ 'is-disabled': isMultiSelectMode || batchVisibilityRunning }">
             <el-tabs v-model="form.viewType" @tab-click="handleViewTypeChange">
-                <el-tab-pane name="working" :disabled="isMultiSelectMode">
+                <el-tab-pane name="working" :disabled="isMultiSelectMode || batchVisibilityRunning">
                     <span slot="label">
                         工作中的稿件
                         <el-badge v-if="workingCount > 0" :value="workingCount" class="item" type="success" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
                     </span>
                 </el-tab-pane>
-                <el-tab-pane name="archived" :disabled="isMultiSelectMode">
+                <el-tab-pane name="archived" :disabled="isMultiSelectMode || batchVisibilityRunning">
                     <span slot="label">
                         已归档的稿件
                         <el-badge v-if="archivedCount > 0" :value="archivedCount" class="item" type="info" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
@@ -495,16 +495,35 @@
         <div class="batch-action-bar" v-if="isMultiSelectMode">
             <el-checkbox v-model="isAllSelected" :indeterminate="isIndeterminate">全选本页</el-checkbox>
             <span class="batch-count">已选 {{ selectedItems.length }} 项</span>
+            <span class="batch-count" style="color:#67c23a;">可切换 {{ selectedVisibilityEligibleCount }} 项</span>
+            <span class="batch-count" v-if="selectedVisibilityIneligibleCount > 0" style="color:#e6a23c;">不可切换 {{ selectedVisibilityIneligibleCount }} 项</span>
             <div class="batch-options">
-                <el-checkbox v-model="batchDeleteOptions.deleteVideo">同时删除视频文件</el-checkbox>
-                <el-checkbox v-model="batchDeleteOptions.deleteDanmaku">同时删除弹幕文件</el-checkbox>
-                <el-checkbox v-model="batchDeleteOptions.deleteCover">同时删除封面图片</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteVideo" :disabled="batchVisibilityRunning">同时删除视频文件</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteDanmaku" :disabled="batchVisibilityRunning">同时删除弹幕文件</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteCover" :disabled="batchVisibilityRunning">同时删除封面图片</el-checkbox>
             </div>
             <div class="batch-actions">
-                <el-button type="danger" size="small" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedItems.length === 0">批量删除</el-button>
-                <el-button size="small" @click="toggleBatchMode">取消</el-button>
+                <el-button type="success" size="small" icon="el-icon-unlock" @click="handleBatchVisibility(0)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning">批量设为公开</el-button>
+                <el-button type="warning" size="small" icon="el-icon-lock" @click="handleBatchVisibility(1)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning">批量设为仅自己可见</el-button>
+                <el-button type="danger" size="small" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedItems.length === 0 || batchVisibilityRunning">批量删除</el-button>
+                <el-button size="small" @click="toggleBatchMode" :disabled="batchVisibilityRunning">取消</el-button>
             </div>
         </div>
+
+        <transition name="fade">
+            <div class="batch-progress-float" v-if="batchVisibilityRunning">
+                <div class="batch-progress-title">批量切换可见性进行中</div>
+                <div class="batch-progress-meta">
+                    <span>目标：{{ batchVisibilityTargetText }}</span>
+                    <span>{{ batchVisibilityDone }}/{{ batchVisibilityTotal }}</span>
+                </div>
+                <el-progress class="batch-progress-bar" :percentage="batchVisibilityPercent" :stroke-width="10" status=""></el-progress>
+                <div class="batch-progress-meta batch-progress-meta-sub">
+                    <span>成功 {{ batchVisibilitySuccess }} / 失败 {{ batchVisibilityFail }}</span>
+                    <span v-if="batchVisibilityCurrentId">当前ID：{{ batchVisibilityCurrentId }}</span>
+                </div>
+            </div>
+        </transition>
 
         <!-- 分页 -->
         <div class="pagination-container">
@@ -1048,6 +1067,14 @@
                 deleteDanmaku: false,
                 deleteCover: false
             },
+            batchVisibilityRunning: false,
+            batchVisibilityTotal: 0,
+            batchVisibilityDone: 0,
+            batchVisibilitySuccess: 0,
+            batchVisibilityFail: 0,
+            batchVisibilityCurrentId: null,
+            batchVisibilityTargetText: '',
+            batchVisibilityIntervalMs: 4000,
             singleDeleteDialogVisible: false,
             singleDeleteId: null,
             singleDeleteOptions: {
@@ -1110,38 +1137,26 @@
             isPublishLockedByCode: function() {
                 return this.form.code !== null && this.form.code !== undefined && this.form.code !== '';
             },
+            selectedVisibilityEligibleCount: function() {
+                if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
+                return this.selectedItems.filter(item => this.canOperateVisibilityForItem(item)).length;
+            },
+            selectedVisibilityIneligibleCount: function() {
+                if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
+                return this.selectedItems.length - this.selectedVisibilityEligibleCount;
+            },
+            batchVisibilityPercent: function() {
+                if (!this.batchVisibilityTotal || this.batchVisibilityTotal <= 0) return 0;
+                var p = Math.floor((this.batchVisibilityDone * 100) / this.batchVisibilityTotal);
+                if (p < 0) return 0;
+                if (p > 100) return 100;
+                return p;
+            },
             canOperateVisibilitySwitch: function() {
-                if (!this.history || !this.history.id) return false;
-                if (!this.history.publish) return false;
-                const code = Number(this.history.code);
-                if (code !== 0 && code !== -50) return false;
-                if (this.history.recording) return false;
-                const pendingNormal = Number(this.history.pendingNormalMsgCount) || 0;
-                const pendingHigh = Number(this.history.pendingHighMsgCount) || 0;
-                // 仅自己可见稿件允许存在普通弹幕待发送，但高级弹幕评论发送中时不允许手动切换
-                if (code === -50) {
-                    if (this.history.roomSendSc === true && Math.max(0, pendingHigh) > 0) return false;
-                    return true;
-                }
-                if (pendingNormal > 0 || pendingHigh > 0) return false;
-                if (this.history.roomSendSc === true && !this.history.sendReply) return false;
-                return true;
+                return this.canOperateVisibilityForItem(this.history);
             },
             visibilityActionDisabledReason: function() {
-                if (!this.history || !this.history.id) return '请先选择有效稿件';
-                if (!this.history.publish) return '稿件未发布，不能切换可见性';
-                const code = Number(this.history.code);
-                if (code !== 0 && code !== -50) return '仅审核通过（公开/仅自己可见）时可切换';
-                if (this.history.recording) return '稿件仍在录制中';
-                const pendingNormal = Number(this.history.pendingNormalMsgCount) || 0;
-                const pendingHigh = Number(this.history.pendingHighMsgCount) || 0;
-                if (code === -50) {
-                    if (this.history.roomSendSc === true && Math.max(0, pendingHigh) > 0) return '系统正在临时切换可见性发送高级弹幕评论，完成后可操作';
-                    return '';
-                }
-                if (pendingNormal > 0 || pendingHigh > 0) return '稿件仍有弹幕待发送，暂不可切换';
-                if (this.history.roomSendSc === true && !this.history.sendReply) return '稿件仍在发送SC/评论，暂不可切换';
-                return '';
+                return this.getVisibilityDisabledReasonForItem(this.history);
             },
             activeFilterCount: function() {
                 let count = 0;
@@ -1353,6 +1368,9 @@
             
             // 页面可见性变化监听，优化进度轮询
             document.addEventListener('visibilitychange', this.handleVisibilityChange);
+            
+            // 监听页面关闭/刷新事件，防止在批量工作进行时意外关闭
+            window.addEventListener('beforeunload', this.handleBeforeUnload);
         },
         methods: {
             // 是否是"预期跳过"类型（不是真正的异常）
@@ -1393,6 +1411,15 @@
                 if (document.hidden) {
                     // 页面不可见时停止进度轮询
                     this.stopProgressPolling();
+                    // 如果正在进行批量切换，提醒用户
+                    if (this.batchVisibilityRunning) {
+                        this.$notify.warning({
+                            title: '工作进行中',
+                            message: '批量切换状态正在进行中，请不要关闭此标签页，切换到其他标签页工作可能会被打断',
+                            duration: 0,
+                            position: 'bottom-right'
+                        });
+                    }
                 } else {
                     // 页面恢复可见时立即刷新一次数据
                     if (!this.isMultiSelectMode) {
@@ -1405,17 +1432,48 @@
                     }
                 }
             },
+            handleBeforeUnload: function(event) {
+                // 如果有批量切换正在进行中，提醒用户
+                if (this.batchVisibilityRunning) {
+                    event.preventDefault();
+                    event.returnValue = '批量切换状态正在进行中，关闭页面可能导致数据不一致。确定要关闭吗？';
+                    return '批量切换状态正在进行中，关闭页面可能导致数据不一致。确定要关闭吗？';
+                }
+            },
             toggleBatchMode: function() {
+                if (this.batchVisibilityRunning) {
+                    this.$message.warning('批量可见性切换进行中，请等待完成后再退出');
+                    return;
+                }
                 this.isMultiSelectMode = !this.isMultiSelectMode;
                 this.selectedItems = [];
                 if (this.isMultiSelectMode) {
                     this.filterExpanded = false;
                     this.stopPolling();
-                    this.$message.info('已进入批量管理模式，点击卡片进行选择');
+                    this.$message.info('已进入批量管理模式，可批量删除或批量切换可见性');
                 } else {
                     this.startPolling();
                     this.initTable(true);
                 }
+            },
+            canOperateVisibilityForItem: function(item) {
+                return !this.getVisibilityDisabledReasonForItem(item);
+            },
+            getVisibilityDisabledReasonForItem: function(item) {
+                if (!item || !item.id) return '请先选择有效稿件';
+                if (!item.publish) return '稿件未发布，不能切换可见性';
+                const code = Number(item.code);
+                if (code !== 0 && code !== -50) return '仅审核通过（公开/仅自己可见）时可切换';
+                if (item.recording) return '稿件仍在录制中';
+                const pendingNormal = Number(item.pendingNormalMsgCount) || 0;
+                const pendingHigh = Number(item.pendingHighMsgCount) || 0;
+                if (code === -50) {
+                    if (item.roomSendSc === true && Math.max(0, pendingHigh) > 0) return '系统正在临时切换可见性发送高级弹幕评论，完成后可操作';
+                    return '';
+                }
+                if (pendingNormal > 0 || pendingHigh > 0) return '稿件仍有弹幕待发送，暂不可切换';
+                if (item.roomSendSc === true && !item.sendReply) return '稿件仍在发送SC/评论，暂不可切换';
+                return '';
             },
             handleCardClick: function(item) {
                 var _this = this;
@@ -1664,6 +1722,162 @@
                         }
                     });
                 }).catch(function() {});
+            },
+            handleBatchVisibility: function(isOnlySelf) {
+                var _this = this;
+                if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return;
+                if (this.batchVisibilityRunning) {
+                    this.$message.warning('批量切换正在进行中，请稍候');
+                    return;
+                }
+
+                var eligibleItems = this.selectedItems.filter(function(item) {
+                    return _this.canOperateVisibilityForItem(item);
+                });
+                var skippedItems = this.selectedItems.filter(function(item) {
+                    return !_this.canOperateVisibilityForItem(item);
+                });
+
+                if (eligibleItems.length === 0) {
+                    this.$message.warning('所选稿件均不满足切换条件');
+                    return;
+                }
+
+                var targetText = isOnlySelf === 1 ? '仅自己可见' : '公开';
+                var msg = '<p>将批量把 <span style="color:#67C23A;font-weight:bold;">' + eligibleItems.length + '</span> 个稿件设置为“' + targetText + '”。</p>';
+                if (skippedItems.length > 0) {
+                    msg += '<p style="margin-top:8px;color:#E6A23C;">其中 ' + skippedItems.length + ' 个稿件不满足切换条件，将自动跳过。</p>';
+                    var topReasons = {};
+                    skippedItems.forEach(function(item) {
+                        var reason = _this.getVisibilityDisabledReasonForItem(item) || '不满足切换条件';
+                        topReasons[reason] = (topReasons[reason] || 0) + 1;
+                    });
+                    var reasonLines = Object.keys(topReasons).slice(0, 3).map(function(reason) {
+                        return '<li>' + reason + '（' + topReasons[reason] + '）</li>';
+                    }).join('');
+                    if (reasonLines) {
+                        msg += '<ul style="margin:6px 0 0 18px;color:#909399;">' + reasonLines + '</ul>';
+                    }
+                }
+
+                this.$confirm(msg, '批量切换可见性确认', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '确定切换',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(async function() {
+                    _this.batchVisibilityRunning = true;
+                    _this.batchVisibilityTotal = eligibleItems.length;
+                    _this.batchVisibilityDone = 0;
+                    _this.batchVisibilitySuccess = 0;
+                    _this.batchVisibilityFail = 0;
+                    _this.batchVisibilityCurrentId = null;
+                    _this.batchVisibilityTargetText = targetText;
+                    
+                    // 通知父页面（index.html）批量操作开始
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'batchOperationStatus',
+                            operating: true,
+                            message: '批量切换可见性'
+                        }, '*');
+                    }
+
+                    var results = [];
+                    try {
+                        for (let i = 0; i < eligibleItems.length; i++) {
+                            const item = eligibleItems[i];
+                            _this.batchVisibilityCurrentId = item.id;
+                            const startedAt = Date.now();
+                            const one = await _this.requestVisibilitySwitch(item.id, isOnlySelf);
+                            results.push(one);
+
+                            _this.batchVisibilityDone += 1;
+                            if (one.ok) {
+                                _this.batchVisibilitySuccess += 1;
+                            } else {
+                                _this.batchVisibilityFail += 1;
+                            }
+
+                            if (i < eligibleItems.length - 1) {
+                                const elapsed = Date.now() - startedAt;
+                                const waitMs = Math.max(0, Number(_this.batchVisibilityIntervalMs || 4000) - elapsed);
+                                if (waitMs > 0) {
+                                    await _this.sleepMs(waitMs);
+                                }
+                            }
+                        }
+                    } finally {
+                        _this.batchVisibilityCurrentId = null;
+                        _this.batchVisibilityRunning = false;
+                        
+                        // 通知父页面（index.html）批量操作结束
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({
+                                type: 'batchOperationStatus',
+                                operating: false,
+                                message: ''
+                            }, '*');
+                        }
+                    }
+
+                    var successCount = results.filter(function(r) { return r.ok; }).length;
+                    var failList = results.filter(function(r) { return !r.ok; });
+                    var failCount = failList.length;
+
+                    if (failCount === 0) {
+                        _this.$message.success('批量切换完成：成功 ' + successCount + ' 项');
+                    } else {
+                        _this.$message.warning('批量切换完成：成功 ' + successCount + ' 项，失败 ' + failCount + ' 项');
+                    }
+
+                    _this.isMultiSelectMode = false;
+                    _this.selectedItems = [];
+                    _this.startPolling();
+                    _this.initTable();
+
+                    if (failCount > 0) {
+                        var details = '<div style="max-height:40vh;overflow:auto;"><div style="margin-bottom:8px;color:#606266;">以下稿件切换失败：</div><ul style="margin:0;padding-left:18px;">';
+                        failList.slice(0, 20).forEach(function(f) {
+                            details += '<li style="margin:4px 0;">ID ' + f.id + '：' + String(f.msg || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</li>';
+                        });
+                        if (failList.length > 20) {
+                            details += '<li style="color:#909399;">... 其余 ' + (failList.length - 20) + ' 项请查看日志</li>';
+                        }
+                        details += '</ul></div>';
+                        _this.$alert(details, '批量切换失败详情', {
+                            dangerouslyUseHTMLString: true,
+                            confirmButtonText: '知道了',
+                            type: 'warning'
+                        });
+                    }
+                }).catch(function() {});
+            },
+            requestVisibilitySwitch: function(id, isOnlySelf) {
+                return new Promise(function(resolve) {
+                    $.ajax({
+                        url: '/history/visibility/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'post',
+                        data: JSON.stringify({ isOnlySelf: isOnlySelf }),
+                        dataType: 'json',
+                        success: function(res) {
+                            resolve({
+                                id: id,
+                                ok: res && res.type === 'success',
+                                msg: (res && res.msg) ? res.msg : '未知结果'
+                            });
+                        },
+                        error: function() {
+                            resolve({ id: id, ok: false, msg: '请求失败' });
+                        }
+                    });
+                });
+            },
+            sleepMs: function(ms) {
+                return new Promise(function(resolve) {
+                    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+                });
             },
             handleViewTypeChange: function() {
                 if (this.isMultiSelectMode) return;
@@ -3252,6 +3466,7 @@
                 window.removeEventListener('resize', this.dialogResizeHandler);
             }
             document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+            window.removeEventListener('beforeunload', this.handleBeforeUnload);
         }
     });
 </script>

@@ -332,6 +332,12 @@
     animation: pulse-alert 1.5s infinite;
 }
 
+.nav-item.is-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .header-subnav {
     min-height: 44px;
     width: 100%;
