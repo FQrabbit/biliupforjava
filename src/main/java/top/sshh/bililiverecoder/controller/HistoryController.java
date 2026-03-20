@@ -10,12 +10,15 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.*;
+import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
@@ -23,7 +26,10 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.impl.HighEnergyCutPublishService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
+import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.TaskUtil;
+import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 
 import java.io.File;
@@ -48,6 +54,8 @@ public class HistoryController {
     @Autowired
     private RecordHistoryPartRepository partRepository;
     @Autowired
+    private BiliUserRepository userRepository;
+    @Autowired
     private RecordBiliPublishService publishService;
     @Autowired
     private LiveMsgRepository msgRepository;
@@ -59,6 +67,8 @@ public class HistoryController {
     private top.sshh.bililiverecoder.job.videoSyncJob videoSyncJob;
     @Autowired
     private SystemConfigService systemConfigService;
+    @Autowired
+    private UploadProgressTracker uploadProgressTracker;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -264,6 +274,158 @@ public class HistoryController {
             result.put("msg", "更新成功");
         }
         return result;
+    }
+
+    @PostMapping("/visibility/{id}")
+    public Map<String, String> updateVisibility(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
+        Map<String, String> result = new HashMap<>();
+        if (id == null) {
+            result.put("type", "warning");
+            result.put("msg", "参数错误：缺少稿件ID");
+            return result;
+        }
+        int isOnlySelf;
+        try {
+            Object raw = body == null ? null : body.get("isOnlySelf");
+            isOnlySelf = Integer.parseInt(String.valueOf(raw));
+        } catch (Exception e) {
+            result.put("type", "warning");
+            result.put("msg", "参数错误：isOnlySelf 只能为 0(公开) 或 1(仅自己可见)");
+            return result;
+        }
+        if (isOnlySelf != 0 && isOnlySelf != 1) {
+            result.put("type", "warning");
+            result.put("msg", "参数错误：isOnlySelf 只能为 0(公开) 或 1(仅自己可见)");
+            return result;
+        }
+
+        Optional<RecordHistory> historyOptional = historyRepository.findById(id);
+        if (historyOptional.isEmpty()) {
+            result.put("type", "warning");
+            result.put("msg", "稿件不存在");
+            return result;
+        }
+        RecordHistory history = historyOptional.get();
+
+        // 仅允许审核通过状态（公开/仅自己可见）切换可见性
+        if (!history.isPublish() || (history.getCode() != 0 && history.getCode() != -50)) {
+            result.put("type", "warning");
+            result.put("msg", "仅审核通过的稿件（公开/仅自己可见）可切换可见性");
+            return result;
+        }
+
+        // 仍在录制/上传/投稿流程中，不允许切换
+        if (history.isRecording() || TaskUtil.publishTask.containsKey(history.getId())) {
+            result.put("type", "warning");
+            result.put("msg", "稿件仍在处理中，暂不允许切换可见性");
+            return result;
+        }
+
+        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        for (RecordHistoryPart part : parts) {
+            if (part == null) {
+                continue;
+            }
+            if (part.isRecording() || part.getEndTime() == null || TaskUtil.partUploadTask.containsKey(part.getId())) {
+                result.put("type", "warning");
+                result.put("msg", "分P仍在录制或上传处理中，暂不允许切换可见性");
+                return result;
+            }
+        }
+        long activeUploadCount = uploadProgressTracker.listByHistoryId(history.getId()).stream()
+                .filter(UploadProgressTracker.Progress::isActive)
+                .count();
+        if (activeUploadCount > 0) {
+            result.put("type", "warning");
+            result.put("msg", "检测到上传仍在进行中，暂不允许切换可见性");
+            return result;
+        }
+
+        // 发送弹幕任务尚未完成，不允许切换
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        boolean sendDmEnabled = room != null && Boolean.TRUE.equals(room.getSendDm());
+        boolean sendScEnabled = room != null && Boolean.TRUE.equals(room.getSendSc());
+        int pendingNormal = 0;
+        int pendingHigh = 0;
+        if (StringUtils.isNotBlank(history.getBvId())) {
+            pendingNormal = sendDmEnabled ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : 0;
+            pendingHigh = sendScEnabled ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : 0;
+        }
+        if (history.getCode() == -50) {
+            // 私有稿件允许普通弹幕队列存在，但若高级弹幕评论仍在发送，不允许手动切换以避免和自动流程冲突
+            if (sendScEnabled && pendingHigh > 0) {
+                result.put("type", "warning");
+                result.put("msg", "稿件仍在发送高级弹幕/评论中，暂不允许切换可见性");
+                return result;
+            }
+        } else {
+            if ((sendScEnabled && !history.isSendReply()) || pendingNormal > 0 || pendingHigh > 0) {
+                result.put("type", "warning");
+                result.put("msg", "稿件仍在发送弹幕/评论中，暂不允许切换可见性");
+                return result;
+            }
+        }
+
+        // 需要可用的投稿账号和 avId
+        if (room == null || room.getUploadUserId() == null) {
+            result.put("type", "warning");
+            result.put("msg", "未配置投稿账号，无法切换可见性");
+            return result;
+        }
+        Optional<BiliBiliUser> userOptional = userRepository.findById(room.getUploadUserId());
+        if (userOptional.isEmpty() || !userOptional.get().isLogin()) {
+            result.put("type", "warning");
+            result.put("msg", "投稿账号未登录或不可用，无法切换可见性");
+            return result;
+        }
+        if (StringUtils.isBlank(history.getAvId())) {
+            result.put("type", "warning");
+            result.put("msg", "稿件缺少 avId，无法切换可见性");
+            return result;
+        }
+
+        try {
+            long aid = Long.parseLong(history.getAvId());
+            String apiRes = BiliApi.updateVideoVisibility(userOptional.get(), aid, isOnlySelf);
+            JSONObject obj = JSON.parseObject(apiRes);
+            int code = obj == null ? -1 : obj.getIntValue("code");
+            String msg = obj == null ? "返回为空" : obj.getString("message");
+            if (code != 0) {
+                result.put("type", "warning");
+                result.put("msg", "切换失败：" + (StringUtils.isNotBlank(msg) ? msg : "B站返回错误(" + code + ")"));
+                log.warn("[BLR] {}", LogKvs.event("History.Visibility.Switch.Failed")
+                        .add("historyId", history.getId())
+                        .add("roomId", history.getRoomId())
+                        .add("aid", history.getAvId())
+                        .add("target", isOnlySelf)
+                        .add("code", code)
+                        .add("msg", msg));
+                return result;
+            }
+
+            history.setCode(isOnlySelf == 1 ? -50 : 0);
+            history.setUpdateTime(LocalDateTime.now());
+            historyRepository.save(history);
+
+            result.put("type", "success");
+            result.put("msg", isOnlySelf == 1 ? "已切换为仅自己可见" : "已切换为公开");
+            log.info("[BLR] {}", LogKvs.event("History.Visibility.Switch.Success")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .add("aid", history.getAvId())
+                    .add("target", isOnlySelf));
+            return result;
+        } catch (Exception e) {
+            result.put("type", "warning");
+            result.put("msg", "切换可见性失败：" + e.getClass().getSimpleName());
+            log.error("[BLR] {}", LogKvs.event("History.Visibility.Switch.Error")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .add("aid", history.getAvId())
+                    .add("target", isOnlySelf)
+                    .add("err", e.getMessage()), e);
+            return result;
+        }
     }
 
     @GetMapping("/delete/{id}")

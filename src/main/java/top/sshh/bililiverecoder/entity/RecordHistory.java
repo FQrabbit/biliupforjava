@@ -191,7 +191,9 @@ public class RecordHistory {
 
             boolean dmEnabled = Boolean.TRUE.equals(roomSendDm);
             boolean scEnabled = Boolean.TRUE.equals(roomSendSc);
-            int pending = Math.max(0, pendingNormalMsgCount) + Math.max(0, pendingHighMsgCount);
+            int pendingNormal = Math.max(0, pendingNormalMsgCount);
+            int pendingHigh = Math.max(0, pendingHighMsgCount);
+            int pending = pendingNormal + pendingHigh;
 
             // 如果弹幕/SC 全部关闭，就不要卡在“发送中”
             if (!dmEnabled && !scEnabled) {
@@ -199,7 +201,7 @@ public class RecordHistory {
             }
 
             // 先看评论（SC列表）是否需要发送
-            if (scEnabled && !sendReply) {
+            if (scEnabled && !sendReply && pendingHigh > 0) {
                 return "发送弹幕中";
             }
 
@@ -220,8 +222,9 @@ public class RecordHistory {
             case -20 -> "转码失败";
             case -30 -> "已提交";
             case -40 -> "定时发布";
+            case 62002 -> "稿件不可见";
             case -100 -> "已删除";
-            default -> "投稿中(Code:" + code + ")";
+            default -> "可能投稿中(Code:" + code + ")";
         };
     }
 }

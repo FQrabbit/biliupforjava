@@ -456,6 +456,7 @@
                             <el-tag size="mini" type="warning" v-else-if="scope.row.code == -9">转码中</el-tag>
                             <el-tag size="mini" type="warning" v-else-if="scope.row.code == -30">已提交</el-tag>
                             <el-tag size="mini" type="warning" v-else-if="scope.row.code == -40">定时发布</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == 62002">稿件不可见(62002)</el-tag>
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == -100">已删除</el-tag>
                             <el-tag size="mini" type="danger" v-else>未通过</el-tag>
                         </template>
@@ -845,6 +846,37 @@
                     <el-option label="否" :value="false"></el-option>
                 </el-select>
             </el-form-item>
+            <el-form-item label="稿件可见性">
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                    <el-tooltip effect="dark" :content="visibilityActionDisabledReason || '切换为公开可见'" placement="top">
+                        <span>
+                            <el-button
+                                size="small"
+                                type="success"
+                                plain
+                                :disabled="!canOperateVisibilitySwitch"
+                                @click="setHistoryVisibility(0)">
+                                设为公开
+                            </el-button>
+                        </span>
+                    </el-tooltip>
+                    <el-tooltip effect="dark" :content="visibilityActionDisabledReason || '切换为仅自己可见'" placement="top">
+                        <span>
+                            <el-button
+                                size="small"
+                                type="warning"
+                                plain
+                                :disabled="!canOperateVisibilitySwitch"
+                                @click="setHistoryVisibility(1)">
+                                设为仅自己可见
+                            </el-button>
+                        </span>
+                    </el-tooltip>
+                </div>
+                <div style="margin-top:6px; font-size:12px; color:#909399; line-height:1.5;">
+                    仅审核通过（公开/仅自己可见）且稿件全部流程完成时可操作。
+                </div>
+            </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
             <el-button class="modern-btn" @click="editDialogFormVisible = false">取 消</el-button>
@@ -1078,6 +1110,39 @@
             isPublishLockedByCode: function() {
                 return this.form.code !== null && this.form.code !== undefined && this.form.code !== '';
             },
+            canOperateVisibilitySwitch: function() {
+                if (!this.history || !this.history.id) return false;
+                if (!this.history.publish) return false;
+                const code = Number(this.history.code);
+                if (code !== 0 && code !== -50) return false;
+                if (this.history.recording) return false;
+                const pendingNormal = Number(this.history.pendingNormalMsgCount) || 0;
+                const pendingHigh = Number(this.history.pendingHighMsgCount) || 0;
+                // 仅自己可见稿件允许存在普通弹幕待发送，但高级弹幕评论发送中时不允许手动切换
+                if (code === -50) {
+                    if (this.history.roomSendSc === true && Math.max(0, pendingHigh) > 0) return false;
+                    return true;
+                }
+                if (pendingNormal > 0 || pendingHigh > 0) return false;
+                if (this.history.roomSendSc === true && !this.history.sendReply) return false;
+                return true;
+            },
+            visibilityActionDisabledReason: function() {
+                if (!this.history || !this.history.id) return '请先选择有效稿件';
+                if (!this.history.publish) return '稿件未发布，不能切换可见性';
+                const code = Number(this.history.code);
+                if (code !== 0 && code !== -50) return '仅审核通过（公开/仅自己可见）时可切换';
+                if (this.history.recording) return '稿件仍在录制中';
+                const pendingNormal = Number(this.history.pendingNormalMsgCount) || 0;
+                const pendingHigh = Number(this.history.pendingHighMsgCount) || 0;
+                if (code === -50) {
+                    if (this.history.roomSendSc === true && Math.max(0, pendingHigh) > 0) return '系统正在临时切换可见性发送高级弹幕评论，完成后可操作';
+                    return '';
+                }
+                if (pendingNormal > 0 || pendingHigh > 0) return '稿件仍有弹幕待发送，暂不可切换';
+                if (this.history.roomSendSc === true && !this.history.sendReply) return '稿件仍在发送SC/评论，暂不可切换';
+                return '';
+            },
             activeFilterCount: function() {
                 let count = 0;
                 if (this.form.roomId) count++;
@@ -1175,6 +1240,10 @@
                 if (!this.currentDetail || !this.currentDetail.publish) return false;
                 return Number(this.currentDetail.code) === -2;
             },
+            isAuditInvisibleLikelyDeleted: function() {
+                if (!this.currentDetail || !this.currentDetail.publish) return false;
+                return Number(this.currentDetail.code) === 62002;
+            },
             auditRejectDetails: function() {
                 if (!this.currentDetailParts || this.currentDetailParts.length === 0) return [];
                 const list = this.currentDetailParts
@@ -1207,13 +1276,16 @@
                 return list;
             },
             canShowAuditRejectInfo: function() {
-                return this.isAuditRejected && this.auditRejectDetails.length > 0;
+                return (this.isAuditRejected && this.auditRejectDetails.length > 0) || this.isAuditInvisibleLikelyDeleted;
             },
             shouldHighlightAuditReject: function() {
                 return this.canShowAuditRejectInfo;
             },
             auditRejectSummaryText: function() {
                 if (!this.canShowAuditRejectInfo) return '';
+                if (this.isAuditInvisibleLikelyDeleted) {
+                    return 'B站返回稿件不可见(62002)，可能已在B站后台被删除、转为不可见或被系统回收，点击查看说明';
+                }
                 const top = this.auditRejectDetails.slice(0, 2).map(item => 'P' + item.page + ' ' + item.detail).join('；');
                 if (this.auditRejectDetails.length > 2) {
                     return top + '；共 ' + this.auditRejectDetails.length + ' 个分P存在审核提示，点击查看详情';
@@ -1637,7 +1709,7 @@
                 if (status === '已完成' || status === '发送弹幕中') return 'success';
                 if (status.indexOf('上传中') > -1 || status === '等待上传') return 'primary';
                 if (status === '正在录制' || status === '审核中' || status === '等待转码' || status === '转码中' || status === '已提交' || status === '定时发布' || status === '等待投稿') return 'warn';
-                if (status === '存在异常' || status === '转码失败' || status === '被锁定' || status === '被退回' || status === '已删除' || status.indexOf('投稿中') > -1) return 'danger';
+                if (status === '存在异常' || status === '转码失败' || status === '被锁定' || status === '被退回' || status === '已删除' || status.indexOf('稿件不可见') > -1 || status.indexOf('投稿中') > -1) return 'danger';
                 // 默认使用 info 样式 (灰色)
                 return 'info';
             },
@@ -1657,21 +1729,57 @@
                 if (item.code == -9) return '转码中';
                 if (item.code == -30) return '已提交';
                 if (item.code == -40) return '定时发布';
+                if (item.code == 62002) return '稿件不可见(62002)';
                 if (item.code == -100) return '已删除';
                 return '未通过(' + item.code + ')';
             },
             getDanmakuStatusClass: function(item) {
-                if (!item.publish || (item.code !== 0 && item.code !== -50)) return '';
-                if (item.sendReply) return 'success';
+                if (!item || !item.publish) return '';
+                const code = Number(item.code);
+                if (code !== 0 && code !== -50) return '';
+                // 仅自己可见稿件不会进入普通弹幕发送流程，视为已完成
+                if (code === -50) return 'success';
+                const pendingNormal = Number(item.pendingNormalMsgCount) || 0;
+                const pendingHigh = Number(item.pendingHighMsgCount) || 0;
+                const pending = Math.max(0, pendingNormal) + Math.max(0, pendingHigh);
+                if (pending <= 0 && (item.roomSendSc !== true || item.sendReply)) return 'success';
                 return 'warning';
             },
             getDanmakuStatusText: function(item) {
-                if (!item.publish || (item.code !== 0 && item.code !== -50)) return '待发布';
-                if (item.sendReply) return '已完成';
-                return '发送中';
+                if (!item || !item.publish) return '待发布';
+                const code = Number(item.code);
+                if (code !== 0 && code !== -50) return '待发布';
+                // 仅自己可见稿件不会进入普通弹幕发送流程，直接判定完成
+                if (code === -50) return '已完成';
+                const pendingNormal = Number(item.pendingNormalMsgCount) || 0;
+                const pendingHigh = Number(item.pendingHighMsgCount) || 0;
+                const pending = Math.max(0, pendingNormal) + Math.max(0, pendingHigh);
+                if (item.roomSendSc === true && !item.sendReply && pendingHigh > 0) return '发送中';
+                if (pending > 0) return '发送中';
+                return '已完成';
             },
             openAuditRejectDetail: function() {
                 if (!this.canShowAuditRejectInfo) return;
+                if (this.isAuditInvisibleLikelyDeleted) {
+                    const html62002 = [
+                        '<div style="line-height:1.75;">',
+                        '<div style="margin-bottom:8px;">当前稿件返回 <strong>62002（稿件不可见）</strong>。</div>',
+                        '<div style="margin-bottom:8px;color:#606266;">这通常意味着该稿件已经无法在当前账号视角访问，常见原因包括：</div>',
+                        '<ul style="margin:0 0 8px 18px;padding:0;color:#606266;">',
+                        '<li>UP 主在 B 站后台手动删除了稿件；</li>',
+                        '<li>稿件被改为不可见（例如仅自己可见或权限变更）；</li>',
+                        '<li>稿件被系统回收/下线，导致接口侧返回不可见。</li>',
+                        '</ul>',
+                        '<div style="color:#909399;font-size:12px;">说明：此提示用于排障参考，最终状态以 B 站创作中心后台为准。</div>',
+                        '</div>'
+                    ].join('');
+                    this.$alert(html62002, '稿件不可见说明', {
+                        dangerouslyUseHTMLString: true,
+                        confirmButtonText: '我知道了',
+                        type: 'warning'
+                    });
+                    return;
+                }
                 const esc = function(s) {
                     return String(s == null ? '' : s)
                         .replace(/&/g, '&amp;')
@@ -2662,6 +2770,52 @@
                         _this.$message.error('保存失败');
                     }
                 });
+            },
+            setHistoryVisibility: function (isOnlySelf) {
+                const _this = this;
+                if (!_this.history || !_this.history.id) return;
+                if (!_this.canOperateVisibilitySwitch) {
+                    _this.$message({ message: _this.visibilityActionDisabledReason || '当前状态不可切换可见性', type: 'warning' });
+                    return;
+                }
+                const targetText = isOnlySelf === 1 ? '仅自己可见' : '公开';
+                _this.$confirm('确定将稿件切换为“' + targetText + '”吗？', '切换可见性确认', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(function () {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在切换可见性...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    $.ajax({
+                        url: '/history/visibility/' + _this.history.id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'post',
+                        data: JSON.stringify({ isOnlySelf: isOnlySelf }),
+                        dataType: 'json',
+                        success: function (data) {
+                            loading.close();
+                            _this.$message({
+                                message: data.msg || '操作完成',
+                                type: data.type || 'info'
+                            });
+                            if (data.type === 'success') {
+                                _this.history.code = isOnlySelf === 1 ? -50 : 0;
+                                if (_this.currentDetail && _this.currentDetail.id === _this.history.id) {
+                                    _this.currentDetail.code = _this.history.code;
+                                }
+                                _this.initTable(true);
+                            }
+                        },
+                        error: function () {
+                            loading.close();
+                            _this.$message.error('切换可见性失败');
+                        }
+                    });
+                }).catch(function () {});
             },
             refreshStatus: function (id) {
                 let _this = this;
