@@ -5,6 +5,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.LiveMsg;
 
 import java.util.List;
@@ -42,6 +43,11 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
     @org.springframework.data.jpa.repository.Modifying
     @Query("delete from LiveMsg where partId = ?1")
     void deleteByPartId(Long partId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("delete from LiveMsg m where m.partId in (select p.id from RecordHistoryPart p where p.historyId = ?1)")
+    int deleteByHistoryId(Long historyId);
 
     List<LiveMsg> queryByBvid(String bvid);
 

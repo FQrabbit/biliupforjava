@@ -433,6 +433,7 @@ public class HistoryController {
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteVideo,
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteDanmaku,
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteCover) {
+        long totalStartNs = System.nanoTime();
         Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -442,99 +443,129 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
-            List<LiveMsg> liveMsgs = msgRepository.queryByBvid(history.getBvId());
-            msgRepository.deleteAll(liveMsgs);
+            long msgDeleteStartNs = System.nanoTime();
+            int deletedMsgCount = msgRepository.deleteByHistoryId(history.getId());
+            long msgDeleteCostMs = toCostMs(msgDeleteStartNs);
+
             List<Map<String, Object>> notDeletedFiles = new ArrayList<>();
             int localDeleteAttempt = 0;
             int localDeleteSuccess = 0;
             boolean deleteAnyLocal = deleteVideo || deleteDanmaku || deleteCover;
-            List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
-            for (RecordHistoryPart part : partList) {
-                String filePath = part.getFilePath();
-                if (filePath == null) {
-                    part.setFileDelete(true);
-                    partRepository.save(part);
-                    continue;
-                }
-                if (!filePath.startsWith(workPath)) {
-                    if (deleteAnyLocal) {
+
+            long localDeleteStartNs = System.nanoTime();
+            if (deleteAnyLocal) {
+                List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+                for (RecordHistoryPart part : partList) {
+                    String filePath = part.getFilePath();
+                    if (filePath == null) {
+                        continue;
+                    }
+                    if (!filePath.startsWith(workPath)) {
                         Map<String, Object> entry = new LinkedHashMap<>();
                         entry.put("path", filePath);
                         entry.put("kind", "unknown");
                         entry.put("status", "skipped");
                         entry.put("reason", "文件不在 workPath 下，出于安全跳过");
                         notDeletedFiles.add(entry);
+                        continue;
                     }
-                    part.setFileDelete(true);
-                    partRepository.save(part);
-                    continue;
-                }
-                String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                File startDir = new File(startDirPath);
-                File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                if (files == null) {
-                    if (deleteAnyLocal) {
+                    String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
+                    String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
+                    File startDir = new File(startDirPath);
+                    File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
+                    if (files == null) {
                         Map<String, Object> entry = new LinkedHashMap<>();
                         entry.put("path", startDirPath);
                         entry.put("kind", "unknown");
                         entry.put("status", "missing");
                         entry.put("reason", "目录不存在或无法读取");
                         notDeletedFiles.add(entry);
-                    }
-                } else {
-                    if (files.length == 0 && deleteAnyLocal) {
-                        Map<String, Object> entry = new LinkedHashMap<>();
-                        entry.put("path", filePath);
-                        entry.put("kind", "unknown");
-                        entry.put("status", "missing");
-                        entry.put("reason", "未找到匹配的本地文件");
-                        notDeletedFiles.add(entry);
-                    }
-                    for (File file : files) {
-                        if (!shouldDeleteFile(file, deleteVideo, deleteDanmaku, deleteCover)) {
-                            continue;
-                        }
-                        localDeleteAttempt++;
-                        Path path = file.toPath();
-                        String lowerName = file.getName() == null ? "" : file.getName().toLowerCase();
-                        String kind = fileKindByLowerName(lowerName);
-                        if (!Files.exists(path)) {
+                    } else {
+                        if (files.length == 0) {
                             Map<String, Object> entry = new LinkedHashMap<>();
-                            entry.put("path", path.toString().replace("\\", "/"));
-                            entry.put("kind", kind);
+                            entry.put("path", filePath);
+                            entry.put("kind", "unknown");
                             entry.put("status", "missing");
-                            entry.put("reason", "文件不存在");
+                            entry.put("reason", "未找到匹配的本地文件");
                             notDeletedFiles.add(entry);
-                            continue;
                         }
-                        try {
-                            Files.delete(path);
-                            localDeleteSuccess++;
-                        } catch (Exception ex) {
-                            Map<String, Object> entry = new LinkedHashMap<>();
-                            entry.put("path", path.toString().replace("\\", "/"));
-                            entry.put("kind", kind);
-                            entry.put("status", "failed");
-                            entry.put("reason", ex.getClass().getSimpleName() + ": " + String.valueOf(ex.getMessage()));
-                            notDeletedFiles.add(entry);
+                        for (File file : files) {
+                            if (!shouldDeleteFile(file, deleteVideo, deleteDanmaku, deleteCover)) {
+                                continue;
+                            }
+                            localDeleteAttempt++;
+                            Path path = file.toPath();
+                            String lowerName = file.getName() == null ? "" : file.getName().toLowerCase();
+                            String kind = fileKindByLowerName(lowerName);
+                            if (!Files.exists(path)) {
+                                Map<String, Object> entry = new LinkedHashMap<>();
+                                entry.put("path", path.toString().replace("\\", "/"));
+                                entry.put("kind", kind);
+                                entry.put("status", "missing");
+                                entry.put("reason", "文件不存在");
+                                notDeletedFiles.add(entry);
+                                continue;
+                            }
+                            try {
+                                Files.delete(path);
+                                localDeleteSuccess++;
+                            } catch (Exception ex) {
+                                Map<String, Object> entry = new LinkedHashMap<>();
+                                entry.put("path", path.toString().replace("\\", "/"));
+                                entry.put("kind", kind);
+                                entry.put("status", "failed");
+                                entry.put("reason", ex.getClass().getSimpleName() + ": " + String.valueOf(ex.getMessage()));
+                                notDeletedFiles.add(entry);
+                            }
                         }
                     }
                 }
-                part.setFileDelete(true);
-                partRepository.save(part);
             }
-            partRepository.deleteAll(partList);
+
+            long localDeleteCostMs = toCostMs(localDeleteStartNs);
+
+            long partDeleteStartNs = System.nanoTime();
+            int deletedPartCount = partRepository.deleteByHistoryId(history.getId());
+            long partDeleteCostMs = toCostMs(partDeleteStartNs);
+
+            long historyDeleteStartNs = System.nanoTime();
             historyRepository.delete(history);
+            long historyDeleteCostMs = toCostMs(historyDeleteStartNs);
+            long totalCostMs = toCostMs(totalStartNs);
+
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("historyId", id);
             data.put("deleteVideo", deleteVideo);
             data.put("deleteDanmaku", deleteDanmaku);
             data.put("deleteCover", deleteCover);
+            data.put("deletedMsgCount", deletedMsgCount);
+            data.put("deletedPartCount", deletedPartCount);
             data.put("localDeleteAttempt", localDeleteAttempt);
             data.put("localDeleteSuccess", localDeleteSuccess);
+            data.put("msgDeleteCostMs", msgDeleteCostMs);
+            data.put("localDeleteCostMs", localDeleteCostMs);
+            data.put("partDeleteCostMs", partDeleteCostMs);
+            data.put("historyDeleteCostMs", historyDeleteCostMs);
+            data.put("totalCostMs", totalCostMs);
             data.put("notDeletedFiles", notDeletedFiles);
             result.put("data", data);
+
+            log.info("[BLR] {}", LogKvs.event("History.Delete.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .add("deleteVideo", deleteVideo)
+                    .add("deleteDanmaku", deleteDanmaku)
+                    .add("deleteCover", deleteCover)
+                    .add("deletedMsgCount", deletedMsgCount)
+                    .add("deletedPartCount", deletedPartCount)
+                    .add("localDeleteAttempt", localDeleteAttempt)
+                    .add("localDeleteSuccess", localDeleteSuccess)
+                    .add("msgDeleteCostMs", msgDeleteCostMs)
+                    .add("localDeleteCostMs", localDeleteCostMs)
+                    .add("partDeleteCostMs", partDeleteCostMs)
+                    .add("historyDeleteCostMs", historyDeleteCostMs)
+                    .add("totalCostMs", totalCostMs));
+
             if (notDeletedFiles.isEmpty()) {
                 result.put("type", "success");
                 result.put("msg", "录制历史删除成功");
@@ -547,6 +578,13 @@ public class HistoryController {
                         .add("notDeletedCount", notDeletedFiles.size())
                         .add("localDeleteAttempt", localDeleteAttempt)
                         .add("localDeleteSuccess", localDeleteSuccess)
+                        .add("deletedMsgCount", deletedMsgCount)
+                        .add("deletedPartCount", deletedPartCount)
+                        .add("msgDeleteCostMs", msgDeleteCostMs)
+                        .add("localDeleteCostMs", localDeleteCostMs)
+                        .add("partDeleteCostMs", partDeleteCostMs)
+                        .add("historyDeleteCostMs", historyDeleteCostMs)
+                        .add("totalCostMs", totalCostMs)
                         .toString());
             }
             return result;
@@ -555,6 +593,10 @@ public class HistoryController {
             result.put("msg", "录制历史不存在");
             return result;
         }
+    }
+
+    private long toCostMs(long startNs) {
+        return (System.nanoTime() - startNs) / 1_000_000;
     }
 
     private String fileKindByLowerName(String lowerName) {

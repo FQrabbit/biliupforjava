@@ -3,6 +3,7 @@ package top.sshh.bililiverecoder.repo;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 
 import java.time.LocalDateTime;
@@ -55,6 +56,11 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     int countAbnormalPartsByHistoryId(Long historyId);
 
     boolean existsByFilePath(String filePath);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("delete from RecordHistoryPart p where p.historyId = ?1")
+    int deleteByHistoryId(Long historyId);
 
     // 查询需要上传但未上传的分P（录制已结束、未上传、结束时间在指定范围内）
     List<RecordHistoryPart> findByRoomIdAndRecordingIsFalseAndUploadIsFalseAndEndTimeBetweenOrderByEndTimeAsc(

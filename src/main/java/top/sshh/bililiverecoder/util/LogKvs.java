@@ -26,6 +26,9 @@ public final class LogKvs {
         EVENT_ZH.put("History.GiveUpCount.QueryFailed", "查询放弃分P数量失败");
         EVENT_ZH.put("History.GiveUpParts.QueryFailed", "查询放弃分P列表失败");
         EVENT_ZH.put("History.MergeInterval.InvalidConfig", "合并间隔时间配置无效");
+        EVENT_ZH.put("History.Visibility.Switch.Success", "批量切换可见性成功");
+        EVENT_ZH.put("History.Visibility.Switch.Error", "批量切换可见性失败");
+        EVENT_ZH.put("History.Delete.Success", "删除录制历史成功");
 
         // 上传
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");
