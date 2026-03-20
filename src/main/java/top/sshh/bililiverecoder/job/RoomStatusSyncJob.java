@@ -37,6 +37,8 @@ public class RoomStatusSyncJob {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return;
         }
+        long roundStartNs = System.nanoTime();
+        int processedRooms = 0;
         log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Start"));
         for (RecordRoom room : roomRepository.findAll()) {
             try {
@@ -171,6 +173,7 @@ public class RoomStatusSyncJob {
                     if (changed) {
                         roomRepository.save(room);
                     }
+                    processedRooms++;
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -194,6 +197,8 @@ public class RoomStatusSyncJob {
                         .add("ex", e.getClass().getSimpleName()), e);
             }
         }
-        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Done"));
+        log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Done")
+            .addRoundCount("processedRoom", processedRooms)
+                .addStageCostMs("total", roundStartNs));
     }
 }

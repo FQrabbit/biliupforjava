@@ -126,12 +126,20 @@ public class LiveMsgService {
         File file = new File(xmlFilePath);
         boolean exists = file.exists();
         if (exists) {
+            long parseStartNs = System.nanoTime();
+            long cleanStartNs = System.nanoTime();
+            long cleanCostMs = -1L;
+            long parseXmlStartNs = 0L;
+            long parseXmlCostMs = -1L;
+            long dbSaveCostMs = -1L;
             // 解析前先清理可能存在的旧数据（幂等性保证）
             liveMsgRepository.deleteByPartId(part.getId());
+            cleanCostMs = (System.nanoTime() - cleanStartNs) / 1_000_000L;
 
             FileInputStream stream = null;
             try {
                 stream = new FileInputStream(file);
+                parseXmlStartNs = System.nanoTime();
 
                 // 创建SAXReader对象
                 SAXReader saxReader = new SAXReader();
@@ -379,6 +387,8 @@ public class LiveMsgService {
                 });
 
                 saxReader.read(stream);
+                parseXmlCostMs = (System.nanoTime() - parseXmlStartNs) / 1_000_000L;
+                dbSaveCostMs = Math.max(0L, ((System.nanoTime() - parseStartNs) / 1_000_000L) - cleanCostMs - parseXmlCostMs);
 
                 if (!liveMsgs.isEmpty()) {
                     jdbcService.saveLiveMsgList(liveMsgs);
@@ -387,7 +397,11 @@ public class LiveMsgService {
                             .add("count", liveMsgs.size())
                             .add("roomId", part.getRoomId())
                             .add("partId", part.getId())
-                            .add("historyId", part.getHistoryId()));
+                            .add("historyId", part.getHistoryId())
+                            .addStageCostMs("total", parseStartNs)
+                            .addStageField("dbClean", "costMs", cleanCostMs)
+                            .addStageField("xmlParse", "costMs", parseXmlCostMs)
+                            .addStageField("dbSave", "costMs", dbSaveCostMs));
                 }
             } catch (Exception e) {
                 log.error("[BLR] {}", LogKvs.event("LiveMsg.Parse.Failed")
@@ -396,7 +410,11 @@ public class LiveMsgService {
                         .add("partId", part.getId())
                         .add("historyId", part.getHistoryId())
                         .add("err", e.getMessage())
-                        .add("ex", e.getClass().getSimpleName()), e);
+                        .add("ex", e.getClass().getSimpleName())
+                        .addStageCostMs("total", parseStartNs)
+                        .addStageField("dbClean", "costMs", cleanCostMs)
+                        .addStageField("xmlParse", "costMs", parseXmlCostMs)
+                        .addStageField("dbSave", "costMs", dbSaveCostMs), e);
                 // 抛出异常以触发事务回滚，避免数据不一致（如：旧数据已删但新数据只入库一半）
                 throw new RuntimeException("LiveMsg parse failed", e);
             } finally {

@@ -48,7 +48,11 @@ public class videoSyncJob {
     @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void syncVideo() {
         //查询出所有需要同步的录播记录
-        for (RecordHistory next : historyRepository.findSyncList()) {
+        long roundStartNs = System.nanoTime();
+        int syncCount = 0;
+        List<RecordHistory> syncList = historyRepository.findSyncList();
+        try {
+        for (RecordHistory next : syncList) {
             try {
                 // 避免请求过快，每次请求间隔3秒
                 Thread.sleep(3000);
@@ -57,6 +61,13 @@ public class videoSyncJob {
                         .add("waitMs", 3000), e);
             }
             syncOne(next);
+            syncCount++;
+        }
+        } finally {
+            log.info("[BLR] {}", LogKvs.event("VideoSync.Round.Done")
+                    .addRoundCount("candidate", syncList.size())
+                    .addRoundCount("synced", syncCount)
+                    .addStageCostMs("total", roundStartNs));
         }
 
     }

@@ -182,6 +182,9 @@ public class publishJob {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return;
         }
+        long roundStartNs = System.nanoTime();
+        int pendingHistoryCount = 0;
+        try {
         //查询出所有需要上传的房间
         List<RecordRoom> roomList = roomRepository.findByUpload(true);
 
@@ -214,6 +217,7 @@ public class publishJob {
             log.info("[BLR] {}", LogKvs.event("PublishJob.PendingCount")
                     .add("size", historyList.size()));
         }
+        pendingHistoryCount = historyList.size();
 
         for (RecordHistory history : historyList) {
             if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
@@ -330,6 +334,11 @@ public class publishJob {
                 return;
             }
         }
+        } finally {
+            log.info("[BLR] {}", LogKvs.event("PublishJob.Round.Done")
+                    .addRoundCount("pendingHistory", pendingHistoryCount)
+                    .addStageCostMs("total", roundStartNs));
+        }
     }
 
     // 独立的分P上传补偿任务，每分钟检查未上传的分P（不依赖整个录制历史状态）
@@ -338,6 +347,10 @@ public class publishJob {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return;
         }
+        long roundStartNs = System.nanoTime();
+        int roomCount = 0;
+        int roundTriggeredCount = 0;
+        try {
         // 清理已投稿稿件中残留的未上传分P，防止对已投稿稿件继续触发上传
         try {
             List<RecordHistoryPart> orphanedParts = partRepository.findOrphanedPartsOfPublishedHistories();
@@ -366,8 +379,8 @@ public class publishJob {
         }
 
         List<RecordRoom> roomList = roomRepository.findByUpload(true);
+    roomCount = roomList.size();
         LocalDateTime now = LocalDateTime.now();
-        int roundTriggeredCount = 0;
         Map<Long, Integer> userTriggeredCount = new HashMap<>();
         
         for (RecordRoom room : roomList) {
@@ -669,6 +682,12 @@ public class publishJob {
                         .add("pending", pendingParts.size()));
             }
         }
+            } finally {
+                log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.Round.Done")
+                        .addRoundCount("room", roomCount)
+                        .addRoundCount("triggered", roundTriggeredCount)
+                    .addStageCostMs("total", roundStartNs));
+            }
     }
 
     private boolean isAsyncPoolBusy() {

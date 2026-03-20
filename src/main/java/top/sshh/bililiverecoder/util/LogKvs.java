@@ -29,6 +29,14 @@ public final class LogKvs {
         EVENT_ZH.put("History.Visibility.Switch.Success", "批量切换可见性成功");
         EVENT_ZH.put("History.Visibility.Switch.Error", "批量切换可见性失败");
         EVENT_ZH.put("History.Delete.Success", "删除录制历史成功");
+        EVENT_ZH.put("History.DeleteMsg.Success", "删除弹幕成功");
+        EVENT_ZH.put("History.ReloadMsg.Success", "重新加载弹幕成功");
+        EVENT_ZH.put("History.UpdatePartStatus.Success", "更新分P状态成功");
+        EVENT_ZH.put("History.UpdatePublishStatus.Success", "更新投稿状态成功");
+        EVENT_ZH.put("History.TouchPublish.Success", "触发发布成功");
+        EVENT_ZH.put("History.HighEnergyCutPublish.Success", "触发高能剪辑成功");
+        EVENT_ZH.put("History.Republish.Success", "触发转码修复成功");
+        EVENT_ZH.put("History.ForceArchive.Success", "强制归档成功");
 
         // 上传
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");
@@ -91,6 +99,7 @@ public final class LogKvs {
         // 录制事件
         EVENT_ZH.put("Room.AutoCreate", "房间不存在，自动创建房间配置");
         EVENT_ZH.put("Room.Seasons.FetchFailed", "房间合集列表获取失败(返回空列表)");
+        EVENT_ZH.put("Room.Seasons.Fetch.Success", "房间合集列表获取成功");
         EVENT_ZH.put("Room.Update.SeasonSection.Fixed", "房间编辑保存：合集配置已校验并修正");
         EVENT_ZH.put("Room.Update.SeasonSection.Corrected", "房间编辑保存：section不属于season，已修正为首section");
         EVENT_ZH.put("Room.Update.SeasonSection.Disabled", "房间编辑保存：合集配置无效，已禁用合集");
@@ -253,6 +262,12 @@ public final class LogKvs {
         EVENT_ZH.put("User.RefreshToken.FailedAndMyInfoFailed", "刷新 token 失败，且获取用户信息也失败");
         EVENT_ZH.put("User.RefreshToken.Failed", "刷新 token 失败，账号将被禁用/标记为不可用");
 
+        // 用户登录
+        EVENT_ZH.put("BiliUser.LoginQr.Generate.Success", "用户登录：二维码生成成功");
+        EVENT_ZH.put("BiliUser.LoginQr.Generate.Failed", "用户登录：二维码生成失败");
+        EVENT_ZH.put("BiliUser.Login.Success", "用户登录成功");
+        EVENT_ZH.put("BiliUser.LoginCheck.Error", "检查登录状态异常");
+
         // 哔哩哔哩API
         EVENT_ZH.put("BiliApi.DeviceIds.LoadOrSaveFailed", "加载/保存设备标识失败，将使用随机设备标识");
         EVENT_ZH.put("BiliApi.QrUrl.Generated", "生成扫码登录 URL(调试)");
@@ -269,9 +284,11 @@ public final class LogKvs {
         EVENT_ZH.put("DeletePartFileJob.Success", "定时任务：删除成功");
         EVENT_ZH.put("DeletePartFileJob.FailedRetry", "定时任务：删除失败，准备重试");
         EVENT_ZH.put("DeletePartFileJob.FailedGiveUp", "定时任务：删除失败，已放弃");
+        EVENT_ZH.put("DeletePartFileJob.Round.Done", "定时任务：分P文件删除轮次完成");
         EVENT_ZH.put("MovePartFileJob.Start", "定时任务：开始移动分P文件");
         EVENT_ZH.put("MovePartFileJob.Success", "定时任务：移动成功");
         EVENT_ZH.put("MovePartFileJob.Failed", "定时任务：移动失败");
+        EVENT_ZH.put("MovePartFileJob.Round.Done", "定时任务：分P文件移动轮次完成");
 
         EVENT_ZH.put("RefreshTokenJob.SkipRecent", "定时任务：刷新token-距离上次更新过近，跳过");
         EVENT_ZH.put("RefreshTokenJob.SleepInterrupted", "定时任务：刷新token-等待被中断");
@@ -286,9 +303,7 @@ public final class LogKvs {
         EVENT_ZH.put("RoomStatusSyncJob.SleepInterrupted", "定时任务：直播间状态同步-等待被中断");
         EVENT_ZH.put("RoomStatusSyncJob.Failed", "定时任务：直播间状态同步失败");
         EVENT_ZH.put("RoomStatusSyncJob.Done", "定时任务：直播间状态同步完成");
-
-        EVENT_ZH.put("BiliUser.Login.Success", "用户登录成功");
-        EVENT_ZH.put("BiliUser.LoginCheck.Error", "检查登录状态异常");
+        EVENT_ZH.put("VideoSync.Round.Done", "定时任务：视频状态同步轮次完成");
 
         EVENT_ZH.put("Auth.Basic.Enabled", "已启用 Basic 认证");
         EVENT_ZH.put("Auth.Basic.DisabledByConfig", "未配置用户名或密码，Basic 认证已禁用(存在安全风险)");
@@ -306,6 +321,7 @@ public final class LogKvs {
         EVENT_ZH.put("PublishJob.Skip.FileStillWriting", "定时任务：检测到文件仍在写入/未稳定，跳过投稿");
         EVENT_ZH.put("PublishJob.WaitNext", "定时任务：本轮投稿结束，等待下一轮");
         EVENT_ZH.put("PublishJob.WaitNextInterrupted", "定时任务：等待下一轮被中断");
+        EVENT_ZH.put("PublishJob.Round.Done", "定时任务：投稿轮次完成");
 
         EVENT_ZH.put("PublishJob.PartCompensate.AlreadyUploading", "补偿任务：分P正在上传中，跳过");
         EVENT_ZH.put("PublishJob.PartCompensate.AlreadyQueued", "补偿任务：分P已在队列中，跳过");
@@ -325,6 +341,7 @@ public final class LogKvs {
         EVENT_ZH.put("PublishJob.PartCompensate.SkipByUserQuota", "补偿任务：账号触发数达到上限，跳过");
         EVENT_ZH.put("PublishJob.PartCompensate.ThrottleSleepInterrupted", "补偿任务：并发控制等待被中断");
         EVENT_ZH.put("PublishJob.PartCompensate.TriggeredSummary", "补偿任务：本轮触发统计");
+        EVENT_ZH.put("PublishJob.PartCompensate.Round.Done", "补偿任务：轮次完成");
 
         // 视频状态同步
         EVENT_ZH.put("VideoSync.SleepInterrupted", "定时任务：视频状态同步-请求间隔等待被中断");
@@ -385,6 +402,7 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsgSendSync.Normal.Send.VideoNotApproved", "普通弹幕发送失败：视频未审核通过");
         EVENT_ZH.put("LiveMsgSendSync.Normal.Send.UserDisabled", "普通弹幕发送失败：账号异常，已禁用该用户");
         EVENT_ZH.put("LiveMsgSendSync.Normal.Send.Failed", "普通弹幕发送失败");
+        EVENT_ZH.put("LiveMsgSendSync.Done", "定时任务：弹幕/评论发送完成");
 
         // 弹幕
         EVENT_ZH.put("LiveMsg.Send.EmptyResponse", "弹幕发送：响应为空");
@@ -406,6 +424,10 @@ public final class LogKvs {
         EVENT_ZH.put("RoomConfig.Import.Histories.Success", "导入录制历史配置成功");
         EVENT_ZH.put("RoomConfig.Import.Parts.Success", "导入分P配置成功");
         EVENT_ZH.put("RoomConfig.Import.Done", "导入配置完成");
+
+        // 上传线路测速
+        EVENT_ZH.put("UploadLine.TestAll.Failed", "上传线路测速：批量测试失败");
+        EVENT_ZH.put("UploadLine.TestSpeed.Failed", "上传线路测速：单线路测试失败");
 
         // 推送通知
         EVENT_ZH.put("Notify.WxPusher.Send.Failed", "通知发送：WxPusher发送失败");
@@ -441,9 +463,6 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.Chunk.RetryWaitInterrupted", "上传：分片重试等待被中断");
         EVENT_ZH.put("Upload.Chunk.ThreadFailed", "上传：分片线程执行异常");
         EVENT_ZH.put("HighEnergyCut.Upload.Chunk.ThreadFailed", "高能剪辑：分片线程执行异常");
-        EVENT_ZH.put("UploadLine.TestAll.Failed", "上传线路测速：批量测试失败");
-        EVENT_ZH.put("UploadLine.TestSpeed.Failed", "上传线路测速：单线路测试失败");
-        EVENT_ZH.put("Netty.Upload.LowSpeed", "Netty上传：检测到低速连接，已断开");
 
         // ByteUtils
         EVENT_ZH.put("ByteUtils.HexParseFailed", "ByteUtils：Hex解析失败");
@@ -580,6 +599,66 @@ public final class LogKvs {
             return this;
         }
         return add(key, value);
+    }
+
+    /**
+     * 统一耗时写入（毫秒），startNs 应来自 System.nanoTime()。
+     */
+    public LogKvs addCostMs(String key, long startNs) {
+        if (startNs <= 0L) {
+            return this;
+        }
+        return add(key, (System.nanoTime() - startNs) / 1_000_000L);
+    }
+
+    /**
+     * 统一阶段耗时前缀：stage.{name}.costMs。
+     */
+    public LogKvs addStageCostMs(String stageName, long startNs) {
+        if (stageName == null || stageName.isBlank()) {
+            return this;
+        }
+        return addCostMs("stage." + normalizeKeySegment(stageName) + ".costMs", startNs);
+    }
+
+    /**
+     * 统一阶段字段前缀：stage.{name}.{metric}。
+     */
+    public LogKvs addStageField(String stageName, String metric, Object value) {
+        if (stageName == null || stageName.isBlank() || metric == null || metric.isBlank()) {
+            return this;
+        }
+        return add("stage." + normalizeKeySegment(stageName) + "." + normalizeKeySegment(metric), value);
+    }
+
+    /**
+     * 统一轮次计数字段：round.{name}Count。
+     */
+    public LogKvs addRoundCount(String name, int value) {
+        if (name == null || name.isBlank()) {
+            return this;
+        }
+        return add("round." + normalizeKeySegment(name) + "Count", value);
+    }
+
+    /**
+     * 统一轮次计数字段：round.{name}Count。
+     */
+    public LogKvs addRoundCount(String name, long value) {
+        if (name == null || name.isBlank()) {
+            return this;
+        }
+        return add("round." + normalizeKeySegment(name) + "Count", value);
+    }
+
+    private static String normalizeKeySegment(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return raw;
+        }
+        String s = raw.trim();
+        s = s.replaceAll("[^A-Za-z0-9._-]", "_");
+        s = s.replace("..", ".");
+        return s;
     }
 
     private static String sanitize(Object value) {

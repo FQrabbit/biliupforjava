@@ -129,6 +129,15 @@ public class RoomController {
 
     @PostMapping("/uploadConfig")
     public void uploadConfig(@RequestParam("file") MultipartFile file) throws IOException {
+        long totalStartNs = System.nanoTime();
+        long importUsersStartNs = 0L;
+        long importRoomsStartNs = 0L;
+        long importHistoriesStartNs = 0L;
+        long importPartsStartNs = 0L;
+        int importedUserCount = 0;
+        int importedRoomCount = 0;
+        int importedHistoryCount = 0;
+        int importedPartCount = 0;
         // 获取上传的文件内容
         byte[] bytes = file.getBytes();
         // 将文件内容转换为JSON字符串
@@ -145,6 +154,7 @@ public class RoomController {
 
         Map<Long,Long> userIdConverMap = new HashMap<>();
         if(userList != null && userList.size()>0){
+            importUsersStartNs = System.nanoTime();
             for (BiliBiliUser user : userList) {
                 Long id = user.getId();
                 user.setId(null);
@@ -154,11 +164,13 @@ public class RoomController {
                 }
                 userRepository.save(user);
                 userIdConverMap.put(id,user.getId());
+                importedUserCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Users.Success")
                     .add("count", userList.size()));
         }
         if(roomList != null && roomList.size()>0){
+            importRoomsStartNs = System.nanoTime();
             for (RecordRoom room : roomList) {
                 room.setId(null);
                 room.setUploadUserId(userIdConverMap.get(room.getUploadUserId()));
@@ -167,12 +179,14 @@ public class RoomController {
                     room.setId(dbRoom.getId());
                 }
                 roomRepository.save(room);
+                importedRoomCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
                     .add("count", roomList.size()));
         }
         Map<Long,Long> historyIdConverMap = new HashMap<>();
         if(historyList != null && historyList.size()>0){
+            importHistoriesStartNs = System.nanoTime();
             for (RecordHistory history : historyList) {
                 Long oldId = history.getId();
                 history.setId(null);
@@ -182,11 +196,13 @@ public class RoomController {
                 }
                 historyRepository.save(history);
                 historyIdConverMap.put(oldId,history.getId());
+                importedHistoryCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Histories.Success")
                     .add("count", historyList.size()));
         }
         if(partList != null && partList.size()>0){
+            importPartsStartNs = System.nanoTime();
             for (RecordHistoryPart part : partList) {
                 part.setId(null);
                 RecordHistoryPart dbPart = partRepository.findByFilePath(part.getFilePath());
@@ -195,12 +211,22 @@ public class RoomController {
                 }
                 part.setHistoryId(historyIdConverMap.get(part.getHistoryId()));
                 partRepository.save(part);
+                importedPartCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
                     .add("count", partList.size()));
         }
         // 在控制台输出转换后的Map对象
-        log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Done"));
+            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Done")
+                .addRoundCount("importedUser", importedUserCount)
+                .addRoundCount("importedRoom", importedRoomCount)
+                .addRoundCount("importedHistory", importedHistoryCount)
+                .addRoundCount("importedPart", importedPartCount)
+                .addStageCostMs("importUsers", importUsersStartNs)
+                .addStageCostMs("importRooms", importRoomsStartNs)
+                .addStageCostMs("importHistories", importHistoriesStartNs)
+                .addStageCostMs("importParts", importPartsStartNs)
+                .addStageCostMs("total", totalStartNs));
     }
 
     @PostMapping("/update")
@@ -525,6 +551,7 @@ public class RoomController {
 
     @GetMapping("/test-lines")
     public Map<String, String> testLines() {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         try {
             // 1. 获取官方线路列表
@@ -596,13 +623,15 @@ public class RoomController {
         } catch (Exception e) {
             log.warn("[BLR] {}", LogKvs.event("UploadLine.TestAll.Failed")
                     .addIfNotBlank("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
+                    .add("ex", e.getClass().getSimpleName())
+                    .addStageCostMs("total", totalStartNs), e);
         }
         return result;
     }
 
     @GetMapping("/test-speed")
     public Map<String, Object> testSpeed(@RequestParam String line) {
+        long totalStartNs = System.nanoTime();
         Map<String, Object> result = new HashMap<>();
         try {
             UploadEnums enumItem = UploadEnums.find(line);
@@ -670,7 +699,8 @@ public class RoomController {
             log.warn("[BLR] {}", LogKvs.event("UploadLine.TestSpeed.Failed")
                     .add("line", line)
                     .addIfNotBlank("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
+                    .add("ex", e.getClass().getSimpleName())
+                    .addStageCostMs("total", totalStartNs), e);
         }
         return result;
     }
@@ -692,6 +722,7 @@ public class RoomController {
 
     @GetMapping("/seasons/{roomId}")
     public String seasons(@PathVariable("roomId") Long roomId) {
+        long totalStartNs = System.nanoTime();
         Optional<RecordRoom> roomOptional = roomRepository.findById(roomId);
         if (roomOptional.isPresent()) {
             RecordRoom room = roomOptional.get();
@@ -704,6 +735,7 @@ public class RoomController {
                 int attempt = 0;
                 while (true) {
                     try {
+                        long apiCallStartNs = System.nanoTime();
                         String raw = BiliApi.getSeasons(biliUser);
                         if (StringUtils.isBlank(raw)) {
                             log.warn("[BLR] {}", LogKvs.event("Room.Seasons.FetchFailed")
@@ -711,7 +743,9 @@ public class RoomController {
                                     .add("uploadUserId", room.getUploadUserId())
                                     .add("timeout", false)
                                     .add("attempt", attempt)
-                                    .add("reason", "empty_response"));
+                                    .add("reason", "empty_response")
+                                    .addStageCostMs("apiCall", apiCallStartNs)
+                                    .addStageCostMs("total", totalStartNs));
                             return "{\"code\":-1,\"message\":\"获取合集失败\",\"ttl\":1,\"data\":{\"seasons\":[]}}";
                         }
 
@@ -737,8 +771,22 @@ public class RoomController {
                             if (!obj.containsKey("ttl")) {
                                 obj.put("ttl", 1);
                             }
+                            log.info("[BLR] {}", LogKvs.event("Room.Seasons.Fetch.Success")
+                                    .add("roomId", roomId)
+                                    .add("uploadUserId", room.getUploadUserId())
+                                    .addRoundCount("attempt", attempt)
+                                    .add("respLen", raw.length())
+                                    .addStageCostMs("apiCall", apiCallStartNs)
+                                    .addStageCostMs("total", totalStartNs));
                             return JSON.toJSONString(obj);
                         } catch (Exception ignored) {
+                            log.info("[BLR] {}", LogKvs.event("Room.Seasons.Fetch.Success")
+                                    .add("roomId", roomId)
+                                    .add("uploadUserId", room.getUploadUserId())
+                                    .addRoundCount("attempt", attempt)
+                                    .add("respLen", raw.length())
+                                    .addStageCostMs("apiCall", apiCallStartNs)
+                                    .addStageCostMs("total", totalStartNs));
                             return raw;
                         }
                     } catch (RuntimeException e) {
@@ -754,7 +802,8 @@ public class RoomController {
                                 .add("timeout", timeout)
                                 .add("attempt", attempt)
                                 .addIfNotBlank("err", e.getMessage())
-                                .add("ex", e.getClass().getSimpleName()), e);
+                                .add("ex", e.getClass().getSimpleName())
+                                .addStageCostMs("total", totalStartNs), e);
                         return "{\"code\":-1,\"message\":\"获取合集失败\",\"ttl\":1,\"data\":{\"seasons\":[]}}";
                     }
                 }
@@ -766,6 +815,7 @@ public class RoomController {
 
     @GetMapping(value = "/image-proxy")
     public ResponseEntity<byte[]> imageProxy(@RequestParam("url") String url) {
+        long totalStartNs = System.nanoTime();
         if (url == null || url.isBlank()) {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
@@ -780,11 +830,15 @@ public class RoomController {
             String host = uri.getHost();
             String scheme = uri.getScheme();
             if (host == null || (!host.endsWith(".hdslb.com") && !host.endsWith(".biliimg.com"))) {
-                log.warn("[BLR] {}", LogKvs.event("ImageProxy.InvalidHost").add("host", host));
+                log.warn("[BLR] {}", LogKvs.event("ImageProxy.InvalidHost")
+                        .add("host", host)
+                        .addStageCostMs("total", totalStartNs));
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
             if (scheme == null || (!scheme.equalsIgnoreCase("https") && !scheme.equalsIgnoreCase("http"))) {
-                log.warn("[BLR] {}", LogKvs.event("ImageProxy.InvalidScheme").add("scheme", scheme));
+                log.warn("[BLR] {}", LogKvs.event("ImageProxy.InvalidScheme")
+                        .add("scheme", scheme)
+                        .addStageCostMs("total", totalStartNs));
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
@@ -796,7 +850,9 @@ public class RoomController {
                     acquired = imageProxySemaphore.tryAcquire(4, TimeUnit.SECONDS);
                     if (!acquired) {
                         placeholder.completeExceptionally(new RuntimeException("image_proxy_busy"));
-                        log.warn("[BLR] {}", LogKvs.event("ImageProxy.Busy").add("url", url));
+                        log.warn("[BLR] {}", LogKvs.event("ImageProxy.Busy")
+                                .add("url", url)
+                                .addStageCostMs("total", totalStartNs));
                         return new ResponseEntity<>(HttpStatus.TOO_MANY_REQUESTS);
                     }
                     
@@ -832,7 +888,8 @@ public class RoomController {
         } catch (Exception e) {
             log.error("[BLR] {}", LogKvs.event("ImageProxy.Failed")
                     .add("url", url)
-                    .add("err", e.getMessage()));
+                    .add("err", e.getMessage())
+                    .addStageCostMs("total", totalStartNs));
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

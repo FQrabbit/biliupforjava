@@ -141,6 +141,10 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
     @Override
     public void upload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
+        long uploadStartNs = System.nanoTime();
+        long preUploadStartNs = 0L;
+        long chunkUploadStartNs = 0L;
+        long completeStartNs = 0L;
         if (part.isUpload()) {
             log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
                     .add("os", OS)
@@ -271,6 +275,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             }
                             // 登录验证结束
                             synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
+                            preUploadStartNs = System.nanoTime();
                             String preRes = BiliApi.preUpload(biliBiliUser, "ugcfr/pc3");
                                 log.debug("[BLR] {}", LogKvs.event("Upload.PreUpload.Response")
                                     .add("os", OS)
@@ -386,6 +391,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                 PushNotifyClient.sendParallel(room, message);
                             }
 
+                            chunkUploadStartNs = System.nanoTime();
                             runnableList.stream().parallel().forEach(Runnable::run);
                             if (tryCount.get() >= 200) {
                                 part = partRepository.findById(part.getId()).get();
@@ -448,6 +454,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             }
 
                             try {
+                                completeStartNs = System.nanoTime();
                                 FileInputStream stream = new FileInputStream(uploadFile);
                                 String md5 = DigestUtils.md5Hex(stream).toLowerCase();
                                 stream.close();
@@ -535,7 +542,11 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                     .add("partId", part.getId())
                                     .add("historyId", part.getHistoryId())
                                     .add("filePath", filePath)
-                                    .add("serverFileName", part.getFileName()));
+                                    .add("serverFileName", part.getFileName())
+                                    .addStageCostMs("total", uploadStartNs)
+                                    .addStageCostMs("preUpload", preUploadStartNs)
+                                    .addStageCostMs("chunkUpload", chunkUploadStartNs)
+                                    .addStageCostMs("complete", completeStartNs));
 
                                 if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
                                     message.setAppToken(wxToken);
@@ -572,7 +583,11 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                     .add("historyId", part.getHistoryId())
                                     .add("filePath", filePath)
                                     .add("err", e.getMessage())
-                                    .add("ex", e.getClass().getSimpleName()), e);
+                                    .add("ex", e.getClass().getSimpleName())
+                                    .addStageCostMs("total", uploadStartNs)
+                                    .addStageCostMs("preUpload", preUploadStartNs)
+                                    .addStageCostMs("chunkUpload", chunkUploadStartNs)
+                                    .addStageCostMs("complete", completeStartNs), e);
                                 if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
                                     message.setAppToken(wxToken);
                                     message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -601,7 +616,11 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
             log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
                     .add("os", OS)
                     .add("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
+                    .add("ex", e.getClass().getSimpleName())
+                    .addStageCostMs("total", uploadStartNs)
+                    .addStageCostMs("preUpload", preUploadStartNs)
+                    .addStageCostMs("chunkUpload", chunkUploadStartNs)
+                    .addStageCostMs("complete", completeStartNs), e);
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
             uploadProgressTracker.remove(part.getId());

@@ -21,9 +21,11 @@ public class BlrecWebhookController {
 
     @PostMapping
     public void handleWebhook(@RequestBody BlrecEventDTO event) {
+        long totalStartNs = System.nanoTime();
         if (event == null || event.getType() == null || event.getData() == null) {
             log.error("[BLR] {}", LogKvs.event("BlrecWebhook.InvalidPayload")
-                    .add("reason", "Event or type or data is null"));
+                    .add("reason", "Event or type or data is null")
+                    .addStageCostMs("total", totalStartNs));
             return;
         }
 
@@ -31,7 +33,8 @@ public class BlrecWebhookController {
         String roomId = getRoomId(event);
         if (roomId == null) {
             log.error("[BLR] {}", LogKvs.event("BlrecWebhook.InvalidPayload")
-                    .add("reason", "room_id is missing in event data"));
+                    .add("reason", "room_id is missing in event data")
+                    .addStageCostMs("total", totalStartNs));
             return;
         }
 
@@ -44,7 +47,8 @@ public class BlrecWebhookController {
                 .add("endpoint", "/webhook/blrec")
                 .add("type", event.getType())
                 .add("roomId", roomId)
-                .add("title", title));
+            .add("title", title)
+            .addStageCostMs("total", totalStartNs));
 
         // 使用房间ID进行同步，确保同一房间的事件串行处理
         synchronized (roomId.intern()) {
@@ -57,7 +61,8 @@ public class BlrecWebhookController {
                 log.error("[BLR] {}", LogKvs.event("BlrecWebhook.DispatchError")
                         .add("eventType", event.getType())
                         .add("err", e.getMessage())
-                        .add("ex", e.getClass().getSimpleName()), e);
+                        .add("ex", e.getClass().getSimpleName())
+                        .addStageCostMs("total", totalStartNs), e);
             }
         }
     }

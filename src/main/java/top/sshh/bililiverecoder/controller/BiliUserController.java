@@ -60,17 +60,25 @@ public class BiliUserController {
 
     @GetMapping("/login")
     public Map<String, String> loginUser() throws Exception {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         
         // 清理过期会话
         cleanExpiredSessions();
         
+        long apiCallStartNs = System.nanoTime();
         BiliApi.BiliResponseDto<BiliApi.GenerateQRDto> s = BiliApi.generateQRUrlTV();
         if (s.getCode() != 0) {
+            log.warn("[BLR] {}", LogKvs.event("BiliUser.LoginQr.Generate.Failed")
+                    .add("code", s.getCode())
+                    .addIfNotBlank("msg", s.getMessage())
+                    .addStageCostMs("apiCall", apiCallStartNs)
+                    .addStageCostMs("total", totalStartNs));
             result.put("error", "生成二维码异常，请检查日志");
             return result;
         }
-        
+
+        long qrEncodeStartNs = System.nanoTime();
         BitMatrix bm = new QRCodeWriter().encode(s.getData().getUrl(),
                 BarcodeFormat.QR_CODE, 256, 256);
         BufferedImage bi = MatrixToImageWriter.toBufferedImage(bm);
@@ -83,6 +91,12 @@ public class BiliUserController {
         String sessionKey = imagesBase64.substring(imagesBase64.length() - 100);
         LoginSession session = new LoginSession(s.getData().getAuth_code());
         loginSessionMap.put(sessionKey, session);
+
+        log.info("[BLR] {}", LogKvs.event("BiliUser.LoginQr.Generate.Success")
+            .add("keyLen", sessionKey.length())
+            .addStageCostMs("apiCall", apiCallStartNs)
+            .addStageCostMs("qrEncode", qrEncodeStartNs)
+            .addStageCostMs("total", totalStartNs));
         
         result.put("image", imagesBase64);
         result.put("key", sessionKey);
@@ -91,6 +105,7 @@ public class BiliUserController {
 
     @GetMapping("/loginCheck")
     public Map<String, String> loginCheck(@RequestParam String key) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         LoginSession session = loginSessionMap.get(key);
         
@@ -154,7 +169,8 @@ public class BiliUserController {
                 }
                 log.info("[BLR] {}", LogKvs.event("BiliUser.Login.Success")
                     .add("uid", biliUser.getUid())
-                    .add("uname", biliUser.getUname()));
+                    .add("uname", biliUser.getUname())
+                    .addStageCostMs("total", totalStartNs));
                 biliUserRepository.save(biliUser);
                 
                 session.status = "success";
@@ -191,7 +207,8 @@ public class BiliUserController {
             log.error("[BLR] {}", LogKvs.event("BiliUser.LoginCheck.Error")
                     .add("keyLen", key == null ? 0 : key.length())
                     .addIfNotBlank("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
+                    .add("ex", e.getClass().getSimpleName())
+                    .addStageCostMs("total", totalStartNs), e);
             result.put("status", "pending");
             result.put("message", "检查中...");
         }

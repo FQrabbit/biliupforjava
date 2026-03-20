@@ -411,6 +411,15 @@ public class RecordBiliPublishService {
                 .add("currentThread", Thread.currentThread().getName()));
             return false;
         }
+        long publishStartNs = System.nanoTime();
+        long loadPartsStartNs = System.nanoTime();
+        long loadPartsCostMs = -1L;
+        long ensureUploadStartNs = 0L;
+        long ensureUploadCostMs = -1L;
+        long webPublishStartNs = 0L;
+        long webPublishCostMs = -1L;
+        long postProcessStartNs = 0L;
+        long postProcessCostMs = -1L;
         try {
 
             RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
@@ -434,6 +443,7 @@ public class RecordBiliPublishService {
             }
             List<RecordHistoryPart> uploadParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             uploadParts = filterPublishableParts(uploadParts);
+            loadPartsCostMs = (System.nanoTime() - loadPartsStartNs) / 1_000_000L;
             if (uploadParts.size() == 0) {
                 log.warn("[BLR] {}", LogKvs.event("Publish.Parts.Empty")
                         .add("roomId", room.getRoomId())
@@ -488,6 +498,7 @@ public class RecordBiliPublishService {
             }
             LocalDateTime now = LocalDateTime.now();
             try {
+            ensureUploadStartNs = System.nanoTime();
             for (RecordHistoryPart uploadPart : uploadParts) {
                 Optional<RecordHistoryPart> flsuhPartOptional = partRepository.findById(uploadPart.getId());
                 uploadPart = flsuhPartOptional.get();
@@ -643,6 +654,7 @@ public class RecordBiliPublishService {
                 }
 
             }
+            ensureUploadCostMs = (System.nanoTime() - ensureUploadStartNs) / 1_000_000L;
             } catch (RuntimeException e) {
                 if (e.getMessage() != null && e.getMessage().startsWith("UPLOAD_GATEWAY_ERROR")) {
                     log.error("[BLR] {}", LogKvs.event("Publish.GatewayErrorPause")
@@ -913,6 +925,7 @@ public class RecordBiliPublishService {
                     videoUploadDto.setTag(this.template(room.getTags(), map).getDesc());
                     String uploadRes = null;
                     try {
+                        webPublishStartNs = System.nanoTime();
                         uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
                         log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Response")
                                 .add("roomId", room.getRoomId())
@@ -1027,13 +1040,19 @@ public class RecordBiliPublishService {
                         history.setAvId(aid);
                         history.setPublish(true);
                         history = historyRepository.save(history);
+                        webPublishCostMs = webPublishStartNs > 0L ? (System.nanoTime() - webPublishStartNs) / 1_000_000L : -1L;
                         log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Success")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
                             .add("historyId", history.getId())
                             .addIfNotBlank("title", history.getTitle())
                             .addIfNotBlank("bvid", bvid)
-                            .addIfNotBlank("aid", aid));
+                            .addIfNotBlank("aid", aid)
+                            .addStageCostMs("total", publishStartNs)
+                            .addStageField("loadParts", "costMs", loadPartsCostMs)
+                            .addStageField("ensureUpload", "costMs", ensureUploadCostMs)
+                            .addStageField("webPublish", "costMs", webPublishCostMs)
+                            .addStageField("postProcess", "costMs", postProcessCostMs));
 
                         // 兜底：部分情况下创建投稿接口可能不稳定地忽略 is_only_self，这里在投稿成功后强制同步一次可见性。
                         try {
@@ -1068,6 +1087,7 @@ public class RecordBiliPublishService {
                             message.setUid(wxuid);
                             PushNotifyClient.sendParallel(room, message);
                         }
+                        postProcessStartNs = System.nanoTime();
                         for (RecordHistoryPart part : uploadParts) {
                             //解析弹幕入库
                             List<LiveMsg> liveMsgs = msgRepository.queryByPartId(part.getId());
@@ -1168,8 +1188,10 @@ public class RecordBiliPublishService {
                                     .add("uname", room.getUname())
                                     .add("historyId", history.getId()), de);
                         }
+                        postProcessCostMs = postProcessStartNs > 0L ? (System.nanoTime() - postProcessStartNs) / 1_000_000L : -1L;
 
                     } catch (Exception e) {
+                        webPublishCostMs = webPublishStartNs > 0L ? (System.nanoTime() - webPublishStartNs) / 1_000_000L : -1L;
                         history.setUploadRetryCount(history.getUploadRetryCount() + 1);
                         history = historyRepository.save(history);
                         log.warn("[BLR] {}", LogKvs.event("Publish.WebPublish.Failed")
@@ -1178,7 +1200,12 @@ public class RecordBiliPublishService {
                                 .add("historyId", history.getId())
                                 .addIfNotBlank("title", history.getTitle())
                                 .add("retryCount", history.getUploadRetryCount())
-                                .add("respLen", uploadRes == null ? 0 : uploadRes.length()), e);
+                                .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                                .addStageCostMs("total", publishStartNs)
+                                .addStageField("loadParts", "costMs", loadPartsCostMs)
+                                .addStageField("ensureUpload", "costMs", ensureUploadCostMs)
+                                .addStageField("webPublish", "costMs", webPublishCostMs)
+                                .addStageField("postProcess", "costMs", postProcessCostMs), e);
                         if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "视频投稿")) {
                             Message message = new Message();
                             message.setAppToken(wxToken);
@@ -1197,7 +1224,12 @@ public class RecordBiliPublishService {
             log.error("[BLR] {}", LogKvs.event("Publish.Error")
                     .add("historyId", history.getId())
                     .add("roomId", history.getRoomId())
-                    .addIfNotBlank("title", history.getTitle()), e);
+                    .addIfNotBlank("title", history.getTitle())
+                    .addStageCostMs("total", publishStartNs)
+                    .addStageField("loadParts", "costMs", loadPartsCostMs)
+                    .addStageField("ensureUpload", "costMs", ensureUploadCostMs)
+                    .addStageField("webPublish", "costMs", webPublishCostMs)
+                    .addStageField("postProcess", "costMs", postProcessCostMs), e);
         } finally {
             TaskUtil.publishTask.remove(history.getId());
         }

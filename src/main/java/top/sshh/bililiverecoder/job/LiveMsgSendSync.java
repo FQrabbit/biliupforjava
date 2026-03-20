@@ -73,9 +73,16 @@ public class LiveMsgSendSync {
     public void sndMsgProcess() {
         skipOrdinaryPartIds.clear();
         skipAdvancedPartIds.clear();
+        long roundStartNs = System.nanoTime();
+        int historyCount = 0;
+        int candidatePartCount = 0;
+        int pendingNormalCount = 0;
+        int pendingHighCount = 0;
         log.debug("[BLR] {}", LogKvs.event("LiveMsgSendSync.Start"));
+        try {
         long startTime = System.currentTimeMillis();
         List<RecordHistory> historyList = historyRepository.findByPublishIsTrueAndCodeIn(Arrays.asList(0, -50));
+        historyCount = historyList.size();
         if (CollectionUtils.isEmpty(historyList)) {
             return;
         }
@@ -436,6 +443,7 @@ public class LiveMsgSendSync {
         if (CollectionUtils.isEmpty(partList)) {
             return;
         }
+        candidatePartCount = partList.size();
         //普通弹幕
         List<LiveMsg> msgAllList = new ArrayList<>();
         List<RecordRoom> roomList = roomRepository.findBySendDmIsTrue();
@@ -443,6 +451,7 @@ public class LiveMsgSendSync {
         List<Long> partIds = partList.stream().map(RecordHistoryPart::getId).toList();
         // 高级弹幕
         List<LiveMsg> allHighLevelMsg = msgRepository.findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(1, -1, partIds);
+        pendingHighCount = allHighLevelMsg.size();
 
         // 房间设置是否发送弹幕
         partIds = partList.stream().filter(p -> roomIds.contains(p.getRoomId())).map(RecordHistoryPart::getId).toList();
@@ -452,6 +461,7 @@ public class LiveMsgSendSync {
         if (!msgPage.isEmpty()) {
             msgAllList.addAll(msgPage.get().toList());
         }
+        pendingNormalCount = msgAllList.size();
         if (msgAllList.isEmpty() && allHighLevelMsg.isEmpty()) {
             return;
         }
@@ -667,6 +677,14 @@ public class LiveMsgSendSync {
             });
         } finally {
             lock.unlock();
+        }
+        } finally {
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Done")
+                    .addRoundCount("history", historyCount)
+                    .addRoundCount("candidatePart", candidatePartCount)
+                    .addRoundCount("pendingNormal", pendingNormalCount)
+                    .addRoundCount("pendingHigh", pendingHighCount)
+                    .addStageCostMs("total", roundStartNs));
         }
 
     }

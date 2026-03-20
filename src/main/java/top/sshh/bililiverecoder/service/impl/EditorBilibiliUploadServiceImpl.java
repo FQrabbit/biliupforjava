@@ -119,6 +119,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
     @Override
     public void upload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).orElse(part);
+        long uploadStartNs = System.nanoTime();
         if (part.isUpload()) {
             log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
                     .add("os", OS)
@@ -454,7 +455,8 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
             log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
                     .add("os", OS)
                     .add("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
+                    .add("ex", e.getClass().getSimpleName())
+                    .addStageCostMs("total", uploadStartNs), e);
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
         }

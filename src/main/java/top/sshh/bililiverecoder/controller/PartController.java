@@ -238,6 +238,7 @@ public class PartController {
 
     @PostMapping("/rescan/{id}")
     public Map<String, Object> rescan(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, Object> result = new LinkedHashMap<>();
         Optional<RecordHistoryPart> partOptional = partRepository.findById(id);
         if (partOptional.isEmpty()) {
@@ -297,7 +298,8 @@ public class PartController {
                             .add("historyId", part.getHistoryId())
                             .add("roomId", part.getRoomId())
                             .add("err", e.getMessage())
-                            .add("ex", e.getClass().getSimpleName()), e);
+                            .add("ex", e.getClass().getSimpleName())
+                            .addStageCostMs("total", totalStartNs), e);
                 }
             }
         }
@@ -306,7 +308,9 @@ public class PartController {
                 .add("partId", part.getId())
                 .add("historyId", part.getHistoryId())
                 .add("roomId", part.getRoomId())
-                .add("triggerUpload", triggered));
+                .add("triggerUpload", triggered)
+                .addRoundCount("stateChanged", changed ? 1 : 0)
+                .addStageCostMs("total", totalStartNs));
 
         result.put("type", "success");
         result.put("msg", triggered ? "已重试扫描并触发上传" : "已重试扫描并修正状态");
@@ -315,6 +319,7 @@ public class PartController {
 
     @PostMapping("/markFinished/{id}")
     public Map<String, Object> markFinished(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, Object> result = new LinkedHashMap<>();
         Optional<RecordHistoryPart> partOptional = partRepository.findById(id);
         if (partOptional.isEmpty()) {
@@ -358,7 +363,8 @@ public class PartController {
         log.info("[BLR] {}", LogKvs.event("PartRepair.MarkFinished")
                 .add("partId", part.getId())
                 .add("historyId", part.getHistoryId())
-                .add("roomId", part.getRoomId()));
+            .add("roomId", part.getRoomId())
+            .addStageCostMs("total", totalStartNs));
 
         result.put("type", "success");
         result.put("msg", "已标记为结束，稿件可继续推进");
@@ -367,6 +373,7 @@ public class PartController {
 
     @PostMapping("/bindFile/{id}")
     public Map<String, Object> bindFile(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
+        long totalStartNs = System.nanoTime();
         Map<String, Object> result = new LinkedHashMap<>();
         Optional<RecordHistoryPart> partOptional = partRepository.findById(id);
         if (partOptional.isEmpty()) {
@@ -434,7 +441,8 @@ public class PartController {
                             .add("historyId", part.getHistoryId())
                             .add("roomId", part.getRoomId())
                             .add("err", e.getMessage())
-                            .add("ex", e.getClass().getSimpleName()), e);
+                            .add("ex", e.getClass().getSimpleName())
+                            .addStageCostMs("total", totalStartNs), e);
                 }
             }
         }
@@ -443,7 +451,8 @@ public class PartController {
                 .add("partId", part.getId())
                 .add("historyId", part.getHistoryId())
                 .add("roomId", part.getRoomId())
-                .add("triggerUpload", triggered));
+                .add("triggerUpload", triggered)
+                .addStageCostMs("total", totalStartNs));
 
         result.put("type", "success");
         result.put("msg", triggered ? "已补全文件并触发上传" : "已补全文件");

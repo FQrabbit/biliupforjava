@@ -37,10 +37,15 @@ public class DeletePartFileJob {
 
     @Scheduled(fixedDelay = 3600000, initialDelay = 60000)
     public void deleteFileProcess() {
+        long roundStartNs = System.nanoTime();
+        int roomCount = 0;
+        int scannedPartCount = 0;
         List<RecordRoom> roomList = roomRepository.findByDeleteType(3);
+        roomCount = roomList.size();
         for (RecordRoom room : roomList) {
             LocalDateTime deleteTime = LocalDateTime.now().minusDays(room.getDeleteDay());
             List<RecordHistoryPart> partList = partRepository.findByRoomIdAndFileDeleteIsFalseAndEndTimeIsBefore(room.getRoomId(),deleteTime);
+            scannedPartCount += partList.size();
             if (partList.size() > 0) {
                 log.info("[BLR] {}", LogKvs.event("DeletePartFileJob.Start")
                         .add("roomId", room.getRoomId())
@@ -110,13 +115,22 @@ public class DeletePartFileJob {
                 partRepository.save(part);
             }
         }
+        log.info("[BLR] {}", LogKvs.event("DeletePartFileJob.Round.Done")
+            .addRoundCount("room", roomCount)
+            .addRoundCount("scannedPart", scannedPartCount)
+                .addStageCostMs("total", roundStartNs));
     }
     @Scheduled(fixedDelay = 3600000, initialDelay = 60000)
     public void moveFileProcess() {
+        long roundStartNs = System.nanoTime();
+        int roomCount = 0;
+        int scannedPartCount = 0;
         List<RecordRoom> roomList = roomRepository.findByDeleteType(8);
+        roomCount = roomList.size();
         for (RecordRoom room : roomList) {
             LocalDateTime deleteTime = LocalDateTime.now().minusDays(room.getDeleteDay());
             List<RecordHistoryPart> partList = partRepository.findByRoomIdAndFileDeleteIsFalseAndEndTimeIsBefore(room.getRoomId(),deleteTime);
+            scannedPartCount += partList.size();
             if (partList.size() > 0) {
                 log.info("[BLR] {}", LogKvs.event("MovePartFileJob.Start")
                         .add("roomId", room.getRoomId())
@@ -166,5 +180,9 @@ public class DeletePartFileJob {
                 part = partRepository.save(part);
             }
         }
+        log.info("[BLR] {}", LogKvs.event("MovePartFileJob.Round.Done")
+            .addRoundCount("room", roomCount)
+            .addRoundCount("scannedPart", scannedPartCount)
+                .addStageCostMs("total", roundStartNs));
     }
 }

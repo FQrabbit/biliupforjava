@@ -157,6 +157,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Override
     public void upload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
+        long uploadStartNs = System.nanoTime();
         if (part.isUpload()) {
             log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
                     .add("os", OS)
@@ -822,7 +823,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                             .add("historyId", part.getHistoryId())
                                             .add("filePath", filePath)
                                             .add("serverFileName", part.getFileName())
-                                            .add("cid", part.getCid()));
+                                            .add("cid", part.getCid())
+                                            .addStageCostMs("total", uploadStartNs));
 
                                     if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
                                         message.setAppToken(wxToken);
@@ -848,7 +850,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         .add("historyId", part.getHistoryId())
                                         .add("filePath", filePath)
                                         .add("err", e.getMessage())
-                                        .add("ex", e.getClass().getSimpleName()), e);
+                                    .add("ex", e.getClass().getSimpleName())
+                                    .addStageCostMs("total", uploadStartNs), e);
                                 if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
                                     message.setAppToken(wxToken);
                                     message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -879,7 +882,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
             log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
                     .add("os", OS)
                     .add("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
+                    .add("ex", e.getClass().getSimpleName())
+                    .addStageCostMs("total", uploadStartNs), e);
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
             uploadProgressTracker.remove(part.getId());

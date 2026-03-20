@@ -32,6 +32,7 @@ public class RecordWebHook {
         long delayMs = "SessionEnded".equals(eventType) ? 10000L : 0L;
 
         boolean accepted = webhookEventDispatcher.submit(lockKey, delayMs, () -> {
+            long dispatchStartNs = System.nanoTime();
             try {
                 String roomId = getEffectiveRoomId(recordEvent);
                 String title = getEffectiveTitle(recordEvent);
@@ -41,18 +42,21 @@ public class RecordWebHook {
                         .add("endpoint", "/recordWebHook")
                         .add("type", eventType)
                         .add("roomId", roomId)
-                        .add("title", title));
+                        .add("title", title)
+                        .addStageCostMs("total", dispatchStartNs));
                     log.debug("[BLR] {}", LogKvs.event("Webhook.Payload.Debug")
                             .add("source", source)
                             .add("endpoint", "/recordWebHook")
                             .add("type", eventType)
                             .add("roomId", roomId)
-                            .add("payloadLen", JSON.toJSONString(recordEvent).length()));
+                            .add("payloadLen", JSON.toJSONString(recordEvent).length())
+                            .addStageCostMs("total", dispatchStartNs));
                 } else {
                     log.info("[BLR] {}", LogKvs.event("Webhook.ReceivedLegacy")
                         .add("source", source)
                         .add("endpoint", "/recordWebHook")
-                        .add("payload", JSON.toJSONString(recordEvent)));
+                        .add("payload", JSON.toJSONString(recordEvent))
+                        .addStageCostMs("total", dispatchStartNs));
                 }
                 recordEventFactory.processing(recordEvent);
             } catch (Exception e) {
@@ -63,7 +67,8 @@ public class RecordWebHook {
                         .add("roomId", getEffectiveRoomId(recordEvent))
                         .add("lockKeyHash", safeLockKeyHash(lockKey))
                         .add("err", e.getMessage())
-                        .add("ex", e.getClass().getSimpleName()), e);
+                        .add("ex", e.getClass().getSimpleName())
+                        .addStageCostMs("total", dispatchStartNs), e);
             }
         });
 

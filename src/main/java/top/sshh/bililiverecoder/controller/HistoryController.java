@@ -278,6 +278,7 @@ public class HistoryController {
 
     @PostMapping("/visibility/{id}")
     public Map<String, String> updateVisibility(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "warning");
@@ -399,7 +400,10 @@ public class HistoryController {
                         .add("aid", history.getAvId())
                         .add("target", isOnlySelf)
                         .add("code", code)
-                        .add("msg", msg));
+                    .add("msg", msg)
+                    .addRoundCount("pendingNormal", pendingNormal)
+                    .addRoundCount("pendingHigh", pendingHigh)
+                    .addStageCostMs("total", totalStartNs));
                 return result;
             }
 
@@ -413,7 +417,10 @@ public class HistoryController {
                     .add("historyId", history.getId())
                     .add("roomId", history.getRoomId())
                     .add("aid", history.getAvId())
-                    .add("target", isOnlySelf));
+                    .add("target", isOnlySelf)
+                    .addRoundCount("pendingNormal", pendingNormal)
+                    .addRoundCount("pendingHigh", pendingHigh)
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } catch (Exception e) {
             result.put("type", "warning");
@@ -423,7 +430,10 @@ public class HistoryController {
                     .add("roomId", history.getRoomId())
                     .add("aid", history.getAvId())
                     .add("target", isOnlySelf)
-                    .add("err", e.getMessage()), e);
+                    .add("err", e.getMessage())
+                    .addRoundCount("pendingNormal", pendingNormal)
+                    .addRoundCount("pendingHigh", pendingHigh)
+                    .addStageCostMs("total", totalStartNs), e);
             return result;
         }
     }
@@ -547,6 +557,15 @@ public class HistoryController {
             data.put("partDeleteCostMs", partDeleteCostMs);
             data.put("historyDeleteCostMs", historyDeleteCostMs);
             data.put("totalCostMs", totalCostMs);
+            data.put("round.deletedMsgCount", deletedMsgCount);
+            data.put("round.deletedPartCount", deletedPartCount);
+            data.put("round.localDeleteAttemptCount", localDeleteAttempt);
+            data.put("round.localDeleteSuccessCount", localDeleteSuccess);
+            data.put("stage.msgDelete.costMs", msgDeleteCostMs);
+            data.put("stage.localDelete.costMs", localDeleteCostMs);
+            data.put("stage.partDelete.costMs", partDeleteCostMs);
+            data.put("stage.historyDelete.costMs", historyDeleteCostMs);
+            data.put("stage.total.costMs", totalCostMs);
             data.put("notDeletedFiles", notDeletedFiles);
             result.put("data", data);
 
@@ -564,7 +583,16 @@ public class HistoryController {
                     .add("localDeleteCostMs", localDeleteCostMs)
                     .add("partDeleteCostMs", partDeleteCostMs)
                     .add("historyDeleteCostMs", historyDeleteCostMs)
-                    .add("totalCostMs", totalCostMs));
+                    .add("totalCostMs", totalCostMs)
+                    .addRoundCount("deletedMsg", deletedMsgCount)
+                    .addRoundCount("deletedPart", deletedPartCount)
+                    .addRoundCount("localDeleteAttempt", localDeleteAttempt)
+                    .addRoundCount("localDeleteSuccess", localDeleteSuccess)
+                    .addStageField("msgDelete", "costMs", msgDeleteCostMs)
+                    .addStageField("localDelete", "costMs", localDeleteCostMs)
+                    .addStageField("partDelete", "costMs", partDeleteCostMs)
+                    .addStageField("historyDelete", "costMs", historyDeleteCostMs)
+                    .addStageField("total", "costMs", totalCostMs));
 
             if (notDeletedFiles.isEmpty()) {
                 result.put("type", "success");
@@ -585,6 +613,15 @@ public class HistoryController {
                         .add("partDeleteCostMs", partDeleteCostMs)
                         .add("historyDeleteCostMs", historyDeleteCostMs)
                         .add("totalCostMs", totalCostMs)
+                        .addRoundCount("deletedMsg", deletedMsgCount)
+                        .addRoundCount("deletedPart", deletedPartCount)
+                        .addRoundCount("localDeleteAttempt", localDeleteAttempt)
+                        .addRoundCount("localDeleteSuccess", localDeleteSuccess)
+                        .addStageField("msgDelete", "costMs", msgDeleteCostMs)
+                        .addStageField("localDelete", "costMs", localDeleteCostMs)
+                        .addStageField("partDelete", "costMs", partDeleteCostMs)
+                        .addStageField("historyDelete", "costMs", historyDeleteCostMs)
+                        .addStageField("total", "costMs", totalCostMs)
                         .toString());
             }
             return result;
@@ -636,6 +673,7 @@ public class HistoryController {
 
     @GetMapping("/deleteMsg/{id}")
     public Map<String, String> deleteMsg(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -645,10 +683,21 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            long queryStartNs = System.nanoTime();
             List<LiveMsg> liveMsgs = msgRepository.queryByBvid(history.getBvId());
+            long queryCostMs = toCostMs(queryStartNs);
+            long deleteStartNs = System.nanoTime();
             msgRepository.deleteAll(liveMsgs);
+            long deleteCostMs = toCostMs(deleteStartNs);
             result.put("type", "success");
             result.put("msg", "弹幕删除成功");
+            log.info("[BLR] {}", LogKvs.event("History.DeleteMsg.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .addRoundCount("deletedMsg", liveMsgs.size())
+                    .addStageField("query", "costMs", queryCostMs)
+                    .addStageField("delete", "costMs", deleteCostMs)
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } else {
             result.put("type", "warning");
@@ -661,6 +710,7 @@ public class HistoryController {
     public Map<String, String> reloadMsg(@PathVariable("id") Long id,
                                          @RequestParam(required = false, defaultValue = "false") boolean restartOrdinary,
                                          @RequestParam(required = false, defaultValue = "false") boolean restartAdvanced) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -670,8 +720,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            int scannedParts = 0;
+            int reloadedParts = 0;
+            int deletedMsgCount = 0;
             List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : parts) {
+                scannedParts++;
                 if (restartOrdinary) {
                     top.sshh.bililiverecoder.job.LiveMsgSendSync.skipOrdinaryPartIds.add(part.getId());
                 }
@@ -683,14 +737,25 @@ public class HistoryController {
                 File file = new File(filePath);
                 if (file.exists()) {
                     List<LiveMsg> liveMsgs = msgRepository.queryByCid(part.getCid());
+                    deletedMsgCount += liveMsgs.size();
                     msgRepository.deleteAll(liveMsgs);
                     msgService.processing(part);
+                    reloadedParts++;
                 }
             }
             history.setSendReply(false);
             historyRepository.save(history);
             result.put("type", "success");
             result.put("msg", "弹幕重新加载成功");
+            log.info("[BLR] {}", LogKvs.event("History.ReloadMsg.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .add("restartOrdinary", restartOrdinary)
+                    .add("restartAdvanced", restartAdvanced)
+                    .addRoundCount("scannedPart", scannedParts)
+                    .addRoundCount("reloadedPart", reloadedParts)
+                    .addRoundCount("deletedMsg", deletedMsgCount)
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } else {
             result.put("type", "warning");
@@ -701,6 +766,7 @@ public class HistoryController {
 
     @GetMapping("/updatePartStatus/{id}")
     public Map<String, String> updatePartStatus(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -710,15 +776,22 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            int updatedPartCount = 0;
             List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : partList) {
                 part.setRecording(false);
                 partRepository.save(part);
+                updatedPartCount++;
             }
             history.setRecording(false);
             historyRepository.save(history);
             result.put("type", "success");
             result.put("msg", "状态更新成功");
+            log.info("[BLR] {}", LogKvs.event("History.UpdatePartStatus.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .addRoundCount("updatedPart", updatedPartCount)
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } else {
             result.put("type", "warning");
@@ -729,6 +802,7 @@ public class HistoryController {
 
     @GetMapping("/updatePublishStatus/{id}")
     public Map<String, String> updatePublishStatus(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -745,6 +819,7 @@ public class HistoryController {
             // 重置上传重试次数
             history.setUploadRetryCount(0);
             historyRepository.save(history);
+            int updatedPartCount = 0;
             List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : partList) {
                 part.setUpload(false);
@@ -753,9 +828,15 @@ public class HistoryController {
                 // 重置分P上传重试次数
                 part.setUploadRetryCount(0);
                 partRepository.save(part);
+                updatedPartCount++;
             }
             result.put("type", "success");
             result.put("msg", "状态更新成功");
+            log.info("[BLR] {}", LogKvs.event("History.UpdatePublishStatus.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .addRoundCount("updatedPart", updatedPartCount)
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } else {
             result.put("type", "warning");
@@ -766,6 +847,7 @@ public class HistoryController {
 
     @GetMapping("/touchPublish/{id}")
     public Map<String, String> touchPublish(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -780,6 +862,10 @@ public class HistoryController {
             publishService.asyncPublishRecordHistory(history);
             result.put("type", "success");
             result.put("msg", "触发发布事件成功");
+            log.info("[BLR] {}", LogKvs.event("History.TouchPublish.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } else {
             result.put("type", "warning");
@@ -790,6 +876,7 @@ public class HistoryController {
 
     @GetMapping("/highEnergyCutPublish/{id}")
     public Map<String, String> HighEnergyCutPublish(@PathVariable("id") Long id) throws IOException {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -817,6 +904,10 @@ public class HistoryController {
             }
             result.put("type", "success");
             result.put("msg", "触发高能剪辑成功");
+                log.info("[BLR] {}", LogKvs.event("History.HighEnergyCutPublish.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } else {
             result.put("type", "warning");
@@ -827,6 +918,7 @@ public class HistoryController {
 
     @GetMapping("/rePublish/{id}")
     public Map<String, String> rePublish(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -841,6 +933,10 @@ public class HistoryController {
             publishService.asyncRepublishRecordHistory(history);
             result.put("type", "success");
             result.put("msg", "触发转码修复事件成功");
+            log.info("[BLR] {}", LogKvs.event("History.Republish.Success")
+                    .add("historyId", id)
+                    .add("roomId", history.getRoomId())
+                    .addStageCostMs("total", totalStartNs));
             return result;
         } else {
             result.put("type", "warning");
@@ -851,6 +947,7 @@ public class HistoryController {
 
     @GetMapping("/forceArchive/{id}")
     public Map<String, String> forceArchive(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
         Map<String, String> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
@@ -899,6 +996,10 @@ public class HistoryController {
                 historyRepository.save(history);
                 result.put("type", "success");
                 result.put("msg", "已强制归档");
+                log.info("[BLR] {}", LogKvs.event("History.ForceArchive.Success")
+                        .add("historyId", id)
+                        .add("roomId", history.getRoomId())
+                        .addStageCostMs("total", totalStartNs));
             } else {
                 result.put("type", "info");
                 result.put("msg", "该稿件不满足强制归档条件（可能已归档）");
