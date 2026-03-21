@@ -223,6 +223,13 @@ public class publishJob {
             if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
                 return;
             }
+            if (history.isForceArchived()) {
+                log.info("[BLR] {}", LogKvs.event("PublishJob.Skip.ForceArchived")
+                        .add("historyId", history.getId())
+                        .add("roomId", history.getRoomId())
+                        .addIfNotBlank("title", history.getTitle()));
+                continue;
+            }
             // 二次校验：不信任 history.recording 单字段，避免被历史数据/列表纠偏误改后误触发投稿。
             // 只要存在未结束(endTime=null)或仍标记录制中的分P，就视为仍在录制，直接跳过。
             int actuallyRecordingParts = 0;

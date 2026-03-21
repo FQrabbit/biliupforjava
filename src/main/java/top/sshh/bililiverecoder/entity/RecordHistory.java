@@ -57,6 +57,9 @@ public class RecordHistory {
     //是否已发布评论
     private boolean sendReply;
 
+    // 是否被用户手动强制归档；为 true 时不再参与短时自动合并与自动投稿
+    private boolean forceArchived;
+
     private int code = -1;
 
     private int uploadRetryCount = 0;
@@ -148,6 +151,9 @@ public class RecordHistory {
      * 不修改数据库结构，仅做逻辑映射
      */
     public String getStatus() {
+        if (forceArchived) {
+            return "已强制归档";
+        }
         if (recording) {
             return "正在录制";
         }

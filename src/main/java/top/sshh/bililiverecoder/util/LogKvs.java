@@ -107,6 +107,7 @@ public final class LogKvs {
         EVENT_ZH.put("RecordStarted.ReuseHistory.Detail", "录制开始：复用历史记录明细(调试)");
         EVENT_ZH.put("RecordStarted.ReuseActiveHistory", "录制开始：复用活跃的历史记录");
         EVENT_ZH.put("RecordStarted.ReuseRecentHistory", "录制开始：复用最近的历史记录");
+        EVENT_ZH.put("RecordStarted.SkipForceArchivedActive", "录制开始：活跃历史已被强制归档，跳过复用");
         EVENT_ZH.put("RecordStarted.SkipPublished", "录制开始：发现活跃记录已发布/审核中，跳过复用并拆分新稿件");
         EVENT_ZH.put("RecordStarted.ActiveHistoryStale", "录制开始：检测到过时的录制中记录(24小时无活动)");
         EVENT_ZH.put("RecordStarted.Processed", "录制开始事件处理完成");
@@ -193,6 +194,7 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.GatewayErrorPause", "投稿：捕获到网关错误，暂停任务一段时间");
         EVENT_ZH.put("Publish.Parts.Changed", "投稿失败：分P数量发生变动");
         EVENT_ZH.put("Publish.Parts.NotAllUploaded", "投稿失败：存在未上传完成的分P");
+        EVENT_ZH.put("PublishJob.Skip.ForceArchived", "投稿任务：稿件已强制归档，跳过自动投稿");
         EVENT_ZH.put("Publish.UploadUserIdMissing", "投稿失败：未配置上传用户ID");
         EVENT_ZH.put("Publish.Cover.Upload.Response", "投稿：封面上传响应(调试)");
         EVENT_ZH.put("Publish.Cover.Upload.Failed", "投稿：上传/使用直播封面失败");

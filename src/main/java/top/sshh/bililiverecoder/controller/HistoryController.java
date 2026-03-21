@@ -929,6 +929,7 @@ public class HistoryController {
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
             history.setUploadRetryCount(0);
+            history.setForceArchived(false);
             history = historyRepository.save(history);
             publishService.asyncRepublishRecordHistory(history);
             result.put("type", "success");
@@ -958,6 +959,11 @@ public class HistoryController {
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
             boolean changed = false;
+
+            if (!history.isForceArchived()) {
+                history.setForceArchived(true);
+                changed = true;
+            }
 
             // 如果正在发弹幕 -> 强制标记为已发完
             if (history.isPublish() && (history.getCode() == 0 || history.getCode() == -50) && !history.isSendReply()) {
@@ -1222,7 +1228,7 @@ public class HistoryController {
 
     // 计算是否处于等待投稿状态
     boolean waitingForPublish = false;
-    if (history.isUpload() && !history.isPublish() && !history.isRecording() 
+    if (!history.isForceArchived() && history.isUpload() && !history.isPublish() && !history.isRecording() 
             && history.getGiveUpPartCount() == 0 && history.getPartCount() > 0
             && history.getUploadPartCount() == history.getPartCount() && history.getEndTime() != null) {
         

@@ -66,6 +66,14 @@ public class RecordEventRecordStartedService implements RecordEventService {
             List<RecordHistory> activeHistoryList = historyRepository.findByRoomIdAndRecordingTrueOrderByStartTimeDesc(eventData.getRoomId());
             if (!CollectionUtils.isEmpty(activeHistoryList)) {
                 RecordHistory activeHistory = activeHistoryList.get(0);
+                if (activeHistory.isForceArchived()) {
+                    activeHistory = null;
+                }
+                if (activeHistory == null) {
+                    log.info("[BLR] {}", LogKvs.event("RecordStarted.SkipForceArchivedActive")
+                            .add("roomId", roomId));
+                }
+                if (activeHistory != null) {
                 // 增加活跃度检查：如果录制中的记录在过去 24 小时内没有任何更新（以 endTime 为准），则视为过时记录
                 // 额外检查：如果稿件已经发布（publish=true），说明已经提交审核，无法再通过投稿接口增加分P，必须拆分新稿件
                 if (activeHistory.getEndTime() != null && activeHistory.getEndTime().isAfter(now.minusHours(24)) && !activeHistory.isPublish()) {
@@ -105,6 +113,7 @@ public class RecordEventRecordStartedService implements RecordEventService {
                                 historyPartRepository.save(p);
                             });
                 }
+                }
             }
 
             if (history == null) {
@@ -129,8 +138,8 @@ public class RecordEventRecordStartedService implements RecordEventService {
                 }
                 List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(eventData.getRoomId(), now.minusMinutes((long) mergeIntervalMinutes), now);
                 if (!CollectionUtils.isEmpty(historyList)) {
-                    // 过滤掉已经发布的稿件
-                    historyList = historyList.stream().filter(h -> !h.isPublish()).collect(java.util.stream.Collectors.toList());
+                    // 过滤掉已经发布或已强制归档的稿件
+                    historyList = historyList.stream().filter(h -> !h.isPublish() && !h.isForceArchived()).collect(java.util.stream.Collectors.toList());
                     if (!historyList.isEmpty()) {
                         // 复用最近的一条记录（取列表的最后一条，即 EndTime 最大的）
                         history = historyList.get(historyList.size() - 1);
