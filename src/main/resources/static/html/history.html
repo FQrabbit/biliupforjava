@@ -1310,6 +1310,8 @@
             isWaitingForUpload: function() {
                 // 如果没有详情或已完成，则不显示
                 if (!this.currentDetail || !this.currentDetail.id) return false;
+                // 如果不需要上传，则不显示
+                if (!this.currentDetail.upload) return false;
                 // 如果整体进度已完成，不显示
                 if (this.getEffectiveDoneParts() >= this.getEffectiveTotalParts() && this.getEffectiveTotalParts() > 0) return false;
                 
