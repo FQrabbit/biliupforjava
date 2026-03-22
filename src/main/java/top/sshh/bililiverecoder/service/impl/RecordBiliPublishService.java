@@ -63,6 +63,7 @@ public class RecordBiliPublishService {
             收到主播%s投稿事件
             房间名: %s
             时间: %s
+            BV号: %s
             原因: %s
             """;
 
@@ -347,7 +348,7 @@ public class RecordBiliPublishService {
                     message.setAppToken(wxToken);
                     message.setContentType(Message.CONTENT_TYPE_TEXT);
                     message.setContent(WX_MSG_FORMAT.formatted("重新投稿成功", room.getUname(), room.getTitle(),
-                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), errMsg));
+                                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), "", errMsg.toString().trim()));
                     message.setUid(wxuid);
                     PushNotifyClient.sendParallel(room, message);
                 }
@@ -358,7 +359,7 @@ public class RecordBiliPublishService {
                     message.setContentType(Message.CONTENT_TYPE_TEXT);
                     message.setContent(WX_MSG_FORMAT.formatted("重新投稿失败", room.getUname(), room.getTitle(),
                             LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                            JsonPath.read(republishRes, "message")));
+                                "", (String) JsonPath.read(republishRes, "message")));
                     message.setUid(wxuid);
                     PushNotifyClient.sendParallel(room, message);
                 }
@@ -489,7 +490,7 @@ public class RecordBiliPublishService {
                         message.setContentType(Message.CONTENT_TYPE_TEXT);
                         message.setContent(WX_MSG_FORMAT.formatted("投稿失败", room.getUname(), room.getTitle(),
                                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                "分p数量超过100,将在切割后再次投稿，当前分P数量为：" + uploadParts.size()));
+                                    "", "分p数量超过100,将在切割后再次投稿，当前分P数量为：" + uploadParts.size()));
                         message.setUid(wxuid);
                         PushNotifyClient.sendParallel(room, message);
                     }
@@ -685,7 +686,7 @@ public class RecordBiliPublishService {
                     message.setContentType(Message.CONTENT_TYPE_TEXT);
                     message.setContent(WX_MSG_FORMAT.formatted("投稿失败", room.getUname(), room.getTitle(),
                             LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                            "分p数量发生变动"));
+                            "", "分p数量发生变动"));
                     message.setUid(wxuid);
                     PushNotifyClient.sendParallel(room, message);
                 }
@@ -747,7 +748,7 @@ public class RecordBiliPublishService {
                             message.setContentType(Message.CONTENT_TYPE_TEXT);
                             message.setContent(WX_MSG_FORMAT.formatted("投稿失败", room.getUname(), room.getTitle(),
                                     LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                    biliBiliUser.getUname() + "登录已过期，请重新登录"));
+                                    "", biliBiliUser.getUname() + "登录已过期，请重新登录"));
                             message.setUid(wxuid);
                             PushNotifyClient.sendParallel(room, message);
                         }
@@ -1083,7 +1084,7 @@ public class RecordBiliPublishService {
                             message.setAppToken(wxToken);
                             message.setContentType(Message.CONTENT_TYPE_TEXT);
                             message.setContent(WX_MSG_FORMAT.formatted("投稿成功", room.getUname(), room.getTitle(),
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), "bvid=>" + bvid));
+                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), bvid, ""));
                             message.setUid(wxuid);
                             PushNotifyClient.sendParallel(room, message);
                         }
@@ -1210,8 +1211,8 @@ public class RecordBiliPublishService {
                             Message message = new Message();
                             message.setAppToken(wxToken);
                             message.setContentType(Message.CONTENT_TYPE_TEXT);
-                            message.setContent(WX_MSG_FORMAT.formatted("投稿失败", room.getUname(), room.getTitle(),
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), uploadRes != null ? uploadRes : e.getMessage()));
+                                message.setContent(WX_MSG_FORMAT.formatted("投稿失败", room.getUname(), room.getTitle(),
+                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), "", uploadRes != null ? uploadRes : e.getMessage()));
                             message.setUid(wxuid);
                             PushNotifyClient.sendParallel(room, message);
                         }

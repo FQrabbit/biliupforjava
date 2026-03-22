@@ -27,7 +27,7 @@ public final class PushNotifyClient {
 
     private static final String SERVER_CHAN3_SEND_URL = "https://%s.push.ft07.com/send/%s.send";
     private static final Pattern SERVER_CHAN3_UID_PATTERN = Pattern.compile("^sctp(\\d+)t.*$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern BV_ID_PATTERN = Pattern.compile("(?i)BV[0-9A-Z]+", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BV_ID_PATTERN = Pattern.compile("BV[0-9A-Za-z]+");
     private static final List<String> KNOWN_PUSH_TAGS = Arrays.asList(
             "开始直播", "录制结束", "分P上传", "视频投稿", "高级弹幕", "视频评论", "云剪辑"
     );
