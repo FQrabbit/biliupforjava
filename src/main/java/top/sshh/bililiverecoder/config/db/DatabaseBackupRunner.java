@@ -1,13 +1,14 @@
-package top.sshh.bililiverecoder.config;
+package top.sshh.bililiverecoder.config.db;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-
 import top.sshh.bililiverecoder.util.LogKvs;
+
 import javax.sql.DataSource;
 import java.io.File;
 import java.sql.Connection;
@@ -18,7 +19,8 @@ import java.util.Date;
 
 @Slf4j
 @Component
-public class StartupBackupRunner implements ApplicationRunner {
+@Order(100)
+public class DatabaseBackupRunner implements ApplicationRunner {
 
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
@@ -26,7 +28,7 @@ public class StartupBackupRunner implements ApplicationRunner {
     @Value("${record.work-path:.}")
     private String workPath;
 
-    public StartupBackupRunner(DataSource dataSource, JdbcTemplate jdbcTemplate) {
+    public DatabaseBackupRunner(DataSource dataSource, JdbcTemplate jdbcTemplate) {
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -37,7 +39,7 @@ public class StartupBackupRunner implements ApplicationRunner {
             String url = connection.getMetaData().getURL();
             if (url != null && url.contains(":h2:")) {
                 log.info("[BLR] {}", LogKvs.event("Database.Backup.Start").add("url", url));
-                
+
                 // 创建备份目录
                 File backupDir = new File(workPath, "backup");
                 if (!backupDir.exists()) {

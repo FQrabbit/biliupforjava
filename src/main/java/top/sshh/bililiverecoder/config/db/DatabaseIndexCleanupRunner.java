@@ -1,8 +1,9 @@
-package top.sshh.bililiverecoder.config;
+package top.sshh.bililiverecoder.config.db;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -12,12 +13,13 @@ import java.sql.Connection;
 
 @Slf4j
 @Component
-public class StartupIndexCleanupRunner implements ApplicationRunner {
+@Order(20)
+public class DatabaseIndexCleanupRunner implements ApplicationRunner {
 
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
 
-    public StartupIndexCleanupRunner(DataSource dataSource, JdbcTemplate jdbcTemplate) {
+    public DatabaseIndexCleanupRunner(DataSource dataSource, JdbcTemplate jdbcTemplate) {
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -54,4 +56,3 @@ public class StartupIndexCleanupRunner implements ApplicationRunner {
         }
     }
 }
-

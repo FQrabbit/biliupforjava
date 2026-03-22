@@ -58,6 +58,7 @@ public class RecordHistory {
     private boolean sendReply;
 
     // 是否被用户手动强制归档；为 true 时不再参与短时自动合并与自动投稿
+    @Column(name = "force_archived", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean forceArchived;
 
     private int code = -1;
