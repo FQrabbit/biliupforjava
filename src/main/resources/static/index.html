@@ -101,6 +101,36 @@
             </nav>
 
             <div class="header-actions">
+                <el-popover placement="bottom-end"
+                            width="300"
+                            trigger="click"
+                            popper-class="workspace-status-popover"
+                            @show="fetchWorkspaceUsageStatus">
+                    <div class="workspace-status-panel">
+                        <div class="workspace-status-title">工作空间状态</div>
+                        <div class="workspace-status-item">
+                            <span class="workspace-status-label">占用率</span>
+                            <span class="workspace-status-value" :class="{ 'is-alert': workspaceStatus.alert }">{{ workspaceUsageDisplayPercent }}</span>
+                        </div>
+                        <div class="workspace-status-item">
+                            <span class="workspace-status-label">待上传文件</span>
+                            <span class="workspace-status-value">{{ workspaceStatus.pendingUploadCount || 0 }}</span>
+                        </div>
+                        <div class="workspace-status-item">
+                            <span class="workspace-status-label">检查时间</span>
+                            <span class="workspace-status-value">{{ workspaceStatus.updatedAt || '--' }}</span>
+                        </div>
+                        <div v-if="workspaceStatusLoading" class="workspace-status-hint">正在刷新状态...</div>
+                        <div v-else-if="workspaceStatus.valid === false" class="workspace-status-hint is-error">{{ workspaceStatus.error || '状态不可用' }}</div>
+                        <div v-else class="workspace-status-hint">后续可在此处扩展更多工作信息。</div>
+                    </div>
+                    <div slot="reference"
+                         class="workspace-toggle"
+                         :class="{ 'has-alert': workspaceStatus.alert }"
+                         :title="workspaceStatus.alert ? ('工作空间占用已接近上限: ' + workspaceUsageDisplayPercent) : ('工作空间占用: ' + workspaceUsageDisplayPercent)">
+                        <i class="el-icon-data-analysis"></i>
+                    </div>
+                </el-popover>
                 <div class="privacy-toggle" :class="{ 'is-active': privacyMode }" @click="toggleGlobalPrivacyMode" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
                     <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
                 </div>
@@ -885,7 +915,17 @@
             componentPages: ['user', 'log'],
             // iframe 子页面批量操作状态
             iframeOperating: false,
-            iframeOperatingMessage: ''
+            iframeOperatingMessage: '',
+            workspaceStatusLoading: false,
+            workspaceUsageTimer: null,
+            workspaceStatus: {
+                valid: true,
+                usedPercent: 0,
+                alertThresholdPercent: 95,
+                alert: false,
+                updatedAt: '',
+                error: ''
+            }
         },
         computed: {
             currentModuleMeta: function() {
@@ -919,14 +959,25 @@
             },
             isIframeReady: function() {
                 return (!this.pageLoading && !this.connectionError && this.connectionReady) || this.keepIframeOnDisconnect();
+            },
+            workspaceUsageDisplayPercent: function() {
+                var percent = Number(this.workspaceStatus.usedPercent);
+                if (!isFinite(percent)) {
+                    return '--';
+                }
+                return percent.toFixed(2) + '%';
             }
         },
         mounted: function() {
             var self = this;
             this.applyTheme(this.theme);
             this.checkAlerts();
+            this.fetchWorkspaceUsageStatus();
             this.loadSystemConfig();
             setInterval(this.checkAlerts, 30000);
+            this.workspaceUsageTimer = setInterval(function() {
+                self.fetchWorkspaceUsageStatus();
+            }, 60000);
             this.checkUpdate();
             // 初始化导航指示器
             this.$nextTick(function() {
@@ -966,7 +1017,25 @@
                 });
             }
         },
+        beforeDestroy: function() {
+            if (this.workspaceUsageTimer) {
+                clearInterval(this.workspaceUsageTimer);
+                this.workspaceUsageTimer = null;
+            }
+        },
         methods: {
+            fetchWorkspaceUsageStatus: function() {
+                var self = this;
+                self.workspaceStatusLoading = true;
+                ApiUtil.get('/system-status/workspace-usage', function(data) {
+                    self.workspaceStatus = Object.assign({}, self.workspaceStatus, data || {});
+                    self.workspaceStatusLoading = false;
+                }, function(xhr) {
+                    self.workspaceStatusLoading = false;
+                    self.workspaceStatus.valid = false;
+                    self.workspaceStatus.error = '状态获取失败' + (xhr && xhr.status ? (' (HTTP ' + xhr.status + ')') : '');
+                });
+            },
             toggleThemePanel: function() {
                 if (!this.showThemePanel) {
                     var btn = document.getElementById('themeToggleBtn');

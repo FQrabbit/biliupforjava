@@ -52,6 +52,15 @@ public class UploadUserSerialScheduler {
         return counter != null && counter.get() > 0;
     }
 
+    /**
+     * 获取所有待上传文件总数
+     */
+    public int getTotalPendingUploadCount() {
+        return pendingPartCounts.values().stream()
+                .mapToInt(AtomicInteger::get)
+                .sum();
+    }
+
     private boolean submitInternal(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task, int requeueAttempt, boolean countAsNew, boolean dedupeByPart) {
         if (uploadUserId == null) {
             try {
