@@ -69,6 +69,21 @@
     box-shadow: var(--shadow-sm);
 }
 
+.workspace-logo-trigger {
+    cursor: pointer;
+    transition: transform var(--transition-base), box-shadow var(--transition-base), filter var(--transition-base);
+}
+
+.workspace-logo-trigger:hover {
+    transform: scale(1.05);
+    filter: brightness(1.03);
+}
+
+.workspace-logo-trigger.has-alert {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning-color) 34%, transparent), var(--shadow-sm);
+    animation: workspace-chip-pulse 1.8s ease-in-out infinite;
+}
+
 .brand-info {
     display: flex;
     flex-direction: column;
@@ -396,6 +411,19 @@
     font-size: 12px;
 }
 
+.workspace-status-item.is-usage {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.workspace-status-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
 .workspace-status-label {
     color: var(--text-secondary);
 }
@@ -405,8 +433,44 @@
     font-weight: 600;
 }
 
-.workspace-status-value.is-alert {
+.workspace-status-value.is-warning {
     color: var(--warning-color);
+}
+
+.workspace-status-value.is-danger {
+    color: var(--danger-color);
+}
+
+.workspace-status-progress-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px var(--border-light);
+}
+
+.workspace-status-progress-fill {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    transition: width var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base);
+    background: var(--success-color);
+}
+
+.workspace-status-progress-fill.is-normal {
+    background: var(--success-color);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--success-color) 36%, transparent);
+}
+
+.workspace-status-progress-fill.is-warning {
+    background: var(--warning-color);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning-color) 36%, transparent);
+}
+
+.workspace-status-progress-fill.is-danger {
+    background: var(--danger-color);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger-color) 36%, transparent);
 }
 
 .workspace-status-hint {
