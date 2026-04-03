@@ -1040,6 +1040,7 @@ public class RecordBiliPublishService {
                         history.setBvId(bvid);
                         history.setAvId(aid);
                         history.setPublish(true);
+                        history.setPublishUserId(biliBiliUser.getId());
                         history = historyRepository.save(history);
                         webPublishCostMs = webPublishStartNs > 0L ? (System.nanoTime() - webPublishStartNs) / 1_000_000L : -1L;
                         log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Success")

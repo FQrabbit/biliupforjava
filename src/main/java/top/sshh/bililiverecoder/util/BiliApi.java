@@ -414,18 +414,65 @@ public class BiliApi {
     }
 
     public static BiliVideoPartInfoResponse getVideoPartInfo(BiliBiliUser user, String bvid) {
+        return getVideoPartInfoDebug(user, bvid).getParsed();
+    }
+
+    public static ApiDebugResponse<BiliVideoPartInfoResponse> getVideoPartInfoDebug(BiliBiliUser user, String bvid) {
         String url = "https://member.bilibili.com/x/vupre/web/archive/view";
         Map<String, String> params = new TreeMap<>();
         params.put("topic_grey", "1");
         params.put("bvid", bvid);
         params.put("t", String.valueOf(System.currentTimeMillis()));
         Map<String, String> headers = getCommonHeaders();
+        headers.put("accept", "*/*");
+        headers.put("accept-language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6");
+        headers.put("cache-control", "no-cache");
+        headers.put("pragma", "no-cache");
+        headers.put("origin", "https://member.bilibili.com");
+        headers.put("referer", "https://member.bilibili.com/platform/upload-manager/archive-process?bvid=" + bvid);
+        headers.put("sec-fetch-site", "same-origin");
         WebCookie cookie = Cookie.parse(user.getCookies());
         headers.put("cookie", cookie.getCookie());
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
         params.forEach(uriBuilder::queryParam);
-        String response = HttpClientUtil.get(uriBuilder.toUriString(), headers);
-        return JSON.parseObject(response, BiliVideoPartInfoResponse.class);
+        String requestUrl = uriBuilder.toUriString();
+        String response = HttpClientUtil.get(requestUrl, headers);
+        BiliVideoPartInfoResponse parsed = JSON.parseObject(response, BiliVideoPartInfoResponse.class);
+        return new ApiDebugResponse<>(parsed, response, requestUrl);
+    }
+
+    public static BiliVideoAuditDetailResponse getVideoAuditDetail(BiliBiliUser user, String bvid) {
+        return getVideoAuditDetailDebug(user, bvid).getParsed();
+    }
+
+    public static ApiDebugResponse<BiliVideoAuditDetailResponse> getVideoAuditDetailDebug(BiliBiliUser user, String bvid) {
+        String url = "https://member.bilibili.com/x/web/detail/audit";
+        Map<String, String> params = new TreeMap<>();
+        params.put("bvid", bvid);
+        params.put("web_location", "0.0");
+        Map<String, String> headers = getCommonHeaders();
+        headers.put("accept", "*/*");
+        headers.put("accept-language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6");
+        headers.put("cache-control", "no-cache");
+        headers.put("pragma", "no-cache");
+        headers.put("origin", "https://member.bilibili.com");
+        headers.put("referer", "https://member.bilibili.com/platform/upload-manager/archive-process?bvid=" + bvid);
+        headers.put("sec-fetch-site", "same-origin");
+        WebCookie cookie = Cookie.parse(user.getCookies());
+        headers.put("cookie", cookie.getCookie());
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
+        params.forEach(uriBuilder::queryParam);
+        String requestUrl = uriBuilder.toUriString();
+        String response = HttpClientUtil.get(requestUrl, headers);
+        BiliVideoAuditDetailResponse parsed = JSON.parseObject(response, BiliVideoAuditDetailResponse.class);
+        return new ApiDebugResponse<>(parsed, response, requestUrl);
+    }
+
+    @Data
+    public static class ApiDebugResponse<T> {
+        private final T parsed;
+        private final String raw;
+        private final String requestUrl;
     }
 
     public static BiliDmResponse sendVideoDm(BiliBiliUser user, LiveMsg msg) {

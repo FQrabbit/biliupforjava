@@ -61,6 +61,9 @@ public class RecordHistory {
     @Column(name = "force_archived", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean forceArchived;
 
+    @Column(name = "publish_user_id")
+    private Long publishUserId;
+
     private int code = -1;
 
     private int uploadRetryCount = 0;

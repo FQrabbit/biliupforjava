@@ -815,6 +815,7 @@ public class HistoryController {
             history.setStartTime(history.getStartTime().plusMinutes(1L));
             history.setPublish(false);
             history.setBvId(null);
+            history.setPublishUserId(null);
             history.setCode(-1);
             // 重置上传重试次数
             history.setUploadRetryCount(0);

@@ -503,8 +503,8 @@
                 <el-checkbox v-model="batchDeleteOptions.deleteCover" :disabled="batchVisibilityRunning">同时删除封面图片</el-checkbox>
             </div>
             <div class="batch-actions">
-                <el-button type="success" size="small" icon="el-icon-unlock" @click="handleBatchVisibility(0)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning">批量设为公开</el-button>
-                <el-button type="warning" size="small" icon="el-icon-lock" @click="handleBatchVisibility(1)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning">批量设为仅自己可见</el-button>
+                <el-button type="success" size="small" icon="el-icon-unlock" @click="handleBatchVisibility(0)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected">批量设为公开</el-button>
+                <el-button type="warning" size="small" icon="el-icon-lock" @click="handleBatchVisibility(1)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected">批量设为仅自己可见</el-button>
                 <el-button type="danger" size="small" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedItems.length === 0 || batchVisibilityRunning">批量删除</el-button>
                 <el-button size="small" @click="toggleBatchMode" :disabled="batchVisibilityRunning">取消</el-button>
             </div>
@@ -1035,6 +1035,12 @@
             pollingTimer: null,
             showMoreActions: false,
             progressSpeedTracking: {},
+            auditRejectRetryGuard: {
+                historyId: null,
+                tried: false
+            },
+            auditRejectManualRefreshing: false,
+            auditRejectReviewDebug: null,
             detailFooterOffset: 120,
             partsAutoScrollTimer: null,
             dialogResizeHandler: null,
@@ -1259,6 +1265,36 @@
                 if (!this.currentDetail || !this.currentDetail.publish) return false;
                 return Number(this.currentDetail.code) === 62002;
             },
+            auditRejectPrimaryDetails: function() {
+                const detail = this.currentDetail || {};
+                const raw = detail.problem_detail || detail.problemDetail;
+                if (!Array.isArray(raw) || raw.length === 0) return [];
+                return raw.map((item, idx) => {
+                    const type = item && item.type ? String(item.type).trim() : '';
+                    const rejectReason = item && item.reject_reason ? String(item.reject_reason).trim() : '';
+                    const modifyAdvise = item && item.modify_advise ? String(item.modify_advise).trim() : '';
+                    const problemDescriptionTitle = item && item.problem_description_title ? String(item.problem_description_title).trim() : '';
+                    const problemDescription = item && item.problem_description ? String(item.problem_description).trim() : '';
+                    const violationTime = item && item.violation_time ? String(item.violation_time).trim() : '';
+                    const violationPosition = item && item.violation_position ? String(item.violation_position).trim() : '';
+                    const rejectReasonId = (item && item.reject_reason_id !== undefined && item.reject_reason_id !== null) ? String(item.reject_reason_id).trim() : '';
+                    const rejectReasonUrl = item && item.reject_reason_url ? String(item.reject_reason_url).trim() : '';
+                    const hasDetail = !!(rejectReason || modifyAdvise || problemDescription || violationTime || violationPosition);
+                    return {
+                        index: (item && item.index !== undefined && item.index !== null) ? Number(item.index) : idx,
+                        type: type,
+                        rejectReason: rejectReason,
+                        modifyAdvise: modifyAdvise,
+                        problemDescriptionTitle: problemDescriptionTitle,
+                        problemDescription: problemDescription,
+                        violationTime: violationTime,
+                        violationPosition: violationPosition,
+                        rejectReasonId: rejectReasonId,
+                        rejectReasonUrl: rejectReasonUrl,
+                        hasDetail: hasDetail
+                    };
+                }).filter(item => item.hasDetail).sort((a, b) => a.index - b.index);
+            },
             auditRejectDetails: function() {
                 if (!this.currentDetailParts || this.currentDetailParts.length === 0) return [];
                 const list = this.currentDetailParts
@@ -1291,7 +1327,7 @@
                 return list;
             },
             canShowAuditRejectInfo: function() {
-                return (this.isAuditRejected && this.auditRejectDetails.length > 0) || this.isAuditInvisibleLikelyDeleted;
+                return this.isAuditRejected || this.isAuditInvisibleLikelyDeleted;
             },
             shouldHighlightAuditReject: function() {
                 return this.canShowAuditRejectInfo;
@@ -1301,11 +1337,12 @@
                 if (this.isAuditInvisibleLikelyDeleted) {
                     return 'B站返回稿件不可见(62002)，可能已在B站后台被删除、转为不可见或被系统回收，点击查看说明';
                 }
-                const top = this.auditRejectDetails.slice(0, 2).map(item => 'P' + item.page + ' ' + item.detail).join('；');
-                if (this.auditRejectDetails.length > 2) {
-                    return top + '；共 ' + this.auditRejectDetails.length + ' 个分P存在审核提示，点击查看详情';
+                if (this.auditRejectPrimaryDetails.length > 0) {
+                    const topPrimary = this.auditRejectPrimaryDetails[0];
+                    const reason = topPrimary.rejectReason || topPrimary.modifyAdvise || topPrimary.problemDescription || '稿件触发审核规则';
+                    return reason + '；点击查看详情';
                 }
-                return top + '；点击查看详情';
+                return '稿件已被退回，暂未获取到详细原因，点击查看说明';
             },
             isWaitingForUpload: function() {
                 // 如果没有详情或已完成，则不显示
@@ -1327,6 +1364,10 @@
                     return true;
                 }
                 return false;
+            },
+            // 判断是否有删除选项被选中，用于禁用批量可见性按钮
+            isDeleteOptionSelected: function() {
+                return this.batchDeleteOptions.deleteVideo || this.batchDeleteOptions.deleteDanmaku || this.batchDeleteOptions.deleteCover;
             }
         },
         watch: {
@@ -1974,19 +2015,46 @@
                 if (pending > 0) return '发送中';
                 return '已完成';
             },
-            openAuditRejectDetail: function() {
+            openAuditRejectDetail: function(skipFallbackRetry) {
                 if (!this.canShowAuditRejectInfo) return;
+                var _this = this;
+                var shouldFallbackRetry = !skipFallbackRetry
+                    && this.isAuditRejected
+                    && this.currentDetail
+                    && this.currentDetail.id
+                    && this.auditRejectPrimaryDetails.length === 0
+                    && this.auditRejectDetails.length === 0
+                    && (!Array.isArray(this.currentDetailParts) || this.currentDetailParts.length === 0)
+                    && (
+                        !this.auditRejectRetryGuard
+                        || this.auditRejectRetryGuard.historyId !== this.currentDetail.id
+                        || this.auditRejectRetryGuard.tried !== true
+                    );
+                if (shouldFallbackRetry) {
+                    this.auditRejectRetryGuard = {
+                        historyId: this.currentDetail.id,
+                        tried: true
+                    };
+                    this.$message({ message: '未拿到退回详情，正在重试一次…', type: 'info', duration: 1200 });
+                    this.fetchPartList(this.currentDetail.id, function () {
+                        _this.openAuditRejectDetail(true);
+                    }, {
+                        retryOnError: 1,
+                        retryDelayMs: 800
+                    });
+                    return;
+                }
                 if (this.isAuditInvisibleLikelyDeleted) {
                     const html62002 = [
                         '<div style="line-height:1.75;">',
                         '<div style="margin-bottom:8px;">当前稿件返回 <strong>62002（稿件不可见）</strong>。</div>',
-                        '<div style="margin-bottom:8px;color:#606266;">这通常意味着该稿件已经无法在当前账号视角访问，常见原因包括：</div>',
-                        '<ul style="margin:0 0 8px 18px;padding:0;color:#606266;">',
+                        '<div style="margin-bottom:8px;color:var(--text-secondary,#a0a0a0);">这通常意味着该稿件已经无法在当前账号视角访问，常见原因包括：</div>',
+                        '<ul style="margin:0 0 8px 18px;padding:0;color:var(--text-secondary,#a0a0a0);">',
                         '<li>UP 主在 B 站后台手动删除了稿件；</li>',
                         '<li>稿件被改为不可见（例如仅自己可见或权限变更）；</li>',
                         '<li>稿件被系统回收/下线，导致接口侧返回不可见。</li>',
                         '</ul>',
-                        '<div style="color:#909399;font-size:12px;">说明：此提示用于排障参考，最终状态以 B 站创作中心后台为准。</div>',
+                        '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;">说明：此提示用于排障参考，最终状态以 B 站创作中心后台为准。</div>',
                         '</div>'
                     ].join('');
                     this.$alert(html62002, '稿件不可见说明', {
@@ -2004,32 +2072,167 @@
                         .replace(/"/g, '&quot;')
                         .replace(/'/g, '&#39;');
                 };
+                const buildFoldableText = function(label, text, threshold) {
+                    const safeLabel = esc(label || '');
+                    const raw = String(text == null ? '' : text).trim();
+                    if (!raw) return '';
+                    const safe = esc(raw);
+                    if (raw.length <= threshold) {
+                        return '<div style="color:var(--text-secondary,#a0a0a0);margin-top:2px;"><strong>' + safeLabel + '：</strong>' + safe + '</div>';
+                    }
+                    return ''
+                        + '<details style="margin-top:4px;">'
+                        + '<summary style="cursor:pointer;list-style:none;outline:none;font-size:12px;font-weight:600;display:inline-block;background:linear-gradient(90deg,#67c23a,#409eff);-webkit-background-clip:text;background-clip:text;color:transparent;">'
+                        + '展开查看' + safeLabel + '（已折叠）'
+                        + '</summary>'
+                        + '<div style="position:relative;margin-top:6px;padding:8px 10px;border-radius:6px;background:var(--brand-soft-bg-faint,rgba(64,158,255,0.06));">'
+                        + '<div style="color:var(--text-secondary,#a0a0a0);line-height:1.75;max-height:9.2em;overflow:auto;">'
+                        + '<strong>' + safeLabel + '：</strong>' + safe
+                        + '</div>'
+                        + '<div style="position:absolute;left:10px;right:10px;bottom:8px;height:22px;background:linear-gradient(to bottom, rgba(0,0,0,0), var(--bg-primary,#18181b));pointer-events:none;"></div>'
+                        + '</div>'
+                        + '</details>';
+                };
+                const buildViolationTimeBlock = function(positionText, violationText) {
+                    const pos = String(positionText == null ? '' : positionText).trim();
+                    const raw = String(violationText == null ? '' : violationText).trim();
+                    if (!pos && !raw) return '';
+                    const rows = [];
+                    if (pos) {
+                        rows.push('<div style="margin-bottom:6px;"><strong>违规位置：</strong>' + esc(pos) + '</div>');
+                    }
+                    const matched = raw ? (raw.match(/P\d+\([^)]+\)/g) || []) : [];
+                    if (matched.length > 0) {
+                        rows.push('<div style="margin-bottom:4px;"><strong>违规时段：</strong></div>');
+                        rows.push('<div style="display:flex;flex-direction:column;gap:6px;">');
+                        matched.forEach(function(seg) {
+                            const m = seg.match(/^P(\d+)\((.+)\)$/);
+                            if (m) {
+                                rows.push('<div style="padding:6px 8px;border:1px solid var(--warning-border,#faad14);border-radius:6px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));color:var(--text-primary,#e8e8e8);font-size:12px;line-height:1.6;"><strong style="color:var(--warning-color,#faad14);">P' + esc(m[1]) + '</strong> <span>' + esc(m[2]) + '</span></div>');
+                            } else {
+                                rows.push('<div style="padding:6px 8px;border:1px solid var(--warning-border,#faad14);border-radius:6px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));color:var(--text-primary,#e8e8e8);font-size:12px;line-height:1.6;">' + esc(seg) + '</div>');
+                            }
+                        });
+                        rows.push('</div>');
+                    } else if (raw) {
+                        rows.push('<div><strong>违规时段：</strong>' + esc(raw) + '</div>');
+                    }
+                    return '<div style="margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));border:1px solid var(--warning-border,#faad14);color:var(--text-secondary,#a0a0a0);">' + rows.join('') + '</div>';
+                };
                 let html = '<div style="max-height:52vh;overflow:auto;line-height:1.7;">';
-                html += '<div style="margin-bottom:8px;color:#909399;font-size:12px;">该稿件审核被退回，以下为分P级提示（仅展示含 failCode/xcodeState 异常信号的条目）：</div>';
-                html += '<ul style="margin:0;padding-left:18px;">';
-                this.auditRejectDetails.forEach(item => {
-                    const codes = [];
-                    if (item.reviewFailCode !== null && item.reviewFailCode !== undefined) {
-                        codes.push('failCode=' + item.reviewFailCode);
+                if (this.auditRejectPrimaryDetails.length > 0) {
+                    html += '<div style="margin-bottom:8px;color:var(--text-secondary,#a0a0a0);font-size:12px;">稿件级审核退回说明：</div>';
+                    html += '<ul style="margin:0;padding-left:18px;">';
+                    this.auditRejectPrimaryDetails.forEach(item => {
+                        html += '<li style="margin:8px 0;">';
+                        if (item.rejectReason) html += '<div style="color:var(--text-primary,#e8e8e8);"><strong>退回原因：</strong>' + esc(item.rejectReason) + '</div>';
+                        if (item.modifyAdvise) html += '<div style="color:var(--text-secondary,#a0a0a0);margin-top:2px;"><strong>修改建议：</strong>' + esc(item.modifyAdvise) + '</div>';
+                        html += buildViolationTimeBlock(item.violationPosition, item.violationTime);
+                        html += buildFoldableText(item.problemDescriptionTitle || '规则说明', item.problemDescription || '', 120);
+                        if (item.type || item.rejectReasonId) {
+                            html += '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;margin-top:2px;">';
+                            if (item.type) html += '分类：' + esc(item.type);
+                            if (item.rejectReasonId) html += (item.type ? '；' : '') + '原因ID：' + esc(item.rejectReasonId);
+                            html += '</div>';
+                        }
+                        if (item.rejectReasonUrl) {
+                            html += '<div style="margin-top:4px;font-size:12px;"><a href="' + esc(item.rejectReasonUrl) + '" target="_blank" rel="noopener noreferrer">查看相关规则说明</a></div>';
+                        }
+                        html += '</li>';
+                    });
+                    html += '</ul>';
+                }
+                if (this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0) {
+                    html += '<div style="margin:4px 0 8px;color:var(--text-secondary,#a0a0a0);">该稿件当前已显示为审核退回，但暂未拿到详细退回文本。</div>';
+                    html += '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;">可稍后重试，或确认投稿账号登录状态是否有效。</div>';
+                    var dbg = this.auditRejectReviewDebug || {};
+                    var dbgAuthSource = (dbg.authSource !== undefined && dbg.authSource !== null && String(dbg.authSource).trim() !== '') ? String(dbg.authSource) : '未知';
+                    var dbgVideoCode = (dbg.videoPartInfoCode !== undefined && dbg.videoPartInfoCode !== null && String(dbg.videoPartInfoCode) !== '') ? String(dbg.videoPartInfoCode) : '-';
+                    var dbgVideoMsg = (dbg.videoPartInfoMessage !== undefined && dbg.videoPartInfoMessage !== null && String(dbg.videoPartInfoMessage).trim() !== '') ? String(dbg.videoPartInfoMessage) : '-';
+                    var dbgAuditCode = (dbg.auditDetailCode !== undefined && dbg.auditDetailCode !== null && String(dbg.auditDetailCode) !== '') ? String(dbg.auditDetailCode) : '-';
+                    var dbgAuditMsg = (dbg.auditDetailMessage !== undefined && dbg.auditDetailMessage !== null && String(dbg.auditDetailMessage).trim() !== '') ? String(dbg.auditDetailMessage) : '-';
+                    var fallbackDetailCount = Array.isArray(this.auditRejectPrimaryDetails) ? this.auditRejectPrimaryDetails.length : 0;
+                    var dbgDetailCount = (dbg.problemDetailCount !== undefined && dbg.problemDetailCount !== null) ? String(dbg.problemDetailCount) : String(fallbackDetailCount);
+                    var dbgBvid = (dbg.bvid !== undefined && dbg.bvid !== null && String(dbg.bvid).trim() !== '') ? String(dbg.bvid) : '-';
+                    var dbgHasBvid = (dbg.hasBvid === true) ? '是' : '否';
+                    var dbgPartEndpoint = (dbg.videoPartInfoEndpoint !== undefined && dbg.videoPartInfoEndpoint !== null && String(dbg.videoPartInfoEndpoint).trim() !== '') ? String(dbg.videoPartInfoEndpoint) : '-';
+                    var dbgAuditEndpoint = (dbg.auditDetailEndpoint !== undefined && dbg.auditDetailEndpoint !== null && String(dbg.auditDetailEndpoint).trim() !== '') ? String(dbg.auditDetailEndpoint) : '-';
+                    var dbgPartRequestUrl = (dbg.videoPartInfoRequestUrl !== undefined && dbg.videoPartInfoRequestUrl !== null && String(dbg.videoPartInfoRequestUrl).trim() !== '') ? String(dbg.videoPartInfoRequestUrl) : dbgPartEndpoint;
+                    var dbgAuditRequestUrl = (dbg.auditDetailRequestUrl !== undefined && dbg.auditDetailRequestUrl !== null && String(dbg.auditDetailRequestUrl).trim() !== '') ? String(dbg.auditDetailRequestUrl) : dbgAuditEndpoint;
+                    var dbgHeaderTemplate = (dbg.requestHeaderTemplate !== undefined && dbg.requestHeaderTemplate !== null && String(dbg.requestHeaderTemplate).trim() !== '') ? String(dbg.requestHeaderTemplate) : '-';
+                    var dbgPartRaw = (dbg.videoPartInfoRaw !== undefined && dbg.videoPartInfoRaw !== null) ? String(dbg.videoPartInfoRaw) : '';
+                    var dbgAuditRaw = (dbg.auditDetailRaw !== undefined && dbg.auditDetailRaw !== null) ? String(dbg.auditDetailRaw) : '';
+                    var dbgAuthBlocked = (dbg.authBlocked === true);
+                    var dbgAuthBlockedReason = (dbg.authBlockedReason !== undefined && dbg.authBlockedReason !== null && String(dbg.authBlockedReason).trim() !== '') ? String(dbg.authBlockedReason) : '';
+                    html += '<div style="margin-top:10px;padding:8px 10px;background:var(--bg-tertiary,#27272a);border:1px solid var(--border-color,#3f3f46);border-radius:6px;color:var(--text-secondary,#a0a0a0);font-size:12px;line-height:1.7;">';
+                    html += '<div style="color:var(--text-secondary,#a0a0a0);margin-bottom:2px;">Review 调试信息</div>';
+                    html += '<div><strong>BV号：</strong>' + esc(dbgBvid) + '，<strong>有效：</strong>' + esc(dbgHasBvid) + '</div>';
+                    html += '<div><strong>鉴权来源：</strong>' + esc(dbgAuthSource) + '</div>';
+                    if (dbgAuthBlocked) {
+                        html += '<div style="color:var(--danger-color,#ff4d4f);"><strong>鉴权拦截：</strong>无法确定可用的鉴权账号，原因：' + esc(dbgAuthBlockedReason || '账号不可用') + '</div>';
                     }
-                    if (item.reviewXcodeState !== null && item.reviewXcodeState !== undefined) {
-                        codes.push('xcodeState=' + item.reviewXcodeState);
+                    html += '<div><strong>分P接口码：</strong>' + esc(dbgVideoCode) + '，<strong>消息：</strong>' + esc(dbgVideoMsg) + '</div>';
+                    html += '<div><strong>审核详情接口码：</strong>' + esc(dbgAuditCode) + '，<strong>消息：</strong>' + esc(dbgAuditMsg) + '</div>';
+                    html += '<div><strong>详情条数：</strong>' + esc(dbgDetailCount) + '</div>';
+                    html += '<div><strong>分P请求地址：</strong>' + esc(dbgPartRequestUrl) + '</div>';
+                    html += '<div><strong>审核详情请求地址：</strong>' + esc(dbgAuditRequestUrl) + '</div>';
+                    html += '<details style="margin-top:6px;">';
+                    html += '<summary style="cursor:pointer;color:var(--primary-color,#7b8fff);font-weight:600;">打开调试响应（完整返回）</summary>';
+                    html += '<div style="margin-top:6px;"><strong>请求标头模板：</strong></div>';
+                    html += '<pre style="margin:4px 0 8px;max-height:120px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e8e8e8);">' + esc(dbgHeaderTemplate) + '</pre>';
+                    html += '<div><strong>分P接口原始响应：</strong></div>';
+                    html += '<pre style="margin:4px 0 8px;max-height:180px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e8e8e8);">' + esc(dbgPartRaw || '-空-') + '</pre>';
+                    html += '<div><strong>审核详情接口原始响应：</strong></div>';
+                    html += '<pre style="margin:4px 0 0;max-height:220px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e8e8e8);">' + esc(dbgAuditRaw || '-空-') + '</pre>';
+                    html += '</details>';
+                    if (dbgVideoCode === '0' && dbgAuditCode === '0' && dbgDetailCount === '0') {
+                        html += '<div style="margin-top:4px;color:var(--warning-color,#faad14);"><strong>结论：</strong>接口请求成功，但平台未返回可展示的退回文案。</div>';
                     }
-                    html += '<li style="margin:6px 0;">';
-                    html += '<div><strong>P' + esc(item.page) + '</strong> ' + esc(item.title) + '</div>';
-                    html += '<div style="color:#606266;">' + esc(item.detail) + '</div>';
-                    if (codes.length > 0) {
-                        html += '<div style="color:#909399;font-size:12px;">' + esc(codes.join(' / ')) + '</div>';
-                    }
-                    html += '</li>';
-                });
-                html += '</ul>';
-                html += '<div style="margin-top:10px;color:#909399;font-size:12px;">说明：以上内容来源于创作中心分P处理提示（vupre failDesc），用于排障参考，最终审核结论以B站后台为准。</div>';
+                    html += '</div>';
+                }
+                html += '<div style="margin-top:10px;color:var(--text-secondary,#a0a0a0);font-size:12px;">说明：以上内容用于排障参考，最终审核结论以B站后台为准。</div>';
                 html += '</div>';
+                if (this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0 && this.isAuditRejected) {
+                    this.$confirm(html, '审核退回详情', {
+                        dangerouslyUseHTMLString: true,
+                        confirmButtonText: '我知道了',
+                        cancelButtonText: this.auditRejectManualRefreshing ? '获取中…' : '重新获取原因',
+                        showCancelButton: true,
+                        distinguishCancelAndClose: true,
+                        closeOnClickModal: false,
+                        type: 'warning'
+                    }).then(function () {
+                    }).catch(function (action) {
+                        if (action === 'cancel') {
+                            _this.manualRefreshAuditRejectReason();
+                        }
+                    });
+                    return;
+                }
                 this.$alert(html, '审核退回详情', {
                     dangerouslyUseHTMLString: true,
                     confirmButtonText: '我知道了',
                     type: 'warning'
+                });
+            },
+            manualRefreshAuditRejectReason: function() {
+                var _this = this;
+                if (this.auditRejectManualRefreshing) return;
+                if (!this.currentDetail || !this.currentDetail.id) return;
+                this.auditRejectManualRefreshing = true;
+                this.$message({ message: '正在重新获取退回原因…', type: 'info', duration: 1200 });
+                this.fetchPartList(this.currentDetail.id, function () {
+                    _this.auditRejectManualRefreshing = false;
+                    if (_this.auditRejectPrimaryDetails.length > 0 || _this.auditRejectDetails.length > 0) {
+                        _this.$message({ message: '已获取到最新退回原因', type: 'success', duration: 1200 });
+                    } else {
+                        _this.$message({ message: '本次仍未获取到退回原因，请稍后再试', type: 'warning', duration: 1800 });
+                    }
+                    _this.openAuditRejectDetail(true);
+                }, {
+                    retryOnError: 1,
+                    retryDelayMs: 900,
+                    forceRefreshReview: true
                 });
             },
             getDurationClass: function(seconds) {
@@ -2285,10 +2488,16 @@
                 this.historyUploadProgress = null;
                 this.currentDetailParts = [];
                 this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
+                this.auditRejectReviewDebug = null;
                 this.showAllParts = false;
                 this.showSkipParts = false;
                 this.$nextTick(() => {
                     this.currentDetail = JSON.parse(JSON.stringify(item || {}));
+                    this.auditRejectRetryGuard = {
+                        historyId: this.currentDetail && this.currentDetail.id ? this.currentDetail.id : null,
+                        tried: false
+                    };
+                    this.auditRejectManualRefreshing = false;
                     this.updateDetailFooterOffset();
                     if (this.currentDetail && this.currentDetail.id) {
                         this.startProgressPolling(this.currentDetail.id);
@@ -2299,17 +2508,31 @@
                     }
                 });
             },
-            fetchPartList: function(historyId, callback) {
+            fetchPartList: function(historyId, callback, options) {
                 var _this = this;
+                var opts = options || {};
                 if (!historyId) {
                     _this.currentDetailParts = [];
                     _this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
+                    _this.auditRejectReviewDebug = null;
                     if (callback) callback();
                     return;
                 }
-                ApiUtil.post('../part/list2/' + historyId, {}, function (resp) {
+                var requestBody = {};
+                if (opts.forceRefreshReview === true) {
+                    requestBody.forceRefreshReview = true;
+                }
+                ApiUtil.post('../part/list2/' + historyId, requestBody, function (resp) {
                     var items = resp && resp.items ? resp.items : [];
                     _this.currentDetailParts = items || [];
+                    _this.auditRejectReviewDebug = (resp && resp.reviewDebug) ? resp.reviewDebug : null;
+                    if (_this.currentDetail && Number(_this.currentDetail.code) === -2) {
+                        var problemDetail = resp && (resp.problem_detail || resp.problemDetail);
+                        if (Array.isArray(problemDetail)) {
+                            _this.$set(_this.currentDetail, 'problem_detail', problemDetail);
+                            _this.$set(_this.currentDetail, 'problemDetail', problemDetail);
+                        }
+                    }
                     _this.partListMeta = {
                         hasBlockingIssues: !!(resp && resp.hasBlockingIssues),
                         blockingIssueCount: Number(resp && resp.blockingIssueCount) || 0
@@ -2317,6 +2540,16 @@
                     if (callback) callback(resp);
                 }, function (error) {
                     console.error('获取分P列表失败', error);
+                    var retryOnError = Number(opts.retryOnError) || 0;
+                    if (retryOnError > 0) {
+                        var delayMs = Number(opts.retryDelayMs);
+                        if (!delayMs || delayMs < 0) delayMs = 700;
+                        setTimeout(function() {
+                            var nextOpts = Object.assign({}, opts, { retryOnError: retryOnError - 1 });
+                            _this.fetchPartList(historyId, callback, nextOpts);
+                        }, delayMs);
+                        return;
+                    }
                     if (callback) callback(null);
                 });
             },
@@ -2356,6 +2589,9 @@
                 this.showAllParts = false;
                 this.showMoreActions = false;
                 this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
+                this.auditRejectRetryGuard = { historyId: null, tried: false };
+                this.auditRejectManualRefreshing = false;
+                this.auditRejectReviewDebug = null;
                 this.detailFooterOffset = this.isMobile ? 160 : 120;
                 if (this.dialogResizeHandler) {
                     window.removeEventListener('resize', this.dialogResizeHandler);

@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
+import top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse;
 import top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
@@ -36,11 +37,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @RestController
 @RequestMapping("/part")
 public class PartController {
+    private static final long REVIEW_INFO_SUCCESS_COOLDOWN_MS = 8000L;
+    private static final long REVIEW_INFO_FAIL_COOLDOWN_MS = 1200L;
 
     @Value("${record.work-path}")
     private String workPath;
@@ -60,6 +64,8 @@ public class PartController {
 
     @Resource(name = "editorBilibiliUploadService")
     private RecordPartUploadService editPartUploadService;
+    private final Map<Long, ReviewInfoCacheEntry> reviewInfoCache = new ConcurrentHashMap<>();
+    private final Map<Long, Object> reviewInfoLocks = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void initWorkPath() {
@@ -73,41 +79,74 @@ public class PartController {
     }
 
     @PostMapping("/list2/{id}")
-    public Map<String, Object> list2(@PathVariable("id") Long id) {
+    public Map<String, Object> list2(@PathVariable("id") Long id, @RequestBody(required = false) Map<String, Object> request) {
         Map<String, Object> resp = new LinkedHashMap<>();
+        boolean forceRefreshReview = parseBooleanFlag(request == null ? null : request.get("forceRefreshReview"));
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(id);
         Optional<RecordHistory> histOpt = historyRepository.findById(id);
         boolean historyPublished = histOpt.isPresent() && histOpt.get().isPublish();
         boolean historyRejected = histOpt.isPresent() && histOpt.get().isPublish() && histOpt.get().getCode() == -2;
+        Map<String, Object> reviewDebug = new LinkedHashMap<>();
+        reviewDebug.put("historyRejected", historyRejected);
+        reviewDebug.put("forceRefreshReview", forceRefreshReview);
+        reviewDebug.put("bvid", null);
+        reviewDebug.put("hasBvid", false);
+        reviewDebug.put("videoPartInfoEndpoint", "https://member.bilibili.com/x/vupre/web/archive/view");
+        reviewDebug.put("auditDetailEndpoint", "https://member.bilibili.com/x/web/detail/audit");
+        reviewDebug.put("authSource", null);
+        reviewDebug.put("authUserId", null);
+        reviewDebug.put("authUid", null);
+        reviewDebug.put("authUname", null);
+        reviewDebug.put("authPolicy", "publish_user_first_fallback_room_when_missing");
+        reviewDebug.put("authBlocked", false);
+        reviewDebug.put("authBlockedReason", null);
+        reviewDebug.put("videoPartInfoCode", null);
+        reviewDebug.put("videoPartInfoMessage", null);
+        reviewDebug.put("auditDetailCode", null);
+        reviewDebug.put("auditDetailMessage", null);
+        reviewDebug.put("problemDetailCount", 0);
+        reviewDebug.put("videoPartInfoRequestUrl", null);
+        reviewDebug.put("auditDetailRequestUrl", null);
+        reviewDebug.put("videoPartInfoRaw", null);
+        reviewDebug.put("auditDetailRaw", null);
+        reviewDebug.put("requestHeaderTemplate", "accept: */*; accept-language: zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6; cache-control: no-cache; pragma: no-cache; origin: https://member.bilibili.com; referer: https://member.bilibili.com/platform/upload-manager/archive-process?bvid=<BVID>; sec-fetch-site: same-origin; cookie: <投稿账号登录态>");
         Map<Integer, BiliVideoPartInfoResponse.Video> reviewByPage = new HashMap<>();
         Map<String, BiliVideoPartInfoResponse.Video> reviewByTitle = new HashMap<>();
-        if (historyPublished && histOpt.isPresent()) {
+        List<BiliVideoAuditDetailResponse.ProblemDetail> reviewProblemDetails = new ArrayList<>();
+        if (historyRejected && histOpt.isPresent()) {
             RecordHistory history = histOpt.get();
+            reviewDebug.put("bvid", history.getBvId());
+            reviewDebug.put("hasBvid", !isBlank(history.getBvId()));
             if (!isBlank(history.getBvId())) {
                 try {
                     RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
-                    if (room != null && room.getUploadUserId() != null) {
-                        Optional<BiliBiliUser> userOpt = userRepository.findById(room.getUploadUserId());
-                        if (userOpt.isPresent() && userOpt.get().isLogin()) {
-                            BiliVideoPartInfoResponse partInfo = BiliApi.getVideoPartInfo(userOpt.get(), history.getBvId());
-                            if (partInfo != null && partInfo.getCode() == 0 && partInfo.getData() != null && partInfo.getData().getVideos() != null) {
-                                for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
-                                    if (video.getPage() > 0) {
-                                        reviewByPage.put(video.getPage(), video);
-                                    }
-                                    if (!isBlank(video.getTitle())) {
-                                        reviewByTitle.put(video.getTitle(), video);
-                                    }
-                                    if (!isBlank(video.getPart())) {
-                                        reviewByTitle.put(video.getPart(), video);
-                                    }
-                                }
-                            }
-                        }
+                    ReviewAuthContext reviewAuth = resolveReviewAuthContext(history, room);
+                    reviewDebug.put("authSource", reviewAuth.source);
+                    reviewDebug.put("authUserId", reviewAuth.user == null ? null : reviewAuth.user.getId());
+                    reviewDebug.put("authUid", reviewAuth.user == null ? null : reviewAuth.user.getUid());
+                    reviewDebug.put("authUname", reviewAuth.user == null ? null : reviewAuth.user.getUname());
+                    if (reviewAuth.user != null) {
+                        ReviewInfoCacheEntry reviewInfo = loadReviewInfo(history.getId(), history.getBvId(), reviewAuth.user, forceRefreshReview);
+                        reviewByPage.putAll(reviewInfo.byPage);
+                        reviewByTitle.putAll(reviewInfo.byTitle);
+                        reviewProblemDetails.addAll(reviewInfo.problemDetails);
+                        reviewDebug.put("videoPartInfoCode", reviewInfo.videoPartInfoCode);
+                        reviewDebug.put("videoPartInfoMessage", reviewInfo.videoPartInfoMessage);
+                        reviewDebug.put("auditDetailCode", reviewInfo.auditDetailCode);
+                        reviewDebug.put("auditDetailMessage", reviewInfo.auditDetailMessage);
+                        reviewDebug.put("problemDetailCount", reviewInfo.problemDetails == null ? 0 : reviewInfo.problemDetails.size());
+                        reviewDebug.put("videoPartInfoRequestUrl", reviewInfo.videoPartInfoRequestUrl);
+                        reviewDebug.put("auditDetailRequestUrl", reviewInfo.auditDetailRequestUrl);
+                        reviewDebug.put("videoPartInfoRaw", reviewInfo.videoPartInfoRaw);
+                        reviewDebug.put("auditDetailRaw", reviewInfo.auditDetailRaw);
+                    } else {
+                        reviewDebug.put("authBlocked", true);
+                        reviewDebug.put("authBlockedReason", reviewAuth.source);
                     }
                 } catch (Exception e) {
                     log.debug("[BLR] {}", LogKvs.event("Part.List2.ReviewInfo.FetchFailed")
                             .add("historyId", id)
+                            .add("forceRefreshReview", forceRefreshReview)
                             .add("err", e.getMessage())
                             .add("ex", e.getClass().getSimpleName()));
                 }
@@ -233,6 +272,9 @@ public class PartController {
         resp.put("items", items);
         resp.put("hasBlockingIssues", blocking > 0);
         resp.put("blockingIssueCount", blocking);
+        resp.put("problem_detail", reviewProblemDetails);
+        resp.put("problemDetail", reviewProblemDetails);
+        resp.put("reviewDebug", reviewDebug);
         return resp;
     }
 
@@ -469,8 +511,241 @@ public class PartController {
         }
     }
 
+    private ReviewAuthContext resolveReviewAuthContext(RecordHistory history, RecordRoom room) {
+        Long publishUserId = history == null ? null : history.getPublishUserId();
+        if (publishUserId != null) {
+            Optional<BiliBiliUser> publishUserOpt = userRepository.findById(publishUserId);
+            if (publishUserOpt.isPresent() && publishUserOpt.get().isLogin()) {
+                return new ReviewAuthContext("history.publishUserId", publishUserOpt.get());
+            }
+            if (publishUserOpt.isEmpty()) {
+                return new ReviewAuthContext("publishUser.notFound", null);
+            }
+            return new ReviewAuthContext("publishUser.notLogin", null);
+        }
+        if (room == null || room.getUploadUserId() == null) {
+            return new ReviewAuthContext("room.uploadUserId.missing", null);
+        }
+        Optional<BiliBiliUser> roomUserOpt = userRepository.findById(room.getUploadUserId());
+        if (roomUserOpt.isEmpty()) {
+            return new ReviewAuthContext("roomUser.notFound", null);
+        }
+        if (!roomUserOpt.get().isLogin()) {
+            return new ReviewAuthContext("roomUser.notLogin", null);
+        }
+        return new ReviewAuthContext("room.uploadUserId.fallback", roomUserOpt.get());
+    }
+
+    private ReviewInfoCacheEntry loadReviewInfo(Long historyId, String bvId, BiliBiliUser reviewAuthUser, boolean forceRefresh) {
+        long now = System.currentTimeMillis();
+        ReviewInfoCacheEntry cached = reviewInfoCache.get(historyId);
+        if (!forceRefresh && isReviewCacheFresh(cached, now)) {
+            return copyReviewInfo(cached);
+        }
+        Object lock = reviewInfoLocks.computeIfAbsent(historyId, k -> new Object());
+        synchronized (lock) {
+            now = System.currentTimeMillis();
+            cached = reviewInfoCache.get(historyId);
+            if (!forceRefresh && isReviewCacheFresh(cached, now)) {
+                return copyReviewInfo(cached);
+            }
+            try {
+                BiliApi.ApiDebugResponse<BiliVideoPartInfoResponse> partInfoDebug = BiliApi.getVideoPartInfoDebug(reviewAuthUser, bvId);
+                BiliVideoPartInfoResponse partInfo = partInfoDebug.getParsed();
+                Integer videoPartInfoCode = partInfo == null ? null : partInfo.getCode();
+                String videoPartInfoMessage = partInfo == null ? "null-response" : partInfo.getMessage();
+                String videoPartInfoRequestUrl = partInfoDebug.getRequestUrl();
+                String videoPartInfoRaw = partInfoDebug.getRaw();
+                Integer auditDetailCode = null;
+                String auditDetailMessage = null;
+                String auditDetailRequestUrl = null;
+                String auditDetailRaw = null;
+                if (partInfo != null && partInfo.getCode() == 0 && partInfo.getData() != null && partInfo.getData().getVideos() != null) {
+                    Map<Integer, BiliVideoPartInfoResponse.Video> byPage = new HashMap<>();
+                    Map<String, BiliVideoPartInfoResponse.Video> byTitle = new HashMap<>();
+                    for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+                        if (video.getPage() > 0) {
+                            byPage.put(video.getPage(), video);
+                        }
+                        if (!isBlank(video.getTitle())) {
+                            byTitle.put(video.getTitle(), video);
+                        }
+                        if (!isBlank(video.getPart())) {
+                            byTitle.put(video.getPart(), video);
+                        }
+                    }
+                    List<BiliVideoAuditDetailResponse.ProblemDetail> problemDetails = new ArrayList<>();
+                    try {
+                        BiliApi.ApiDebugResponse<BiliVideoAuditDetailResponse> auditDetailDebug = BiliApi.getVideoAuditDetailDebug(reviewAuthUser, bvId);
+                        BiliVideoAuditDetailResponse auditDetail = auditDetailDebug.getParsed();
+                        auditDetailCode = auditDetail == null ? null : auditDetail.getCode();
+                        auditDetailMessage = auditDetail == null ? "null-response" : auditDetail.getMessage();
+                        auditDetailRequestUrl = auditDetailDebug.getRequestUrl();
+                        auditDetailRaw = auditDetailDebug.getRaw();
+                        if (auditDetail != null
+                                && auditDetail.getCode() == 0
+                                && auditDetail.getData() != null
+                                && auditDetail.getData().getProblem_detail() != null) {
+                            problemDetails.addAll(auditDetail.getData().getProblem_detail());
+                        }
+                        if (problemDetails.isEmpty()
+                                && auditDetail != null
+                                && auditDetail.getData() != null
+                                && auditDetail.getData().getAppeal() != null
+                                && !isBlank(auditDetail.getData().getAppeal().getReject())) {
+                            BiliVideoAuditDetailResponse.ProblemDetail fallback = new BiliVideoAuditDetailResponse.ProblemDetail();
+                            fallback.setType("appeal");
+                            fallback.setReject_reason(auditDetail.getData().getAppeal().getReject());
+                            problemDetails.add(fallback);
+                        }
+                        if (problemDetails.isEmpty()) {
+                            log.warn("[BLR] {}", LogKvs.event("Part.ReviewInfo.AuditDetail.Unexpected")
+                                    .add("historyId", historyId)
+                                    .add("forceRefresh", forceRefresh)
+                                    .add("bvid", bvId)
+                                    .add("userId", reviewAuthUser.getId())
+                                    .add("respCode", auditDetail == null ? null : auditDetail.getCode())
+                                    .add("respMsg", auditDetail == null ? "null-response" : auditDetail.getMessage())
+                                    .add("hasData", auditDetail != null && auditDetail.getData() != null));
+                        }
+                    } catch (Exception e) {
+                        log.debug("[BLR] {}", LogKvs.event("Part.ReviewInfo.AuditDetail.LoadFailed")
+                                .add("historyId", historyId)
+                                .add("forceRefresh", forceRefresh)
+                                .add("bvid", bvId)
+                                .add("userId", reviewAuthUser.getId())
+                                .add("err", e.getMessage())
+                                .add("ex", e.getClass().getSimpleName()));
+                        auditDetailMessage = e.getMessage();
+                    }
+                    ReviewInfoCacheEntry okEntry = new ReviewInfoCacheEntry(
+                            now, true, byPage, byTitle, problemDetails,
+                            videoPartInfoCode, videoPartInfoMessage, auditDetailCode, auditDetailMessage,
+                            videoPartInfoRequestUrl, auditDetailRequestUrl, videoPartInfoRaw, auditDetailRaw
+                    );
+                    reviewInfoCache.put(historyId, okEntry);
+                    return copyReviewInfo(okEntry);
+                }
+                log.warn("[BLR] {}", LogKvs.event("Part.ReviewInfo.Vupre.Unexpected")
+                        .add("historyId", historyId)
+                        .add("forceRefresh", forceRefresh)
+                        .add("bvid", bvId)
+                        .add("userId", reviewAuthUser.getId())
+                        .add("respCode", partInfo == null ? null : partInfo.getCode())
+                        .add("respMsg", partInfo == null ? "null-response" : partInfo.getMessage())
+                        .add("hasData", partInfo != null && partInfo.getData() != null));
+            } catch (Exception e) {
+                log.debug("[BLR] {}", LogKvs.event("Part.ReviewInfo.LoadFailed")
+                        .add("historyId", historyId)
+                        .add("forceRefresh", forceRefresh)
+                        .add("bvid", bvId)
+                        .add("userId", reviewAuthUser == null ? null : reviewAuthUser.getId())
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()));
+            }
+            ReviewInfoCacheEntry fallback = cached == null
+                    ? new ReviewInfoCacheEntry(now, false, new HashMap<>(), new HashMap<>(), new ArrayList<>(),
+                    null, null, null, null, null, null, null, null)
+                    : new ReviewInfoCacheEntry(now, false, cached.byPage, cached.byTitle, cached.problemDetails,
+                    cached.videoPartInfoCode, cached.videoPartInfoMessage, cached.auditDetailCode, cached.auditDetailMessage,
+                    cached.videoPartInfoRequestUrl, cached.auditDetailRequestUrl, cached.videoPartInfoRaw, cached.auditDetailRaw);
+            reviewInfoCache.put(historyId, fallback);
+            return copyReviewInfo(fallback);
+        }
+    }
+
+    private boolean isReviewCacheFresh(ReviewInfoCacheEntry cached, long now) {
+        if (cached == null) {
+            return false;
+        }
+        long cooldown = cached.success ? REVIEW_INFO_SUCCESS_COOLDOWN_MS : REVIEW_INFO_FAIL_COOLDOWN_MS;
+        return (now - cached.fetchAtMs) < cooldown;
+    }
+
+    private ReviewInfoCacheEntry copyReviewInfo(ReviewInfoCacheEntry source) {
+        return new ReviewInfoCacheEntry(
+                source.fetchAtMs,
+                source.success,
+                new HashMap<>(source.byPage),
+                new HashMap<>(source.byTitle),
+                new ArrayList<>(source.problemDetails),
+                source.videoPartInfoCode,
+                source.videoPartInfoMessage,
+                source.auditDetailCode,
+                source.auditDetailMessage,
+                source.videoPartInfoRequestUrl,
+                source.auditDetailRequestUrl,
+                source.videoPartInfoRaw,
+                source.auditDetailRaw
+        );
+    }
+
+    private static class ReviewAuthContext {
+        private final String source;
+        private final BiliBiliUser user;
+
+        private ReviewAuthContext(String source, BiliBiliUser user) {
+            this.source = source;
+            this.user = user;
+        }
+    }
+
+    private static class ReviewInfoCacheEntry {
+        private final long fetchAtMs;
+        private final boolean success;
+        private final Map<Integer, BiliVideoPartInfoResponse.Video> byPage;
+        private final Map<String, BiliVideoPartInfoResponse.Video> byTitle;
+        private final List<BiliVideoAuditDetailResponse.ProblemDetail> problemDetails;
+        private final Integer videoPartInfoCode;
+        private final String videoPartInfoMessage;
+        private final Integer auditDetailCode;
+        private final String auditDetailMessage;
+        private final String videoPartInfoRequestUrl;
+        private final String auditDetailRequestUrl;
+        private final String videoPartInfoRaw;
+        private final String auditDetailRaw;
+
+        private ReviewInfoCacheEntry(long fetchAtMs,
+                                     boolean success,
+                                     Map<Integer, BiliVideoPartInfoResponse.Video> byPage,
+                                     Map<String, BiliVideoPartInfoResponse.Video> byTitle,
+                                     List<BiliVideoAuditDetailResponse.ProblemDetail> problemDetails,
+                                     Integer videoPartInfoCode,
+                                     String videoPartInfoMessage,
+                                     Integer auditDetailCode,
+                                     String auditDetailMessage,
+                                     String videoPartInfoRequestUrl,
+                                     String auditDetailRequestUrl,
+                                     String videoPartInfoRaw,
+                                     String auditDetailRaw) {
+            this.fetchAtMs = fetchAtMs;
+            this.success = success;
+            this.byPage = byPage;
+            this.byTitle = byTitle;
+            this.problemDetails = problemDetails;
+            this.videoPartInfoCode = videoPartInfoCode;
+            this.videoPartInfoMessage = videoPartInfoMessage;
+            this.auditDetailCode = auditDetailCode;
+            this.auditDetailMessage = auditDetailMessage;
+            this.videoPartInfoRequestUrl = videoPartInfoRequestUrl;
+            this.auditDetailRequestUrl = auditDetailRequestUrl;
+            this.videoPartInfoRaw = videoPartInfoRaw;
+            this.auditDetailRaw = auditDetailRaw;
+        }
+    }
+
     private static boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
+    }
+
+    private static boolean parseBooleanFlag(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        if (value instanceof String) {
+            return "true".equalsIgnoreCase(((String) value).trim());
+        }
+        return false;
     }
 
 
