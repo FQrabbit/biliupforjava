@@ -931,7 +931,8 @@
                 alert: false,
                 updatedAt: '',
                 error: ''
-            }
+            },
+            needCacheRefresh: false
         },
         computed: {
             currentModuleMeta: function() {
@@ -1018,6 +1019,7 @@
                 self.fetchWorkspaceUsageStatus();
             }, 60000);
             this.checkUpdate();
+            this.checkCacheVersion();
             // 初始化导航指示器
             this.$nextTick(function() {
                 self.updateNavIndicator();
@@ -1328,6 +1330,38 @@
                             processData(cache.data);
                         }
                     } catch (e) {}
+                });
+            },
+            checkCacheVersion: function() {
+                var self = this;
+                var STORED_VERSION_KEY = 'biliup_frontend_version';
+
+                ApiUtil.get('/api/version', function(data) {
+                    var version = data.version || data;
+                    if (!version || version === 'unknown' || version === 'error') {
+                        return;
+                    }
+                    var storedVersion = localStorage.getItem(STORED_VERSION_KEY);
+
+                    if (!storedVersion) {
+                        localStorage.setItem(STORED_VERSION_KEY, version);
+                        return;
+                    }
+
+                    if (storedVersion !== version) {
+                        localStorage.setItem(STORED_VERSION_KEY, version);
+                        self.needCacheRefresh = true;
+                        self.$message({
+                            message: '检测到前端版本已更新，正在刷新页面...',
+                            type: 'success',
+                            duration: 3000
+                        });
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1500);
+                    }
+                }, function(xhr) {
+                    console.warn('[CacheVersion] 获取版本失败:', xhr.status);
                 });
             },
             compareVersions: function(v1, v2) {
