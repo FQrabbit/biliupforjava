@@ -397,11 +397,26 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                             isFallback = false;
                                         } else {
                                             String[] endpoints = preUploadBean.getEndpoints();
+                                            // 先尝试找用户指定的 CDN
                                             for (String endpoint : endpoints) {
                                                 if (endpoint.contains("upcdn" + uploadEnums.getCdn())) {
                                                     preUploadBean.setEndpoint(endpoint);
                                                     isFallback = false;
                                                     break;
+                                                }
+                                            }
+                                            // 如果没找到，且当前分配的是 esheep，则尝试从备用列表中挑一个正常的 B站 upcdn 节点
+                                            if (isFallback && preUploadBean.getEndpoint().contains("esheep.com")) {
+                                                for (String endpoint : endpoints) {
+                                                    if (endpoint.contains("upcdn") && !endpoint.contains("esheep.com")) {
+                                                        preUploadBean.setEndpoint(endpoint);
+                                                        log.info("[BLR] {}", LogKvs.event("Upload.PreUpload.AvoidEsheep")
+                                                                .add("roomId", room.getRoomId())
+                                                                .add("historyId", part.getHistoryId())
+                                                                .add("avoidedEndpoint", "esheep.com")
+                                                                .add("newEndpoint", endpoint));
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
