@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
@@ -39,6 +40,9 @@ public class RecordEventFileOpenService implements RecordEventService {
     @Autowired
     private RecordHistoryPartRepository historyPartRepository;
 
+
+    @Autowired
+    private SystemConfigService systemConfigService;
 
     @Override
     public void processing(RecordEventDTO event) {
@@ -134,8 +138,26 @@ public class RecordEventFileOpenService implements RecordEventService {
 
                     if (history == null) {
                         // 其次复用最近结束的记录
+                        // 读取用户配置的断线合并时间（默认20分钟），防止用户配置大数值时这里只查20分钟导致遗漏
+                        int mergeIntervalMinutes = 20;
+                        try {
+                            String mergeIntervalConfig = systemConfigService.getAllConfigsMap().get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
+                            if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
+                                mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
+                                if (mergeIntervalMinutes < 1) {
+                                    mergeIntervalMinutes = 1;
+                                } else if (mergeIntervalMinutes > 1440) {
+                                    mergeIntervalMinutes = 1440;
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.warn("[BLR] {}", LogKvs.event("SessionMismatch.ParseMergeIntervalConfigFailed")
+                                    .add("error", e.getMessage()));
+                        }
+                        
                         // 同样需要检查 publish 状态，已发布的稿件无法追加分P
-                        List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes(20L), now);
+                        // 增加上限缓冲(plusMinutes(5))，防止并发处理时FileClosed更新的endTime略晚于当前now()导致查询遗漏
+                        List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes((long) mergeIntervalMinutes), now.plusMinutes(5L));
                         if (!CollectionUtils.isEmpty(historyList)) {
                             // 过滤掉已经发布的稿件
                             historyList = historyList.stream().filter(h -> !h.isPublish()).collect(java.util.stream.Collectors.toList());
