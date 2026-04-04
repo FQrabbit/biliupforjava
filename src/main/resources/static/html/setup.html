@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>初始配置向导 - 录播姬上传插件</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="../css/element-ui.css" rel="stylesheet">
+    <link href="../css/base/variables.css" rel="stylesheet">
+    <link href="../css/base/reset.css" rel="stylesheet">
+    <link href="../css/base/element-override.css" rel="stylesheet">
+    <link href="../css/base/shared-components.css" rel="stylesheet">
+    <link href="../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../css/animations/transitions.css" rel="stylesheet">
+    <link href="../css/animations/effects.css" rel="stylesheet">
+    <link href="../css/login.css" rel="stylesheet">
+    <style>
+        .login-card {
+            width: 500px !important; /* 加宽一点以适应配置表单 */
+        }
+        .form-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-color);
+            margin: 20px 0 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .el-form-item__label {
+            color: var(--text-color) !important;
+            padding-bottom: 4px !important;
+        }
+        .setup-actions {
+            margin-top: 30px;
+            text-align: center;
+        }
+        .setup-actions .el-button {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="login-page">
+        <div class="login-bg" aria-hidden="true">
+            <div class="bg-blob blob-1"><div class="blob-inner"></div></div>
+            <div class="bg-blob blob-2"><div class="blob-inner"></div></div>
+            <div class="bg-blob blob-3"><div class="blob-inner"></div></div>
+        </div>
+
+        <div class="login-topbar">
+            <div class="brand-mini">
+                <img src="../img/icon.svg" alt="logo">
+                <span class="brand-mini-title">录播姬上传插件</span>
+            </div>
+            <div class="login-topbar-actions">
+                <el-select v-model="themePalette" size="mini" class="login-theme-palette" @change="applyThemePalette" :popper-append-to-body="false" placeholder="配色">
+                    <el-option v-for="item in themePaletteOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+                </el-select>
+                <button class="login-theme-toggle" type="button" @click="toggleTheme" :title="theme === 'dark' ? '切换到浅色' : '切换到深色'">
+                    <i :class="theme === 'dark' ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="login-center">
+            <el-card class="login-card" shadow="never">
+                <div class="login-inner">
+                    <div class="login-header">
+                        <h2 class="login-title">初始化配置向导</h2>
+                        <p class="login-subtitle">检测到当前环境未配置启动参数，请填写以下基础信息完成初始化设置。</p>
+                    </div>
+
+                    <el-form :model="form" :rules="rules" ref="setupForm" label-position="top" @submit.native.prevent="handleSave">
+                        <div class="form-section-title">基础配置 (必填)</div>
+                        <el-row :gutter="20">
+                            <el-col :span="8">
+                                <el-form-item label="服务端口号" prop="port">
+                                    <el-input v-model.number="form.port" placeholder="例如: 44122"></el-input>
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="16">
+                                <el-form-item label="工作路径 (视频保存路径)" prop="workPath">
+                                    <el-input v-model="form.workPath" placeholder="例如: D:\录播姬"></el-input>
+                                </el-form-item>
+                            </el-col>
+                        </el-row>
+
+                        <div class="form-section-title">安全配置 (可选)</div>
+                        <el-row :gutter="20">
+                            <el-col :span="12">
+                                <el-form-item label="管理员账号" prop="username">
+                                    <el-input v-model="form.username" placeholder="留空则不校验"></el-input>
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="12">
+                                <el-form-item label="管理员密码" prop="password">
+                                    <el-input v-model="form.password" type="password" show-password placeholder="留空则不校验"></el-input>
+                                </el-form-item>
+                            </el-col>
+                        </el-row>
+
+                        <div class="form-section-title">高级配置 (可选)</div>
+                        <el-row :gutter="20">
+                            <el-col :span="12">
+                                <el-form-item label="文件编码" prop="encoding">
+                                    <el-select v-model="form.encoding" style="width: 100%">
+                                        <el-option label="UTF-8" value="UTF-8"></el-option>
+                                        <el-option label="GBK" value="GBK"></el-option>
+                                    </el-select>
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="12">
+                                <el-form-item label="系统时区" prop="timezone">
+                                    <el-select v-model="form.timezone" style="width: 100%" filterable placeholder="搜索或选择时区">
+                                        <el-option-group label="常用时区">
+                                            <el-option label="Asia/Shanghai (北京时间)" value="Asia/Shanghai"></el-option>
+                                            <el-option label="UTC (协调世界时)" value="UTC"></el-option>
+                                        </el-option-group>
+                                        <el-option-group label="亚洲">
+                                            <el-option label="Asia/Hong_Kong (香港)" value="Asia/Hong_Kong"></el-option>
+                                            <el-option label="Asia/Taipei (台北)" value="Asia/Taipei"></el-option>
+                                            <el-option label="Asia/Tokyo (东京)" value="Asia/Tokyo"></el-option>
+                                            <el-option label="Asia/Seoul (东京/首尔)" value="Asia/Seoul"></el-option>
+                                            <el-option label="Asia/Singapore (首尔/平壤)" value="Asia/Singapore"></el-option>
+                                        </el-option-group>
+                                        <el-option-group label="美洲">
+                                            <el-option label="America/New_York (纽约)" value="America/New_York"></el-option>
+                                            <el-option label="America/Los_Angeles (洛杉矶)" value="America/Los_Angeles"></el-option>
+                                            <el-option label="America/Chicago (芝加哥)" value="America/Chicago"></el-option>
+                                            <el-option label="America/Toronto (多伦多)" value="America/Toronto"></el-option>
+                                        </el-option-group>
+                                        <el-option-group label="欧洲">
+                                            <el-option label="Europe/London (伦敦)" value="Europe/London"></el-option>
+                                            <el-option label="Europe/Paris (巴黎)" value="Europe/Paris"></el-option>
+                                            <el-option label="Europe/Berlin (柏林)" value="Europe/Berlin"></el-option>
+                                            <el-option label="Europe/Moscow (莫斯科)" value="Europe/Moscow"></el-option>
+                                        </el-option-group>
+                                        <el-option-group label="澳洲">
+                                            <el-option label="Australia/Sydney (悉尼)" value="Australia/Sydney"></el-option>
+                                            <el-option label="Australia/Melbourne (墨尔本)" value="Australia/Melbourne"></el-option>
+                                        </el-option-group>
+                                    </el-select>
+                                </el-form-item>
+                            </el-col>
+                        </el-row>
+
+                        <div class="setup-actions">
+                            <el-button type="primary" @click="handleSave" :loading="loading" size="large">保存配置并应用</el-button>
+                        </div>
+                    </el-form>
+                </div>
+            </el-card>
+        </div>
+    </div>
+</div>
+
+<script src="../js/vue.min.js"></script>
+<script src="../js/element-ui.js"></script>
+<script src="../js/theme-tokens.js"></script>
+<script>
+    new Vue({
+        el: '#app',
+        data() {
+            return {
+                form: {
+                    port: 44122,
+                    workPath: '',
+                    username: '',
+                    password: '',
+                    encoding: 'UTF-8',
+                    timezone: 'Asia/Shanghai'
+                },
+                rules: {
+                    port: [
+                        { required: true, message: '端口号不能为空', trigger: 'blur' },
+                        { type: 'number', message: '端口号必须为数字', trigger: 'blur' }
+                    ],
+                    workPath: [
+                        { required: true, message: '工作路径不能为空', trigger: 'blur' }
+                    ]
+                },
+                loading: false,
+                theme: localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+                themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'classic',
+                _parallaxRaf: null,
+                _mx: 0,
+                _my: 0
+            }
+        },
+        computed: {
+            themePaletteOptions: function () {
+                if (window.ThemeTokens && typeof window.ThemeTokens.getThemeOptions === 'function') {
+                    return window.ThemeTokens.getThemeOptions();
+                }
+                return [{ value: 'classic', label: 'classic' }];
+            }
+        },
+        mounted() {
+            this.applyTheme(this.theme);
+            this.initParallax();
+        },
+        methods: {
+            applyTheme(theme) {
+                this.theme = theme === 'dark' ? 'dark' : 'light';
+                if (window.ThemeTokens && typeof window.ThemeTokens.applyCurrent === 'function') {
+                    window.ThemeTokens.applyCurrent(document, this.theme);
+                } else {
+                    document.documentElement.setAttribute('data-theme', this.theme);
+                }
+                try {
+                    localStorage.setItem('theme', this.theme);
+                } catch (e) {
+                }
+            },
+            toggleTheme() {
+                this.applyTheme(this.theme === 'dark' ? 'light' : 'dark');
+            },
+            applyThemePalette(paletteName) {
+                if (window.ThemeTokens && typeof window.ThemeTokens.setPalette === 'function') {
+                    var ok = window.ThemeTokens.setPalette(paletteName);
+                    if (!ok) {
+                        return;
+                    }
+                }
+                this.themePalette = paletteName;
+                this.applyTheme(this.theme);
+            },
+            initParallax() {
+                var reduce = false;
+                try { reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+                if (reduce) return;
+
+                var page = document.querySelector('.login-page');
+                var b1 = document.querySelector('.bg-blob.blob-1');
+                var b2 = document.querySelector('.bg-blob.blob-2');
+                var b3 = document.querySelector('.bg-blob.blob-3');
+                if (!page || !b1 || !b2 || !b3) return;
+
+                var self = this;
+                var update = function() {
+                    self._parallaxRaf = null;
+                    var x = self._mx;
+                    var y = self._my;
+                    b1.style.transform = 'translate3d(' + (x * 28) + 'px,' + (y * 20) + 'px,0)';
+                    b2.style.transform = 'translate3d(' + (x * -22) + 'px,' + (y * 26) + 'px,0)';
+                    b3.style.transform = 'translate3d(' + (x * 18) + 'px,' + (y * -18) + 'px,0)';
+                };
+
+                var onMove = function(ev) {
+                    var vw = window.innerWidth || 1;
+                    var vh = window.innerHeight || 1;
+                    var cx = (ev.clientX / vw) * 2 - 1;
+                    var cy = (ev.clientY / vh) * 2 - 1;
+                    self._mx = Math.max(-1, Math.min(1, cx));
+                    self._my = Math.max(-1, Math.min(1, cy));
+                    if (self._parallaxRaf) return;
+                    self._parallaxRaf = requestAnimationFrame(update);
+                };
+
+                window.addEventListener('mousemove', onMove, { passive: true });
+                window.addEventListener('touchmove', function(ev) {
+                    if (!ev.touches || !ev.touches[0]) return;
+                    onMove(ev.touches[0]);
+                }, { passive: true });
+            },
+            handleSave() {
+                this.$refs.setupForm.validate(async valid => {
+                    if (valid) {
+                        this.loading = true;
+                        try {
+                            const res = await fetch('/api/setup', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(this.form)
+                            });
+                            
+                            if (res.ok) {
+                                this.$alert('配置已成功保存为 application.yml！\n进程即将退出，请手动重新启动程序以使配置生效。', '配置成功', {
+                                    confirmButtonText: '我知道了',
+                                    type: 'success',
+                                    callback: () => {
+                                        window.close();
+                                    }
+                                });
+                            } else {
+                                throw new Error('Failed to save config');
+                            }
+                        } catch (error) {
+                            this.$message.error('保存配置失败，请重试或检查日志。');
+                        } finally {
+                            this.loading = false;
+                        }
+                    } else {
+                        return false;
+                    }
+                });
+            }
+        }
+    });
+</script>
+</body>
+</html>
