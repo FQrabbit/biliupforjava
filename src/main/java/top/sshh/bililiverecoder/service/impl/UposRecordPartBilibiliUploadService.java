@@ -391,15 +391,31 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         // 同步更新
                                         //                                    chunkSize = preUploadBean.getChunk_size();
                                         //                                    chunkNum = (long) Math.ceil((double) fileSize / chunkSize);
-                                        // 如果返回的线路不是指定的线路，则从备用线路选择
-                                        if (!preUploadBean.getEndpoint().contains(("upcdn" + uploadEnums.getCdn()))) {
+                                        // 如果返回的线路不是指定的线路，则尝试从备用线路选择
+                                        boolean isFallback = true;
+                                        if (preUploadBean.getEndpoint().contains(("upcdn" + uploadEnums.getCdn()))) {
+                                            isFallback = false;
+                                        } else {
                                             String[] endpoints = preUploadBean.getEndpoints();
                                             for (String endpoint : endpoints) {
                                                 if (endpoint.contains("upcdn" + uploadEnums.getCdn())) {
                                                     preUploadBean.setEndpoint(endpoint);
+                                                    isFallback = false;
+                                                    break;
                                                 }
                                             }
                                         }
+                                        if (isFallback) {
+                                            log.warn("[BLR] {}", LogKvs.event("Upload.PreUpload.Fallback")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("uname", room.getUname())
+                                                    .add("partId", part.getId())
+                                                    .add("historyId", part.getHistoryId())
+                                                    .add("expectedCdn", uploadEnums.getCdn())
+                                                    .add("assignedEndpoint", preUploadBean.getEndpoint())
+                                                    .add("endpointsList", Arrays.toString(preUploadBean.getEndpoints())));
+                                        }
+                                        
                                         LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
                                         uploadBean = uploadRequest.getPojo();
                                         log.debug("[BLR] {}", LogKvs.event("Upload.PreUpload.Success")

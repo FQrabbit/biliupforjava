@@ -53,6 +53,7 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.Captcha.Timeout", "等待验证码超时，将按策略处理/重试");
         EVENT_ZH.put("Upload.RateLimit.Wait", "触发限流，等待后重试");
         EVENT_ZH.put("Upload.PreUpload.Success", "预上传成功，开始分片上传");
+        EVENT_ZH.put("Upload.PreUpload.Fallback", "节点被B站降级或切换(当前区域不可用/已满)");
         EVENT_ZH.put("Upload.PreUpload.Response", "预上传响应(调试)");
         EVENT_ZH.put("Upload.Chunk.Progress", "分片上传进度(调试)");
         EVENT_ZH.put("Upload.Chunk.FileMissing", "分片上传时文件不存在，终止");
