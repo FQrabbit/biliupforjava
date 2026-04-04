@@ -246,6 +246,15 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                         synchronized (USER_UPLOAD_LOCKS.computeIfAbsent(biliBiliUser.getId(), k -> new Object())) {
                         long fileSize = uploadFile.length();
                         Map<String, String> preParams = new HashMap<>();
+                        preParams.put("r", uploadEnums.getOs());
+                        preParams.put("os", uploadEnums.getOs());
+                        if (StringUtils.isNotBlank(uploadEnums.getCdn())) {
+                            preParams.put("upcdn", uploadEnums.getCdn());
+                        }
+                        if (StringUtils.isNotBlank(uploadEnums.getZone())) {
+                            preParams.put("zone", uploadEnums.getZone());
+                        }
+                        preParams.put("profile", uploadEnums.getProfile());
                         if(StringUtils.isNotBlank(part.getTitle())){
                             preParams.put("name", room.getUname()+part.getTitle());
                         }else {

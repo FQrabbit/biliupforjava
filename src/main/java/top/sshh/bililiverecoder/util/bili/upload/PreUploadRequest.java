@@ -34,7 +34,8 @@ public class PreUploadRequest {
 
 
     public void setLineQuery(String value) {
-        headers.put("referer", value);
+        // 值类似于 ?os=upos&zone=cs&upcdn=bda2，这不是有效的 referer
+        headers.put("referer", "https://member.bilibili.com/video/upload.html");
     }
 
     public PreUploadBean getPojo() throws HttpException {

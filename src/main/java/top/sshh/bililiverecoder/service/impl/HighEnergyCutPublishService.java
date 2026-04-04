@@ -417,6 +417,13 @@ public class HighEnergyCutPublishService {
         File uploadFile = new File(filePath);
         Map<String, String> preParams = new HashMap<>();
         preParams.put("r", uploadEnums.getOs());
+        preParams.put("os", uploadEnums.getOs());
+        if (StringUtils.isNotBlank(uploadEnums.getCdn())) {
+            preParams.put("upcdn", uploadEnums.getCdn());
+        }
+        if (StringUtils.isNotBlank(uploadEnums.getZone())) {
+            preParams.put("zone", uploadEnums.getZone());
+        }
         preParams.put("profile", uploadEnums.getProfile());
         preParams.put("ssl", "0");
         preParams.put("version", "2.14.0.0");
