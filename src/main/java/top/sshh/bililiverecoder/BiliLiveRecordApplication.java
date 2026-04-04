@@ -4,12 +4,17 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
 
 import top.sshh.bililiverecoder.wizard.SetupWizardServer;
 
 @EnableAsync
 @EnableScheduling
 @SpringBootApplication
+@RegisterReflectionForBinding({
+    jakarta.servlet.GenericServlet.class,
+    jakarta.servlet.http.HttpServlet.class
+})
 public class BiliLiveRecordApplication {
 
     public static void main(String[] args) {

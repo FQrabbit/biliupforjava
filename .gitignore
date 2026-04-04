@@ -15,6 +15,9 @@ target/
 # Runtime generated files
 device.properties
 
+# GraalVM / Native build temp files
+app.res
+
 
 .*/
 # Whitelist necessary directories

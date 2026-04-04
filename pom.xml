@@ -49,6 +49,10 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-core</artifactId>
+        </dependency>
         <!-- 添加 Undertow 依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -165,6 +169,17 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <configuration>
+                    <imageName>biliupforjava</imageName>
+                    <buildArgs>
+                        <!-- 使用 ${project.basedir} 确保传给底层链接器的是绝对路径 -->
+                        <buildArg>-H:NativeLinkerOption=${project.basedir}/app.res</buildArg>
+                    </buildArgs>
+                </configuration>
             </plugin>
         </plugins>
     </build>

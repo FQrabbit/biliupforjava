@@ -39,6 +39,27 @@
     </style>
 </head>
 <body>
+<!-- 浏览器兼容性检测兜底 -->
+<div id="browser-warning" style="display: none; position: fixed; top: 0; left: 0; width: 100%; z-index: 99999; background: #f56c6c; color: white; text-align: center; padding: 15px; font-family: sans-serif; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+    ⚠️ 您的浏览器版本过低（不支持现代特性）。请使用最新版的 Chrome、Edge、Firefox 或 Safari 访问本页面，否则配置向导可能无法正常工作。
+</div>
+<script>
+    // 非常古老的检测方法，确保在最老的 IE 上也能执行
+    var isIE = window.navigator.userAgent.indexOf("MSIE ") > -1 || window.navigator.userAgent.indexOf("Trident/") > -1;
+    // 检测是否支持 ES6 箭头函数、Promise 等现代特性
+    var isModern = false;
+    try {
+        new Function("(a = 0) => a");
+        if (typeof Promise !== "undefined") {
+            isModern = true;
+        }
+    } catch (err) {}
+    
+    if (isIE || !isModern) {
+        document.getElementById("browser-warning").style.display = "block";
+    }
+</script>
+
 <div id="app">
     <div class="login-page">
         <div class="login-bg" aria-hidden="true">
@@ -277,7 +298,7 @@
                             });
                             
                             if (res.ok) {
-                                this.$alert('配置已成功保存为 application.yml！\n进程即将退出，请手动重新启动程序以使配置生效。', '配置成功', {
+                                this.$alert('配置已成功保存！\n进程即将退出，请手动重新启动程序以使配置生效。', '配置成功', {
                                     confirmButtonText: '我知道了',
                                     type: 'success',
                                     callback: () => {

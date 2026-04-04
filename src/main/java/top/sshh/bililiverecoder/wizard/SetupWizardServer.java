@@ -12,11 +12,12 @@ import java.util.stream.Collectors;
 public class SetupWizardServer {
 
     public static void checkAndRunWizardIfNeeded(String[] args) {
-        // 检查是否存在配置文件
-        File appYml = new File("application.yml");
-        File appProps = new File("application.properties");
-        File configAppYml = new File("config/application.yml");
-        File configAppProps = new File("config/application.properties");
+        // 检查是否存在配置文件 (相对于进程所在目录)
+        File currentDir = getProcessDir();
+        File appYml = new File(currentDir, "application.yml");
+        File appProps = new File(currentDir, "application.properties");
+        File configAppYml = new File(currentDir, "config/application.yml");
+        File configAppProps = new File(currentDir, "config/application.properties");
 
         if (appYml.exists() || appProps.exists() || configAppYml.exists() || configAppProps.exists()) {
             return;
@@ -36,6 +37,20 @@ public class SetupWizardServer {
 
         // 都没有，启动网页配置向导
         startWizardServer();
+    }
+
+    // 获取进程（Jar/Exe）所在的物理绝对路径
+    private static File getProcessDir() {
+        try {
+            String path = SetupWizardServer.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+            File jarFile = new File(path);
+            if (jarFile.isFile()) {
+                return jarFile.getParentFile();
+            }
+            return jarFile;
+        } catch (Exception e) {
+            return new File(System.getProperty("user.dir")); // 兜底方案
+        }
     }
 
     private static void startWizardServer() {
@@ -194,9 +209,11 @@ public class SetupWizardServer {
                     yml.append("    time-zone: \"").append(timezone).append("\"\n");
                 }
 
-                // 保存到当前目录的 application.yml
-                try (FileWriter fw = new FileWriter("application.yml")) {
-                    fw.write(yml.toString());
+                // 保存到进程所在目录的 application.yml，强制使用 UTF-8 编码
+                File currentDir = getProcessDir();
+                File targetYml = new File(currentDir, "application.yml");
+                try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(targetYml), StandardCharsets.UTF_8)) {
+                    writer.write(yml.toString());
                 }
 
                 String response = "{\"success\":true}";
@@ -206,8 +223,8 @@ public class SetupWizardServer {
                 os.write(response.getBytes());
                 os.close();
 
-                System.out.println("配置已成功保存到 application.yml，向导进程即将退出。请手动重新启动程序！");
-                System.out.println("Configuration saved successfully to 'application.yml'. The wizard process is exiting. Please restart the program manually!");
+                System.out.println("配置已成功保存到 " + targetYml.getAbsolutePath() + "，向导进程即将退出。请手动重新启动程序！");
+                System.out.println("Configuration saved successfully to '" + targetYml.getAbsolutePath() + "'. The wizard process is exiting. Please restart the program manually!");
                 
                 // 停止服务并退出
                 new Thread(() -> {
