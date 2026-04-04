@@ -326,7 +326,18 @@ public class publishJob {
             } catch (Exception ignored) {
             }
 
-            publishService.publishRecordHistory(history);
+            try {
+                publishService.publishRecordHistory(history);
+            } catch (Exception e) {
+                log.error("[BLR] {}", LogKvs.event("PublishJob.PublishHistory.Error")
+                        .add("historyId", history.getId())
+                        .add("roomId", history.getRoomId())
+                        .addIfNotBlank("title", history.getTitle())
+                        .addIfNotBlank("err", e.getMessage()), e);
+                history.setUploadRetryCount(history.getUploadRetryCount() + 1);
+                historyRepository.save(history);
+            }
+            
             try {
                 log.info("[BLR] {}", LogKvs.event("PublishJob.WaitNext")
                         .add("waitMs", 30000));

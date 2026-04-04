@@ -130,6 +130,8 @@ public final class LogKvs {
         EVENT_ZH.put("SessionMismatch.SkipPublished", "Session ID 不匹配：发现最近记录已发布/审核中，跳过合并并创建新稿件");
         EVENT_ZH.put("SessionMismatch.ActiveHistoryStale", "Session ID 不匹配：检测到过时的录制中记录(24小时无活动)");
         EVENT_ZH.put("SessionMismatch.CreatedNew", "Session ID 不匹配：未找到最近记录，已创建新的录制历史");
+        EVENT_ZH.put("SessionMismatch.ParseMergeIntervalConfigFailed", "Session ID 不匹配：解析合并间隔配置失败");
+        EVENT_ZH.put("PublishJob.PublishHistory.Error", "执行投稿任务异常");
         EVENT_ZH.put("SessionMismatch.Recovered", "Session ID 不匹配：自愈成功，已更新状态");
         EVENT_ZH.put("FileOpen.MissingRoom", "文件打开事件：房间不存在");
         EVENT_ZH.put("FileOpen.HistoryRoomMismatch", "文件打开事件：history 与 room 不匹配");

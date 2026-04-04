@@ -1148,6 +1148,12 @@ public class HistoryController {
         if (history == null) {
             return;
         }
+        // 动态计算该稿件下所有分P的总文件大小，避免历史数据统计遗漏或0B问题
+        long totalFileSize = partRepository.sumHistoryFileSizeByHistoryId(history.getId());
+        if (totalFileSize > 0 || history.getFileSize() == 0) {
+            history.setFileSize(totalFileSize);
+        }
+        
         // 分P统计
         history.setPartCount(partRepository.countByHistoryId(history.getId()));
         history.setPartDuration(partRepository.sumHistoryDurationByHistoryId(history.getId()));
