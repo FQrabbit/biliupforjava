@@ -391,34 +391,47 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         // 同步更新
                                         //                                    chunkSize = preUploadBean.getChunk_size();
                                         //                                    chunkNum = (long) Math.ceil((double) fileSize / chunkSize);
-                                        // 如果返回的线路不是指定的线路，则尝试从备用线路选择
-                                        boolean isFallback = true;
-                                        if (preUploadBean.getEndpoint().contains(("upcdn" + uploadEnums.getCdn()))) {
-                                            isFallback = false;
-                                        } else {
-                                            String[] endpoints = preUploadBean.getEndpoints();
+                                        // 如果返回的线路不是指定线路，优先选择 upcdn 系列节点（速度通常更稳定）
+                                        String expectedToken = "upcdn" + uploadEnums.getCdn();
+                                        String[] endpoints = preUploadBean.getEndpoints() == null ? new String[0] : preUploadBean.getEndpoints();
+                                        String assignedEndpoint = StringUtils.defaultString(preUploadBean.getEndpoint());
+                                        String selectedEndpoint = assignedEndpoint;
+                                        boolean isFallback = !assignedEndpoint.contains(expectedToken);
+                                        if (isFallback) {
                                             // 先尝试找用户指定的 CDN
                                             for (String endpoint : endpoints) {
-                                                if (endpoint.contains("upcdn" + uploadEnums.getCdn())) {
-                                                    preUploadBean.setEndpoint(endpoint);
+                                                if (StringUtils.isNotBlank(endpoint) && endpoint.contains(expectedToken)) {
+                                                    selectedEndpoint = endpoint;
                                                     isFallback = false;
                                                     break;
                                                 }
                                             }
-                                            // 如果没找到，且当前分配的是 esheep，则尝试从备用列表中挑一个正常的 B站 upcdn 节点
-                                            if (isFallback && preUploadBean.getEndpoint().contains("esheep.com")) {
+                                            // 指定 CDN 不可用时，优先使用任意 upcdn 的正规节点（不是 esheep）
+                                            if (isFallback) {
                                                 for (String endpoint : endpoints) {
-                                                    if (endpoint.contains("upcdn") && !endpoint.contains("esheep.com")) {
-                                                        preUploadBean.setEndpoint(endpoint);
-                                                        log.info("[BLR] {}", LogKvs.event("Upload.PreUpload.AvoidEsheep")
+                                                    if (StringUtils.isNotBlank(endpoint)
+                                                            && endpoint.contains("upcdn")
+                                                            && !endpoint.contains("esheep.com")) {
+                                                        selectedEndpoint = endpoint;
+                                                        log.info("[BLR] {}", LogKvs.event("Upload.PreUpload.PreferUpcdn")
                                                                 .add("roomId", room.getRoomId())
                                                                 .add("historyId", part.getHistoryId())
-                                                                .add("avoidedEndpoint", "esheep.com")
+                                                                .add("expectedCdn", uploadEnums.getCdn())
+                                                                .add("assignedEndpoint", assignedEndpoint)
                                                                 .add("newEndpoint", endpoint));
                                                         break;
                                                     }
                                                 }
                                             }
+                                            // 如果仍是 fallback 且原始分配为 esheep，记录规避尝试结果（可能无可用替换）
+                                            if (assignedEndpoint.contains("esheep.com") && !assignedEndpoint.equals(selectedEndpoint)) {
+                                                log.info("[BLR] {}", LogKvs.event("Upload.PreUpload.AvoidEsheep")
+                                                        .add("roomId", room.getRoomId())
+                                                        .add("historyId", part.getHistoryId())
+                                                        .add("avoidedEndpoint", assignedEndpoint)
+                                                        .add("newEndpoint", selectedEndpoint));
+                                            }
+                                            preUploadBean.setEndpoint(selectedEndpoint);
                                         }
                                         if (isFallback) {
                                             log.warn("[BLR] {}", LogKvs.event("Upload.PreUpload.Fallback")
@@ -428,7 +441,19 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     .add("historyId", part.getHistoryId())
                                                     .add("expectedCdn", uploadEnums.getCdn())
                                                     .add("assignedEndpoint", preUploadBean.getEndpoint())
-                                                    .add("endpointsList", Arrays.toString(preUploadBean.getEndpoints())));
+                                                    .add("endpointsList", Arrays.toString(endpoints)));
+                                        }
+                                        String selectedHost = resolveUploadHost(preUploadBean);
+                                        if (isLikelyEdgeOrProxyHost(selectedHost)) {
+                                            log.warn("[BLR] {}", LogKvs.event("Upload.PreUpload.EdgeProxy")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("uname", room.getUname())
+                                                    .add("partId", part.getId())
+                                                    .add("historyId", part.getHistoryId())
+                                                    .add("expectedCdn", uploadEnums.getCdn())
+                                                    .add("endpoint", preUploadBean.getEndpoint())
+                                                    .add("host", selectedHost)
+                                                    .add("endpointsList", Arrays.toString(endpoints)));
                                         }
                                         
                                         LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
@@ -965,6 +990,24 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
         }
         return endpoint;
     }
+
+    private boolean isLikelyEdgeOrProxyHost(String host) {
+        if (StringUtils.isBlank(host)) {
+            return false;
+        }
+        String h = host.toLowerCase();
+        if (h.contains("bilivideo.com")) {
+            return false;
+        }
+        if (h.contains("esheep.com") || h.contains("aikobo.cn")) {
+            return true;
+        }
+        int firstDot = h.indexOf('.');
+        String firstLabel = firstDot > 0 ? h.substring(0, firstDot) : h;
+        boolean mixedAlphaNum = firstLabel.matches(".*[a-z].*") && firstLabel.matches(".*\\d.*");
+        if (mixedAlphaNum && firstLabel.length() >= 8) {
+            return true;
+        }
+        return h.contains("cdn");
+    }
 }
-
-
