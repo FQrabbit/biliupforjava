@@ -6,7 +6,9 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
 import top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse;
@@ -62,7 +64,9 @@ public class PartController {
     @Autowired
     private ShutdownState shutdownState;
 
-    @Resource(name = "editorBilibiliUploadService")
+    @Lazy
+    @Autowired
+    @Qualifier("editorBilibiliUploadService")
     private RecordPartUploadService editPartUploadService;
     private final Map<Long, ReviewInfoCacheEntry> reviewInfoCache = new ConcurrentHashMap<>();
     private final Map<Long, Object> reviewInfoLocks = new ConcurrentHashMap<>();

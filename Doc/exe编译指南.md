@@ -1,41 +1,48 @@
-# biliupforjava 编译可执行文件 (exe) 指南
+# biliupforjava 编译为 Windows 可执行文件 (.exe) 指南
 
-本项目支持使用 GraalVM Native Image 将 Spring Boot Java 项目打包成独立运行的 Windows `.exe` 可执行文件。这不仅可以加快启动速度，还能大幅降低内存占用，且用户运行不需要预先安装 Java 环境。
+本项目基于 Spring Boot 3 与 GraalVM Native Image 技术，支持将 Java 应用程序打包为独立的 Windows `.exe` 可执行文件。该方案可显著提升启动速度并降低运行内存占用，且部署时无需安装 Java 运行环境。
 
-## 1. 编译环境准备
+***
 
-在 Windows 下编译 Native Image，需要准备以下两个核心环境：
+## 1. 编译环境配置
 
-### 1.1 安装 Visual Studio Build Tools (C++ 编译环境)
-GraalVM 需要用到微软的 C++ 编译器（MSVC）来将 Java 代码编译成机器码。
-1. 下载并安装 [Visual Studio Installer](https://visualstudio.microsoft.com/zh-hans/downloads/)。
-2. 在安装器中，勾选 **“使用 C++ 的桌面开发”**。
-3. 在右侧的“安装详细信息”中，确保勾选了以下两项（默认通常已勾选）：
-   - **MSVC v143 - VS 2022 C++ x64/x86 生成工具**
-   - **Windows 11 SDK** (或 Windows 10 SDK)
+在 Windows 环境下进行 AOT (Ahead-of-Time) 编译，需预先安装 C++ 编译工具链与 GraalVM。
 
-### 1.2 安装 GraalVM JDK 和 native-image 工具
-1. 下载带有 GraalVM 的 JDK 17（推荐使用 Oracle GraalVM 或 CE 版本）。
-2. 解压到任意目录，并配置系统环境变量：
-   - 新建系统变量 `JAVA_HOME`，值为 GraalVM 的解压目录（例如 `C:\graalvm-jdk-17`）。
-   - 在系统变量 `Path` 中，添加 `%JAVA_HOME%\bin`。
+### 1.1 安装 Visual Studio Build Tools
+
+GraalVM 编译过程依赖 MSVC 编译器。
+
+1. 下载并运行 [Visual Studio Installer](https://visualstudio.microsoft.com/zh-hans/downloads/)。
+2. 勾选 **使用 C++ 的桌面开发** 工作负载。
+3. 确保在右侧“安装详细信息”中已勾选以下核心组件：
+   - MSVC v143 - VS 2022 C++ x64/x86 生成工具
+   - Windows 11 SDK (或 Windows 10 SDK)
+
+### 1.2 配置 GraalVM JDK
+
+1. 下载集成 GraalVM 的 JDK 17 (如 Oracle GraalVM 或 CE 版)。
+2. 解压后配置系统环境变量：
+   - 新建 `JAVA_HOME`，指向解压目录（如 `C:\graalvm-jdk-17`）。
+   - 在 `Path` 变量中添加 `%JAVA_HOME%\bin`。
 3. **安装 native-image 组件**：
-   - 右键“开始”菜单，以**管理员身份**打开 Windows 终端（CMD 或 PowerShell）。
-   - 运行以下命令安装 Native Image 支持：
+   - 以管理员权限运行系统自带终端 (CMD / PowerShell)。
+   - 执行组件安装命令：
      ```cmd
      gu install native-image
      ```
 
----
+***
 
-## 2. 准备图标与版本信息资源 (可选)
+## 2. 注入图标与版本信息资源 (可选)
 
-如果你希望最终生成的 `biliupforjava.exe` 拥有自定义的图标和版本详细信息（例如右键属性中的“文件说明”、“产品版本”等），需要通过 Windows 资源编译器（`rc.exe`）将配置编译到执行文件中。
+通过 Windows 资源编译器 (`rc.exe`)，可将自定义图标及版本信息注入最终生成的执行文件中。
 
-### 2.1 准备文件
-在项目根目录下准备以下两个文件：
-- `icon.ico`: 你的程序图标（必须是 `.ico` 格式，如果只有 svg/png 需要先转换）。
-- `app.rc`: 资源描述文件，内容参考如下：
+### 2.1 准备资源文件
+
+确保项目根目录存在以下文件：
+
+- `icon.ico`: 应用程序图标文件。
+- `app.rc`: 资源描述文件，参考内容如下：
 
 ```rc
 IDI_ICON1 ICON "icon.ico"
@@ -49,7 +56,7 @@ BEGIN
         BLOCK "080404b0"
         BEGIN
             VALUE "CompanyName", "biliupforjava"
-            VALUE "FileDescription", "BiliLive Record & Upload Tool"
+            VALUE "FileDescription", "biliupforjava1.4.1-beta7.1"
             VALUE "FileVersion", "1.4.1.71"
             VALUE "InternalName", "biliupforjava"
             VALUE "OriginalFilename", "biliupforjava.exe"
@@ -64,45 +71,68 @@ BEGIN
 END
 ```
 
-### 2.2 编译为 `.res` 文件
-在进行 Maven 编译前，需要先将 `app.rc` 编译为 `app.res`。
-1. 从开始菜单中找到并打开 **x64 Native Tools Command Prompt for VS 2022**（这是 VS 提供的自带好 C++ 环境变量的终端）。
-2. `cd` 切换到你的项目根目录。
-3. 执行编译命令：
+### 2.2 编译资源文件
+
+必须先将 `.rc` 编译为 `.res`，方可在 Maven 构建中被链接器读取。
+
+1. 在开始菜单搜索并打开 **x64 Native Tools Command Prompt for VS 2022**。
+2. 切换至项目根目录，执行资源编译：
    ```cmd
    rc /nologo /fo app.res app.rc
    ```
-执行成功后，项目目录下会生成一个 `app.res` 文件。
 
----
+> 执行成功后，根目录将生成 `app.res` 文件。
 
-## 3. 开始编译 exe
+***
 
-完成环境配置和资源准备后，就可以开始编译了。
+## 3. 使用 Tracing Agent 收集反射配置
 
-**重要提醒：** 
-由于打包 exe 需要非常庞大的系统资源（CPU 满载，内存消耗 8GB 以上），且容易受到杀毒软件和 IDE 沙盒限制的干扰。
-**请务必在独立的系统原生终端（x64 Native Tools Command Prompt for VS 2022）中执行以下命令，切勿在 IDE（如 Trae/IDEA）自带的终端中执行！**
+GraalVM 在编译期间会移除未直接调用的类与方法（Dead Code Elimination）。当项目中存在反射调用（如 Fastjson 反序列化、WebSocket 动态注册）时，直接编译会导致运行时出现 `JSONException: default constructor not found` 或空指针异常。
+
+**在引入新实体类、DTO 或依赖注入变更后，必须通过 Tracing Agent 重新收集并生成反射配置白名单。**
+
+### 配置收集流程：
+
+1. 编译标准 War 包：
+   ```cmd
+   mvn clean package -DskipTests
+   ```
+2. 挂载 Agent 启动程序：
+   ```cmd
+   java -agentlib:native-image-agent=config-output-dir=src/main/resources/META-INF/native-image -jar target/biliLiveRecord-0.0.1-SNAPSHOT.War
+   ```
+   *(注：挂载 Agent 期间性能下降属正常现象)*
+3. **功能覆盖测试**：在程序运行期间，手动触发新增或修改过的业务流程（如：扫码登录、新增录制房间、模拟一次文件结束和分P上传等）。
+4. 测试完成后，正常退出程序 (Ctrl+C)。
+5. 此时 `src/main/resources/META-INF/native-image` 目录已更新相关 JSON 配置文件，**需将变更提交至 Git 版本库**。后续 AOT 编译将自动读取这些配置。
+
+***
+
+## 4. 执行 EXE 编译
+
+**注意事项：**
+Native Image 编译过程资源消耗极大（内存 8GB+，CPU 高负载），且对执行环境要求严格。**必须在独立的系统原生终端（x64 Native Tools Command Prompt for VS 2022）中执行，禁止使用 IDE 内部终端以防沙盒限制导致异常中断。**
 
 1. 打开 **x64 Native Tools Command Prompt for VS 2022**，进入项目根目录。
-2. 确认 `pom.xml` 中的 `<packaging>` 标签值为 `jar`（如果是 `war` 编译会失败）。
-3. 运行 Maven 编译命令，并指定链接刚才生成的 `app.res` 资源文件：
+2. 确保 `pom.xml` 的 `<packaging>` 为 `war`。
+3. 运行编译命令：
+   ```cmd
+   mvn clean -Pnative native:compile -DskipTests
+   ```
 
-```cmd
-mvn clean -Pnative native:compile -DskipTests -Dnative.buildArgs="-H:NativeLinkerOption=app.res"
-```
+### 编译说明：
 
-### 编译过程说明：
-- 编译过程通常需要 **3 ~ 10 分钟** 不等，取决于 CPU 性能。
-- 期间会看到大量的 `[graalvm reachability metadata repository]` 下载和解析日志，以及最后的 `[native-image]` 编译阶段，这是正常的。
-- 编译完成后，会在 `target/` 目录下生成 `biliupforjava.exe`。
+- 耗时通常在 3 至 10 分钟不等。
+- 编译期间输出大量 `reachability metadata repository` 与 `[native-image]` 构建日志为正常流程。
+- 编译完成后，产物输出在 `target/biliupforjava.exe`。
 
----
+***
 
-## 4. 运行与配置
+## 5. 首次运行与初始化配置
 
-- 将 `target/biliupforjava.exe` 复制到任意你想运行的目录。
-- **首次运行**：双击运行，如果没有传递任何参数，控制台会提示并在 `8080` 端口开启一个网页配置向导（Setup Wizard）。
-- 浏览器访问 `http://localhost:8080/setup.html`，填写配置后点击保存。
-- 程序会在 `exe` 同级目录下生成 `application.yml` 文件并自动退出。
-- 再次双击运行，程序将读取 `application.yml` 的配置并正式启动录制和上传服务。
+1. 将 `target/biliupforjava.exe` 移动至目标部署目录。
+2. **首次启动**：直接运行程序。若未检测到启动参数或配置文件，控制台将提示于 `8080` 端口启动 Setup Wizard。
+3. 浏览器访问 `http://localhost:8080/setup.html`，完成参数配置并保存。
+4. 程序将在同级目录生成 `application.yml` 后自动退出。
+5. 再次运行程序，服务将加载配置文件并正式进入工作状态。
+

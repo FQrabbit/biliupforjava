@@ -1,8 +1,10 @@
 package top.sshh.bililiverecoder.service;
 
-import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 import top.sshh.bililiverecoder.service.impl.AppRecordPartBilibiliUploadService;
 import top.sshh.bililiverecoder.service.impl.KodoRecordPartBilibiliUploadService;
 import top.sshh.bililiverecoder.service.impl.UposRecordPartBilibiliUploadService;
@@ -13,13 +15,19 @@ import top.sshh.bililiverecoder.util.UploadEnums;
 public class UploadServiceFactory {
 
 
-    @Resource(name = "appRecordPartBilibiliUploadService")
+    @Lazy
+    @Autowired
+    @Qualifier("appRecordPartBilibiliUploadService")
     private RecordPartUploadService appRecordPartBilibiliUploadService;
 
-    @Resource(name = "uposRecordPartBilibiliUploadService")
+    @Lazy
+    @Autowired
+    @Qualifier("uposRecordPartBilibiliUploadService")
     private RecordPartUploadService uposRecordPartBilibiliUploadService;
 
-    @Resource(name = "kodoRecordPartBilibiliUploadService")
+    @Lazy
+    @Autowired
+    @Qualifier("kodoRecordPartBilibiliUploadService")
     private RecordPartUploadService kodoRecordPartBilibiliUploadService;
 
 

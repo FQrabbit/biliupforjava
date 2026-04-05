@@ -49,10 +49,6 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <dependency>
-            <groupId>org.apache.tomcat.embed</groupId>
-            <artifactId>tomcat-embed-core</artifactId>
-        </dependency>
         <!-- 添加 Undertow 依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

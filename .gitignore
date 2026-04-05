@@ -14,6 +14,7 @@ target/
 
 # Runtime generated files
 device.properties
+application.yml
 
 # GraalVM / Native build temp files
 app.res
