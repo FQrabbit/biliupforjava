@@ -356,6 +356,7 @@ docker network connect bili-net bup
 - 最低需求：400MB
 - 推荐配置：512MB 或更高
 - 可通过 `-m` 参数限制：`-m 512M`
+- 如果使用exe版本，内存占用大约70MB+ (运行时间长了Windows回收内存之后占用会更低)
 
 </details>
 
