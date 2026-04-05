@@ -26,6 +26,8 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByPublishIsTrueAndCodeIn(List<Integer> codes);
 
+    List<RecordHistory> findByPublishIsTrueAndSendReplyIsFalseAndCodeIn(List<Integer> codes);
+
     List<RecordHistory> findByBvIdNotNullAndPublishIsTrueAndCodeLessThan(int code);
 
     @org.springframework.data.jpa.repository.Query("select r from RecordHistory r where r.bvId is not null and r.publish = true and r.code in (-1, -9, -30, -40)")

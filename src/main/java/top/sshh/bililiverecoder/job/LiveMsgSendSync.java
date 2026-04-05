@@ -80,13 +80,52 @@ public class LiveMsgSendSync {
         int pendingHighCount = 0;
         log.debug("[BLR] {}", LogKvs.event("LiveMsgSendSync.Start"));
         try {
-        long startTime = System.currentTimeMillis();
-        List<RecordHistory> historyList = historyRepository.findByPublishIsTrueAndCodeIn(Arrays.asList(0, -50));
-        historyCount = historyList.size();
-        if (CollectionUtils.isEmpty(historyList)) {
-            return;
-        }
-        List<BiliBiliUser> allUser = userRepository.findByLoginIsTrueAndEnableIsTrue();
+            long startTime = System.currentTimeMillis();
+            
+            // 获取需要发送评论的稿件
+            List<RecordHistory> historyList = new ArrayList<>(historyRepository.findByPublishIsTrueAndSendReplyIsFalseAndCodeIn(Arrays.asList(0, -50)));
+            
+            // 获取有待发送弹幕的分P，找到其对应的稿件，如果没在 historyList 中则加进去
+            List<Long> pendingPartIds = msgRepository.findDistinctPartIdByCode(-1);
+            if (pendingPartIds != null && !pendingPartIds.isEmpty()) {
+                Set<Long> pendingHistoryIds = new HashSet<>();
+                // 分批查询，防止 IN 语句过长报错
+                int batchSize = 500;
+                for (int i = 0; i < pendingPartIds.size(); i += batchSize) {
+                    List<Long> subList = pendingPartIds.subList(i, Math.min(i + batchSize, pendingPartIds.size()));
+                    List<RecordHistoryPart> pendingParts = partRepository.findByIdIn(subList);
+                    for (RecordHistoryPart p : pendingParts) {
+                        if (p.getHistoryId() != null) {
+                            pendingHistoryIds.add(p.getHistoryId());
+                        }
+                    }
+                }
+                
+                for (Long hid : pendingHistoryIds) {
+                    boolean exists = false;
+                    for (RecordHistory h : historyList) {
+                        if (h.getId().equals(hid)) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        Optional<RecordHistory> opt = historyRepository.findById(hid);
+                        if (opt.isPresent()) {
+                            RecordHistory h = opt.get();
+                            if (h.isPublish() && (h.getCode() == 0 || h.getCode() == -50)) {
+                                historyList.add(h);
+                            }
+                        }
+                    }
+                }
+            }
+
+            historyCount = historyList.size();
+            if (CollectionUtils.isEmpty(historyList)) {
+                return;
+            }
+            List<BiliBiliUser> allUser = userRepository.findByLoginIsTrueAndEnableIsTrue();
         DateFormat format = new SimpleDateFormat("HH:mm:ss");
         format.setTimeZone(TimeZone.getTimeZone("UTC"));
         List<RecordHistoryPart> partList = new ArrayList<>();
@@ -449,17 +488,28 @@ public class LiveMsgSendSync {
         List<RecordRoom> roomList = roomRepository.findBySendDmIsTrue();
         List<String> roomIds = roomList.stream().map(RecordRoom::getRoomId).toList();
         List<Long> partIds = partList.stream().map(RecordHistoryPart::getId).toList();
-        // 高级弹幕
-        List<LiveMsg> allHighLevelMsg = msgRepository.findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(1, -1, partIds);
+        
+        // 高级弹幕 (分批查询避免 IN 语句过长)
+        List<LiveMsg> allHighLevelMsg = new ArrayList<>();
+        int pBatchSize = 500;
+        for (int i = 0; i < partIds.size(); i += pBatchSize) {
+            List<Long> subList = partIds.subList(i, Math.min(i + pBatchSize, partIds.size()));
+            allHighLevelMsg.addAll(msgRepository.findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(1, -1, subList));
+        }
         pendingHighCount = allHighLevelMsg.size();
 
         // 房间设置是否发送弹幕
-        partIds = partList.stream().filter(p -> roomIds.contains(p.getRoomId())).map(RecordHistoryPart::getId).toList();
+        List<Long> normalPartIds = partList.stream().filter(p -> roomIds.contains(p.getRoomId())).map(RecordHistoryPart::getId).toList();
         //一个用户一小时发送150条弹幕
-        Pageable pageable = Pageable.ofSize(500);
-        Page<LiveMsg> msgPage = msgRepository.findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(0, -1, partIds, pageable);
-        if (!msgPage.isEmpty()) {
-            msgAllList.addAll(msgPage.get().toList());
+        for (int i = 0; i < normalPartIds.size(); i += pBatchSize) {
+            List<Long> subList = normalPartIds.subList(i, Math.min(i + pBatchSize, normalPartIds.size()));
+            int remain = 500 - msgAllList.size();
+            if (remain <= 0) break;
+            Pageable pageable = Pageable.ofSize(remain);
+            Page<LiveMsg> msgPage = msgRepository.findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(0, -1, subList, pageable);
+            if (!msgPage.isEmpty()) {
+                msgAllList.addAll(msgPage.get().toList());
+            }
         }
         pendingNormalCount = msgAllList.size();
         if (msgAllList.isEmpty() && allHighLevelMsg.isEmpty()) {

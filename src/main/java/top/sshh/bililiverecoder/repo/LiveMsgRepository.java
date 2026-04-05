@@ -17,6 +17,9 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     int countByPartIdAndCode(Long partId, int code);
 
+    @Query("SELECT DISTINCT m.partId FROM LiveMsg m WHERE m.code = ?1")
+    List<Long> findDistinctPartIdByCode(int code);
+
     List<LiveMsg> findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(int pool, int code, List<Long> partIds);
     Page<LiveMsg> findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(int pool, int code, List<Long> partIds, Pageable page);
 
