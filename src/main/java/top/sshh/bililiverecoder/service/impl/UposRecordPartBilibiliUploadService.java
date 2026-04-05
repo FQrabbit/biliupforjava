@@ -996,7 +996,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
             return false;
         }
         String h = host.toLowerCase();
-        if (h.contains("bilivideo.com")) {
+        if (h.contains("bilivideo.com") || h.contains("bilivideo.cn") || h.contains("bilivideo.net")) {
             return false;
         }
         if (h.contains("esheep.com") || h.contains("aikobo.cn")) {
