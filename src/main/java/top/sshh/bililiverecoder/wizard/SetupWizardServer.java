@@ -7,11 +7,23 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.stream.Collectors;
 
 public class SetupWizardServer {
 
     public static void checkAndRunWizardIfNeeded(String[] args) {
+        // 允许用户通过开关强制控制是否启用向导（优先级最高）
+        Boolean wizardEnabled = readWizardEnabledFlag();
+        if (wizardEnabled != null) {
+            if (!wizardEnabled) {
+                return;
+            }
+        } else if (isRunningInContainer()) {
+            // 容器环境默认跳过向导，避免 Docker 启动被误判
+            return;
+        }
+
         // 检查是否存在配置文件 (相对于进程所在目录)
         File currentDir = getProcessDir();
         File appYml = new File(currentDir, "application.yml");
@@ -35,8 +47,62 @@ public class SetupWizardServer {
             return;
         }
 
+        // 检查环境变量参数（Docker 场景常用）
+        if (System.getenv("SPRING_CONFIG_LOCATION") != null
+                || System.getenv("RECORD_WORK_PATH") != null
+                || System.getenv("RECORD_WORK_PATH".toLowerCase()) != null) {
+            return;
+        }
+
         // 都没有，启动网页配置向导
         startWizardServer();
+    }
+
+    private static Boolean readWizardEnabledFlag() {
+        String flag = firstNonBlank(
+                System.getProperty("blr.setup.wizard"),
+                System.getenv("BLR_SETUP_WIZARD"),
+                System.getenv("blr_setup_wizard")
+        );
+        if (flag == null) {
+            return null;
+        }
+        String normalized = flag.trim().toLowerCase();
+        if ("true".equals(normalized) || "1".equals(normalized) || "yes".equals(normalized) || "on".equals(normalized)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equals(normalized) || "0".equals(normalized) || "no".equals(normalized) || "off".equals(normalized)) {
+            return Boolean.FALSE;
+        }
+        return null;
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isRunningInContainer() {
+        if (new File("/.dockerenv").exists()) {
+            return true;
+        }
+        File cgroup = new File("/proc/1/cgroup");
+        if (!cgroup.exists()) {
+            return false;
+        }
+        try {
+            String content = Files.readString(cgroup.toPath(), StandardCharsets.UTF_8).toLowerCase();
+            return content.contains("docker")
+                    || content.contains("containerd")
+                    || content.contains("kubepods")
+                    || content.contains("podman");
+        } catch (IOException ignored) {
+            return false;
+        }
     }
 
     // 获取进程（Jar/Exe）所在的物理绝对路径

@@ -1,0 +1,86 @@
+name: Manual Docker Push
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '镜像版本号(例: 1.4.2 或 v1.4.2)'
+        required: true
+        default: ''
+      push_latest:
+        description: '是否同时推送 latest'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  docker-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4.2.1
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build with Maven
+        run: mvn -B clean package --file pom.xml -DskipTests
+
+      - name: Prepare Docker Build Context
+        run: |
+          cd target
+          for file in *.war; do
+            if [ -f "$file" ] && [[ ! "$file" =~ \.original$ ]]; then
+              cp "$file" ROOT.war
+              echo "Prepared ROOT.war for Docker build"
+              break
+            fi
+          done
+          ls -la ROOT.war
+
+      - name: Normalize Version
+        id: version
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag_name }}"
+          VERSION=${TAG_NAME#v}
+          echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3.1.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.4.0
+
+      - name: Build and Push Docker Image
+        if: ${{ github.event.inputs.push_latest == 'true' }}
+        uses: docker/build-push-action@v5.4.0
+        with:
+          context: ./target
+          file: ./Docker/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/biliupforjava:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/biliupforjava:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and Push Docker Image (no latest)
+        if: ${{ github.event.inputs.push_latest != 'true' }}
+        uses: docker/build-push-action@v5.4.0
+        with:
+          context: ./target
+          file: ./Docker/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/biliupforjava:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
