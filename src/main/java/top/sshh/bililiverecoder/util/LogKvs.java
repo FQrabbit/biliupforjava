@@ -521,6 +521,104 @@ public final class LogKvs {
         EVENT_ZH.put("Database.Backup.Failed", "数据库备份：备份失败");
         EVENT_ZH.put("Database.Backup.Cleanup.Success", "数据库备份：清理旧备份成功");
         EVENT_ZH.put("Database.Backup.Cleanup.Failed", "数据库备份：清理旧备份失败");
+
+        // 接口/系统维护
+        EVENT_ZH.put("BiliApi.WebCookie.BuvidAppendFailed", "B站 Web Cookie：补充 buvid 参数失败");
+        EVENT_ZH.put("BiliApi.WebPublish.Request", "B站投稿接口：发起 Web 投稿请求");
+        EVENT_ZH.put("Shutdown.Begin", "系统关闭：开始等待后台任务结束");
+        EVENT_ZH.put("Shutdown.End", "系统关闭：后台任务等待结束");
+        EVENT_ZH.put("SystemConfig.ApplyBoolean", "系统配置：应用布尔配置项");
+        EVENT_ZH.put("UploadConnectionBudget.Init", "上传连接预算：初始化");
+        EVENT_ZH.put("UploadConnectionBudget.Update", "上传连接预算：配置已更新");
+
+        // 数据库维护
+        EVENT_ZH.put("Database.Index.Cleanup.Start", "数据库索引清理：开始检查旧索引");
+        EVENT_ZH.put("Database.Index.Cleanup.Success", "数据库索引清理：旧索引清理成功");
+        EVENT_ZH.put("Database.Index.Cleanup.Failed", "数据库索引清理：旧索引清理失败");
+        EVENT_ZH.put("Database.Schema.ColumnPatch.Start", "数据库结构修补：开始检查缺失字段");
+        EVENT_ZH.put("Database.Schema.ColumnPatch.Success", "数据库结构修补：字段修补完成");
+        EVENT_ZH.put("Database.Schema.ColumnPatch.Skip", "数据库结构修补：当前环境跳过字段修补");
+        EVENT_ZH.put("Database.Schema.ColumnPatch.Failed", "数据库结构修补：字段修补失败");
+
+        // 历史/审核/图片代理
+        EVENT_ZH.put("History.Count.CalcFailed", "历史记录：统计数量计算失败");
+        EVENT_ZH.put("History.AbnormalCount.QueryFailed", "历史记录：查询异常分P数量失败");
+        EVENT_ZH.put("History.UploadFlowFallback.QueryFailed", "历史记录：查询上传流程回退数量失败");
+        EVENT_ZH.put("History.Visibility.Switch.Failed", "历史记录：切换可见性失败");
+        EVENT_ZH.put("History.Delete.LocalFileNotDeleted", "历史记录：本地文件未能删除");
+        EVENT_ZH.put("Part.List2.ReviewInfo.FetchFailed", "分P列表：获取审核信息失败");
+        EVENT_ZH.put("Part.ReviewInfo.AuditDetail.Unexpected", "分P审核信息：审核详情返回异常");
+        EVENT_ZH.put("Part.ReviewInfo.AuditDetail.LoadFailed", "分P审核信息：加载审核详情失败");
+        EVENT_ZH.put("Part.ReviewInfo.Vupre.Unexpected", "分P审核信息：vupre 接口返回异常");
+        EVENT_ZH.put("Part.ReviewInfo.LoadFailed", "分P审核信息：加载失败");
+        EVENT_ZH.put("ImageProxy.Busy", "图片代理：当前并发繁忙，拒绝本次请求");
+        EVENT_ZH.put("ImageProxy.EmptyBody", "图片代理：上游返回空内容");
+        EVENT_ZH.put("ImageProxy.NonImageContentType", "图片代理：上游返回的内容不是图片");
+        EVENT_ZH.put("ImageProxy.UpstreamNon2xx", "图片代理：上游返回非成功状态码");
+
+        // blrec/录制事件
+        EVENT_ZH.put("Blrec.RecordingStarted.ReuseHistory", "blrec 事件：录制开始，复用最近的录制历史");
+        EVENT_ZH.put("Blrec.RecordStarted.ParseMergeIntervalFailed", "blrec 事件：解析合并间隔配置失败");
+        EVENT_ZH.put("RecordStarted.ParseMergeIntervalFailed", "录制开始：解析合并间隔配置失败");
+        EVENT_ZH.put("RoomStatusSyncJob.GetMasterInfoFailed", "直播状态同步：获取主播信息失败");
+
+        // 投稿 WebPublish/合集流程
+        EVENT_ZH.put("Publish.WebPublish.MissingData", "投稿：Web 投稿响应缺少 data 字段");
+        EVENT_ZH.put("Publish.WebPublish.Parsed", "投稿：Web 投稿响应解析完成");
+        EVENT_ZH.put("Publish.WebPublish.ParseFailed", "投稿：Web 投稿响应解析失败");
+        EVENT_ZH.put("Publish.PartUpload.Interrupted", "投稿流程：等待分P上传时被中断");
+        EVENT_ZH.put("Publish.Season.ResolveSectionId.Empty", "投稿合集：没有可用的合集分区");
+        EVENT_ZH.put("Publish.Season.ResolveSectionId.Failed", "投稿合集：解析合集分区失败");
+
+        // 投稿补偿任务
+        EVENT_ZH.put("PublishJob.PartCompensate.CleanOrphanedParts", "分P补偿：开始清理孤立分P");
+        EVENT_ZH.put("PublishJob.PartCompensate.CleanOrphanedPartsFailed", "分P补偿：清理孤立分P失败");
+        EVENT_ZH.put("PublishJob.PartCompensate.OrphanedPartMarked", "分P补偿：孤立分P已标记");
+        EVENT_ZH.put("PublishJob.PartCompensate.InitialBackoff", "分P补偿：首次发现异常，等待下一轮确认");
+        EVENT_ZH.put("PublishJob.PartCompensate.CompensateExhausted", "分P补偿：补偿次数已耗尽，放弃继续尝试");
+
+        // 普通上传 multipart 流程
+        EVENT_ZH.put("Upload.Multipart.ConfigReadFailed", "分片上传：读取 multipart 配置失败");
+        EVENT_ZH.put("Upload.Multipart.FlowDecision", "分片上传：已决定使用的上传流程");
+        EVENT_ZH.put("Upload.Multipart.SessionLocked", "分片上传：复用已锁定的上传会话");
+        EVENT_ZH.put("Upload.Multipart.InitFallback", "分片上传：初始化失败，尝试回退方案");
+        EVENT_ZH.put("Upload.Multipart.PrepareFallback", "分片上传：准备阶段异常，尝试回退方案");
+        EVENT_ZH.put("Upload.Multipart.Part.DiagnosticUploadIdMismatch", "分片上传：诊断到 uploadId 不一致");
+        EVENT_ZH.put("Upload.MultipartComplete.PayloadSummary", "分片上传完成：提交 payload 摘要");
+        EVENT_ZH.put("Upload.MultipartComplete.ValidationFailed", "分片上传完成：提交前校验失败");
+        EVENT_ZH.put("Upload.MultipartComplete.FatalError", "分片上传完成：发生致命错误");
+        EVENT_ZH.put("Upload.MultipartComplete.ConflictRetry", "分片上传完成：检测到冲突，准备重试");
+        EVENT_ZH.put("Upload.MultipartComplete.Retry", "分片上传完成：提交失败，正在重试");
+        EVENT_ZH.put("Upload.MultipartComplete.WillRetry", "分片上传完成：本次失败，将安排后续重试");
+        EVENT_ZH.put("Upload.Part.RetryEnqueueAttempt", "上传重试：尝试重新加入上传队列");
+        EVENT_ZH.put("Upload.Part.RetryEnqueueError", "上传重试：重新加入上传队列失败");
+
+        // multipart 调试日志
+        EVENT_ZH.put("Upload.MultipartDebug.Complete.Request", "分片上传调试：complete 请求");
+        EVENT_ZH.put("Upload.MultipartDebug.Complete.Response", "分片上传调试：complete 响应");
+        EVENT_ZH.put("Upload.MultipartDebug.InitNew.Request", "分片上传调试：新版初始化请求");
+        EVENT_ZH.put("Upload.MultipartDebug.InitNew.Response", "分片上传调试：新版初始化响应");
+        EVENT_ZH.put("Upload.MultipartDebug.InitLegacy.Request", "分片上传调试：旧版初始化请求");
+        EVENT_ZH.put("Upload.MultipartDebug.InitLegacy.Response", "分片上传调试：旧版初始化响应");
+        EVENT_ZH.put("Upload.MultipartDebug.Part.Request", "分片上传调试：分片请求");
+        EVENT_ZH.put("Upload.MultipartDebug.Part.Response", "分片上传调试：分片响应");
+        EVENT_ZH.put("Upload.MultipartDebug.Part.SelectedReq", "分片上传调试：已选择的分片请求参数");
+        EVENT_ZH.put("Upload.MultipartDebug.Part.FirstValidNotFirst", "分片上传调试：首个有效请求不是第一组候选");
+        EVENT_ZH.put("Upload.MultipartDebug.SignedPut.Response", "分片上传调试：签名 PUT 响应");
+
+        // 高能剪辑投稿/上传
+        EVENT_ZH.put("HighEnergyCut.Publish.WebPublish.MissingData", "高能剪辑：Web 投稿响应缺少 data 字段");
+        EVENT_ZH.put("HighEnergyCut.Publish.WebPublish.Parsed", "高能剪辑：Web 投稿响应解析完成");
+        EVENT_ZH.put("HighEnergyCut.Publish.WebPublish.ParseFailed", "高能剪辑：Web 投稿响应解析失败");
+        EVENT_ZH.put("HighEnergyCut.Upload.Multipart.ConfigReadFailed", "高能剪辑：读取 multipart 配置失败");
+        EVENT_ZH.put("HighEnergyCut.Upload.Multipart.SessionLocked", "高能剪辑：复用已锁定的上传会话");
+        EVENT_ZH.put("HighEnergyCut.Upload.Multipart.InitFallback", "高能剪辑：分片初始化失败，尝试回退方案");
+        EVENT_ZH.put("HighEnergyCut.Upload.Multipart.PrepareFallback", "高能剪辑：分片准备阶段异常，尝试回退方案");
+        EVENT_ZH.put("HighEnergyCut.Upload.MultipartComplete.PayloadSummary", "高能剪辑：分片完成 payload 摘要");
+        EVENT_ZH.put("HighEnergyCut.Upload.MultipartComplete.ValidationFailed", "高能剪辑：分片完成提交前校验失败");
+        EVENT_ZH.put("HighEnergyCut.Upload.MultipartComplete.FatalError", "高能剪辑：分片完成发生致命错误");
+        EVENT_ZH.put("HighEnergyCut.Upload.MultipartComplete.ConflictRetry", "高能剪辑：分片完成检测到冲突，准备重试");
+        EVENT_ZH.put("HighEnergyCut.Upload.MultipartComplete.Retry", "高能剪辑：分片完成提交失败，正在重试");
     }
 
     private LogKvs() {

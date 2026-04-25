@@ -1,11 +1,18 @@
 package top.sshh.bililiverecoder.config;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+
 import java.lang.reflect.Method;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
@@ -14,12 +21,12 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class LogWebSocketHandler extends TextWebSocketHandler {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final CopyOnWriteArraySet<WebSocketSession> sessions = new CopyOnWriteArraySet<>();
-
-    // 有界队列，防止慢速ws客户端阻塞业务线程或导致内存溢出
     private static final int MAX_PENDING_LOGS = 2000;
     private static final LinkedBlockingDeque<String> pendingLogs = new LinkedBlockingDeque<>(MAX_PENDING_LOGS);
     private static final AtomicLong droppedLogs = new AtomicLong(0);
+    private static final AtomicLong reportedDroppedLogs = new AtomicLong(0);
 
     static {
         Thread sender = new Thread(LogWebSocketHandler::drainLoop, "log-ws-sender");
@@ -42,9 +49,9 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        // 如果队列已满，丢弃最旧的日志以保留最新的日志
         if (!pendingLogs.offerLast(log)) {
             pendingLogs.pollFirst();
+            droppedLogs.incrementAndGet();
             if (!pendingLogs.offerLast(log)) {
                 droppedLogs.incrementAndGet();
             }
@@ -59,29 +66,58 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
                     continue;
                 }
 
-                for (WebSocketSession session : sessions) {
-                    if (!session.isOpen()) {
-                        sessions.remove(session);
-                        continue;
-                    }
-
-                    try {
-                        // 优先选择JSR-356异步远程通信
-                        Object nativeSession = getNativeSessionIfAvailable(session);
-                        if (!tryAsyncSend(nativeSession, log)) {
-                            // 后备方案：Spring会话发送(可能会阻塞，但仅阻塞此发送线程)
-                            session.sendMessage(new TextMessage(log));
-                        }
-                    } catch (Exception e) {
-                        sessions.remove(session);
-                    }
-                }
+                sendDroppedLogNoticeIfNeeded();
+                broadcast(log);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             } catch (Exception ignored) {
-                // 绝不让发送线程终止
+                // Keep the sender alive even if one malformed log or session fails.
             }
+        }
+    }
+
+    private static void sendDroppedLogNoticeIfNeeded() {
+        long dropped = droppedLogs.get();
+        long reported = reportedDroppedLogs.get();
+        if (dropped <= reported || !reportedDroppedLogs.compareAndSet(reported, dropped)) {
+            return;
+        }
+
+        long currentDropped = dropped - reported;
+        broadcast(buildSystemLog("实时日志队列已满，已丢弃 " + currentDropped + " 条较旧消息，累计丢弃 " + dropped + " 条。"));
+    }
+
+    private static void broadcast(String log) {
+        for (WebSocketSession session : sessions) {
+            if (!session.isOpen()) {
+                sessions.remove(session);
+                continue;
+            }
+
+            try {
+                Object nativeSession = getNativeSessionIfAvailable(session);
+                if (!tryAsyncSend(nativeSession, log)) {
+                    session.sendMessage(new TextMessage(log));
+                }
+            } catch (Exception e) {
+                sessions.remove(session);
+            }
+        }
+    }
+
+    private static String buildSystemLog(String message) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date()));
+        payload.put("level", "WARN");
+        payload.put("thread", "log-ws-sender");
+        payload.put("logger", LogWebSocketHandler.class.getName());
+        payload.put("message", message);
+
+        try {
+            return OBJECT_MAPPER.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            return "{\"level\":\"WARN\",\"message\":\"Log websocket queue dropped messages.\"}";
         }
     }
 
@@ -115,7 +151,6 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
             return null;
         }
         try {
-            
             Method getNativeSession = session.getClass().getMethod("getNativeSession");
             return getNativeSession.invoke(session);
         } catch (ReflectiveOperationException | RuntimeException e) {
