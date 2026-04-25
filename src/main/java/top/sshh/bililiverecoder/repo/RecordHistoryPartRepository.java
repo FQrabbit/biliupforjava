@@ -46,6 +46,12 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     @Query("select count(p) from RecordHistoryPart p where p.historyId = ?1 and p.upload = false and (p.uploadRetryCount >= 9999 or (p.deleteFailType is not null and trim(p.deleteFailType) <> ''))")
     int countGiveUpPartsByHistoryId(Long historyId);
 
+    @Query("select count(p) from RecordHistoryPart p where p.historyId = ?1 and p.uploadFlowFallback = true")
+    int countUploadFlowFallbackPartsByHistoryId(Long historyId);
+
+    @Query("select p from RecordHistoryPart p where p.historyId = ?1 and p.uploadFlowFallback = true order by p.page asc")
+    List<RecordHistoryPart> findUploadFlowFallbackPartsByHistoryId(Long historyId);
+
     @Query("select p.filePath from RecordHistoryPart p where p.historyId = ?1 and p.upload = false and (p.uploadRetryCount >= 9999 or (p.deleteFailType is not null and trim(p.deleteFailType) <> '')) order by p.endTime asc")
     List<String> findGiveUpPartFilePathsByHistoryId(Long historyId);
 

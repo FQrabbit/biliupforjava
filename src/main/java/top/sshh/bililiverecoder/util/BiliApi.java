@@ -47,6 +47,13 @@ public class BiliApi {
     }
 
     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    private static final int[] WBI_MIXIN_KEY_ENC_TAB = {
+            46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
+            27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
+            37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
+            22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52
+    };
+    private static volatile WbiKeyCache wbiKeyCache;
     private static String BUVID;
     private static String DEVICE_ID;
 
@@ -209,16 +216,46 @@ public class BiliApi {
 
     public static String webPublish(BiliBiliUser user, VideoUploadDto data, Map<String, String> captcha) {
         WebCookie cookie = Cookie.parse(user.getCookies());
-        String url = "https://member.bilibili.com/x/vu/web/add/v3?t=" + System.currentTimeMillis() + "&csrf=" + cookie.getCsrf();
+        long nowMs = System.currentTimeMillis();
+        String nowSeconds = String.valueOf(nowMs / 1000);
+        Map<String, String> query = new TreeMap<>();
+        query.put("csrf", cookie.getCsrf());
+        query.put("t", String.valueOf(nowMs));
+        query.put("web_location", "333.1024");
+        query.put("wts", nowSeconds);
+        query.put("w_rid", signWbi(query, getWbiMixinKey(cookie)));
+        String url = "https://member.bilibili.com/x/vu/web/add/v3?" + toQueryString(query);
         Map<String, String> headers = new HashMap<>();
-        data.setCsrf(cookie.getCsrf());
-        BiliResponseDto<BillBuvId> buvId = getBuvId();
-        headers.put("cookie", cookie.getCookie() + "buvid3=" + buvId.getData().getB3() + ";buvid4=" + buvId.getData().getB4());
+        headers.put("User-Agent", USER_AGENT);
+        headers.put("Accept", "*/*");
+        headers.put("Origin", "https://member.bilibili.com");
+        headers.put("Referer", "https://member.bilibili.com/platform/upload/video/frame?page_from=creative_home_top_upload");
+        headers.put("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6");
+        headers.put("X-Event-TraceID", buildWebEventTraceId(cookie));
+        headers.put("cookie", buildWebCookieHeader(cookie));
         com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSONObject.parseObject(JSON.toJSONString(data));
+        jsonObject.remove("csrf");
+        jsonObject.putIfAbsent("act_reserve_create_title", "");
+        jsonObject.putIfAbsent("ai_cover", 0);
+        jsonObject.putIfAbsent("is_ab_cover", 0);
+        jsonObject.put("ab_cover_info", null);
+        jsonObject.putIfAbsent("neutral_mark", "");
+        jsonObject.putIfAbsent("space_hidden", 2);
+        jsonObject.putIfAbsent("subtitle", com.alibaba.fastjson.JSONObject.parseObject("{\"open\":0,\"lan\":\"\"}"));
+        jsonObject.putIfAbsent("watermark", com.alibaba.fastjson.JSONObject.parseObject("{\"state\":0}"));
+        normalizeWebPublishBody(jsonObject);
         if (captcha != null) {
             jsonObject.putAll(captcha);
         }
         String body = jsonObject.toJSONString();
+        log.info("[BLR] {}", LogKvs.event("BiliApi.WebPublish.Request")
+                .add("hasWbi", true)
+                .add("wts", nowSeconds)
+                .add("wRidHint", tokenHint(query.get("w_rid")))
+                .add("webLocation", query.get("web_location"))
+                .add("bodyLen", body.length())
+                .add("bodyKeys", String.join(",", jsonObject.keySet()))
+                .add("videoCount", data.getVideos() == null ? 0 : data.getVideos().size()));
         return HttpClientUtil.post(url, headers, body);
     }
 
@@ -638,6 +675,195 @@ public class BiliApi {
         BiliResponseDto<BillBuvId> resp = JSON.parseObject(res, new TypeReference<BiliResponseDto<BillBuvId>>() {
         });
         return resp;
+    }
+
+    private static String getWbiMixinKey(WebCookie cookie) {
+        long now = System.currentTimeMillis();
+        WbiKeyCache cache = wbiKeyCache;
+        if (cache != null && now < cache.expireAtMs) {
+            return cache.mixinKey;
+        }
+
+        String url = "https://api.bilibili.com/x/web-interface/nav";
+        Map<String, String> headers = new HashMap<>();
+        headers.put("User-Agent", USER_AGENT);
+        headers.put("Accept", "application/json, text/plain, */*");
+        headers.put("Origin", "https://member.bilibili.com");
+        headers.put("Referer", "https://member.bilibili.com/");
+        headers.put("cookie", buildWebCookieHeader(cookie));
+        String resp = HttpClientUtil.get(url, headers);
+        com.alibaba.fastjson.JSONObject root = com.alibaba.fastjson.JSONObject.parseObject(resp);
+        com.alibaba.fastjson.JSONObject data = root == null ? null : root.getJSONObject("data");
+        com.alibaba.fastjson.JSONObject wbiImg = data == null ? null : data.getJSONObject("wbi_img");
+        String imgKey = extractWbiKey(wbiImg == null ? null : wbiImg.getString("img_url"));
+        String subKey = extractWbiKey(wbiImg == null ? null : wbiImg.getString("sub_url"));
+        if (StringUtils.isBlank(imgKey) || StringUtils.isBlank(subKey)) {
+            throw new RuntimeException("getWbiMixinKey failed: " + resp);
+        }
+        String mixinKey = mixinWbiKey(imgKey, subKey);
+        wbiKeyCache = new WbiKeyCache(mixinKey, now + 600_000L);
+        return mixinKey;
+    }
+
+    private static void normalizeWebPublishBody(com.alibaba.fastjson.JSONObject jsonObject) {
+        jsonObject.remove("build");
+        jsonObject.remove("csrf");
+        jsonObject.remove("open_elec");
+        jsonObject.remove("topic_grey");
+        jsonObject.remove("handle_staff");
+        jsonObject.remove("is_360");
+        jsonObject.remove("desc_format_id");
+        removeBlank(jsonObject, "aid");
+        removeBlank(jsonObject, "cover43");
+
+        Object copyright = jsonObject.get("copyright");
+        boolean isReprint = copyright instanceof Number && ((Number) copyright).intValue() == 2;
+        if (!isReprint || StringUtils.isBlank(jsonObject.getString("source"))) {
+            jsonObject.remove("source");
+        }
+
+        jsonObject.remove("desc_v2");
+        jsonObject.remove("dynamic_v2");
+    }
+
+    private static void removeBlank(com.alibaba.fastjson.JSONObject jsonObject, String key) {
+        if (StringUtils.isBlank(jsonObject.getString(key))) {
+            jsonObject.remove(key);
+        }
+    }
+
+    private static void removeNullOrEmpty(com.alibaba.fastjson.JSONObject jsonObject, String key) {
+        Object value = jsonObject.get(key);
+        if (value == null) {
+            jsonObject.remove(key);
+            return;
+        }
+        if (value instanceof Collection && ((Collection<?>) value).isEmpty()) {
+            jsonObject.remove(key);
+        }
+    }
+
+    private static String tokenHint(String value) {
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
+        if (value.length() <= 12) {
+            return "***#" + DigestUtils.sha1Hex(value).substring(0, 12);
+        }
+        return value.substring(0, 6) + "..." + value.substring(value.length() - 6) + "#" + DigestUtils.sha1Hex(value).substring(0, 12);
+    }
+
+    private static String signWbi(Map<String, String> params, String mixinKey) {
+        String query = toQueryString(params);
+        return DigestUtils.md5Hex(query + mixinKey);
+    }
+
+    private static String toQueryString(Map<String, String> params) {
+        return params.entrySet().stream()
+                .filter(e -> e.getValue() != null)
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> urlEncode(e.getKey()) + "=" + urlEncode(sanitizeWbiValue(e.getValue())))
+                .collect(Collectors.joining("&"));
+    }
+
+    private static String sanitizeWbiValue(String value) {
+        return value == null ? "" : value.replaceAll("[!'()*]", "");
+    }
+
+    private static String urlEncode(String value) {
+        try {
+            return URLEncoder.encode(value, String.valueOf(StandardCharsets.UTF_8));
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String mixinWbiKey(String imgKey, String subKey) {
+        String raw = imgKey + subKey;
+        StringBuilder builder = new StringBuilder(64);
+        for (int index : WBI_MIXIN_KEY_ENC_TAB) {
+            if (index < raw.length()) {
+                builder.append(raw.charAt(index));
+            }
+        }
+        return builder.substring(0, Math.min(32, builder.length()));
+    }
+
+    private static String extractWbiKey(String url) {
+        if (StringUtils.isBlank(url)) {
+            return null;
+        }
+        int slash = url.lastIndexOf('/');
+        int dot = url.lastIndexOf('.');
+        if (slash < 0 || dot <= slash) {
+            return null;
+        }
+        return url.substring(slash + 1, dot);
+    }
+
+    private static String buildWebCookieHeader(WebCookie cookie) {
+        String cookieHeader = cookie.getCookie();
+        if (containsCookie(cookieHeader, "buvid3") && containsCookie(cookieHeader, "buvid4")) {
+            return cookieHeader;
+        }
+        try {
+            BiliResponseDto<BillBuvId> buvId = getBuvId();
+            if (buvId != null && buvId.getData() != null) {
+                StringBuilder builder = new StringBuilder(cookieHeader == null ? "" : cookieHeader);
+                if (!containsCookie(builder.toString(), "buvid3") && StringUtils.isNotBlank(buvId.getData().getB3())) {
+                    builder.append("buvid3=").append(buvId.getData().getB3()).append(";");
+                }
+                if (!containsCookie(builder.toString(), "buvid4") && StringUtils.isNotBlank(buvId.getData().getB4())) {
+                    builder.append("buvid4=").append(buvId.getData().getB4()).append(";");
+                }
+                return builder.toString();
+            }
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("BiliApi.WebCookie.BuvidAppendFailed")
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+        return cookieHeader;
+    }
+
+    private static boolean containsCookie(String cookieHeader, String key) {
+        if (StringUtils.isBlank(cookieHeader) || StringUtils.isBlank(key)) {
+            return false;
+        }
+        return Arrays.stream(cookieHeader.split(";"))
+                .map(String::trim)
+                .anyMatch(item -> item.startsWith(key + "="));
+    }
+
+    private static String buildWebEventTraceId(WebCookie cookie) {
+        String buvid3 = extractCookieValue(cookie.getCookie(), "buvid3");
+        if (StringUtils.isBlank(buvid3)) {
+            buvid3 = BUVID;
+        }
+        return "Web:" + buvid3 + ":" + System.currentTimeMillis() + ":2";
+    }
+
+    private static String extractCookieValue(String cookieHeader, String key) {
+        if (StringUtils.isBlank(cookieHeader) || StringUtils.isBlank(key)) {
+            return null;
+        }
+        for (String item : cookieHeader.split(";")) {
+            String pair = item.trim();
+            if (pair.startsWith(key + "=")) {
+                return pair.substring(key.length() + 1);
+            }
+        }
+        return null;
+    }
+
+    private static class WbiKeyCache {
+        private final String mixinKey;
+        private final long expireAtMs;
+
+        private WbiKeyCache(String mixinKey, long expireAtMs) {
+            this.mixinKey = mixinKey;
+            this.expireAtMs = expireAtMs;
+        }
     }
 
     public static String refreshToken(BiliBiliUser user) {

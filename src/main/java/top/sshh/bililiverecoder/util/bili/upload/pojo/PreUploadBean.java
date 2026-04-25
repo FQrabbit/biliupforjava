@@ -71,4 +71,8 @@ public class PreUploadBean {
     public String getUptoken() {
         return "UpToken " + uptoken;
     }
+
+    public String getRawUptoken() {
+        return uptoken;
+    }
 }

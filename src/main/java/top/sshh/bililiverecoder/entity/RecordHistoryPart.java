@@ -70,6 +70,15 @@ public class RecordHistoryPart {
 
     private int uploadRetryCount;
 
+    @Column(name = "upload_flow", length = 32)
+    private String uploadFlow;
+
+    @Column(name = "upload_flow_fallback", columnDefinition = "bit default 0")
+    private boolean uploadFlowFallback;
+
+    @Column(name = "upload_flow_fallback_reason", length = 256)
+    private String uploadFlowFallbackReason;
+
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
@@ -246,6 +255,30 @@ public class RecordHistoryPart {
 
     public void setUploadRetryCount(int uploadRetryCount) {
         this.uploadRetryCount = uploadRetryCount;
+    }
+
+    public String getUploadFlow() {
+        return uploadFlow;
+    }
+
+    public void setUploadFlow(String uploadFlow) {
+        this.uploadFlow = uploadFlow;
+    }
+
+    public boolean isUploadFlowFallback() {
+        return uploadFlowFallback;
+    }
+
+    public void setUploadFlowFallback(boolean uploadFlowFallback) {
+        this.uploadFlowFallback = uploadFlowFallback;
+    }
+
+    public String getUploadFlowFallbackReason() {
+        return uploadFlowFallbackReason;
+    }
+
+    public void setUploadFlowFallbackReason(String uploadFlowFallbackReason) {
+        this.uploadFlowFallbackReason = uploadFlowFallbackReason;
     }
 
     public LocalDateTime getStartTime() {

@@ -179,6 +179,7 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.Part.NotUploaded", "投稿：分P未上传完成，等待/触发上传");
         EVENT_ZH.put("Publish.PartUpload.WaitQueued", "投稿流程：分P已在队列中，等待现有上传结果");
         EVENT_ZH.put("Publish.PartUpload.WaitTimeout", "投稿流程：等待队列中分P上传超时");
+        EVENT_ZH.put("Publish.PartUpload.Deferred", "投稿流程：分P仍在上传，本轮投稿延后");
         EVENT_ZH.put("Publish.Republish.Response", "投稿：重新投稿响应");
         EVENT_ZH.put("Publish.Task.SuspendedSkip", "投稿任务已暂停，跳过本次执行");
         EVENT_ZH.put("Publish.History.AlreadyPublished", "投稿历史已标记为发布，跳过");
@@ -208,6 +209,8 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.Cover.Fallback.Success", "投稿：兜底封面获取成功");
         EVENT_ZH.put("Publish.Cover.Fallback.Failed", "投稿：兜底封面获取失败");
         EVENT_ZH.put("Publish.Cover.Upload.Retry", "投稿：封面上传失败，正在重试");
+        EVENT_ZH.put("Publish.WebPublish.UploadPartsReady", "投稿：提交前分P上传来源摘要");
+        EVENT_ZH.put("Publish.WebPublish.PayloadDebug", "投稿：Web端提交参数摘要(调试)");
         EVENT_ZH.put("Publish.WebPublish.Response", "投稿：Web端提交响应(调试)");
         EVENT_ZH.put("Publish.Captcha.Submit", "投稿：提交验证码结果");
         EVENT_ZH.put("Publish.Captcha.PublishResponse", "投稿：验证码投稿响应(调试)");

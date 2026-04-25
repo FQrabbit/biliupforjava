@@ -28,6 +28,8 @@ public class UploadProgressTracker {
         private Integer page;
         private int chunkDone;
         private int chunkTotal;
+        private long chunkSizeBytes;
+        private String uploadFlow;
         private int percent;
         private State state;
         private String stateMsg;
@@ -45,6 +47,10 @@ public class UploadProgressTracker {
     private final ConcurrentHashMap<Long, Progress> byPartId = new ConcurrentHashMap<>();
 
     public void start(long partId, long historyId, Integer page, int chunkTotal) {
+        start(partId, historyId, page, chunkTotal, 0L, null);
+    }
+
+    public void start(long partId, long historyId, Integer page, int chunkTotal, long chunkSizeBytes, String uploadFlow) {
         long now = System.currentTimeMillis();
         byPartId.compute(partId, (k, old) -> {
             Progress p = (old != null) ? old : new Progress();
@@ -52,6 +58,8 @@ public class UploadProgressTracker {
             p.setHistoryId(historyId);
             p.setPage(page);
             p.setChunkTotal(Math.max(chunkTotal, 0));
+            p.setChunkSizeBytes(Math.max(chunkSizeBytes, 0L));
+            p.setUploadFlow(uploadFlow);
             if (p.getChunkDone() < 0) p.setChunkDone(0);
             p.setPercent(calcPercent(p.getChunkDone(), p.getChunkTotal()));
             p.setState(State.UPLOADING);
@@ -170,6 +178,8 @@ public class UploadProgressTracker {
         p.setPage(src.getPage());
         p.setChunkDone(src.getChunkDone());
         p.setChunkTotal(src.getChunkTotal());
+        p.setChunkSizeBytes(src.getChunkSizeBytes());
+        p.setUploadFlow(src.getUploadFlow());
         p.setPercent(src.getPercent());
         p.setState(src.getState());
         p.setStateMsg(src.getStateMsg());

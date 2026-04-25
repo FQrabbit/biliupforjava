@@ -270,8 +270,23 @@
                                     </el-input>
                                     <div class="config-help">限制同时进行的上传连接数(1-16)，值越小对网络占用越少。多账号同时上传时建议保持较低值避免网络拥塞影响其他应用</div>
                                 </div>
+
+                                <div class="config-item">
+                                    <label class="config-label">
+                                        <i class="el-icon-guide"></i>
+                                        新版上传流程
+                                        <span class="config-unit">实验</span>
+                                    </label>
+                                    <el-switch
+                                        v-model="systemConfig.newUploadFlowEnabled"
+                                        active-text="新流程(浏览器)"
+                                        inactive-text="旧流程(稳定)"
+                                        @change="checkConfigChanges">
+                                    </el-switch>
+                                    <div class="config-help">默认使用旧上传流程(稳定)。开启后优先使用浏览器 multipart 上传链路，遇到异常会自动回退旧流程，并在录制历史中标记回退状态。同时，新流程可能用户自定义节点的能力会失效，更多的使用平台自动下发的节点来传递视频。</div>
+                                </div>
                             </div>
-                            
+
                             <div class="config-footer">
                                 <el-button class="modern-btn" type="primary" @click="saveSystemConfig" :loading="configLoading" icon="el-icon-check" size="small">
                                     保存配置
@@ -878,7 +893,15 @@
                 apiQps: 5.0,
                 uploadMb: 0,
                 mergeIntervalMinutes: 20,
-                maxConnections: 3
+                maxConnections: 3,
+                newUploadFlowEnabled: false
+            },
+            originalConfig: {
+                apiQps: 5.0,
+                uploadMb: 0,
+                mergeIntervalMinutes: 20,
+                maxConnections: 3,
+                newUploadFlowEnabled: false
             },
             configLoading: false,
             configExpanded: false,
@@ -1197,12 +1220,14 @@
                 var originalUploadMb = parseFloat(self.originalConfig.uploadMb) || 0;
                 var originalMergeIntervalMinutes = parseInt(self.originalConfig.mergeIntervalMinutes) || 20;
                 var originalMaxConnections = parseInt(self.originalConfig.maxConnections) || 3;
+                var originalNewUploadFlowEnabled = !!self.originalConfig.newUploadFlowEnabled;
                 var currentApiQps = parseFloat(self.systemConfig.apiQps) || 0;
                 var currentUploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
                 var currentMergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
                 var currentMaxConnections = parseInt(self.systemConfig.maxConnections) || 3;
+                var currentNewUploadFlowEnabled = !!self.systemConfig.newUploadFlowEnabled;
 
-                self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections);
+                self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections) || (originalNewUploadFlowEnabled !== currentNewUploadFlowEnabled);
             },
             resetConfig: function() {
                 // 重置配置
@@ -1211,6 +1236,7 @@
                 self.systemConfig.uploadMb = self.originalConfig.uploadMb;
                 self.systemConfig.mergeIntervalMinutes = self.originalConfig.mergeIntervalMinutes;
                 self.systemConfig.maxConnections = self.originalConfig.maxConnections;
+                self.systemConfig.newUploadFlowEnabled = !!self.originalConfig.newUploadFlowEnabled;
                 self.hasConfigChanges = false;
             },
             loadSystemConfig: function() {
@@ -1226,6 +1252,8 @@
                                 self.systemConfig.mergeIntervalMinutes = parseInt(item.configValue);
                             } else if (item.configKey === 'upload.max-concurrent-connections') {
                                 self.systemConfig.maxConnections = parseInt(item.configValue);
+                            } else if (item.configKey === 'upload.new-flow-enabled') {
+                                self.systemConfig.newUploadFlowEnabled = item.configValue === true || item.configValue === 'true' || item.configValue === '1';
                             }
                         });
                     }
@@ -1234,7 +1262,8 @@
                         apiQps: self.systemConfig.apiQps,
                         uploadMb: self.systemConfig.uploadMb,
                         mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
-                        maxConnections: self.systemConfig.maxConnections
+                        maxConnections: self.systemConfig.maxConnections,
+                        newUploadFlowEnabled: !!self.systemConfig.newUploadFlowEnabled
                     };
                 }, function(e) {
                     console.error('Failed to load system config', e);
@@ -1249,6 +1278,7 @@
                 var uploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
                 var mergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
                 var maxConnections = parseInt(self.systemConfig.maxConnections) || 3;
+                var newUploadFlowEnabled = !!self.systemConfig.newUploadFlowEnabled;
                 
                 if (mergeIntervalMinutes > 1440) {
                     this.configLoading = false;
@@ -1260,7 +1290,8 @@
                     { key: 'bili.limit.api-qps', value: String(apiQps) },
                     { key: 'bili.limit.upload-mb', value: String(uploadMb) },
                     { key: 'bili.publish.merge-interval-minutes', value: String(mergeIntervalMinutes) },
-                    { key: 'upload.max-concurrent-connections', value: String(maxConnections) }
+                    { key: 'upload.max-concurrent-connections', value: String(maxConnections) },
+                    { key: 'upload.new-flow-enabled', value: String(newUploadFlowEnabled) }
                 ];
                 
                 var promises = updates.map(function(item) {
@@ -1275,7 +1306,8 @@
                         apiQps: self.systemConfig.apiQps,
                         uploadMb: self.systemConfig.uploadMb,
                         mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
-                        maxConnections: self.systemConfig.maxConnections
+                        maxConnections: self.systemConfig.maxConnections,
+                        newUploadFlowEnabled: !!self.systemConfig.newUploadFlowEnabled
                     };
                     self.hasConfigChanges = false;
                     self.$message.success('系统配置已保存并生效');

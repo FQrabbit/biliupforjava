@@ -371,6 +371,9 @@
                                 <el-tooltip v-if="skippedOnlyCount(item) > 0" effect="dark" content="文件低于配置阈值，已自动跳过" placement="top">
                                     <span class="status-chip" style="background: rgba(230, 162, 60, 0.15); color: #e6a23c;">已跳过 {{ skippedOnlyCount(item) }}</span>
                                 </el-tooltip>
+                                <el-tooltip v-if="uploadFlowFallbackCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatUploadFlowFallbackTooltip(item.uploadFlowFallbackReasons)" placement="top">
+                                    <span class="status-chip warn">上传已回退 {{ uploadFlowFallbackCount(item) }}</span>
+                                </el-tooltip>
                             </div>
                             <div class="card-meta">
                                 <span class="meta-chip">{{ formatDateTime(item.startTime) }}</span>
@@ -826,6 +829,7 @@
                             <span class="action-group-label">发布管理</span>
                             <el-button class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
                             <el-button class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
+                            <el-button v-if="currentDetail.upload && !currentDetail.publish && currentDetail.partCount > 0 && currentDetail.uploadPartCount === currentDetail.partCount" class="modern-btn" @click="retryPublishOnly(currentDetail.id)" size="mini" type="primary" plain icon="el-icon-refresh">重试发布</el-button>
                             <el-button class="modern-btn" @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
                             <el-button class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
                         </div>
@@ -1220,8 +1224,11 @@
                         // 区分 分片进度 和 字节大小
                         activeChunkDone: 0,
                         activeChunkTotal: 0,
+                        activeChunkSizeBytes: 0,
                         chunkDone: p.upload ? p.fileSize : 0, // 字节
                         chunkTotal: p.fileSize,               // 字节
+                        chunkSizeBytes: 0,
+                        uploadFlow: p.uploadFlow || null,
                         speed: 0,
                         updateAtMs: 0
                     };
@@ -1243,6 +1250,9 @@
                             // 记录活跃的分片进度
                             match.activeChunkDone = active.chunkDone;
                             match.activeChunkTotal = active.chunkTotal;
+                            match.activeChunkSizeBytes = active.chunkSizeBytes || 0;
+                            match.chunkSizeBytes = active.chunkSizeBytes || match.chunkSizeBytes || 0;
+                            match.uploadFlow = active.uploadFlow || match.uploadFlow || null;
                             // 注意：这里不再覆盖 chunkDone/chunkTotal 为分片数，保留原字节数用于显示总大小（如果需要）
                             // 但为了进度条计算，可能需要保留逻辑一致性，或者在模板中区分处理
                             
@@ -1437,6 +1447,15 @@
             skippedOnlyCount: function(item) {
                 if (!item || !item.giveUpPartTypes) return 0;
                 return item.giveUpPartTypes.filter(t => this.isSkippedType(t)).length;
+            },
+            uploadFlowFallbackCount: function(item) {
+                return Number(item && item.uploadFlowFallbackCount) || 0;
+            },
+            formatUploadFlowFallbackTooltip: function(reasons) {
+                if (!reasons || !reasons.length) {
+                    return '新版上传流程已自动回退旧流程';
+                }
+                return reasons.join('\n');
             },
             // 防抖函数工具
             debounce: function(func, delay) {
@@ -2913,6 +2932,22 @@
                 const hasIssue = p.issueCode && (p.state === 'ISSUE' || p.state === 'FAILED');
                 return hasErrorState || hasErrorMsg || hasIssue;
             },
+            resolveUploadChunkSizeBytes: function(source) {
+                if (!source) return 0;
+                const direct = Number(source.activeChunkSizeBytes || source.chunkSizeBytes) || 0;
+                if (direct > 0) return direct;
+
+                const fileSize = Number(source.fileSize) || 0;
+                const chunkTotal = Number(source.activeChunkTotal || source.chunkTotal) || 0;
+                if (fileSize > 0 && chunkTotal > 0 && chunkTotal < fileSize) {
+                    return Math.ceil(fileSize / chunkTotal);
+                }
+
+                const flow = String(source.uploadFlow || '').toUpperCase();
+                if (flow === 'MULTIPART') return 10 * 1024 * 1024;
+                if (flow === 'LEGACY' || flow === 'KODO' || flow === 'APP') return 5 * 1024 * 1024;
+                return 0;
+            },
             updateSpeedTracking: function(progressData) {
                 if (!progressData || !progressData.items) return;
                 const now = Date.now();
@@ -2923,6 +2958,7 @@
                     
                     const chunkDone = Number(item.chunkDone) || 0;
                     const chunkTotal = Number(item.chunkTotal) || 0;
+                    const chunkSizeBytes = this.resolveUploadChunkSizeBytes(item);
                     const state = item.state;
                     
                     if (state !== 'UPLOADING' || chunkTotal <= 0) return;
@@ -2932,7 +2968,9 @@
                             samples: [],
                             lastChunkDone: chunkDone,
                             lastTime: now,
-                            chunkTotal: chunkTotal
+                            chunkTotal: chunkTotal,
+                            chunkSizeBytes: chunkSizeBytes,
+                            uploadFlow: item.uploadFlow || null
                         };
                     } else {
                         const track = this.progressSpeedTracking[partId];
@@ -2950,6 +2988,8 @@
                             track.lastChunkDone = chunkDone;
                             track.lastTime = now;
                             track.chunkTotal = chunkTotal;
+                            track.chunkSizeBytes = chunkSizeBytes || track.chunkSizeBytes || 0;
+                            track.uploadFlow = item.uploadFlow || track.uploadFlow || null;
                         }
                     }
                 });
@@ -2993,10 +3033,11 @@
                 const remainingChunks = chunkTotal - chunkDone;
                 const remainingSeconds = remainingChunks / avgSpeed;
                 
-                // 假设每片 5MB
+                // Prefer the chunk size reported by the backend upload tracker.
                 let speedMBpsVal = 0;
                 if (p.activeChunkTotal > 0) {
-                     speedMBpsVal = avgSpeed * 5;
+                     const chunkSizeBytes = this.resolveUploadChunkSizeBytes(p) || Number(track.chunkSizeBytes) || 0;
+                     speedMBpsVal = chunkSizeBytes > 0 ? (avgSpeed * chunkSizeBytes / 1024 / 1024) : 0;
                 } else {
                      // avgSpeed is bytes/s
                      speedMBpsVal = avgSpeed / 1024 / 1024;
@@ -3383,6 +3424,40 @@
                     });
                     $.ajax({
                         url: '/history/updatePublishStatus/' + id,
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            loading.close();
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('操作失败');
+                        }
+                    });
+                }).catch(() => {});
+            },
+            retryPublishOnly: function (id) {
+                let _this = this;
+                this.$confirm('此操作不会重新上传任何分P，只会重新进入投稿流程。适用于已经上传完成但投稿卡住的旧稿件。<br/><br/>确定要重试发布吗？', '重试发布确认', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '重试',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在重试发布...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    $.ajax({
+                        url: '/history/touchPublish/' + id,
                         contentType: 'application/json;charset=utf-8',
                         type: 'get',
                         dataType: 'json',

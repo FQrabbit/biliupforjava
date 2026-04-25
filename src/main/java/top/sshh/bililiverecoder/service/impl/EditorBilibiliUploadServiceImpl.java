@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
+import top.sshh.bililiverecoder.util.UploadRetryLogPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.EditorChunkUploadRequest;
@@ -310,7 +311,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                             break;
                                         } catch (Exception e) {
                                             tryCount.incrementAndGet();
-                                                log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
+                                                LogKvs chunkErrorLog = LogKvs.event("Upload.Chunk.Error")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
                                                     .add("title", room.getTitle())
@@ -321,7 +322,12 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                                     .add("start", finalI * chunkSize)
                                                     .add("end", (finalI + 1) * chunkSize)
                                                     .add("err", e.getMessage())
-                                                    .add("ex", e.getClass().getSimpleName()));
+                                                    .add("ex", e.getClass().getSimpleName());
+                                            if (UploadRetryLogPolicy.shouldWarn(tryCount.get())) {
+                                                log.warn("[BLR] {}", chunkErrorLog);
+                                            } else {
+                                                log.debug("[BLR] {}", chunkErrorLog);
+                                            }
                                             try {
                                                 Thread.sleep(10000L);
                                             } catch (InterruptedException ex) {
@@ -461,11 +467,20 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
             }
         } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
+            UploadRetryLogPolicy.LogDecision logDecision = UploadRetryLogPolicy.recoverable(
+                    "Upload.ServiceError:" + OS + ":" + (part == null ? "unknown" : part.getId()));
+            LogKvs serviceErrorLog = LogKvs.event("Upload.ServiceError")
                     .add("os", OS)
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName())
-                    .addStageCostMs("total", uploadStartNs), e);
+                    .add("recoverableCount", logDecision.count())
+                    .add("warnThreshold", logDecision.warnThreshold())
+                    .addStageCostMs("total", uploadStartNs);
+            if (logDecision.warn()) {
+                log.warn("[BLR] {}", serviceErrorLog, e);
+            } else {
+                log.info("[BLR] {}", serviceErrorLog);
+            }
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
         }

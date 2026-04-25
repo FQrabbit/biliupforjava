@@ -27,6 +27,7 @@ import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
+import top.sshh.bililiverecoder.util.UploadRetryLogPolicy;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
@@ -94,6 +95,9 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
             """;
     @Value("${record.wx-push-token}")
     private String wxToken;
+
+    @Value("${record.upload.probe-version:20250923}")
+    private String probeVersion;
     @Autowired
     private BiliUserRepository biliUserRepository;
     @Autowired
@@ -309,12 +313,16 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                             preParams.put("version", "2.14.0.0");
                             preParams.put("build", "2140000");
                             preParams.put("webVersion", "2.14.0");
+                            if (StringUtils.isNotBlank(probeVersion)) {
+                                preParams.put("probe_version", probeVersion);
+                            }
                             preParams.put("name", uploadFile.getName());
                             preParams.put("size", String.valueOf(uploadFile.length()));
                             long fileSize = uploadFile.length();
                             long chunkSize = 1024 * 1024 * 4;
                             long chunkNum = (long)Math.ceil((double)fileSize / chunkSize);
                             PreUploadRequest preuploadRequest = new PreUploadRequest(webCookie, preParams);
+                            preuploadRequest.setLineQuery(uploadEnums.getLineQuery());
                             PreUploadBean preUploadBean;
                             try {
                                 do {
@@ -404,7 +412,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
                             final Integer partPage = resolveProgressPage(part);
-                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
+                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum, chunkSize, "KODO");
                             List<KodoPart> parts = new CopyOnWriteArrayList<>();
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
@@ -466,7 +474,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 String uploadHost = resolveUploadHost(finalPreUploadBean);
                                                 long backoffMs = backoffDecision.delayMs();
                                                 uploadProgressTracker.markRetryWait(partId, e.getMessage(), chunkRetryCount, backoffMs);
-                                                log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
+                                                LogKvs chunkErrorLog = LogKvs.event("Upload.Chunk.Error")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
                                                     .add("title", room.getTitle())
@@ -484,7 +492,12 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     .add("host", uploadHost)
                                                     .add("backoffMs", backoffMs)
                                                     .add("err", e.getMessage())
-                                                    .add("ex", e.getClass().getSimpleName()));
+                                                    .add("ex", e.getClass().getSimpleName());
+                                                if (UploadRetryLogPolicy.shouldWarn(chunkRetryCount, globalRetryCount)) {
+                                                    log.warn("[BLR] {}", chunkErrorLog);
+                                                } else {
+                                                    log.debug("[BLR] {}", chunkErrorLog);
+                                                }
                                                 if (globalRetryCount >= GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD) {
                                                     globalFuseReason.compareAndSet(null, "GLOBAL_CHUNK_FAILURE_THRESHOLD_REACHED");
                                                     globalFuseOpen.set(true);
@@ -853,11 +866,20 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
 
             }
         } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
+            UploadRetryLogPolicy.LogDecision logDecision = UploadRetryLogPolicy.recoverable(
+                    "Upload.ServiceError:" + OS + ":" + (part == null ? "unknown" : part.getId()));
+            LogKvs serviceErrorLog = LogKvs.event("Upload.ServiceError")
                     .add("os", OS)
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName())
-                    .addStageCostMs("total", uploadStartNs), e);
+                    .add("recoverableCount", logDecision.count())
+                    .add("warnThreshold", logDecision.warnThreshold())
+                    .addStageCostMs("total", uploadStartNs);
+            if (logDecision.warn()) {
+                log.warn("[BLR] {}", serviceErrorLog, e);
+            } else {
+                log.info("[BLR] {}", serviceErrorLog);
+            }
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
             uploadProgressTracker.remove(part.getId());

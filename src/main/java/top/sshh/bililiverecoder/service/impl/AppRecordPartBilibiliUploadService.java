@@ -27,6 +27,7 @@ import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
+import top.sshh.bililiverecoder.util.UploadRetryLogPolicy;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
@@ -297,7 +298,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
                             final Integer partPage = resolveProgressPage(part);
-                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
+                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum, chunkSize, "APP");
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
                                 int finalI = i;
@@ -329,7 +330,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                                 long backoffMs = uploadRetryBackoffPolicy.nextDelayMs(tryCount.get(), e.getMessage());
                                                 int count = upCount.get();
                                                 uploadProgressTracker.markRetryWait(partId, e.getMessage(), tryCount.get(), backoffMs);
-                                                log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
+                                                LogKvs chunkErrorLog = LogKvs.event("Upload.Chunk.Error")
                                                         .add("os", OS)
                                                         .add("roomId", room.getRoomId())
                                                         .add("title", room.getTitle())
@@ -341,7 +342,12 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                                         .add("retryCount", tryCount.get())
                                                         .add("backoffMs", backoffMs)
                                                         .add("err", e.getMessage())
-                                                        .add("ex", e.getClass().getSimpleName()));
+                                                        .add("ex", e.getClass().getSimpleName());
+                                                if (UploadRetryLogPolicy.shouldWarn(tryCount.get())) {
+                                                    log.warn("[BLR] {}", chunkErrorLog);
+                                                } else {
+                                                    log.debug("[BLR] {}", chunkErrorLog);
+                                                }
                                                 try {
                                                     Thread.sleep(backoffMs);
                                                 } catch (InterruptedException ex) {
@@ -613,14 +619,23 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
 
             }
         } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
+            UploadRetryLogPolicy.LogDecision logDecision = UploadRetryLogPolicy.recoverable(
+                    "Upload.ServiceError:" + OS + ":" + (part == null ? "unknown" : part.getId()));
+            LogKvs serviceErrorLog = LogKvs.event("Upload.ServiceError")
                     .add("os", OS)
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName())
+                    .add("recoverableCount", logDecision.count())
+                    .add("warnThreshold", logDecision.warnThreshold())
                     .addStageCostMs("total", uploadStartNs)
                     .addStageCostMs("preUpload", preUploadStartNs)
                     .addStageCostMs("chunkUpload", chunkUploadStartNs)
-                    .addStageCostMs("complete", completeStartNs), e);
+                    .addStageCostMs("complete", completeStartNs);
+            if (logDecision.warn()) {
+                log.warn("[BLR] {}", serviceErrorLog, e);
+            } else {
+                log.info("[BLR] {}", serviceErrorLog);
+            }
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
             uploadProgressTracker.remove(part.getId());

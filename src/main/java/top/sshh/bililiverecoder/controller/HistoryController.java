@@ -814,29 +814,28 @@ public class HistoryController {
             RecordHistory history = historyOptional.get();
             history.setStartTime(history.getStartTime().plusMinutes(1L));
             history.setPublish(false);
+            history.setAvId(null);
             history.setBvId(null);
+            history.setSendReply(false);
             history.setPublishUserId(null);
             history.setCode(-1);
             // 重置上传重试次数
             history.setUploadRetryCount(0);
             historyRepository.save(history);
-            int updatedPartCount = 0;
+            int preservedPartCount = 0;
             List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : partList) {
-                part.setUpload(false);
-                // 清空已上传的文件名标记，否则进度条会误认为已完成
-                part.setFileName(null);
-                // 重置分P上传重试次数
-                part.setUploadRetryCount(0);
-                partRepository.save(part);
-                updatedPartCount++;
+                // 只统计分P数量，保留每个分P的上传状态和上传产物。
+                preservedPartCount++;
             }
             result.put("type", "success");
             result.put("msg", "状态更新成功");
             log.info("[BLR] {}", LogKvs.event("History.UpdatePublishStatus.Success")
                     .add("historyId", id)
                     .add("roomId", history.getRoomId())
-                    .addRoundCount("updatedPart", updatedPartCount)
+                    .addRoundCount("preservedPart", preservedPartCount)
+                    .add("preserveUpload", true)
+                    .add("resetPublish", true)
                     .addStageCostMs("total", totalStartNs));
             return result;
         } else {
@@ -960,6 +959,7 @@ public class HistoryController {
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
             boolean changed = false;
+            boolean uploadClosed = false;
 
             if (!history.isForceArchived()) {
                 history.setForceArchived(true);
@@ -993,9 +993,9 @@ public class HistoryController {
 
             // 如果正在上传/处理中 -> 强制关闭上传
             // 定义处理中: upload=true 且 (publish=false 或 code是处理中状态)
-            boolean isProcessing = history.isUpload() && (!history.isPublish() || Arrays.asList(-1, -9, -30).contains(history.getCode()));
-            if (isProcessing) {
+            if (history.isUpload()) {
                 history.setUpload(false);
+                uploadClosed = true;
                 changed = true;
             }
 
@@ -1006,6 +1006,7 @@ public class HistoryController {
                 log.info("[BLR] {}", LogKvs.event("History.ForceArchive.Success")
                         .add("historyId", id)
                         .add("roomId", history.getRoomId())
+                        .add("uploadClosed", uploadClosed)
                         .addStageCostMs("total", totalStartNs));
             } else {
                 result.put("type", "info");
@@ -1115,6 +1116,8 @@ public class HistoryController {
     }
 
     private Predicate buildFullArchivedPredicate(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root) {
+        Predicate isForceArchived = criteriaBuilder.equal(root.get("forceArchived"), true);
+
         // 正常上传并完成的条件
         Predicate isPublishedArchived = buildPublishedArchivedPredicate(criteriaBuilder, root);
 
@@ -1136,7 +1139,7 @@ public class HistoryController {
                 criteriaBuilder.not(criteriaBuilder.exists(recordingPartExists))
         );
 
-        return criteriaBuilder.or(isPublishedArchived, isNoUploadArchived);
+        return criteriaBuilder.or(isForceArchived, isPublishedArchived, isNoUploadArchived);
     }
 
     /**
@@ -1179,7 +1182,24 @@ public class HistoryController {
                     .add("err", e.getMessage()), e);
         }
         history.setAbnormalPartCount(abnormalCount);
-                if (giveUpCount > 0) {
+
+        int uploadFlowFallbackCount = 0;
+        try {
+            uploadFlowFallbackCount = partRepository.countUploadFlowFallbackPartsByHistoryId(history.getId());
+            history.setUploadFlowFallbackCount(uploadFlowFallbackCount);
+            if (uploadFlowFallbackCount > 0) {
+                List<RecordHistoryPart> fallbackParts = partRepository.findUploadFlowFallbackPartsByHistoryId(history.getId());
+                history.setUploadFlowFallbackReasons(fallbackParts.stream()
+                        .map(p -> StringUtils.defaultIfBlank(p.getUploadFlowFallbackReason(), "multipart fallback to legacy"))
+                        .toList());
+            }
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("History.UploadFlowFallback.QueryFailed")
+                    .add("historyId", history.getId())
+                    .add("err", e.getMessage()), e);
+        }
+
+        if (giveUpCount > 0) {
             try {
                 List<RecordHistoryPart> giveUpParts = partRepository.findGiveUpPartsByHistoryId(history.getId());
                 history.setGiveUpPartFiles(giveUpParts.stream().map(RecordHistoryPart::getFilePath).toList());

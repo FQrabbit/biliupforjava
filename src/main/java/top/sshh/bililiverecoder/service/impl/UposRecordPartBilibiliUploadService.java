@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.zjiecode.wxpusher.client.bean.Message;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
+import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -26,6 +28,7 @@ import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
+import top.sshh.bililiverecoder.util.UploadRetryLogPolicy;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
@@ -33,7 +36,13 @@ import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.ChunkUploadRequest;
 import top.sshh.bililiverecoder.util.bili.upload.CompleteUploadRequest;
 import top.sshh.bililiverecoder.util.bili.upload.LineUploadRequest;
+import top.sshh.bililiverecoder.util.bili.upload.MultipartCompleteRequest;
+import top.sshh.bililiverecoder.util.bili.upload.MultipartDebugSupport;
+import top.sshh.bililiverecoder.util.bili.upload.MultipartInitRequest;
+import top.sshh.bililiverecoder.util.bili.upload.MultipartPartRequest;
+import top.sshh.bililiverecoder.util.bili.upload.MultipartSessionValidator;
 import top.sshh.bililiverecoder.util.bili.upload.PreUploadRequest;
+import top.sshh.bililiverecoder.util.bili.upload.SignedUrlChunkUploadRequest;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.CompleteUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.LineUploadBean;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean;
@@ -51,9 +60,12 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import top.sshh.bililiverecoder.service.RateLimiterService;
 import top.sshh.bililiverecoder.util.NettyUploadClient;
 
@@ -80,6 +92,15 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     @Value("${record.wx-push-token}")
     private String wxToken;
+
+    @Value("${record.upload.multipart-enabled:true}")
+    private boolean multipartEnabled;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
+
+    @Value("${record.upload.probe-version:20250923}")
+    private String probeVersion;
     private static final String WX_MSG_FORMAT = """
             上传结果: %s
             收到主播%s分P上传%s事件
@@ -117,6 +138,20 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
     private static final int CHUNK_MAX_RETRY = 200;
     private static final int GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD = 400;
+    private static final int MULTIPART_RETRY_LIMIT = 2;
+    private static final long LEGACY_CHUNK_SIZE = 1024L * 1024L * 5L;
+    private static final String BROWSER_MULTIPART_PROFILE = "ugcfx/bup";
+
+    private boolean isBrowserMultipartEnabled() {
+        try {
+            return systemConfigService != null && systemConfigService.isNewUploadFlowEnabled();
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("Upload.Multipart.ConfigReadFailed")
+                    .add("fallbackProperty", multipartEnabled)
+                    .addIfNotBlank("err", e.getMessage()));
+            return multipartEnabled;
+        }
+    }
 
     @Override
     public void asyncUpload(RecordHistoryPart part) {
@@ -205,23 +240,23 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                     }
                     RecordHistory history = historyOptional.get();
                     File uploadFile = new File(filePath);
-                    if (!uploadFile.exists()) {
+                        if (!uploadFile.exists()) {
                         log.error("[BLR] {}", LogKvs.event("Upload.Part.FileMissing")
                                 .add("partId", part.getId())
                                 .add("historyId", part.getHistoryId())
                                 .add("roomId", part.getRoomId())
                                 .add("filePath", filePath));
-                        if (part.getUploadRetryCount() < 2) {
+                        if (part.getUploadRetryCount() < MULTIPART_RETRY_LIMIT) {
                             part.setUploadRetryCount(part.getUploadRetryCount() + 1);
                             partRepository.save(part);
-                            Thread.sleep(5000);
-                            uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                            scheduleRetryEnqueue(room, part, filePath, 5000L, "FILE_MISSING");
                             log.info("[BLR] {}", LogKvs.event("Upload.Part.RetryScheduled")
                                     .add("partId", part.getId())
                                     .add("historyId", part.getHistoryId())
                                     .add("roomId", part.getRoomId())
                                     .add("retry", part.getUploadRetryCount())
-                                    .add("maxRetry", 2)
+                                    .add("nextAttemptMultipart", part.getUploadRetryCount() < MULTIPART_RETRY_LIMIT)
+                                    .add("maxRetry", MULTIPART_RETRY_LIMIT)
                                     .add("filePath", filePath));
                         } else {
                             part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
@@ -306,15 +341,35 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             preParams.put("version", "2.14.0.0");
                             preParams.put("build", "2140000");
                             preParams.put("webVersion", "2.14.0");
+                            if (StringUtils.isNotBlank(probeVersion)) {
+                                preParams.put("probe_version", probeVersion);
+                            }
                             preParams.put("name", uploadFile.getName());
                             preParams.put("size", String.valueOf(uploadFile.length()));
                             long fileSize = uploadFile.length();
-                            long chunkSize = 1024 * 1024 * 5;
+                            long chunkSize = LEGACY_CHUNK_SIZE;
                             long chunkNum = (long)Math.ceil((double)fileSize / chunkSize);
                             PreUploadRequest preuploadRequest = new PreUploadRequest(webCookie, preParams);
                             preuploadRequest.setLineQuery(uploadEnums.getLineQuery());
                             PreUploadBean preUploadBean;
                             LineUploadBean uploadBean = null;
+                            int multipartRetryCount = part.getUploadRetryCount();
+                            final int finalMultipartRetryCount = multipartRetryCount;
+                            boolean configuredMultipartEnabled = isBrowserMultipartEnabled();
+                            boolean useMultipartFlow = configuredMultipartEnabled && multipartRetryCount < MULTIPART_RETRY_LIMIT;
+                            String uploadFlowFallbackReason = configuredMultipartEnabled && multipartRetryCount >= MULTIPART_RETRY_LIMIT
+                                    ? "multipart retry limit reached, using legacy"
+                                    : null;
+                            String multipartUploadId = null;
+                            String multipartUri = null;
+                            String multipartToken = null;
+                            long multipartBizId = 0L;
+                            String multipartProfile = BROWSER_MULTIPART_PROFILE;
+                            String multipartMetaUposUri = null;
+                            String multipartSessionDigest = null;
+                            Map<Integer, String> multipartEtags = new ConcurrentHashMap<>();
+                            Map<Integer, String> multipartSignedUploadIds = new ConcurrentHashMap<>();
+                            Map<Integer, Integer> multipartSignedPartNumbers = new ConcurrentHashMap<>();
                             try {
                                 do {
                                     preUploadBean = preuploadRequest.getPojo();
@@ -456,8 +511,135 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     .add("endpointsList", Arrays.toString(endpoints)));
                                         }
                                         
-                                        LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
-                                        uploadBean = uploadRequest.getPojo();
+                                        if (useMultipartFlow) {
+                                            multipartUploadId = null;
+                                            multipartUri = preUploadBean.getUpos_uri();
+                                            try {
+                                                MultipartInitRequest multipartInitRequest = new MultipartInitRequest(webCookie);
+                                                MultipartInitRequest.MultipartInitInfo initInfo = multipartInitRequest.init(
+                                                        multipartUploadId,
+                                                        uploadFile.getName(),
+                                                        multipartUri,
+                                                        multipartProfile,
+                                                    preUploadBean.getBiz_id(),
+                                                    fileSize
+                                                );
+                                                multipartUploadId = initInfo.getUploadId();
+                                                multipartToken = initInfo.getUploadToken();
+                                                multipartUri = initInfo.getUri();
+                                                multipartProfile = initInfo.getProfile();
+                                                multipartBizId = initInfo.getBizId();
+                                                multipartMetaUposUri = initInfo.getMetaUposUri();
+                                                preUploadBean.setBiz_id(multipartBizId);
+                                                multipartSessionDigest = buildMultipartSessionDigest(
+                                                        multipartUploadId,
+                                                        multipartUri,
+                                                        multipartToken,
+                                                        multipartBizId,
+                                                        multipartProfile
+                                                );
+                                                log.info("[BLR] {}", LogKvs.event("Upload.Multipart.FlowDecision")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("uname", room.getUname())
+                                                    .add("partId", part.getId())
+                                                    .add("historyId", part.getHistoryId())
+                                                    .add("retryCount", multipartRetryCount)
+                                                    .add("retryLimit", MULTIPART_RETRY_LIMIT)
+                                                    .add("multipartEnabled", configuredMultipartEnabled)
+                                                    .add("useMultipartFlow", useMultipartFlow)
+                                                    .add("nextRetryMultipart", multipartRetryCount + 1 < MULTIPART_RETRY_LIMIT)
+                                                    .addIfNotBlank("sessionDigest", multipartSessionDigest));
+                                                log.info("[BLR] {}", LogKvs.event("Upload.Multipart.SessionLocked")
+                                                        .add("roomId", room.getRoomId())
+                                                        .add("uname", room.getUname())
+                                                        .add("partId", part.getId())
+                                                        .add("historyId", part.getHistoryId())
+                                                        .add("bizId", multipartBizId)
+                                                        .addIfNotBlank("profile", multipartProfile)
+                                                    .add("retryCount", multipartRetryCount)
+                                                    .add("retryLimit", MULTIPART_RETRY_LIMIT)
+                                                    .add("useMultipartFlow", useMultipartFlow)
+                                                        .addIfNotBlank("sessionDigest", multipartSessionDigest));
+                                                MultipartSessionValidator.MetaBucketCheck metaCheck =
+                                                        MultipartSessionValidator.checkMetaBucket(multipartUri, multipartMetaUposUri);
+                                                if (metaCheck.isComparable() && !metaCheck.isConsistent()) {
+                                                    uploadFlowFallbackReason = "multipart init meta bucket mismatch";
+                                                    useMultipartFlow = false;
+                                                    log.warn("[BLR] {}", LogKvs.event("Upload.Multipart.InitFallback")
+                                                            .add("roomId", room.getRoomId())
+                                                            .add("uname", room.getUname())
+                                                            .add("partId", part.getId())
+                                                            .add("historyId", part.getHistoryId())
+                                                            .add("reason", "meta bucket mismatch")
+                                                            .add("uposBucket", metaCheck.getUposBucket())
+                                                            .add("expectedMetaBucket", metaCheck.getExpectedMetaBucket())
+                                                            .add("actualMetaBucket", metaCheck.getActualMetaBucket())
+                                                            .addIfNotBlank("metaUposUri", multipartMetaUposUri)
+                                                            .addIfNotBlank("zipUrl", preUploadBean.getUpos_uri()));
+                                                }
+                                                if (useMultipartFlow) {
+                                                    long multipartChunkSize = initInfo.getChunkSize();
+                                                    if (multipartChunkSize > 0) {
+                                                        chunkSize = multipartChunkSize;
+                                                        chunkNum = (long) Math.ceil((double) fileSize / chunkSize);
+                                                        preUploadBean.setChunk_size(chunkSize);
+                                                    }
+                                                    if (initInfo.getThreads() > 0) {
+                                                        preUploadBean.setThreads(String.valueOf(initInfo.getThreads()));
+                                                    }
+                                                    if (initInfo.getTimeout() > 0) {
+                                                        preUploadBean.setTimeout(String.valueOf(initInfo.getTimeout()));
+                                                    }
+                                                }
+                                            } catch (Exception initEx) {
+                                                uploadFlowFallbackReason = "multipart init failed";
+                                                useMultipartFlow = false;
+                                                LogKvs kvs = LogKvs.event("Upload.Multipart.InitFallback")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("uname", room.getUname())
+                                                    .add("partId", part.getId())
+                                                    .add("historyId", part.getHistoryId())
+                                                    .add("reason", "multipart init failed")
+                                                    .addIfNotBlank("err", initEx.getMessage());
+                                                if (initEx instanceof MultipartInitRequest.MultipartInitDiagnosticException) {
+                                                    MultipartInitRequest.MultipartInitDiagnosticException dx =
+                                                        (MultipartInitRequest.MultipartInitDiagnosticException) initEx;
+                                                    kvs.add("httpCode", dx.getHttpCode())
+                                                        .add("bizCode", dx.getBizCode())
+                                                        .addIfNotBlank("bizMessage", dx.getBizMessage())
+                                                        .addIfNotBlank("uploadId", dx.getUploadId())
+                                                        .addIfNotBlank("filename", dx.getFilename())
+                                                        .addIfNotBlank("zipUrl", dx.getZipUrl())
+                                                        .addIfNotBlank("rootKeys", dx.getRootKeys())
+                                                        .addIfNotBlank("dataKeys", dx.getDataKeys())
+                                                        .add("hasUploadToken", dx.isHasUploadToken())
+                                                        .add("hasUptoken", dx.isHasUptoken())
+                                                        .add("hasUri", dx.isHasUri())
+                                                        .add("hasUposUri", dx.isHasUposUri())
+                                                        .addIfNotBlank("missingFields", dx.getMissingFields())
+                                                        .addIfNotBlank("responseSnippet", dx.getResponseSnippet());
+                                                }
+                                                kvs.add("preHasAuth", StringUtils.isNotBlank(preUploadBean.getAuth()))
+                                                        .add("preHasUptoken", StringUtils.isNotBlank(preUploadBean.getRawUptoken()))
+                                                        .add("preHasUposUri", StringUtils.isNotBlank(preUploadBean.getUpos_uri()));
+                                                log.warn("[BLR] {}", kvs);
+                                            }
+                                            if (StringUtils.isBlank(multipartUri) || StringUtils.isBlank(multipartToken)) {
+                                                uploadFlowFallbackReason = "multipart missing uri or upload_token";
+                                                useMultipartFlow = false;
+                                                log.warn("[BLR] {}", LogKvs.event("Upload.Multipart.PrepareFallback")
+                                                        .add("roomId", room.getRoomId())
+                                                        .add("uname", room.getUname())
+                                                        .add("partId", part.getId())
+                                                        .add("historyId", part.getHistoryId())
+                                                        .add("reason", "missing uri or upload_token"));
+                                            }
+                                        }
+
+                                        if (!useMultipartFlow) {
+                                            LineUploadRequest uploadRequest = new LineUploadRequest(webCookie, preUploadBean);
+                                            uploadBean = uploadRequest.getPojo();
+                                        }
                                         log.debug("[BLR] {}", LogKvs.event("Upload.PreUpload.Success")
                                                 .add("roomId", room.getRoomId())
                                                 .add("uname", room.getUname())
@@ -465,6 +647,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 .add("historyId", part.getHistoryId())
                                                 .add("fileName", uploadFile.getName())
                                                 .add("uploadId", uploadBean != null ? uploadBean.getUpload_id() : null)
+                                                .add("multipartEnabled", configuredMultipartEnabled)
+                                                .add("multipartActive", useMultipartFlow)
+                                                .add("chunkSize", chunkSize)
+                                                .add("chunkNum", chunkNum)
                                                 .add("endpoint", preUploadBean != null ? preUploadBean.getEndpoint() : null));
                                     }
                                 } while (preUploadBean.getOK() == 0);
@@ -484,20 +670,37 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("并发上传失败，存在异常", e);
                             }
                             // 分段上传
+                            final long effectiveChunkSize = chunkSize;
+                            final long effectiveChunkNum = chunkNum;
                             AtomicInteger upCount = new AtomicInteger(0);
                             AtomicInteger globalFailCount = new AtomicInteger(0);
                             java.util.concurrent.atomic.AtomicBoolean globalFuseOpen = new java.util.concurrent.atomic.AtomicBoolean(false);
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
                             final Integer partPage = resolveProgressPage(part);
-                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum);
+                            uploadProgressTracker.start(
+                                    partId,
+                                    historyId,
+                                    partPage,
+                                    (int) effectiveChunkNum,
+                                    effectiveChunkSize,
+                                    useMultipartFlow ? "MULTIPART" : "LEGACY"
+                            );
                             java.util.concurrent.atomic.AtomicReference<String> gatewayError = new java.util.concurrent.atomic.AtomicReference<>(null);
                             java.util.concurrent.atomic.AtomicReference<String> globalFuseReason = new java.util.concurrent.atomic.AtomicReference<>(null);
                             List<Runnable> runnableList = new ArrayList<>();
-                            for (int i = 0; i < chunkNum; i++) {
+                            for (int i = 0; i < effectiveChunkNum; i++) {
                                 long finalI = i;
                                 LineUploadBean finalUploadBean = uploadBean;
                                 PreUploadBean finalPreUploadBean = preUploadBean;
+                                boolean finalUseMultipartFlow = useMultipartFlow;
+                                String finalMultipartUploadId = multipartUploadId;
+                                String finalMultipartUri = multipartUri;
+                                String finalMultipartToken = multipartToken;
+                                String finalMultipartSessionDigest = multipartSessionDigest;
+                                Map<Integer, String> finalMultipartEtags = multipartEtags;
+                                Map<Integer, String> finalMultipartSignedUploadIds = multipartSignedUploadIds;
+                                Map<Integer, Integer> finalMultipartSignedPartNumbers = multipartSignedPartNumbers;
                                 Runnable runnable = () -> {
                                     try {
                                         int chunkRetryCount = 0;
@@ -509,27 +712,73 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                             }
                                             try {
                                                 // 上传
-                                                long endSize = (finalI + 1) * chunkSize;
-                                                long finalChunkSize = chunkSize;
-                                                Map<String, String> chunkParams = new HashMap<>();
-                                                chunkParams.put("partNumber", String.valueOf(finalI + 1));
-                                                chunkParams.put("uploadId", finalUploadBean.getUpload_id());
-                                                chunkParams.put("chunk", String.valueOf(finalI));
-                                                chunkParams.put("chunks", String.valueOf(chunkNum));
-                                                chunkParams.put("size", String.valueOf(finalChunkSize));
-                                                chunkParams.put("start", String.valueOf(finalI * finalChunkSize));
-                                                chunkParams.put("end", String.valueOf(endSize));
-                                                chunkParams.put("total", String.valueOf(fileSize));
+                                                long endSize = (finalI + 1) * effectiveChunkSize;
+                                                long finalChunkSize = effectiveChunkSize;
+                                                long startSize = finalI * finalChunkSize;
                                                 if (endSize > fileSize) {
                                                     endSize = fileSize;
-
-                                                    finalChunkSize = fileSize - (finalI * finalChunkSize);
-                                                    chunkParams.put("size", String.valueOf(finalChunkSize));
-                                                    chunkParams.put("end", String.valueOf(endSize));
+                                                    finalChunkSize = fileSize - startSize;
                                                 }
+
                                                 try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath, "r")) {
-                                                    ChunkUploadRequest chunkUploadRequest = new ChunkUploadRequest(finalPreUploadBean, chunkParams, randomAccessFile);
-                                                    chunkUploadRequest.getPage();
+                                                    if (finalUseMultipartFlow) {
+                                                        MultipartPartRequest multipartPartRequest = new MultipartPartRequest(webCookie);
+                                                        MultipartPartRequest.MultipartSignedReq signedReq = multipartPartRequest.getSignedReq(
+                                                                finalMultipartUploadId,
+                                                                finalMultipartUri,
+                                                                finalMultipartToken,
+                                                                (int) (finalI + 1),
+                                                                uploadEnums.getCdn()
+                                                        );
+                                                        int timeoutSeconds = 1200;
+                                                        if (StringUtils.isNotBlank(finalPreUploadBean.getTimeout())) {
+                                                            timeoutSeconds = Integer.parseInt(finalPreUploadBean.getTimeout());
+                                                        }
+                                                        SignedUrlChunkUploadRequest signedUrlChunkUploadRequest = new SignedUrlChunkUploadRequest();
+                                                        String etag = signedUrlChunkUploadRequest.upload(
+                                                                signedReq.getUrl(),
+                                                                randomAccessFile,
+                                                                startSize,
+                                                                endSize,
+                                                                timeoutSeconds
+                                                        );
+                                                        int partNumber = (int) (finalI + 1);
+                                                        finalMultipartEtags.put(partNumber, etag);
+                                                        String signedUploadId = MultipartDebugSupport.uploadIdFromUrl(signedReq.getUrl());
+                                                        Integer signedPartNumber = MultipartDebugSupport.partNumberFromUrl(signedReq.getUrl());
+                                                        finalMultipartSignedUploadIds.put(partNumber, signedUploadId);
+                                                        finalMultipartSignedPartNumbers.put(partNumber, signedPartNumber);
+                                                        if (StringUtils.isNotBlank(finalMultipartUploadId)
+                                                                && StringUtils.isNotBlank(signedUploadId)
+                                                                && !StringUtils.equals(finalMultipartUploadId, signedUploadId)) {
+                                                            log.warn("[BLR] {}", LogKvs.event("Upload.Multipart.Part.DiagnosticUploadIdMismatch")
+                                                                    .add("roomId", room.getRoomId())
+                                                                    .add("uname", room.getUname())
+                                                                    .add("partId", partId)
+                                                                    .add("historyId", historyId)
+                                                                    .add("chunkIndex", finalI)
+                                                                    .add("partNumber", partNumber)
+                                                                    .add("diagnosticUploadId", finalMultipartUploadId)
+                                                                    .add("signedUrlUploadId", signedUploadId)
+                                                                    .addIfNotBlank("signedPartNumber", signedPartNumber == null ? null : String.valueOf(signedPartNumber))
+                                                                    .addIfNotBlank("sessionDigest", finalMultipartSessionDigest)
+                                                                    .add("retryCount", finalMultipartRetryCount)
+                                                                    .add("retryLimit", MULTIPART_RETRY_LIMIT)
+                                                                    .add("useMultipartFlow", finalUseMultipartFlow));
+                                                        }
+                                                    } else {
+                                                        Map<String, String> chunkParams = new HashMap<>();
+                                                        chunkParams.put("partNumber", String.valueOf(finalI + 1));
+                                                        chunkParams.put("uploadId", finalUploadBean.getUpload_id());
+                                                        chunkParams.put("chunk", String.valueOf(finalI));
+                                                        chunkParams.put("chunks", String.valueOf(effectiveChunkNum));
+                                                        chunkParams.put("size", String.valueOf(finalChunkSize));
+                                                        chunkParams.put("start", String.valueOf(startSize));
+                                                        chunkParams.put("end", String.valueOf(endSize));
+                                                        chunkParams.put("total", String.valueOf(fileSize));
+                                                        ChunkUploadRequest chunkUploadRequest = new ChunkUploadRequest(finalPreUploadBean, chunkParams, randomAccessFile);
+                                                        chunkUploadRequest.getPage();
+                                                    }
                                                 } catch (FileNotFoundException fileNotFoundException) {
                                                     globalFuseReason.compareAndSet(null, "UPLOAD_FILE_NOT_FOUND");
                                                     globalFuseOpen.set(true);
@@ -542,7 +791,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     break;
                                                 }
                                                 int count = upCount.incrementAndGet();
-                                                uploadProgressTracker.updateChunkDone(partId, historyId, partPage, count, (int) chunkNum);
+                                                uploadProgressTracker.updateChunkDone(partId, historyId, partPage, count, (int) effectiveChunkNum);
                                                 log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
                                                         .add("roomId", room.getRoomId())
                                                         .add("title", room.getTitle())
@@ -550,7 +799,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("historyId", historyId)
                                                         .add("chunkIndex", finalI)
                                                         .add("done", count)
-                                                        .add("total", chunkNum)
+                                                        .add("total", effectiveChunkNum)
                                                         .add("thread", Thread.currentThread().getName()));
                                                 break;
                                             } catch (Exception e) {
@@ -560,15 +809,24 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         uploadRetryBackoffPolicy.nextDecision(chunkRetryCount, e, e.getMessage());
                                                 String uploadHost = resolveUploadHost(finalPreUploadBean);
                                                 if ("GATEWAY_5XX".equals(backoffDecision.retryCategory())) {
-                                                    log.error("[BLR] {}", LogKvs.event("Upload.GatewayErrorPause")
+                                                    UploadRetryLogPolicy.LogDecision logDecision = UploadRetryLogPolicy.recoverable(
+                                                            "Upload.GatewayErrorPause:" + historyId + ":" + partId + ":" + uploadHost);
+                                                    LogKvs gatewayLog = LogKvs.event("Upload.GatewayErrorPause")
                                                             .add("roomId", room.getRoomId())
                                                             .add("uname", room.getUname())
                                                             .add("partId", partId)
                                                             .add("historyId", historyId)
                                                             .add("retryCategory", backoffDecision.retryCategory())
                                                             .add("host", uploadHost)
+                                                            .add("recoverableCount", logDecision.count())
+                                                            .add("warnThreshold", logDecision.warnThreshold())
                                                             .add("err", e.getMessage())
-                                                            .add("ex", e.getClass().getSimpleName()));
+                                                            .add("ex", e.getClass().getSimpleName());
+                                                    if (logDecision.warn()) {
+                                                        log.warn("[BLR] {}", gatewayLog);
+                                                    } else {
+                                                        log.info("[BLR] {}", gatewayLog);
+                                                    }
                                                     gatewayError.set(e.getMessage());
                                                     globalFuseReason.compareAndSet(null, "UPLOAD_GATEWAY_ERROR");
                                                     globalFuseOpen.set(true);
@@ -576,15 +834,15 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 }
                                                 long backoffMs = backoffDecision.delayMs();
                                                 uploadProgressTracker.markRetryWait(partId, e.getMessage(), chunkRetryCount, backoffMs);
-                                                log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Error")
+                                                LogKvs chunkErrorLog = LogKvs.event("Upload.Chunk.Error")
                                                         .add("roomId", room.getRoomId())
                                                         .add("title", room.getTitle())
                                                     .add("partId", partId)
                                                     .add("historyId", historyId)
                                                         .add("chunkIndex", finalI)
-                                                        .add("chunkSize", chunkSize)
-                                                        .add("start", finalI * chunkSize)
-                                                        .add("end", (finalI + 1) * chunkSize)
+                                                        .add("chunkSize", effectiveChunkSize)
+                                                        .add("start", finalI * effectiveChunkSize)
+                                                        .add("end", (finalI + 1) * effectiveChunkSize)
                                                         .add("chunkRetryCount", chunkRetryCount)
                                                         .add("chunkRetryMax", CHUNK_MAX_RETRY)
                                                         .add("globalFailCount", globalRetryCount)
@@ -593,7 +851,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("host", uploadHost)
                                                         .add("backoffMs", backoffMs)
                                                         .add("err", e.getMessage())
-                                                        .add("ex", e.getClass().getSimpleName()));
+                                                        .add("ex", e.getClass().getSimpleName());
+                                                if (UploadRetryLogPolicy.shouldWarn(chunkRetryCount, globalRetryCount)) {
+                                                    log.warn("[BLR] {}", chunkErrorLog);
+                                                } else {
+                                                    log.debug("[BLR] {}", chunkErrorLog);
+                                                }
                                                 if (globalRetryCount >= GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD) {
                                                     globalFuseReason.compareAndSet(null, "GLOBAL_CHUNK_FAILURE_THRESHOLD_REACHED");
                                                     globalFuseOpen.set(true);
@@ -715,7 +978,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("UPLOAD_GATEWAY_ERROR:" + gatewayError.get());
                             }
 
-                            if (globalFuseOpen.get() || upCount.get() < chunkNum) {
+                            if (globalFuseOpen.get() || upCount.get() < effectiveChunkNum) {
                                 part = partRepository.findById(part.getId()).get();
                                 part.setUpload(false);
                                 part.setUploadRetryCount(part.getUploadRetryCount() + 1);
@@ -728,20 +991,20 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         .add("partId", partId)
                                         .add("historyId", historyId)
                                         .add("doneChunkCount", upCount.get())
-                                        .add("totalChunkCount", chunkNum)
+                                        .add("totalChunkCount", effectiveChunkNum)
                                         .add("globalFailCount", globalFailCount.get())
                                         .add("globalFuseOpen", globalFuseOpen.get())
                                         .add("reason", chunkFailReason));
-                                if (part.getUploadRetryCount() < 2) {
-                                    Thread.sleep(5000);
-                                    uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                                if (part.getUploadRetryCount() < MULTIPART_RETRY_LIMIT) {
+                                    scheduleRetryEnqueue(room, part, filePath, 5000L, "CHUNK_UPLOAD_FAILED");
                                     log.info("[BLR] {}", LogKvs.event("Upload.Part.RetryScheduled")
                                             .add("roomId", room.getRoomId())
                                             .add("uname", room.getUname())
                                             .add("partId", part.getId())
                                             .add("historyId", part.getHistoryId())
                                             .add("retry", part.getUploadRetryCount())
-                                            .add("maxRetry", 2)
+                                            .add("nextAttemptMultipart", part.getUploadRetryCount() < MULTIPART_RETRY_LIMIT)
+                                            .add("maxRetry", MULTIPART_RETRY_LIMIT)
                                             .add("filePath", filePath));
                                 } else {
                                     part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
@@ -765,52 +1028,217 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException(part.getFilePath() + "===并发上传失败，存在异常");
                             }
                             //通知服务器上传完成
-                            Map<String, String> completeParams = new HashMap<>();
-                            completeParams.put("profile", uploadEnums.getProfile());
-                            completeParams.put("name", uploadFile.getName());
-                            completeParams.put("uploadId", uploadBean.getUpload_id());
-                            completeParams.put("biz_id", String.valueOf(preUploadBean.getBiz_id()));
-                            Map<String, Object> bodyMap = new LinkedHashMap<>(1);
-                            List<Map<String, String>> chunkMaps = new ArrayList<>((int)chunkNum);
-                            for (int i = 1; i <= chunkNum; i++) {
-                                Map<String, String> partMap = new LinkedHashMap<>(2);
-                                partMap.put("partNumber", String.valueOf(i));
-                                partMap.put("eTag", "etag");
-                                chunkMaps.add(partMap);
-                            }
-                            bodyMap.put("parts", chunkMaps);
-                            CompleteUploadRequest completeUploadRequest = new CompleteUploadRequest(preUploadBean, completeParams, JSON.toJSONString(bodyMap));
-
                             try {
-                                CompleteUploadBean completeUploadBean = null;
-                                for (int i = 0; i < 5; i++) {
-                                    try {
-                                        completeUploadBean = completeUploadRequest.getPojo();
-                                    } catch (Exception e) {
-                                        if (completeUploadBean == null) {
-                                            completeUploadBean = new CompleteUploadBean();
+                                boolean completeSuccess = false;
+                                String completeResponse = null;
+                                String serverFileName = resolveServerFileName(preUploadBean, uploadBean, uploadFile.getName());
+                                if (useMultipartFlow) {
+                                    serverFileName = resolveFileNameFromUposUri(multipartUri, serverFileName);
+                                }
+
+                                if (useMultipartFlow) {
+                                    if (multipartEtags.size() < effectiveChunkNum) {
+                                        throw new RuntimeException("multipart etag missing, expected=" + effectiveChunkNum + ", actual=" + multipartEtags.size());
+                                    }
+
+                                    List<Map<String, Object>> partPayload = new ArrayList<>((int) effectiveChunkNum);
+                                    for (int i = 1; i <= effectiveChunkNum; i++) {
+                                        String etag = multipartEtags.get(i);
+                                        if (StringUtils.isBlank(etag)) {
+                                            throw new RuntimeException("multipart etag missing for part " + i);
                                         }
-                                        log.error("[BLR] {}", LogKvs.event("Upload.Complete.Retry")
+                                        Map<String, Object> partMap = new LinkedHashMap<>(2);
+                                        partMap.put("part_number", i);
+                                        partMap.put("etag", etag);
+                                        partPayload.add(partMap);
+                                    }
+
+                                    String completeProfile = resolveMultipartProfile(preUploadBean, multipartProfile, multipartUri);
+                                    String completeSessionDigest = buildMultipartSessionDigest(
+                                            multipartUploadId,
+                                            multipartUri,
+                                            multipartToken,
+                                            multipartBizId,
+                                            completeProfile
+                                    );
+                                    String firstEtag = partPayload.isEmpty() ? "" : String.valueOf(partPayload.get(0).get("etag"));
+                                    String lastEtag = partPayload.isEmpty() ? "" : String.valueOf(partPayload.get(partPayload.size() - 1).get("etag"));
+                                    MultipartSessionValidator.CompleteValidation validation =
+                                            MultipartSessionValidator.validateCompleteContext(
+                                                    effectiveChunkNum,
+                                                    multipartUri,
+                                                    multipartToken,
+                                                    multipartBizId,
+                                                    completeProfile,
+                                                    multipartUploadId,
+                                                    multipartEtags,
+                                                    multipartSignedUploadIds,
+                                                    multipartSignedPartNumbers
+                                            );
+
+                                    log.info("[BLR] {}", LogKvs.event("Upload.MultipartComplete.PayloadSummary")
+                                            .add("roomId", room.getRoomId())
+                                            .add("uname", room.getUname())
+                                            .add("partId", part.getId())
+                                            .add("historyId", part.getHistoryId())
+                                            .add("retryCount", multipartRetryCount)
+                                            .add("retryLimit", MULTIPART_RETRY_LIMIT)
+                                            .add("nextRetryMultipart", multipartRetryCount + 1 < MULTIPART_RETRY_LIMIT)
+                                            .add("profile", completeProfile)
+                                            .add("bizId", multipartBizId)
+                                            .addIfNotBlank("initUploadId", multipartUploadId)
+                                            .add("parts", partPayload.size())
+                                            .add("chunkSize", effectiveChunkSize)
+                                            .add("expectedParts", effectiveChunkNum)
+                                            .add("uriPrefix", StringUtils.left(multipartUri, 32))
+                                            .addIfNotBlank("metaUposUri", multipartMetaUposUri)
+                                            .add("tokenLen", multipartToken == null ? 0 : multipartToken.length())
+                                            .add("firstEtagQuoted", StringUtils.startsWith(firstEtag, "\"") && StringUtils.endsWith(firstEtag, "\""))
+                                            .add("lastEtagQuoted", StringUtils.startsWith(lastEtag, "\"") && StringUtils.endsWith(lastEtag, "\""))
+                                            .add("signedUploadIdCount", validation.getSignedUploadIdCount())
+                                            .addIfNotBlank("signedUploadId", validation.getSignedUploadId())
+                                            .addIfNotBlank("inferredProfile", validation.getInferredProfile())
+                                            .addIfNotBlank("sessionDigest", completeSessionDigest));
+
+                                    if (!validation.isValid()) {
+                                        completeResponse = "multipart complete validation failed: " + validation.getReason();
+                                        log.error("[BLR] {}", LogKvs.event("Upload.MultipartComplete.ValidationFailed")
                                                 .add("roomId", room.getRoomId())
                                                 .add("uname", room.getUname())
                                                 .add("partId", part.getId())
                                                 .add("historyId", part.getHistoryId())
-                                                .add("attempt", i + 1)
-                                                .add("maxAttempt", 5)
-                                                .add("err", e.getMessage())
-                                                .add("ex", e.getClass().getSimpleName()), e);
+                                                .add("retryCount", multipartRetryCount)
+                                                .add("retryLimit", MULTIPART_RETRY_LIMIT)
+                                                .add("nextRetryMultipart", multipartRetryCount + 1 < MULTIPART_RETRY_LIMIT)
+                                                .add("parts", partPayload.size())
+                                                .add("signedUploadIdCount", validation.getSignedUploadIdCount())
+                                                .addIfNotBlank("signedUploadIds", validation.getSignedUploadIds())
+                                                .addIfNotBlank("initUploadId", multipartUploadId)
+                                                .addIfNotBlank("sessionDigest", completeSessionDigest)
+                                                .addIfNotBlank("reason", validation.getReason())
+                                                .add("willFallback", true));
+                                    } else {
+                                        MultipartCompleteRequest multipartCompleteRequest = new MultipartCompleteRequest(webCookie);
+                                        for (int i = 0; i < 5; i++) {
+                                            try {
+                                                JSONObject resp = multipartCompleteRequest.complete(
+                                                        multipartUri,
+                                                        multipartUploadId,
+                                                        multipartToken,
+                                                        multipartBizId,
+                                                        completeProfile,
+                                                        partPayload
+                                                );
+                                                completeResponse = resp != null ? resp.toJSONString() : null;
+                                                if (MultipartCompleteRequest.isSuccess(resp)) {
+                                                    completeSuccess = true;
+                                                    break;
+                                                }
+                                                // 403 是权限问题，继续重试通常只会消耗额度；409 先按对象存储合并延迟重试。
+                                                if (resp != null) {
+                                                    int code = resp.getIntValue("code");
+                                                    if (code == -403 || code == 403) {
+                                                        log.error("[BLR] {}", LogKvs.event("Upload.MultipartComplete.FatalError")
+                                                                .add("roomId", room.getRoomId())
+                                                                .add("uname", room.getUname())
+                                                                .add("partId", part.getId())
+                                                                .add("historyId", part.getHistoryId())
+                                                            .add("retryCount", multipartRetryCount)
+                                                            .add("retryLimit", MULTIPART_RETRY_LIMIT)
+                                                            .add("nextRetryMultipart", multipartRetryCount + 1 < MULTIPART_RETRY_LIMIT)
+                                                                .add("code", code)
+                                                                .add("message", resp.getString("message"))
+                                                                .addIfNotBlank("sessionDigest", completeSessionDigest)
+                                                                .add("willFallback", true));
+                                                        break;
+                                                    }
+                                                    if (code == -409 || code == 409) {
+                                                        log.warn("[BLR] {}", LogKvs.event("Upload.MultipartComplete.ConflictRetry")
+                                                                .add("roomId", room.getRoomId())
+                                                                .add("uname", room.getUname())
+                                                                .add("partId", part.getId())
+                                                                .add("historyId", part.getHistoryId())
+                                                                .add("attempt", i + 1)
+                                                                .add("maxAttempt", 5)
+                                                                .add("code", code)
+                                                                .add("message", resp.getString("message"))
+                                                                .addIfNotBlank("sessionDigest", completeSessionDigest)
+                                                                .add("willFallback", i >= 4));
+                                                    }
+                                                }
+                                                // 重试间隔，避免疯狂重试
+                                                if (i < 4) {
+                                                    Thread.sleep(1000);
+                                                }
+                                            } catch (Exception e) {
+                                                log.error("[BLR] {}", LogKvs.event("Upload.MultipartComplete.Retry")
+                                                        .add("roomId", room.getRoomId())
+                                                        .add("uname", room.getUname())
+                                                        .add("partId", part.getId())
+                                                        .add("historyId", part.getHistoryId())
+                                                        .add("attempt", i + 1)
+                                                        .add("maxAttempt", 5)
+                                                        .add("err", e.getMessage())
+                                                        .add("ex", e.getClass().getSimpleName()), e);
+                                            }
+                                        }
                                     }
-                                    if (completeUploadBean != null && completeUploadBean.getOK() != null && completeUploadBean.getOK() == 1) {
-                                        break;
+                                } else {
+                                    Map<String, String> completeParams = new HashMap<>();
+                                    completeParams.put("profile", uploadEnums.getProfile());
+                                    completeParams.put("name", uploadFile.getName());
+                                    completeParams.put("uploadId", uploadBean.getUpload_id());
+                                    completeParams.put("biz_id", String.valueOf(preUploadBean.getBiz_id()));
+                                    Map<String, Object> bodyMap = new LinkedHashMap<>(1);
+                                    List<Map<String, String>> chunkMaps = new ArrayList<>((int) effectiveChunkNum);
+                                    for (int i = 1; i <= effectiveChunkNum; i++) {
+                                        Map<String, String> partMap = new LinkedHashMap<>(2);
+                                        partMap.put("partNumber", String.valueOf(i));
+                                        partMap.put("eTag", "etag");
+                                        chunkMaps.add(partMap);
+                                    }
+                                    bodyMap.put("parts", chunkMaps);
+                                    CompleteUploadRequest completeUploadRequest = new CompleteUploadRequest(preUploadBean, completeParams, JSON.toJSONString(bodyMap));
+                                    CompleteUploadBean completeUploadBean = null;
+                                    for (int i = 0; i < 5; i++) {
+                                        try {
+                                            completeUploadBean = completeUploadRequest.getPojo();
+                                        } catch (Exception e) {
+                                            if (completeUploadBean == null) {
+                                                completeUploadBean = new CompleteUploadBean();
+                                            }
+                                            log.error("[BLR] {}", LogKvs.event("Upload.Complete.Retry")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("uname", room.getUname())
+                                                    .add("partId", part.getId())
+                                                    .add("historyId", part.getHistoryId())
+                                                    .add("attempt", i + 1)
+                                                    .add("maxAttempt", 5)
+                                                    .add("err", e.getMessage())
+                                                    .add("ex", e.getClass().getSimpleName()), e);
+                                        }
+                                        if (completeUploadBean != null && completeUploadBean.getOK() != null && completeUploadBean.getOK() == 1) {
+                                            completeSuccess = true;
+                                            completeResponse = JSON.toJSONString(completeUploadBean);
+                                            break;
+                                        }
                                     }
                                 }
 
-                                if (completeUploadBean != null && completeUploadBean.getOK() != null && completeUploadBean.getOK() == 1) {
+                                if (completeSuccess) {
                                     part = partRepository.findById(part.getId()).get();
                                     part.setUpload(true);
-                                    part.setFileName(uploadBean.getFileName());
+                                    part.setFileName(serverFileName);
                                     part.setCid(preUploadBean.getBiz_id());
                                     part.setUpdateTime(LocalDateTime.now());
+                                    part.setUploadFlow(useMultipartFlow ? "MULTIPART" : "LEGACY");
+                                    if (configuredMultipartEnabled && !useMultipartFlow) {
+                                        part.setUploadFlowFallback(true);
+                                        part.setUploadFlowFallbackReason(StringUtils.defaultIfBlank(uploadFlowFallbackReason, "multipart fallback to legacy"));
+                                    } else {
+                                        part.setUploadFlowFallback(false);
+                                        part.setUploadFlowFallbackReason(null);
+                                    }
                                     part = partRepository.save(part);
                                     //如果配置上传完成删除，则删除文件
                                     if (room.getDeleteType() == 1) {
@@ -899,7 +1327,48 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         PushNotifyClient.sendParallel(room, message);
                                     }
                                 } else {
-                                    throw new RuntimeException("合并上传文件失败：" + JSON.toJSONString(completeUploadBean));
+                                    // 合并失败，检查是否可以重试
+                                    int currentRetry = part.getUploadRetryCount();
+                                    int nextRetryCount = currentRetry + 1;
+                                    boolean nextAttemptMultipart = nextRetryCount < MULTIPART_RETRY_LIMIT;
+                                    if (currentRetry < MULTIPART_RETRY_LIMIT) {
+                                        // 还有重试次数，先再跑一次 multipart；再失败才回退 legacy
+                                        part.setUploadRetryCount(nextRetryCount);
+                                        if (!nextAttemptMultipart) {
+                                            part.setUploadFlowFallback(true);
+                                            part.setUploadFlowFallbackReason("multipart complete failed, will fallback to legacy");
+                                        }
+                                        part = partRepository.save(part);
+                                        TaskUtil.partUploadTask.remove(part.getId());
+                                        uploadProgressTracker.markFailed(part.getId(), nextAttemptMultipart
+                                            ? "multipart complete failed, will retry multipart session"
+                                            : "multipart complete failed, will fallback to legacy");
+                                        log.warn("[BLR] {}", LogKvs.event("Upload.MultipartComplete.WillRetry")
+                                                .add("roomId", room.getRoomId())
+                                                .add("uname", room.getUname())
+                                                .add("partId", part.getId())
+                                                .add("historyId", part.getHistoryId())
+                                                .add("filePath", filePath)
+                                                .add("currentRetry", currentRetry)
+                                                .add("nextRetry", nextRetryCount)
+                                                .add("retryLimit", MULTIPART_RETRY_LIMIT)
+                                                .add("nextAttemptMultipart", nextAttemptMultipart)
+                                                .add("response", completeResponse)
+                                                .addIfNotBlank("sessionDigest", multipartSessionDigest)
+                                                .add("willUseLegacyFlow", !nextAttemptMultipart)
+                                                .addStageCostMs("total", uploadStartNs));
+                                        scheduleRetryEnqueue(room, part, filePath, 3000L, "MULTIPART_COMPLETE_FAILED");
+                                    } else {
+                                        // 超过最大重试次数，标记为真正失败
+                                        part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                                        String errorMsg = "multipart complete 已重试多次仍失败，放弃上传: " + filePath;
+                                        part.setDeleteFailReason(errorMsg);
+                                        part.setDeleteFailType("MULTIPART_COMPLETE_FAILED");
+                                        partRepository.save(part);
+                                        uploadProgressTracker.markFailed(part.getId(), errorMsg);
+                                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
+                                        throw new RuntimeException("合并上传文件失败（已重试）：" + completeResponse);
+                                    }
                                 }
 
                             } catch (Exception e) {
@@ -942,11 +1411,20 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
             }
         } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("Upload.ServiceError")
+            UploadRetryLogPolicy.LogDecision logDecision = UploadRetryLogPolicy.recoverable(
+                    "Upload.ServiceError:" + OS + ":" + (part == null ? "unknown" : part.getId()));
+            LogKvs serviceErrorLog = LogKvs.event("Upload.ServiceError")
                     .add("os", OS)
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName())
-                    .addStageCostMs("total", uploadStartNs), e);
+                    .add("recoverableCount", logDecision.count())
+                    .add("warnThreshold", logDecision.warnThreshold())
+                    .addStageCostMs("total", uploadStartNs);
+            if (logDecision.warn()) {
+                log.warn("[BLR] {}", serviceErrorLog, e);
+            } else {
+                log.info("[BLR] {}", serviceErrorLog);
+            }
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
             uploadProgressTracker.remove(part.getId());
@@ -1009,5 +1487,163 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
             return true;
         }
         return h.contains("cdn");
+    }
+
+    private String buildMultipartUploadId(Long uid, Long partId) {
+        long now = System.currentTimeMillis();
+        String uidPart = uid == null ? "0" : String.valueOf(uid);
+        String partSuffix = partId == null ? "0" : String.valueOf(Math.abs(partId % 10000));
+        return uidPart + "_" + now + "_" + partSuffix;
+    }
+
+    private String extractMultipartUploadToken(PreUploadBean preUploadBean) {
+        if (preUploadBean == null) {
+            return null;
+        }
+        String raw = preUploadBean.getRawUptoken();
+        if (StringUtils.isNotBlank(raw)) {
+            return raw;
+        }
+        String withPrefix = preUploadBean.getUptoken();
+        if (StringUtils.isBlank(withPrefix)) {
+            return null;
+        }
+        return StringUtils.removeStart(withPrefix, "UpToken ").trim();
+    }
+
+    private void scheduleRetryEnqueue(RecordRoom room,
+                                      RecordHistoryPart part,
+                                      String filePath,
+                                      long initialDelayMs,
+                                      String reason) {
+        if (room == null || part == null) {
+            return;
+        }
+        CompletableFuture.runAsync(
+                () -> tryRetryEnqueue(room, part.getId(), filePath, reason, 1),
+                CompletableFuture.delayedExecutor(Math.max(initialDelayMs, 0L), TimeUnit.MILLISECONDS)
+        );
+    }
+
+    private void tryRetryEnqueue(RecordRoom room,
+                                 Long partId,
+                                 String filePath,
+                                 String reason,
+                                 int attempt) {
+        if (room == null || partId == null) {
+            return;
+        }
+        try {
+            Optional<RecordHistoryPart> latestOpt = partRepository.findById(partId);
+            if (latestOpt.isEmpty()) {
+                return;
+            }
+            RecordHistoryPart latestPart = latestOpt.get();
+            boolean accepted = uploadServiceFactory
+                    .getUploadService(room.getLine())
+                    .asyncUploadIfNeeded(latestPart);
+            log.info("[BLR] {}", LogKvs.event("Upload.Part.RetryEnqueueAttempt")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("partId", latestPart.getId())
+                    .add("historyId", latestPart.getHistoryId())
+                    .add("attempt", attempt)
+                    .add("accepted", accepted)
+                    .addIfNotBlank("reason", reason)
+                    .addIfNotBlank("filePath", filePath));
+            if (!accepted && attempt < 4) {
+                CompletableFuture.runAsync(
+                        () -> tryRetryEnqueue(room, partId, filePath, reason, attempt + 1),
+                        CompletableFuture.delayedExecutor(1500L, TimeUnit.MILLISECONDS)
+                );
+            }
+        } catch (Exception enqueueEx) {
+            log.warn("[BLR] {}", LogKvs.event("Upload.Part.RetryEnqueueError")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("partId", partId)
+                    .add("attempt", attempt)
+                    .addIfNotBlank("reason", reason)
+                    .addIfNotBlank("filePath", filePath)
+                    .addIfNotBlank("err", enqueueEx.getMessage())
+                    .add("ex", enqueueEx.getClass().getSimpleName()), enqueueEx);
+            if (attempt < 4) {
+                CompletableFuture.runAsync(
+                        () -> tryRetryEnqueue(room, partId, filePath, reason, attempt + 1),
+                        CompletableFuture.delayedExecutor(1500L, TimeUnit.MILLISECONDS)
+                );
+            }
+        }
+    }
+
+    private String buildMultipartSessionDigest(String uploadId,
+                                               String multipartUri,
+                                               String uploadToken,
+                                               long bizId,
+                                               String profile) {
+        if (StringUtils.isBlank(uploadId)
+                && StringUtils.isBlank(multipartUri)
+                && StringUtils.isBlank(uploadToken)
+                && bizId <= 0
+                && StringUtils.isBlank(profile)) {
+            return "";
+        }
+        String normalizedProfile = MultipartSessionValidator.preferProfileByUri(profile, multipartUri);
+        String raw = shortHash(uploadId)
+                + ":"
+                + shortHash(multipartUri)
+                + ":"
+                + shortHash(uploadToken)
+                + ":"
+                + bizId
+                + ":"
+                + shortHash(normalizedProfile);
+        return Integer.toHexString(raw.hashCode());
+    }
+
+    private String shortHash(String value) {
+        if (StringUtils.isBlank(value)) {
+            return "";
+        }
+        return Integer.toHexString(StringUtils.trim(value).hashCode());
+    }
+
+    private String resolveMultipartProfile(PreUploadBean preUploadBean, String fallbackProfile, String multipartUri) {
+        // 优先锁定 multipart/new 返回的 profile，保证同一会话 init/part/complete 一致。
+        String candidateProfile = StringUtils.trimToNull(fallbackProfile);
+        if (StringUtils.isBlank(candidateProfile) && preUploadBean != null && StringUtils.isNotBlank(preUploadBean.getPut_query())) {
+            String putQuery = preUploadBean.getPut_query();
+            for (String kv : putQuery.split("&")) {
+                String[] pair = kv.split("=", 2);
+                if (pair.length == 2 && "profile".equals(pair[0]) && StringUtils.isNotBlank(pair[1])) {
+                    String profile = java.net.URLDecoder.decode(pair[1], java.nio.charset.StandardCharsets.UTF_8);
+                    if (StringUtils.isNotBlank(profile)) {
+                        candidateProfile = profile;
+                        break;
+                    }
+                }
+            }
+        }
+        return MultipartSessionValidator.preferProfileByUri(candidateProfile, multipartUri);
+    }
+
+    private String resolveServerFileName(PreUploadBean preUploadBean, LineUploadBean uploadBean, String fallback) {
+        if (uploadBean != null && StringUtils.isNotBlank(uploadBean.getKey())) {
+            return uploadBean.getFileName();
+        }
+        if (preUploadBean != null && StringUtils.isNotBlank(preUploadBean.getUpos_uri())) {
+            return resolveFileNameFromUposUri(preUploadBean.getUpos_uri(), fallback);
+        }
+        return fallback;
+    }
+
+    private String resolveFileNameFromUposUri(String uposUri, String fallback) {
+        if (StringUtils.isBlank(uposUri)) {
+            return fallback;
+        }
+        int slash = uposUri.lastIndexOf('/');
+        String filename = slash >= 0 ? uposUri.substring(slash + 1) : uposUri;
+        int dot = filename.lastIndexOf('.');
+        return dot > 0 ? filename.substring(0, dot) : filename;
     }
 }

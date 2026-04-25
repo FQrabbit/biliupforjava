@@ -92,6 +92,13 @@ public class RecordHistory {
     // 真正异常的分P数量（排除低于阈值SKIPPED_THRESHOLD和手动跳过MANUAL_SKIP的分P）
     @Transient
     private int abnormalPartCount;
+
+    @Transient
+    private int uploadFlowFallbackCount;
+
+    @Transient
+    private List<String> uploadFlowFallbackReasons;
+
     // 是否处于等待投稿状态（分P已上传完毕，等待合并间隔时间）
     @Transient
     private boolean waitingForPublish;

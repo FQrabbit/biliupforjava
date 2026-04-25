@@ -21,6 +21,7 @@ import top.sshh.bililiverecoder.util.netty.UploadThrottlePolicy;
 import java.io.RandomAccessFile;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -72,6 +73,14 @@ public class NettyUploadClient {
      * @return 响应内容
      */
     public static String put(String url, Map<String, String> headers, Map<String, String> params, RandomAccessFile file, long start, long end, long timeoutMs, long writeLimit) {
+        UploadResponse response = putForResponse(url, headers, params, file, start, end, timeoutMs, writeLimit);
+        if (response.getStatusCode() == 200) {
+            return response.getContent();
+        }
+        throw new RuntimeException("Upload failed: " + response.getStatusCode() + ", " + response.getContent());
+    }
+
+    public static UploadResponse putForResponse(String url, Map<String, String> headers, Map<String, String> params, RandomAccessFile file, long start, long end, long timeoutMs, long writeLimit) {
         long effectiveWriteLimit = Math.max(writeLimit, 0L);
         // 更新全局写限速值
         trafficHandler.setWriteLimit(effectiveWriteLimit);
@@ -101,7 +110,7 @@ public class NettyUploadClient {
         final int finalPort = port;
         boolean ssl = "https".equalsIgnoreCase(scheme);
 
-        CompletableFuture<String> future = new CompletableFuture<>();
+        CompletableFuture<UploadResponse> future = new CompletableFuture<>();
         Channel ch = null;
         boolean transferStarted = false;
 
@@ -146,11 +155,11 @@ public class NettyUploadClient {
                                 @Override
                                 protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) {
                                     String content = msg.content().toString(io.netty.util.CharsetUtil.UTF_8);
-                                    if (msg.status().code() == 200) {
-                                        future.complete(content);
-                                    } else {
-                                        future.completeExceptionally(new RuntimeException("Upload failed: " + msg.status() + ", " + content));
+                                    Map<String, String> responseHeaders = new LinkedHashMap<>();
+                                    for (Map.Entry<String, String> header : msg.headers()) {
+                                        responseHeaders.put(header.getKey(), header.getValue());
                                     }
+                                    future.complete(new UploadResponse(msg.status().code(), content, responseHeaders));
                                     ctx.close();
                                 }
 
@@ -223,7 +232,7 @@ public class NettyUploadClient {
         }
     }
 
-    private static void scheduleLowSpeedCheck(Channel ch, ChannelTrafficShapingHandler channelTrafficHandler, AtomicLong lowSpeedStartMs, AtomicLong transferStartMs, SlowSpeedJudge slowSpeedJudge, long writeLimit, CompletableFuture<String> future) {
+    private static void scheduleLowSpeedCheck(Channel ch, ChannelTrafficShapingHandler channelTrafficHandler, AtomicLong lowSpeedStartMs, AtomicLong transferStartMs, SlowSpeedJudge slowSpeedJudge, long writeLimit, CompletableFuture<?> future) {
         long intervalMs = lowSpeedCheckIntervalMs.get();
         ch.eventLoop().schedule(() -> {
             if (!ch.isActive()) {
@@ -289,5 +298,41 @@ public class NettyUploadClient {
             }
             scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
         }, intervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    public static class UploadResponse {
+        private final int statusCode;
+        private final String content;
+        private final Map<String, String> headers;
+
+        public UploadResponse(int statusCode, String content, Map<String, String> headers) {
+            this.statusCode = statusCode;
+            this.content = content;
+            this.headers = headers == null ? Map.of() : Map.copyOf(headers);
+        }
+
+        public int getStatusCode() {
+            return statusCode;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public Map<String, String> getHeaders() {
+            return headers;
+        }
+
+        public String getHeader(String name) {
+            if (name == null || headers == null || headers.isEmpty()) {
+                return null;
+            }
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(name)) {
+                    return entry.getValue();
+                }
+            }
+            return null;
+        }
     }
 }

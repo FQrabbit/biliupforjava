@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.jayway.jsonpath.JsonPath;
 import com.zjiecode.wxpusher.client.bean.Message;
 import jakarta.annotation.PostConstruct;
@@ -657,6 +658,19 @@ public class RecordBiliPublishService {
             }
             ensureUploadCostMs = (System.nanoTime() - ensureUploadStartNs) / 1_000_000L;
             } catch (RuntimeException e) {
+                if (e instanceof PartUploadWaitTimeoutException || (e.getMessage() != null && e.getMessage().startsWith("UPLOAD_WAIT_TIMEOUT"))) {
+                    if (ensureUploadStartNs > 0L && ensureUploadCostMs < 0L) {
+                        ensureUploadCostMs = (System.nanoTime() - ensureUploadStartNs) / 1_000_000L;
+                    }
+                    log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.Deferred")
+                            .add("historyId", history.getId())
+                            .add("roomId", history.getRoomId())
+                            .addIfNotBlank("title", history.getTitle())
+                            .addIfNotBlank("err", e.getMessage())
+                            .addStageField("ensureUpload", "costMs", ensureUploadCostMs));
+                    TaskUtil.publishTask.remove(history.getId());
+                    return false;
+                }
                 if (e.getMessage() != null && e.getMessage().startsWith("UPLOAD_GATEWAY_ERROR")) {
                     log.error("[BLR] {}", LogKvs.event("Publish.GatewayErrorPause")
                             .add("historyId", history.getId())
@@ -788,6 +802,9 @@ public class RecordBiliPublishService {
                         uploadPart = partRepository.save(uploadPart);
                         dto.setDesc("");
                         dto.setFilename(uploadPart.getFileName());
+                        if (uploadPart.getCid() != null && uploadPart.getCid() > 0) {
+                            dto.setCid(uploadPart.getCid());
+                        }
                         dtos.add(dto);
                     }
                     String coverUrl = room.getCoverUrl();
@@ -924,6 +941,35 @@ public class RecordBiliPublishService {
                     }
                     videoUploadDto.setVideos(dtos);
                     videoUploadDto.setTag(this.template(room.getTags(), map).getDesc());
+                    log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.UploadPartsReady")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", history.getId())
+                            .add("partCount", uploadParts.size())
+                            .add("videoCount", dtos.size())
+                            .add("multipartPartCount", countUploadFlow(uploadParts, "MULTIPART"))
+                            .add("legacyPartCount", countUploadFlow(uploadParts, "LEGACY"))
+                            .add("unknownFlowPartCount", countUnknownUploadFlow(uploadParts))
+                            .add("fallbackPartCount", countUploadFlowFallback(uploadParts))
+                            .addIfNotBlank("historyPartSummary", summarizePublishParts(uploadParts)));
+                    if (log.isDebugEnabled()) {
+                        log.debug("[BLR] {}", LogKvs.event("Publish.WebPublish.PayloadDebug")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", history.getId())
+                                .add("partCount", uploadParts.size())
+                                .add("videoCount", dtos.size())
+                                .add("tid", videoUploadDto.getTid())
+                                .add("copyright", videoUploadDto.getCopyright())
+                                .add("isOnlySelf", videoUploadDto.getIs_only_self())
+                                .add("noDisturbance", videoUploadDto.getNo_disturbance())
+                                .addIfNotBlank("historyPartSummary", summarizePublishParts(uploadParts))
+                                .addIfNotBlank("videoSummary", summarizePublishVideos(dtos))
+                                .addIfNotBlank("publishTitle", abbreviateForLog(videoUploadDto.getTitle(), 80))
+                                .addIfNotBlank("publishTag", abbreviateForLog(videoUploadDto.getTag(), 80))
+                                .addIfNotBlank("cover", abbreviateForLog(videoUploadDto.getCover(), 120))
+                                .addIfNotBlank("source", abbreviateForLog(videoUploadDto.getSource(), 120)));
+                    }
                     String uploadRes = null;
                     try {
                         webPublishStartNs = System.nanoTime();
@@ -1000,11 +1046,39 @@ public class RecordBiliPublishService {
                                         .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
                             }
                         }
-                        String bvid = JSON.parseObject(uploadRes).getJSONObject("data").getString("bvid");
-                        String aid = JSON.parseObject(uploadRes).getJSONObject("data").getString("aid");
+                        JSONObject publishRoot = parseJsonObject(uploadRes);
+                        JSONObject publishData = publishRoot == null ? null : publishRoot.getJSONObject("data");
+                        log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Parsed")
+                                .add("roomId", room.getRoomId())
+                                .add("uname", room.getUname())
+                                .add("historyId", history.getId())
+                                .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                                .add("code", publishRoot == null ? null : publishRoot.getInteger("code"))
+                                .addIfNotBlank("message", publishRoot == null ? null : publishRoot.getString("message"))
+                                .add("hasData", publishData != null)
+                                .addIfNotBlank("rootKeys", publishRoot == null ? "" : String.join(",", publishRoot.keySet()))
+                                .addIfNotBlank("dataKeys", publishData == null ? "" : String.join(",", publishData.keySet()))
+                                .addIfNotBlank("respSnippet", abbreviatePublishResponse(uploadRes, 320)));
+                        if (publishData == null) {
+                            Integer publishCode = publishRoot == null ? null : publishRoot.getInteger("code");
+                            String publishMessage = publishRoot == null ? null : publishRoot.getString("message");
+                            log.warn("[BLR] {}", LogKvs.event("Publish.WebPublish.MissingData")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("historyId", history.getId())
+                                    .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                                    .add("code", publishCode)
+                                    .addIfNotBlank("message", publishMessage)
+                                    .addIfNotBlank("respSnippet", abbreviatePublishResponse(uploadRes, 320)));
+                            throw new RuntimeException("webPublish failed: code=" + publishCode
+                                    + ", message=" + publishMessage
+                                    + ", resp=" + abbreviatePublishResponse(uploadRes, 320));
+                        }
+                        String bvid = publishData == null ? null : publishData.getString("bvid");
+                        String aid = publishData == null ? null : publishData.getString("aid");
                         if (StringUtils.isBlank(bvid) || StringUtils.isBlank(aid)) {
                             // 检测是否是时间戳跳变错误(code:21588)，如果是则放弃该投稿
-                            if (uploadRes.contains("21588") || uploadRes.contains("时间跳跃") || uploadRes.contains("时间戳")) {
+                            if (StringUtils.contains(uploadRes, "21588") || StringUtils.contains(uploadRes, "时间跳跃") || StringUtils.contains(uploadRes, "时间戳")) {
                                 log.error("[BLR] {}", LogKvs.event("Publish.TimestampJump.GiveUpHistory")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
@@ -1282,13 +1356,14 @@ public class RecordBiliPublishService {
                 
                 long elapsedMs = System.currentTimeMillis() - startTime;
                 if (elapsedMs > timeoutMs) {
-                    log.error("[BLR] {}", LogKvs.event("Publish.PartUpload.Timeout")
+                    log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.Deferred")
                             .add("historyId", part.getHistoryId())
                             .add("partId", part.getId())
                             .add("roomId", part.getRoomId())
                             .add("timeoutMinutes", timeoutMinutes)
                             .add("elapsedMs", elapsedMs));
-                    throw new RuntimeException("UPLOAD_WAIT_TIMEOUT: 分P上传超时，超过" + timeoutMinutes + "分钟未完成");
+                    throw new PartUploadWaitTimeoutException(part.getHistoryId(), part.getId(),
+                            "UPLOAD_WAIT_TIMEOUT: 分P仍在上传，等待超过" + timeoutMinutes + "分钟，本轮投稿延后");
                 }
             }
         } catch (InterruptedException e) {
@@ -1329,11 +1404,12 @@ public class RecordBiliPublishService {
                 throw new RuntimeException("UPLOAD_INTERRUPTED", e);
             }
         }
-        log.warn("[BLR] {}", LogKvs.event("Publish.PartUpload.WaitTimeout")
+        log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.Deferred")
                 .add("historyId", part.getHistoryId())
                 .add("partId", part.getId())
                 .add("timeoutMs", timeoutMs));
-        throw new RuntimeException("UPLOAD_WAIT_TIMEOUT");
+        throw new PartUploadWaitTimeoutException(part.getHistoryId(), part.getId(),
+                "UPLOAD_WAIT_TIMEOUT: 等待队列中分P上传超过" + (timeoutMs / 60000L) + "分钟，本轮投稿延后");
     }
 
     public DescDto template(String template, Map<String, Object> map) {
@@ -1544,6 +1620,105 @@ public class RecordBiliPublishService {
             return name.substring(0, dot);
         }
         return name;
+    }
+
+    private JSONObject parseJsonObject(String raw) {
+        if (StringUtils.isBlank(raw)) {
+            return null;
+        }
+        try {
+            return JSON.parseObject(raw);
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.WebPublish.ParseFailed")
+                    .add("respLen", raw.length())
+                    .add("err", e.getMessage())
+                    .addIfNotBlank("respSnippet", abbreviatePublishResponse(raw, 320)));
+            return null;
+        }
+    }
+
+    private String abbreviatePublishResponse(String raw, int maxLen) {
+        if (StringUtils.isBlank(raw)) {
+            return "";
+        }
+        String normalized = raw.replace("\r", " ").replace("\n", " ");
+        if (normalized.length() <= maxLen) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLen) + "...";
+    }
+
+    private String summarizePublishParts(List<RecordHistoryPart> uploadParts) {
+        if (uploadParts == null || uploadParts.isEmpty()) {
+            return "";
+        }
+        return uploadParts.stream()
+                .limit(12)
+                .map(part -> "partId=" + part.getId()
+                        + ",upload=" + part.isUpload()
+                        + ",flow=" + StringUtils.defaultIfBlank(part.getUploadFlow(), "UNKNOWN")
+                        + ",fallback=" + part.isUploadFlowFallback()
+                        + ",fallbackReason=" + abbreviateForLog(part.getUploadFlowFallbackReason(), 40)
+                        + ",fileName=" + abbreviateForLog(part.getFileName(), 36)
+                        + ",cid=" + (part.getCid() == null ? "null" : part.getCid())
+                        + ",title=" + abbreviateForLog(part.getTitle(), 32))
+                .collect(Collectors.joining(" | "));
+    }
+
+    private long countUploadFlow(List<RecordHistoryPart> uploadParts, String uploadFlow) {
+        if (uploadParts == null || uploadParts.isEmpty()) {
+            return 0L;
+        }
+        return uploadParts.stream()
+                .filter(part -> StringUtils.equalsIgnoreCase(uploadFlow, part.getUploadFlow()))
+                .count();
+    }
+
+    private long countUnknownUploadFlow(List<RecordHistoryPart> uploadParts) {
+        if (uploadParts == null || uploadParts.isEmpty()) {
+            return 0L;
+        }
+        return uploadParts.stream()
+                .filter(part -> StringUtils.isBlank(part.getUploadFlow()))
+                .count();
+    }
+
+    private long countUploadFlowFallback(List<RecordHistoryPart> uploadParts) {
+        if (uploadParts == null || uploadParts.isEmpty()) {
+            return 0L;
+        }
+        return uploadParts.stream()
+                .filter(RecordHistoryPart::isUploadFlowFallback)
+                .count();
+    }
+
+    private String summarizePublishVideos(List<SingleVideoDto> videos) {
+        if (videos == null || videos.isEmpty()) {
+            return "";
+        }
+        return videos.stream()
+                .limit(12)
+                .map(video -> "fileName=" + abbreviateForLog(video.getFilename(), 36)
+                        + ",cid=" + (video.getCid() == null ? "null" : video.getCid())
+                        + ",title=" + abbreviateForLog(video.getTitle(), 32))
+                .collect(Collectors.joining(" | "));
+    }
+
+    private String abbreviateForLog(String value, int maxLen) {
+        if (StringUtils.isBlank(value)) {
+            return "";
+        }
+        String normalized = value.replace("\r", " ").replace("\n", " ");
+        if (normalized.length() <= maxLen) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLen) + "...";
+    }
+
+    private static final class PartUploadWaitTimeoutException extends RuntimeException {
+        private PartUploadWaitTimeoutException(Long historyId, Long partId, String message) {
+            super(message + " | historyId=" + historyId + " | partId=" + partId);
+        }
     }
 
     @Data
