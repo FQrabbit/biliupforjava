@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
+import top.sshh.bililiverecoder.util.TaskUtil;
 
 import java.nio.file.FileStore;
 import java.nio.file.Files;
@@ -28,10 +30,13 @@ public class WorkspaceUsageService {
     private int alertThresholdPercent;
 
     private final UploadUserSerialScheduler uploadUserSerialScheduler;
+    private final RecordHistoryPartRepository partRepository;
     private volatile WorkspaceUsageSnapshot latestSnapshot;
 
-    public WorkspaceUsageService(UploadUserSerialScheduler uploadUserSerialScheduler) {
+    public WorkspaceUsageService(UploadUserSerialScheduler uploadUserSerialScheduler,
+                                 RecordHistoryPartRepository partRepository) {
         this.uploadUserSerialScheduler = uploadUserSerialScheduler;
+        this.partRepository = partRepository;
     }
 
     @PostConstruct
@@ -78,7 +83,9 @@ public class WorkspaceUsageService {
         usedPercent = round2(usedPercent);
 
         boolean alert = usedPercent >= alertThresholdPercent;
-        int pendingUploadCount = uploadUserSerialScheduler.getTotalPendingUploadCount();
+        int pendingUploadCount = partRepository.countPendingUploadPartsWithHistoryUploadEnabled();
+        int queuedUploadCount = uploadUserSerialScheduler.getTotalPendingUploadCount();
+        int activeUploadCount = TaskUtil.partUploadTask.size();
         return WorkspaceUsageSnapshot.success(
                 normalizedWorkPath,
                 probePath.toString(),
@@ -88,7 +95,9 @@ public class WorkspaceUsageService {
                 usedPercent,
                 alertThresholdPercent,
                 alert,
-                pendingUploadCount
+                pendingUploadCount,
+                queuedUploadCount,
+                activeUploadCount
         );
     }
 
@@ -133,6 +142,8 @@ public class WorkspaceUsageService {
         private final int alertThresholdPercent;
         private final boolean alert;
         private final int pendingUploadCount;
+        private final int queuedUploadCount;
+        private final int activeUploadCount;
         private final String updatedAt;
         private final String error;
 
@@ -146,6 +157,8 @@ public class WorkspaceUsageService {
                                        int alertThresholdPercent,
                                        boolean alert,
                                        int pendingUploadCount,
+                                       int queuedUploadCount,
+                                       int activeUploadCount,
                                        String updatedAt,
                                        String error) {
             this.valid = valid;
@@ -158,6 +171,8 @@ public class WorkspaceUsageService {
             this.alertThresholdPercent = alertThresholdPercent;
             this.alert = alert;
             this.pendingUploadCount = pendingUploadCount;
+            this.queuedUploadCount = queuedUploadCount;
+            this.activeUploadCount = activeUploadCount;
             this.updatedAt = updatedAt;
             this.error = error;
         }
@@ -170,7 +185,9 @@ public class WorkspaceUsageService {
                                                       double usedPercent,
                                                       int alertThresholdPercent,
                                                       boolean alert,
-                                                      int pendingUploadCount) {
+                                                      int pendingUploadCount,
+                                                      int queuedUploadCount,
+                                                      int activeUploadCount) {
             return new WorkspaceUsageSnapshot(
                     true,
                     workPath,
@@ -182,6 +199,8 @@ public class WorkspaceUsageService {
                     alertThresholdPercent,
                     alert,
                     pendingUploadCount,
+                    queuedUploadCount,
+                    activeUploadCount,
                     LocalDateTime.now().format(TIME_FMT),
                     null
             );
@@ -198,6 +217,8 @@ public class WorkspaceUsageService {
                     0.0d,
                     alertThresholdPercent,
                     false,
+                    0,
+                    0,
                     0,
                     LocalDateTime.now().format(TIME_FMT),
                     error
@@ -216,6 +237,8 @@ public class WorkspaceUsageService {
                     alertThresholdPercent,
                     false,
                     0,
+                    0,
+                    0,
                     LocalDateTime.now().format(TIME_FMT),
                     "snapshot not ready"
             );
@@ -233,6 +256,8 @@ public class WorkspaceUsageService {
             map.put("alertThresholdPercent", alertThresholdPercent);
             map.put("alert", alert);
             map.put("pendingUploadCount", pendingUploadCount);
+            map.put("queuedUploadCount", queuedUploadCount);
+            map.put("activeUploadCount", activeUploadCount);
             map.put("updatedAt", updatedAt);
             map.put("error", error);
             return map;

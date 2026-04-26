@@ -59,6 +59,10 @@
                                 <span class="workspace-status-value">{{ workspaceStatus.pendingUploadCount || 0 }}</span>
                             </div>
                             <div class="workspace-status-item">
+                                <span class="workspace-status-label">上传队列</span>
+                                <span class="workspace-status-value">{{ workspaceStatus.queuedUploadCount || 0 }}</span>
+                            </div>
+                            <div class="workspace-status-item">
                                 <span class="workspace-status-label">检查时间</span>
                                 <span class="workspace-status-value">{{ workspaceStatus.updatedAt || '--' }}</span>
                             </div>
@@ -952,6 +956,9 @@
                 usedPercent: 0,
                 alertThresholdPercent: 95,
                 alert: false,
+                pendingUploadCount: 0,
+                queuedUploadCount: 0,
+                activeUploadCount: 0,
                 updatedAt: '',
                 error: ''
             },

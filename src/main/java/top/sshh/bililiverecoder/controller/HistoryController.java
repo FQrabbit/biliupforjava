@@ -812,29 +812,47 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
-            history.setStartTime(history.getStartTime().plusMinutes(1L));
+            LocalDateTime now = LocalDateTime.now();
+            if (history.getStartTime() != null) {
+                history.setStartTime(history.getStartTime().plusMinutes(1L));
+            }
+            history.setRecording(false);
+            history.setStreaming(false);
+            history.setUpload(true);
             history.setPublish(false);
             history.setAvId(null);
             history.setBvId(null);
             history.setSendReply(false);
+            history.setForceArchived(false);
             history.setPublishUserId(null);
             history.setCode(-1);
-            // 重置上传重试次数
             history.setUploadRetryCount(0);
-            historyRepository.save(history);
-            int preservedPartCount = 0;
+            history.setUpdateTime(now);
+            int resetPartCount = 0;
             List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : partList) {
-                // 只统计分P数量，保留每个分P的上传状态和上传产物。
-                preservedPartCount++;
+                part.setRecording(false);
+                part.setUpload(false);
+                part.setCid(null);
+                part.setFileName(null);
+                part.setUploadRetryCount(0);
+                part.setDeleteFailType(null);
+                part.setDeleteFailReason(null);
+                part.setUploadFlow(null);
+                part.setUploadFlowFallback(false);
+                part.setUploadFlowFallbackReason(null);
+                part.setUpdateTime(now);
+                partRepository.save(part);
+                resetPartCount++;
             }
+            historyRepository.save(history);
             result.put("type", "success");
-            result.put("msg", "状态更新成功");
+            result.put("msg", "状态已重置，将重新上传并投稿");
             log.info("[BLR] {}", LogKvs.event("History.UpdatePublishStatus.Success")
                     .add("historyId", id)
                     .add("roomId", history.getRoomId())
-                    .addRoundCount("preservedPart", preservedPartCount)
-                    .add("preserveUpload", true)
+                    .addRoundCount("resetPart", resetPartCount)
+                    .add("resetUpload", true)
                     .add("resetPublish", true)
                     .addStageCostMs("total", totalStartNs));
             return result;
