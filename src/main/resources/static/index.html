@@ -922,6 +922,7 @@
             retryTimer: null,
             connectionCheckTimer: null,
             currentVersion: window.BILIUPFORJAVA_VERSION || '读取版本号异常',
+            frontendBuildId: window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '',
             hasNewVersion: false,
             releaseUrl: 'https://github.com/FQrabbit/biliupforjava/releases',
             showThemePanel: false,
@@ -992,7 +993,7 @@
                     default:
                         return '';
                 }
-                return baseUrl;
+                return this.withFrontendBuildId(baseUrl);
             },
             isIframeReady: function() {
                 return (!this.pageLoading && !this.connectionError && this.connectionReady) || this.keepIframeOnDisconnect();
@@ -1373,35 +1374,70 @@
             },
             checkCacheVersion: function() {
                 var self = this;
+                var STORED_BUILD_KEY = 'biliup_frontend_build_id';
                 var STORED_VERSION_KEY = 'biliup_frontend_version';
 
                 ApiUtil.get('/api/version', function(data) {
                     var version = data.version || data;
+                    var buildId = data.buildId || version;
                     if (!version || version === 'unknown' || version === 'error') {
                         return;
                     }
-                    var storedVersion = localStorage.getItem(STORED_VERSION_KEY);
+                    if (!buildId || buildId === 'unknown' || buildId === 'error') {
+                        return;
+                    }
+                    var currentBuildId = self.frontendBuildId || '';
+                    var storedBuildId = localStorage.getItem(STORED_BUILD_KEY);
 
-                    if (!storedVersion) {
+                    if (!storedBuildId) {
+                        localStorage.setItem(STORED_BUILD_KEY, buildId);
                         localStorage.setItem(STORED_VERSION_KEY, version);
+                        self.frontendBuildId = currentBuildId || buildId;
                         return;
                     }
 
-                    if (storedVersion !== version) {
-                        localStorage.setItem(STORED_VERSION_KEY, version);
-                        self.needCacheRefresh = true;
-                        self.$message({
-                            message: '检测到前端版本已更新，正在刷新页面...',
-                            type: 'success',
-                            duration: 3000
-                        });
-                        setTimeout(function() {
-                            location.reload();
-                        }, 1500);
+                    var pageBuildIsOld = currentBuildId ? currentBuildId !== buildId : storedBuildId !== buildId;
+                    localStorage.setItem(STORED_BUILD_KEY, buildId);
+                    localStorage.setItem(STORED_VERSION_KEY, version);
+                    if (!pageBuildIsOld) {
+                        self.frontendBuildId = currentBuildId || buildId;
+                        return;
                     }
+                    self.frontendBuildId = buildId;
+                    self.needCacheRefresh = true;
+                    self.$message({
+                        message: '检测到前端版本已更新，正在刷新页面...',
+                        type: 'success',
+                        duration: 3000
+                    });
+                    setTimeout(function() {
+                        self.reloadWithFrontendBuildId(buildId);
+                    }, 1500);
                 }, function(xhr) {
                     console.warn('[CacheVersion] 获取版本失败:', xhr.status);
                 });
+            },
+            withFrontendBuildId: function(url, buildId) {
+                var id = buildId || this.frontendBuildId || window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '';
+                if (!id || !url || /^(https?:)?\/\//i.test(url) || /^data:/i.test(url) || /^blob:/i.test(url)) {
+                    return url;
+                }
+                var hash = '';
+                var hashIndex = url.indexOf('#');
+                if (hashIndex >= 0) {
+                    hash = url.substring(hashIndex);
+                    url = url.substring(0, hashIndex);
+                }
+                var parts = url.split('?');
+                var path = parts[0];
+                var query = parts.length > 1 ? parts.slice(1).join('?') : '';
+                var params = new URLSearchParams(query);
+                params.set('v', id);
+                return path + '?' + params.toString() + hash;
+            },
+            reloadWithFrontendBuildId: function(buildId) {
+                var target = this.withFrontendBuildId(window.location.pathname + window.location.search + window.location.hash, buildId);
+                window.location.replace(target);
             },
             compareVersions: function(v1, v2) {
                 var tokenize = function(v) {
