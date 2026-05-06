@@ -38,6 +38,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Stream;
 
 @Slf4j
 @RestController
@@ -193,61 +194,15 @@ public class HistoryController {
             return result;
         }
         RecordHistory history = historyOptional.get();
-        String baseDir = history.getFilePath();
-        if (StringUtils.isBlank(baseDir)) {
-            baseDir = workPath + "/" + history.getRoomId();
-        }
-        baseDir = baseDir.replace("\\", "/");
-        String normalizedWork = workPath.endsWith("/") ? workPath : (workPath + "/");
-        if (!baseDir.startsWith(normalizedWork)) {
-            result.put("items", List.of());
-            return result;
-        }
-        File dir = new File(baseDir);
-        if (!dir.exists() || !dir.isDirectory()) {
-            result.put("items", List.of());
-            return result;
-        }
-
         String kw = keyword == null ? null : keyword.trim().toLowerCase(java.util.Locale.ROOT);
         int max = Math.max(1, Math.min(limit, 500));
         String[] allowedExt = new String[]{".flv", ".mp4", ".ts", ".mkv", ".mov", ".m4v"};
 
-        File[] files = dir.listFiles();
-        if (files == null || files.length == 0) {
-            result.put("items", List.of());
-            return result;
-        }
-
         List<Map<String, Object>> items = new ArrayList<>();
-        for (File f : files) {
-            if (!f.isFile()) {
-                continue;
-            }
-            String name = f.getName();
-            if (name == null) {
-                continue;
-            }
-            String lower = name.toLowerCase(java.util.Locale.ROOT);
-            boolean ok = false;
-            for (String ext : allowedExt) {
-                if (lower.endsWith(ext)) {
-                    ok = true;
-                    break;
-                }
-            }
-            if (!ok) {
-                continue;
-            }
-            if (kw != null && !kw.isEmpty() && lower.indexOf(kw) < 0) {
-                continue;
-            }
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("name", name);
-            m.put("filePath", f.getPath().replace("\\", "/"));
-            m.put("size", f.length());
-            m.put("lastModified", f.lastModified());
-            items.add(m);
+        Set<String> seenPaths = new HashSet<>();
+        LinkedHashSet<String> searchRoots = resolveCandidateFileSearchRoots(history);
+        for (String root : searchRoots) {
+            collectCandidateFiles(new File(root), kw, allowedExt, items, seenPaths);
         }
 
         items.sort((a, b) -> Long.compare(((Number) b.getOrDefault("lastModified", 0)).longValue(), ((Number) a.getOrDefault("lastModified", 0)).longValue()));
@@ -257,6 +212,116 @@ public class HistoryController {
 
         result.put("items", items);
         return result;
+    }
+
+    private LinkedHashSet<String> resolveCandidateFileSearchRoots(RecordHistory history) {
+        LinkedHashSet<String> roots = new LinkedHashSet<>();
+        String historyDir = normalizeFsPath(history.getFilePath());
+        addCandidateSearchRoot(roots, historyDir);
+        if (StringUtils.isNotBlank(historyDir)) {
+            File parent = new File(historyDir).getParentFile();
+            if (parent != null) {
+                addCandidateSearchRoot(roots, parent.getPath());
+            }
+        }
+
+        String roomId = history.getRoomId();
+        if (StringUtils.isNotBlank(roomId)) {
+            addCandidateSearchRoot(roots, workPath + "/" + roomId);
+            RecordRoom room = roomRepository.findByRoomId(roomId);
+            if (room != null && StringUtils.isNotBlank(room.getUname())) {
+                addCandidateSearchRoot(roots, workPath + "/" + roomId + "-" + room.getUname());
+            }
+            File workDir = new File(workPath);
+            File[] roomDirs = workDir.listFiles(file -> file.isDirectory() && file.getName().startsWith(roomId + "-"));
+            if (roomDirs != null) {
+                for (File roomDir : roomDirs) {
+                    addCandidateSearchRoot(roots, roomDir.getPath());
+                }
+            }
+        }
+        return roots;
+    }
+
+    private void addCandidateSearchRoot(Set<String> roots, String dirPath) {
+        String normalized = normalizeFsPath(dirPath);
+        if (StringUtils.isBlank(normalized) || !isUnderWorkPath(normalized)) {
+            return;
+        }
+        String normalizedWork = normalizeFsPath(workPath);
+        if (normalizedWork != null
+                && normalized.equalsIgnoreCase(normalizedWork.endsWith("/") ? normalizedWork.substring(0, normalizedWork.length() - 1) : normalizedWork)) {
+            return;
+        }
+        File dir = new File(normalized);
+        if (dir.exists() && dir.isDirectory()) {
+            roots.add(dir.getPath().replace("\\", "/"));
+        }
+    }
+
+    private void collectCandidateFiles(File root,
+                                       String keyword,
+                                       String[] allowedExt,
+                                       List<Map<String, Object>> items,
+                                       Set<String> seenPaths) {
+        if (root == null || !root.exists() || !root.isDirectory()) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(root.toPath(), 4)) {
+            paths.filter(Files::isRegularFile).forEach(path -> {
+                File f = path.toFile();
+                String name = f.getName();
+                if (name == null) {
+                    return;
+                }
+                String lower = name.toLowerCase(java.util.Locale.ROOT);
+                if (!hasAllowedExt(lower, allowedExt)) {
+                    return;
+                }
+                if (keyword != null && !keyword.isEmpty() && lower.indexOf(keyword) < 0) {
+                    return;
+                }
+                String filePath = f.getPath().replace("\\", "/");
+                if (!seenPaths.add(filePath.toLowerCase(java.util.Locale.ROOT))) {
+                    return;
+                }
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", name);
+                m.put("filePath", filePath);
+                m.put("size", f.length());
+                m.put("lastModified", f.lastModified());
+                items.add(m);
+            });
+        } catch (IOException e) {
+            log.warn("[BLR] {}", LogKvs.event("History.CandidateFiles.ScanFailed")
+                    .add("root", root.getPath())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+    }
+
+    private boolean hasAllowedExt(String lowerName, String[] allowedExt) {
+        for (String ext : allowedExt) {
+            if (lowerName.endsWith(ext)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isUnderWorkPath(String path) {
+        String normalizedWork = normalizeFsPath(workPath);
+        String normalizedPath = normalizeFsPath(path);
+        if (StringUtils.isBlank(normalizedWork) || StringUtils.isBlank(normalizedPath)) {
+            return false;
+        }
+        normalizedWork = normalizedWork.endsWith("/") ? normalizedWork : (normalizedWork + "/");
+        normalizedPath = normalizedPath.endsWith("/") ? normalizedPath : (normalizedPath + "/");
+        return normalizedPath.toLowerCase(java.util.Locale.ROOT).startsWith(normalizedWork.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    private String normalizeFsPath(String path) {
+        return path == null ? null : path.replace("\\", "/");
     }
 
 

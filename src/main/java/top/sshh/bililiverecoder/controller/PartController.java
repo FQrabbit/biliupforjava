@@ -211,7 +211,10 @@ public class PartController {
             if (!isBlank(p.getDeleteFailType()) || p.getUploadRetryCount() >= 9999) {
                 issueCode = isBlank(p.getDeleteFailType()) ? "GIVE_UP" : p.getDeleteFailType();
                 issueMessage = isBlank(p.getDeleteFailReason()) ? "该分P已被标记为跳过/放弃上传" : p.getDeleteFailReason();
-                actionable = "SKIPPED_THRESHOLD".equals(issueCode) || "MANUAL_SKIP".equals(issueCode);
+                actionable = "SKIPPED_THRESHOLD".equals(issueCode)
+                        || "MANUAL_SKIP".equals(issueCode)
+                        || "FILE_MISSING".equals(issueCode)
+                        || p.getUploadRetryCount() >= 9999;
                 if (actionable && !historyPublished) {
                     actions.add("BIND_FILE");
                     actions.add("MARK_FINISHED");
