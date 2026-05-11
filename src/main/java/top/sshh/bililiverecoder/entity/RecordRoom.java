@@ -171,6 +171,8 @@ public class RecordRoom {
 
     private boolean streaming;
 
+    private Integer sortOrder;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;

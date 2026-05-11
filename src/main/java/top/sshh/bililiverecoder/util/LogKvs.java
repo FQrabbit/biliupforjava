@@ -516,6 +516,8 @@ public final class LogKvs {
         EVENT_ZH.put("Blrec.DanmakuCompleted.Processed", "blrec 事件: 弹幕文件完成，已触发解析");
         
         // 系统配置
+        EVENT_ZH.put("RoomConfig.Import.SystemConfigs.Success", "导入系统配置成功");
+        EVENT_ZH.put("RoomConfig.Import.LiveMsgs.Success", "导入弹幕数据成功");
         EVENT_ZH.put("SystemConfig.Init", "系统配置：初始化");
         EVENT_ZH.put("SystemConfig.CreateDefault", "系统配置：创建默认配置");
         EVENT_ZH.put("SystemConfig.Updated", "系统配置：配置已更新");

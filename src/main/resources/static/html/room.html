@@ -144,6 +144,14 @@
             <el-button class="modern-btn" type="primary" @click="addRoomDialog = true" icon="el-icon-plus">
                 添加房间
             </el-button>
+            <el-button v-if="viewMode === 'card' && !isSortMode" class="modern-btn" type="primary" plain @click="enterSortMode" icon="el-icon-rank">
+                调整顺序
+            </el-button>
+            <template v-if="viewMode === 'card' && isSortMode">
+                <el-button class="modern-btn" type="success" @click="saveSortOrder" icon="el-icon-check">保存排序</el-button>
+                <el-button class="modern-btn" plain @click="cancelSortMode" icon="el-icon-close">取消</el-button>
+                <el-button class="modern-btn" plain @click="resetSortOrder" icon="el-icon-refresh-left">重置默认</el-button>
+            </template>
             <el-tooltip content="导出用户后若程序继续运行，则用户登录状态会失效" effect="dark" placement="top">
                 <el-button class="modern-btn" type="primary" @click="exportConfigDialog=true" icon="el-icon-download">
                     导出配置
@@ -200,13 +208,26 @@
             <div class="room-card"
                  :class="{
                     'is-recording': item.recording,
-                    'is-streaming': item.streaming && !item.recording
+                    'is-streaming': item.streaming && !item.recording,
+                    'is-sorting': isSortMode,
+                    'is-dragging': draggingRoomId === item.id,
+                    'is-drag-over': dragOverRoomId === item.id
                  }"
+                 :draggable="isSortMode"
                  data-stagger
                  :style="{ animationDelay: index * 40 + 'ms' }"
-                      v-for="(item, index) in filteredTableData" :key="item.id" @click="showDetail(item)">
+                      v-for="(item, index) in filteredTableData" :key="item.id"
+                 @click="handleCardClick(item)"
+                 @dragstart.stop="handleSortDragStart(index, item, $event)"
+                 @dragover.prevent="handleSortDragOver(index, item, $event)"
+                 @drop.prevent.stop="handleSortDrop(index, item, $event)"
+                 @dragend="handleSortDragEnd">
                 
                 <div class="room-card-header">
+                    <div v-if="isSortMode" class="room-sort-handle" @click.stop title="拖动排序">
+                        <i class="el-icon-rank"></i>
+                        <span>{{ index + 1 }}</span>
+                    </div>
                     <div class="room-avatar">
                         <img v-if="!privacyMode && item.userCover" :src="buildImageProxyUrl(item.userCover)" referrerpolicy="no-referrer">
                         <span v-else>{{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}</span>
@@ -260,7 +281,7 @@
                     </div>
                 </div>
                 
-                <div class="room-card-footer" @click.stop>
+                <div v-if="!isSortMode" class="room-card-footer" @click.stop>
                     <el-button size="mini" type="primary" icon="el-icon-edit" @click="handleEdit(index, item)">编辑</el-button>
                     <el-button size="mini" icon="el-icon-chat-line-round" @click="handleEeditLiveMsg(index, item)">弹幕</el-button>
                     <el-button size="mini" type="danger" icon="el-icon-delete" @click="deleteRoom(item.id)">删除</el-button>
@@ -1028,8 +1049,13 @@
             <el-form-item :label-width="formLabelWidth" label="导出选项">
                 <el-checkbox v-model="exportConfig.exportRoom">导出房间信息</el-checkbox>
                 <el-checkbox v-model="exportConfig.exportUser">导出用户信息</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportSystemConfig">导出系统配置</el-checkbox>
                 <el-checkbox v-model="exportConfig.exportHistory">导出录制历史信息</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportLiveMsg" :disabled="!exportConfig.exportHistory" @change="handleExportLiveMsgChange">导出弹幕数据</el-checkbox>
             </el-form-item>
+            <div v-if="exportConfig.exportLiveMsg" class="export-live-msg-warning">
+                弹幕数据可能非常庞大，导出时可能耗时、卡顿、失败或生成很大的文件，请确认确实需要完整备份弹幕。
+            </div>
         </el-form>
         <div class="dialog-footer" slot="footer">
             <el-button @click="exportConfigDialog = false">放 弃</el-button>
@@ -2762,7 +2788,13 @@
             editLiveMsgSettingVisible: false,
             room: {},
             addRoom: {},
-            exportConfig: {},
+            exportConfig: {
+                exportRoom: true,
+                exportUser: true,
+                exportSystemConfig: true,
+                exportHistory: false,
+                exportLiveMsg: false
+            },
             seasonsList: [],
             seasonCoverObjectUrls: {},
             seasonCoverPreloadQueue: [],
@@ -2778,6 +2810,10 @@
             liveCoverObjectUrl: '',
             tableData: [],
             roomFilter: 'all',
+            isSortMode: false,
+            sortSnapshot: [],
+            draggingRoomId: null,
+            dragOverRoomId: null,
             lines: [],
             lineStats: {},
             lineSpeeds: {},
@@ -2815,6 +2851,12 @@
             }
         },
         methods: {
+            handleCardClick(item) {
+                if (this.isSortMode) {
+                    return;
+                }
+                this.showDetail(item);
+            },
             showDetail(item) {
                 this.currentDetail = item;
                 this.detailDialogVisible = true;
@@ -3034,12 +3076,106 @@
                 if (this.roomFilter === filterKey) {
                     return;
                 }
+                if (this.isSortMode && filterKey !== 'all') {
+                    this.$message.warning('调整顺序时请保持全部房间视图');
+                    return;
+                }
                 this.roomFilter = filterKey;
                 try {
                     var searchParams = new URLSearchParams(window.location.search || '');
                     searchParams.set('roomFilter', filterKey);
                     window.history.replaceState(null, '', window.location.pathname + '?' + searchParams.toString());
                 } catch (e) {}
+            },
+            enterSortMode: function () {
+                if (this.roomFilter !== 'all') {
+                    this.$message.warning('请先切换到全部房间再调整顺序');
+                    return;
+                }
+                this.sortSnapshot = this.tableData.map(function (item) { return item.id; });
+                this.isSortMode = true;
+            },
+            cancelSortMode: function () {
+                var orderMap = {};
+                this.sortSnapshot.forEach(function (id, index) {
+                    orderMap[id] = index;
+                });
+                this.tableData = this.tableData.slice().sort(function (a, b) {
+                    var ai = orderMap[a.id];
+                    var bi = orderMap[b.id];
+                    if (ai === undefined) ai = Number.MAX_SAFE_INTEGER;
+                    if (bi === undefined) bi = Number.MAX_SAFE_INTEGER;
+                    return ai - bi;
+                });
+                this.isSortMode = false;
+                this.draggingRoomId = null;
+                this.dragOverRoomId = null;
+            },
+            resetSortOrder: function () {
+                this.tableData = this.tableData.slice().sort(function (a, b) {
+                    return (a.id || 0) - (b.id || 0);
+                });
+            },
+            handleSortDragStart: function (index, item, event) {
+                if (!this.isSortMode) return;
+                this.draggingRoomId = item.id;
+                if (event.dataTransfer) {
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', String(item.id));
+                }
+            },
+            handleSortDragOver: function (index, item) {
+                if (!this.isSortMode || this.draggingRoomId === item.id) return;
+                this.dragOverRoomId = item.id;
+            },
+            handleSortDrop: function (targetIndex, item) {
+                if (!this.isSortMode || this.draggingRoomId == null || this.draggingRoomId === item.id) {
+                    return;
+                }
+                var fromIndex = this.tableData.findIndex(function (room) {
+                    return room.id === this.draggingRoomId;
+                }, this);
+                var toIndex = this.tableData.findIndex(function (room) {
+                    return room.id === item.id;
+                });
+                if (fromIndex < 0 || toIndex < 0) return;
+                var next = this.tableData.slice();
+                var moved = next.splice(fromIndex, 1)[0];
+                next.splice(toIndex, 0, moved);
+                this.tableData = next;
+                this.dragOverRoomId = null;
+            },
+            handleSortDragEnd: function () {
+                this.draggingRoomId = null;
+                this.dragOverRoomId = null;
+            },
+            saveSortOrder: function () {
+                if (this.roomFilter !== 'all') {
+                    this.$message.warning('请先切换到全部房间再保存顺序');
+                    return;
+                }
+                var _this = this;
+                var roomIds = this.tableData.map(function (item) { return item.id; });
+                $.ajax({
+                    url: '/room/sort',
+                    contentType: 'application/json;charset=utf-8',
+                    type: 'post',
+                    data: JSON.stringify(roomIds),
+                    dataType: 'json',
+                    success: function (data) {
+                        if (data && data.success) {
+                            _this.$message.success('排序已保存');
+                            _this.isSortMode = false;
+                            _this.sortSnapshot = [];
+                            _this.initTable(true);
+                        } else {
+                            _this.$message.error((data && data.msg) || '保存排序失败');
+                        }
+                    },
+                    error: function () {
+                        _this.$message.error('保存排序失败');
+                    }
+                });
             },
             formatDelete: function (row) {
                 switch(row.deleteType){
@@ -3129,8 +3265,23 @@
                     }
                 });
             },
+            handleExportLiveMsgChange: function (checked) {
+                if (checked) {
+                    this.exportConfig.exportHistory = true;
+                    this.$confirm('弹幕数据可能非常庞大，导出过程可能耗时、卡顿、失败或生成很大的文件。确认要导出弹幕数据吗？', '导出弹幕数据', {
+                        confirmButtonText: '确认导出',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).catch(() => {
+                        this.exportConfig.exportLiveMsg = false;
+                    });
+                }
+            },
             exportConfigF: function () {
                 let _this = this;
+                if (_this.exportConfig.exportLiveMsg && !_this.exportConfig.exportHistory) {
+                    _this.exportConfig.exportHistory = true;
+                }
                 $.ajax({
                     url: '/room/exportConfig',
                     contentType: 'application/json;charset=utf-8',
@@ -3661,6 +3812,10 @@
                     type: 'post',
                     dataType: 'json',
                     success: function (data) {
+                        if (_this.isSortMode) {
+                            if (!silent) _this.loading = false;
+                            return;
+                        }
                         data.forEach(room => {
                             if (room.coverUrl === 'live') {
                                 room.coverType = 'live';
@@ -3729,6 +3884,9 @@
         watch: {
             viewMode: function (val) {
                 localStorage.setItem('room-view-mode', val);
+                if (val !== 'card' && this.isSortMode) {
+                    this.cancelSortMode();
+                }
             },
             dialogFormVisible: function (val) {
                 if (!val) {
@@ -3740,6 +3898,11 @@
             },
             'room.coverType': function () {
                 this.refreshRoomCoverPreview();
+            },
+            'exportConfig.exportHistory': function (val) {
+                if (!val) {
+                    this.exportConfig.exportLiveMsg = false;
+                }
             }
         },
         beforeDestroy: function () {

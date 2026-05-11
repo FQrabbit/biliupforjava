@@ -18,9 +18,12 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
+import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.repo.SystemConfigRepository;
+import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
@@ -62,6 +65,15 @@ public class RoomController {
     @Autowired
     private RecordHistoryPartRepository partRepository;
 
+    @Autowired
+    private SystemConfigRepository systemConfigRepository;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
+
+    @Autowired
+    private LiveMsgRepository liveMsgRepository;
+
     private final Cache<String, CachedImage> imageCache = CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(1, TimeUnit.DAYS)
@@ -83,16 +95,13 @@ public class RoomController {
 
     @PostMapping
     public List<RecordRoom> list() {
-        Iterator<RecordRoom> roomIterator = roomRepository.findAll().iterator();
-        List<RecordRoom> list = new ArrayList<>();
-        roomIterator.forEachRemaining(list::add);
-        return list;
+        return roomRepository.findAllOrderBySortOrder();
     }
 
 
     @PostMapping("/exportConfig")
     public void exportConfig(@RequestBody ExportConfigParams params, HttpServletResponse response) throws IOException {
-        Map<String,Object> map = new HashMap<>();
+        Map<String,Object> map = new LinkedHashMap<>();
         if(params.isExportRoom()){
             List<RecordRoom> roomList = this.list();
             map.put("roomList",roomList);
@@ -113,6 +122,15 @@ public class RoomController {
             partIterator.forEachRemaining(partList::add);
             map.put("partList",partList);
         }
+        if(params.isExportSystemConfig()){
+            map.put("systemConfigList", systemConfigRepository.findAll());
+        }
+        if(params.isExportLiveMsg()){
+            List<LiveMsg> liveMsgList = new ArrayList<>();
+            Iterator<LiveMsg> liveMsgIterator = liveMsgRepository.findAll().iterator();
+            liveMsgIterator.forEachRemaining(liveMsgList::add);
+            map.put("liveMsgList", liveMsgList);
+        }
         String jsonString = JSON.toJSONString(map);
         String timeString = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分"));
         // 构造响应头，指定文件名，并将文件名进行URL编码
@@ -122,7 +140,7 @@ public class RoomController {
         response.setHeader("Content-Disposition", "attachment; filename="+encodedFilename);
         // 将JSON字符串写入到响应输出流中
         OutputStream out = response.getOutputStream();
-        out.write(jsonString.getBytes());
+        out.write(jsonString.getBytes(StandardCharsets.UTF_8));
         out.flush();
         out.close();
     }
@@ -134,28 +152,42 @@ public class RoomController {
         long importRoomsStartNs = 0L;
         long importHistoriesStartNs = 0L;
         long importPartsStartNs = 0L;
+        long importSystemConfigsStartNs = 0L;
+        long importLiveMsgsStartNs = 0L;
         int importedUserCount = 0;
         int importedRoomCount = 0;
         int importedHistoryCount = 0;
         int importedPartCount = 0;
+        int importedSystemConfigCount = 0;
+        int importedLiveMsgCount = 0;
+        int skippedPartCount = 0;
+        int skippedLiveMsgCount = 0;
         // 获取上传的文件内容
         byte[] bytes = file.getBytes();
         // 将文件内容转换为JSON字符串
-        String json = new String(bytes);
+        String json = new String(bytes, StandardCharsets.UTF_8);
 
         // 将JSON字符串转换为Map对象
         Map<String,Object> configMap = JSON.parseObject(json, new TypeReference<>() {
         });
-        List<RecordRoom> roomList = JSON.parseObject(JSON.toJSONString(configMap.get("roomList")), new TypeReference<>() {});
-        List<BiliBiliUser> userList = JSON.parseObject(JSON.toJSONString(configMap.get("userList")), new TypeReference<>() {});
-        List<RecordHistory> historyList = JSON.parseObject(JSON.toJSONString(configMap.get("historyList")), new TypeReference<>() {});
-        List<RecordHistoryPart> partList = JSON.parseObject(JSON.toJSONString(configMap.get("partList")), new TypeReference<>() {});
+        if (configMap == null) {
+            throw new IOException("Invalid config json");
+        }
+        List<RecordRoom> roomList = parseConfigList(configMap, "roomList", new TypeReference<>() {});
+        List<BiliBiliUser> userList = parseConfigList(configMap, "userList", new TypeReference<>() {});
+        List<RecordHistory> historyList = parseConfigList(configMap, "historyList", new TypeReference<>() {});
+        List<RecordHistoryPart> partList = parseConfigList(configMap, "partList", new TypeReference<>() {});
+        List<SystemConfig> systemConfigList = parseConfigList(configMap, "systemConfigList", new TypeReference<>() {});
+        List<LiveMsg> liveMsgList = parseConfigList(configMap, "liveMsgList", new TypeReference<>() {});
 
 
         Map<Long,Long> userIdConverMap = new HashMap<>();
-        if(userList != null && userList.size()>0){
+        if(userList.size()>0){
             importUsersStartNs = System.nanoTime();
             for (BiliBiliUser user : userList) {
+                if (user.getUid() == null) {
+                    continue;
+                }
                 Long id = user.getId();
                 user.setId(null);
                 BiliBiliUser dbUser = userRepository.findByUid(user.getUid());
@@ -163,29 +195,49 @@ public class RoomController {
                     user.setId(dbUser.getId());
                 }
                 userRepository.save(user);
-                userIdConverMap.put(id,user.getId());
+                if (id != null) {
+                    userIdConverMap.put(id,user.getId());
+                }
                 importedUserCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Users.Success")
-                    .add("count", userList.size()));
+                    .add("count", importedUserCount));
         }
-        if(roomList != null && roomList.size()>0){
+        if(roomList.size()>0){
             importRoomsStartNs = System.nanoTime();
             for (RecordRoom room : roomList) {
+                if (StringUtils.isBlank(room.getRoomId())) {
+                    continue;
+                }
+                Long oldUploadUserId = room.getUploadUserId();
                 room.setId(null);
-                room.setUploadUserId(userIdConverMap.get(room.getUploadUserId()));
                 RecordRoom dbRoom = roomRepository.findByRoomId(room.getRoomId());
                 if(dbRoom != null){
                     room.setId(dbRoom.getId());
+                    if (oldUploadUserId == null || !userIdConverMap.containsKey(oldUploadUserId)) {
+                        room.setUploadUserId(dbRoom.getUploadUserId());
+                    }
+                } else if (oldUploadUserId != null && userIdConverMap.containsKey(oldUploadUserId)) {
+                    room.setUploadUserId(userIdConverMap.get(oldUploadUserId));
+                } else if (oldUploadUserId != null && userRepository.findById(oldUploadUserId).isPresent()) {
+                    room.setUploadUserId(oldUploadUserId);
+                } else {
+                    room.setUploadUserId(null);
+                }
+                if (oldUploadUserId != null && userIdConverMap.containsKey(oldUploadUserId)) {
+                    room.setUploadUserId(userIdConverMap.get(oldUploadUserId));
+                }
+                if (room.getSortOrder() == null) {
+                    room.setSortOrder(nextSortOrder());
                 }
                 roomRepository.save(room);
                 importedRoomCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
-                    .add("count", roomList.size()));
+                    .add("count", importedRoomCount));
         }
         Map<Long,Long> historyIdConverMap = new HashMap<>();
-        if(historyList != null && historyList.size()>0){
+        if(historyList.size()>0){
             importHistoriesStartNs = System.nanoTime();
             for (RecordHistory history : historyList) {
                 Long oldId = history.getId();
@@ -195,38 +247,108 @@ public class RoomController {
                     history.setId(dbHistory.getId());
                 }
                 historyRepository.save(history);
-                historyIdConverMap.put(oldId,history.getId());
+                if (oldId != null) {
+                    historyIdConverMap.put(oldId,history.getId());
+                }
                 importedHistoryCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Histories.Success")
-                    .add("count", historyList.size()));
+                    .add("count", importedHistoryCount));
         }
-        if(partList != null && partList.size()>0){
+        Map<Long,Long> partIdConverMap = new HashMap<>();
+        if(partList.size()>0){
             importPartsStartNs = System.nanoTime();
             for (RecordHistoryPart part : partList) {
+                Long oldId = part.getId();
+                Long oldHistoryId = part.getHistoryId();
                 part.setId(null);
-                RecordHistoryPart dbPart = partRepository.findByFilePath(part.getFilePath());
+                RecordHistoryPart dbPart = StringUtils.isNotBlank(part.getFilePath())
+                        ? partRepository.findByFilePath(part.getFilePath())
+                        : null;
                 if(dbPart != null){
                     part.setId(dbPart.getId());
                 }
-                part.setHistoryId(historyIdConverMap.get(part.getHistoryId()));
+                if (oldHistoryId != null && historyIdConverMap.containsKey(oldHistoryId)) {
+                    part.setHistoryId(historyIdConverMap.get(oldHistoryId));
+                } else if (dbPart != null) {
+                    part.setHistoryId(dbPart.getHistoryId());
+                } else {
+                    skippedPartCount++;
+                    continue;
+                }
                 partRepository.save(part);
+                if (oldId != null) {
+                    partIdConverMap.put(oldId,part.getId());
+                }
                 importedPartCount++;
             }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
-                    .add("count", partList.size()));
+                    .add("count", importedPartCount));
         }
         // 在控制台输出转换后的Map对象
+        if(systemConfigList.size()>0){
+            importSystemConfigsStartNs = System.nanoTime();
+            for (SystemConfig systemConfig : systemConfigList) {
+                if (StringUtils.isBlank(systemConfig.getConfigKey()) || systemConfig.getConfigValue() == null) {
+                    continue;
+                }
+                systemConfigService.updateConfig(systemConfig.getConfigKey(), systemConfig.getConfigValue());
+                importedSystemConfigCount++;
+            }
+            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.SystemConfigs.Success")
+                    .add("count", importedSystemConfigCount));
+        }
+        if(liveMsgList.size()>0){
+            importLiveMsgsStartNs = System.nanoTime();
+            Set<Long> mappedPartIds = new HashSet<>(partIdConverMap.values());
+            for (Long partId : mappedPartIds) {
+                liveMsgRepository.deleteByPartId(partId);
+            }
+            for (LiveMsg liveMsg : liveMsgList) {
+                Long newPartId = partIdConverMap.get(liveMsg.getPartId());
+                if (newPartId == null) {
+                    skippedLiveMsgCount++;
+                    continue;
+                }
+                liveMsg.setId(null);
+                liveMsg.setPartId(newPartId);
+                liveMsgRepository.save(liveMsg);
+                importedLiveMsgCount++;
+            }
+            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.LiveMsgs.Success")
+                    .add("count", importedLiveMsgCount)
+                    .add("skipped", skippedLiveMsgCount));
+        }
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Done")
                 .addRoundCount("importedUser", importedUserCount)
                 .addRoundCount("importedRoom", importedRoomCount)
                 .addRoundCount("importedHistory", importedHistoryCount)
                 .addRoundCount("importedPart", importedPartCount)
+                .addRoundCount("importedSystemConfig", importedSystemConfigCount)
+                .addRoundCount("importedLiveMsg", importedLiveMsgCount)
+                .addRoundCount("skippedPart", skippedPartCount)
+                .addRoundCount("skippedLiveMsg", skippedLiveMsgCount)
                 .addStageCostMs("importUsers", importUsersStartNs)
                 .addStageCostMs("importRooms", importRoomsStartNs)
                 .addStageCostMs("importHistories", importHistoriesStartNs)
                 .addStageCostMs("importParts", importPartsStartNs)
+                .addStageCostMs("importSystemConfigs", importSystemConfigsStartNs)
+                .addStageCostMs("importLiveMsgs", importLiveMsgsStartNs)
                 .addStageCostMs("total", totalStartNs));
+    }
+
+    private <T> List<T> parseConfigList(Map<String,Object> configMap, String key, TypeReference<List<T>> typeReference) {
+        Object value = configMap.get(key);
+        if (value == null) {
+            return Collections.emptyList();
+        }
+        List<T> list = JSON.parseObject(JSON.toJSONString(value), typeReference);
+        return list == null ? Collections.emptyList() : list;
+    }
+
+    private Integer nextSortOrder() {
+        Integer maxSortOrder = roomRepository.findMaxSortOrder();
+        return (maxSortOrder == null ? 0 : maxSortOrder) + 1;
     }
 
     @PostMapping("/update")
@@ -438,11 +560,50 @@ public class RoomController {
         } else {
             room = new RecordRoom();
             room.setRoomId(add.getRoomId());
+            room.setSortOrder(nextSortOrder());
             roomRepository.save(room);
             result.put("type", "success");
             result.put("msg", "添加成功");
             return result;
         }
+    }
+
+    @PostMapping("/sort")
+    public Map<String, Object> sort(@RequestBody List<Long> roomIds) {
+        Map<String, Object> result = new HashMap<>();
+        if (roomIds == null || roomIds.isEmpty()) {
+            result.put("success", false);
+            result.put("msg", "empty room order");
+            return result;
+        }
+
+        Map<Long, RecordRoom> roomMap = new HashMap<>();
+        for (RecordRoom room : roomRepository.findAllOrderBySortOrder()) {
+            roomMap.put(room.getId(), room);
+        }
+
+        int order = 1;
+        Set<Long> visited = new HashSet<>();
+        List<RecordRoom> changedRooms = new ArrayList<>();
+        for (Long roomId : roomIds) {
+            RecordRoom room = roomMap.get(roomId);
+            if (room == null || !visited.add(roomId)) {
+                continue;
+            }
+            room.setSortOrder(order++);
+            changedRooms.add(room);
+        }
+        for (RecordRoom room : roomRepository.findAllOrderBySortOrder()) {
+            if (room.getId() != null && visited.add(room.getId())) {
+                room.setSortOrder(order++);
+                changedRooms.add(room);
+            }
+        }
+
+        roomRepository.saveAll(changedRooms);
+        result.put("success", true);
+        result.put("count", changedRooms.size());
+        return result;
     }
 
     @GetMapping("/delete/{roomId}")

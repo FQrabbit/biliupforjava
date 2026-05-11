@@ -606,6 +606,116 @@
 
 
 
+.room-card.is-sorting {
+
+    cursor: grab;
+
+    user-select: none;
+
+    border-color: var(--primary-light);
+
+}
+
+
+
+.room-card.is-sorting:hover {
+
+    transform: translateY(-2px);
+
+}
+
+
+
+.room-card.is-dragging {
+
+    opacity: 0.55;
+
+    transform: scale(0.98);
+
+}
+
+
+
+.room-card.is-drag-over {
+
+    border-color: var(--primary-color);
+
+    box-shadow: 0 0 0 3px var(--brand-soft-bg-active), var(--shadow-md);
+
+}
+
+
+
+.room-sort-handle {
+
+    width: 38px;
+
+    height: 38px;
+
+    flex: 0 0 38px;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 3px;
+
+    border-radius: var(--radius-md);
+
+    background: var(--brand-soft-bg);
+
+    color: var(--primary-color);
+
+    border: 1px solid var(--brand-accent-border);
+
+    cursor: grab;
+
+    font-weight: 700;
+
+}
+
+
+
+.room-sort-handle:active {
+
+    cursor: grabbing;
+
+}
+
+
+
+.room-sort-handle span {
+
+    font-size: 12px;
+
+}
+
+
+
+.export-live-msg-warning {
+
+    margin: 0 0 12px 160px;
+
+    padding: 10px 12px;
+
+    border-radius: var(--radius-md);
+
+    border: 1px solid var(--warning-line);
+
+    background: var(--warning-soft-bg);
+
+    color: var(--warning-color);
+
+    line-height: 1.6;
+
+    font-size: 13px;
+
+}
+
+
+
 .room-card::before {
 
     content: '';

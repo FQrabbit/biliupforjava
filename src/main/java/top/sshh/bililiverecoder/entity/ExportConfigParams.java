@@ -9,4 +9,6 @@ public class ExportConfigParams {
     private boolean exportRoom;
     private boolean exportUser;
     private boolean exportHistory;
+    private boolean exportSystemConfig;
+    private boolean exportLiveMsg;
 }
