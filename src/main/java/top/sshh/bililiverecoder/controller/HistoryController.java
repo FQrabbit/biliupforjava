@@ -34,11 +34,13 @@ import top.sshh.bililiverecoder.service.SystemConfigService;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Stream;
 
 @Slf4j
 @RestController
@@ -248,6 +250,11 @@ public class HistoryController {
         if (StringUtils.isBlank(normalized) || !isUnderWorkPath(normalized)) {
             return;
         }
+        if (isFilesystemRoot(normalized)) {
+            log.warn("[BLR] {}", LogKvs.event("History.CandidateFiles.SkipRootDir")
+                    .add("root", normalized));
+            return;
+        }
         String normalizedWork = normalizeFsPath(workPath);
         if (normalizedWork != null
                 && normalized.equalsIgnoreCase(normalizedWork.endsWith("/") ? normalizedWork.substring(0, normalizedWork.length() - 1) : normalizedWork)) {
@@ -267,30 +274,23 @@ public class HistoryController {
         if (root == null || !root.exists() || !root.isDirectory()) {
             return;
         }
-        try (Stream<Path> paths = Files.walk(root.toPath(), 4)) {
-            paths.filter(Files::isRegularFile).forEach(path -> {
-                File f = path.toFile();
-                String name = f.getName();
-                if (name == null) {
-                    return;
+        try {
+            Files.walkFileTree(root.toPath(), EnumSet.noneOf(java.nio.file.FileVisitOption.class), 4, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) {
+                    if (attrs != null && attrs.isRegularFile()) {
+                        addCandidateFile(path, keyword, allowedExt, items, seenPaths);
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-                String lower = name.toLowerCase(java.util.Locale.ROOT);
-                if (!hasAllowedExt(lower, allowedExt)) {
-                    return;
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    log.debug("[BLR] {}", LogKvs.event("History.CandidateFiles.SkipUnreadablePath")
+                            .add("path", file == null ? "" : file.toString())
+                            .addIfNotBlank("err", exc == null ? null : exc.getMessage()));
+                    return FileVisitResult.CONTINUE;
                 }
-                if (keyword != null && !keyword.isEmpty() && lower.indexOf(keyword) < 0) {
-                    return;
-                }
-                String filePath = f.getPath().replace("\\", "/");
-                if (!seenPaths.add(filePath.toLowerCase(java.util.Locale.ROOT))) {
-                    return;
-                }
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("name", name);
-                m.put("filePath", filePath);
-                m.put("size", f.length());
-                m.put("lastModified", f.lastModified());
-                items.add(m);
             });
         } catch (IOException e) {
             log.warn("[BLR] {}", LogKvs.event("History.CandidateFiles.ScanFailed")
@@ -298,6 +298,35 @@ public class HistoryController {
                     .addIfNotBlank("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()));
         }
+    }
+
+    private void addCandidateFile(Path path,
+                                  String keyword,
+                                  String[] allowedExt,
+                                  List<Map<String, Object>> items,
+                                  Set<String> seenPaths) {
+        File f = path.toFile();
+        String name = f.getName();
+        if (name == null) {
+            return;
+        }
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (!hasAllowedExt(lower, allowedExt)) {
+            return;
+        }
+        if (keyword != null && !keyword.isEmpty() && lower.indexOf(keyword) < 0) {
+            return;
+        }
+        String filePath = f.getPath().replace("\\", "/");
+        if (!seenPaths.add(filePath.toLowerCase(java.util.Locale.ROOT))) {
+            return;
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("name", name);
+        m.put("filePath", filePath);
+        m.put("size", f.length());
+        m.put("lastModified", f.lastModified());
+        items.add(m);
     }
 
     private boolean hasAllowedExt(String lowerName, String[] allowedExt) {
@@ -322,6 +351,17 @@ public class HistoryController {
 
     private String normalizeFsPath(String path) {
         return path == null ? null : path.replace("\\", "/");
+    }
+
+    private boolean isFilesystemRoot(String path) {
+        if (StringUtils.isBlank(path)) {
+            return false;
+        }
+        try {
+            return Path.of(path).getParent() == null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
 
