@@ -18,6 +18,20 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByRoomIdAndRecordingTrueOrderByStartTimeDesc(String roomId);
 
+    @org.springframework.data.jpa.repository.Query("""
+            select h from RecordHistory h
+            where h.roomId = ?1
+              and h.publish = false
+              and h.forceArchived = false
+              and exists (
+                  select 1 from RecordHistoryPart p
+                  where p.historyId = h.id
+                    and (p.recording = true or p.endTime is null)
+              )
+            order by h.startTime desc
+            """)
+    List<RecordHistory> findUnpublishedHistoriesWithRecordingPartsByRoomIdOrderByStartTimeDesc(String roomId);
+
     List<RecordHistory> findByRoomIdAndBvIdAndRecordingAndUploadAndPublishAndEndTimeBetweenOrderByEndTimeAsc(String roomId, String bvId, Boolean record, Boolean upload, Boolean publish, LocalDateTime from, LocalDateTime to);
 
     List<RecordHistory> findByRoomIdAndRecordingIsFalseAndUploadIsTrueAndPublishIsFalseAndUploadRetryCountLessThanAndEndTimeBetweenOrderByEndTimeAsc(String roomId, int count, LocalDateTime from, LocalDateTime to);

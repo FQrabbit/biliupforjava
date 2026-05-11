@@ -93,14 +93,24 @@ public class RecordEventFileClosedService implements RecordEventService {
             relativePath = relativePath.replace(workPath, "");
         }
         String filePath = workPath + File.separator + relativePath;
+        RecordHistoryPart partByPath = historyPartRepository.findByFilePath(filePath);
+        if (partByPath != null && partByPath.getHistoryId() != null && !partByPath.getHistoryId().equals(room.getHistoryId())) {
+            log.info("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByPart")
+                    .add("roomId", eventData.getRoomId())
+                    .add("oldHistoryId", room.getHistoryId())
+                    .add("newHistoryId", partByPath.getHistoryId())
+                    .add("partId", partByPath.getId())
+                    .add("filePath", relativePath));
+            room.setHistoryId(partByPath.getHistoryId());
+            roomRepository.save(room);
+        }
         Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
         if (!historyOptional.isPresent()) {
-            RecordHistoryPart partByPath = historyPartRepository.findByFilePath(filePath);
             if (partByPath != null && partByPath.getHistoryId() != null) {
                 Optional<RecordHistory> historyFromPart = historyRepository.findById(partByPath.getHistoryId());
                 if (historyFromPart.isPresent()) {
                     if (!partByPath.getHistoryId().equals(room.getHistoryId())) {
-                        log.warn("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByPart")
+                        log.info("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByPart")
                                 .add("roomId", eventData.getRoomId())
                                 .add("oldHistoryId", room.getHistoryId())
                                 .add("newHistoryId", partByPath.getHistoryId())

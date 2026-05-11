@@ -2,6 +2,7 @@ package top.sshh.bililiverecoder.service.impl;
 
 import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -61,6 +62,22 @@ public class RecordEventRecordEndService implements RecordEventService {
                 .add("title", eventData.getTitle())
                 .add("sessionId", eventData.getSessionId()));
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
+        if (room == null) {
+            log.info("[BLR] {}", LogKvs.event("RecordEnd.NoRoom")
+                    .add("roomId", eventData.getRoomId())
+                    .add("sessionId", eventData.getSessionId()));
+            return;
+        }
+        if (StringUtils.isNotBlank(room.getSessionId())
+                && StringUtils.isNotBlank(eventData.getSessionId())
+                && !room.getSessionId().equals(eventData.getSessionId())) {
+            log.info("[BLR] {}", LogKvs.event("RecordEnd.IgnoreStaleSession")
+                    .add("roomId", eventData.getRoomId())
+                    .add("currentSessionId", room.getSessionId())
+                    .add("incomingSessionId", eventData.getSessionId())
+                    .add("historyId", room.getHistoryId()));
+            return;
+        }
         if (room.getHistoryId() != null) {
             Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
             if (historyOptional.isPresent()) {

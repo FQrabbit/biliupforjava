@@ -118,8 +118,8 @@ public class SystemConfigService {
                 if (v < 1) {
                     return "1";
                 }
-                if (v > 720) {
-                    return "720";
+                if (v > 1440) {
+                    return "1440";
                 }
                 return String.valueOf((int) Math.round(v));
             }

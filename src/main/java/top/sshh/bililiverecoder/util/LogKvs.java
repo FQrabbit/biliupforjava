@@ -109,9 +109,12 @@ public final class LogKvs {
         EVENT_ZH.put("Room.Update.SeasonSection.Disabled", "房间编辑保存：合集配置无效，已禁用合集");
         EVENT_ZH.put("RecordStarted.ReuseHistory", "录制开始：复用历史记录(继续录制)");
         EVENT_ZH.put("RecordStarted.ReuseHistory.Detail", "录制开始：复用历史记录明细(调试)");
+        EVENT_ZH.put("RecordStarted.InvalidPayload", "录制开始：事件载荷缺少房间号");
         EVENT_ZH.put("RecordStarted.ReuseActiveHistory", "录制开始：复用活跃的历史记录");
+        EVENT_ZH.put("RecordStarted.ReuseOpenPartHistory", "录制开始：复用仍有录制中分P的历史记录");
         EVENT_ZH.put("RecordStarted.ReuseRecentHistory", "录制开始：复用最近的历史记录");
         EVENT_ZH.put("RecordStarted.SkipForceArchivedActive", "录制开始：活跃历史已被强制归档，跳过复用");
+        EVENT_ZH.put("RecordStarted.SkipForceArchived", "录制开始：历史已被强制归档，跳过复用");
         EVENT_ZH.put("RecordStarted.SkipPublished", "录制开始：发现活跃记录已发布/审核中，跳过复用并拆分新稿件");
         EVENT_ZH.put("RecordStarted.ActiveHistoryStale", "录制开始：检测到过时的录制中记录(24小时无活动)");
         EVENT_ZH.put("RecordStarted.Processed", "录制开始事件处理完成");
@@ -120,6 +123,8 @@ public final class LogKvs {
         EVENT_ZH.put("StreamEnd.RoomMissing", "下播事件：房间不存在，忽略");
         EVENT_ZH.put("StreamEnd.NoRecording", "下播事件：本地无活跃录制记录");
         EVENT_ZH.put("RecordEnd.Received", "收到录制结束事件");
+        EVENT_ZH.put("RecordEnd.NoRoom", "录制结束事件：房间不存在，忽略");
+        EVENT_ZH.put("RecordEnd.IgnoreStaleSession", "录制结束事件：旧 session 结束事件，已忽略");
         EVENT_ZH.put("RecordEnd.NoRecording", "录制结束事件：本地无活跃录制记录");
         EVENT_ZH.put("RecordEnd.PartHeal.Done", "录制结束：分P纠偏/修复成功");
         EVENT_ZH.put("RecordEnd.PartHeal.Failed", "录制结束：分P纠偏/修复失败");
@@ -131,10 +136,15 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.PartExists.Skip", "文件打开事件：分P记录已存在，跳过重复创建");
         EVENT_ZH.put("SessionMismatch.Detected", "检测到 Session ID 不匹配(可能错过了[录制开始]事件)(调试)");
         EVENT_ZH.put("SessionMismatch.Merged", "Session ID 不匹配：检测到最近的直播记录，已自动合并");
+        EVENT_ZH.put("SessionMismatch.ReuseActiveHistory", "Session ID 不匹配：复用活跃的历史记录");
+        EVENT_ZH.put("SessionMismatch.ReuseOpenPartHistory", "Session ID 不匹配：复用仍有录制中分P的历史记录");
+        EVENT_ZH.put("SessionMismatch.ReuseRecentHistory", "Session ID 不匹配：按合并间隔复用最近历史记录");
         EVENT_ZH.put("SessionMismatch.SkipPublished", "Session ID 不匹配：发现最近记录已发布/审核中，跳过合并并创建新稿件");
+        EVENT_ZH.put("SessionMismatch.SkipForceArchived", "Session ID 不匹配：历史已被强制归档，跳过复用");
         EVENT_ZH.put("SessionMismatch.ActiveHistoryStale", "Session ID 不匹配：检测到过时的录制中记录(24小时无活动)");
         EVENT_ZH.put("SessionMismatch.CreatedNew", "Session ID 不匹配：未找到最近记录，已创建新的录制历史");
         EVENT_ZH.put("SessionMismatch.ParseMergeIntervalConfigFailed", "Session ID 不匹配：解析合并间隔配置失败");
+        EVENT_ZH.put("SessionMismatch.ParseMergeIntervalFailed", "Session ID 不匹配：解析合并间隔配置失败");
         EVENT_ZH.put("PublishJob.PublishHistory.Error", "执行投稿任务异常");
         EVENT_ZH.put("SessionMismatch.Recovered", "Session ID 不匹配：自愈成功，已更新状态");
         EVENT_ZH.put("FileOpen.MissingRoom", "文件打开事件：房间不存在");
