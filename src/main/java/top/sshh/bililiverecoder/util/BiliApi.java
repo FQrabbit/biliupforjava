@@ -442,6 +442,19 @@ public class BiliApi {
         return JSON.parseObject(response, BiliLiveRoomInfoResponse.class);
     }
 
+    public static String getLiveGiftConfig(String roomId) {
+        String url = "https://api.live.bilibili.com/xlive/web-room/v1/giftPanel/giftConfig";
+        Map<String, String> params = new TreeMap<>();
+        params.put("platform", "pc");
+        params.put("room_id", roomId);
+        Map<String, String> headers = getCommonHeaders();
+        headers.put("Referer", "https://live.bilibili.com/" + roomId);
+        headers.put("Accept", "application/json, text/plain, */*");
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
+        params.forEach(uriBuilder::queryParam);
+        return HttpClientUtil.get(uriBuilder.toUriString(), headers);
+    }
+
     public static BiliLiveMasterInfoResponse getLiveMasterInfo(long uid) {
         Map<String, String> headers = getCommonHeaders();
         String url = "https://api.live.bilibili.com/live_user/v1/Master/info?uid=" + uid;

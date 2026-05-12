@@ -19,6 +19,7 @@ public class HtmlPageController {
             "history",
             "login",
             "room",
+            "stats",
             "setup"
     );
 

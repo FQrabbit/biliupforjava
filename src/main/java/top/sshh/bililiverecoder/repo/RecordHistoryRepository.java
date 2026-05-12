@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.repo;
 
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 
@@ -44,6 +45,16 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByBvIdNotNullAndPublishIsTrueAndCodeLessThan(int code);
 
+    long countByEndTimeIsNotNull();
+
+    List<RecordHistory> findByEndTimeIsNotNullOrderByEndTimeDesc();
+
     @org.springframework.data.jpa.repository.Query("select r from RecordHistory r where r.bvId is not null and r.publish = true and r.code in (-1, -9, -30, -40)")
     List<RecordHistory> findSyncList();
+
+    @org.springframework.data.jpa.repository.Query("select h from RecordHistory h where h.endTime is not null order by h.endTime desc")
+    List<RecordHistory> findCompletedOrderByEndTimeDesc(Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Query("select h from RecordHistory h where h.endTime is not null and h.recording = false and h.streaming = false and h.endTime <= ?1 order by h.endTime asc")
+    List<RecordHistory> findMatureCompletedOrderByEndTimeAsc(LocalDateTime endBefore, Pageable pageable);
 }

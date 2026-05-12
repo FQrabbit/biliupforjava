@@ -20,6 +20,7 @@ import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.StatsAggregationService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
@@ -50,6 +51,9 @@ public class LiveMsgService {
 
     @Autowired
     RecordHistoryPartRepository partRepository;
+
+    @Autowired
+    private StatsAggregationService statsAggregationService;
 
     public int sendMsg(BiliBiliUser user, LiveMsg liveMsg) {
         try {
@@ -392,6 +396,7 @@ public class LiveMsgService {
 
                 if (!liveMsgs.isEmpty()) {
                     jdbcService.saveLiveMsgList(liveMsgs);
+                    statsAggregationService.refreshHistoryStatsAsync(part.getHistoryId());
                     log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.Saved")
                             .add("filePath", xmlFilePath)
                             .add("count", liveMsgs.size())

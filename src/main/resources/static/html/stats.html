@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>统计中心 - Bili Live Recorder</title>
+    <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
+    <link href="../css/element-ui.css" rel="stylesheet">
+    <link href="../css/base/variables.css" rel="stylesheet">
+    <link href="../css/base/reset.css" rel="stylesheet">
+    <link href="../css/base/element-override.css" rel="stylesheet">
+    <link href="../css/base/shared-components.css" rel="stylesheet">
+    <link href="../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../css/animations/transitions.css" rel="stylesheet">
+    <link href="../css/animations/effects.css" rel="stylesheet">
+    <link href="../css/stats.css" rel="stylesheet">
+    <script src="../js/jquery-3.3.1.min.js"></script>
+    <script src="../js/vue.min.js"></script>
+    <script src="../js/element-ui.js"></script>
+    <script src="../js/echarts.min.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/theme-tokens.js"></script>
+    <script src="../js/mixins.js"></script>
+    <script src="../js/privacy.js"></script>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            if (window.ThemeTokens && typeof window.ThemeTokens.applyCurrent === 'function') {
+                window.ThemeTokens.applyCurrent(document, theme);
+            } else {
+                document.documentElement.setAttribute('data-theme', theme);
+            }
+        })();
+    </script>
+</head>
+<body>
+<div id="statsApp" class="stats-container" v-loading="loading">
+    <header class="stats-header">
+        <div>
+            <h1 class="stats-title">
+                <i class="el-icon-data-analysis"></i>
+                <span>统计中心</span>
+            </h1>
+            <p class="stats-subtitle">直播场次、时段偏好、投稿状态与弹幕热度</p>
+        </div>
+        <div class="stats-toolbar">
+            <el-select v-model="selectedRoomId" size="small" clearable filterable placeholder="全部房间" @change="loadRoomDetail">
+                <el-option v-for="room in rooms" :key="room.roomId" :label="roomLabel(room)" :value="room.roomId"></el-option>
+            </el-select>
+            <el-date-picker
+                    v-model="dateRange"
+                    type="daterange"
+                    size="small"
+                    value-format="yyyy-MM-dd"
+                    range-separator="至"
+                    start-placeholder="开始日期"
+                    end-placeholder="结束日期"
+                    @change="reload">
+            </el-date-picker>
+            <el-button size="small" icon="el-icon-refresh" @click="reload">刷新</el-button>
+            <el-button size="small" icon="el-icon-finished" :loading="backfilling" @click="backfillStats">补全未统计</el-button>
+            <el-button size="small" type="primary" icon="el-icon-magic-stick" :loading="rebuilding" @click="rebuildStats">重建统计</el-button>
+        </div>
+    </header>
+
+    <section class="coverage-strip" :class="{ 'is-complete': coverage.complete }">
+        <div>
+            <strong>{{ coverage.complete ? '统计已覆盖全部历史' : '统计仍有缺口' }}</strong>
+            <span>历史 {{ number(coverage.totalHistoryCount) }} 场，已统计 {{ number(coverage.statsSessionCount) }} 场，待补算 {{ number(coverage.pendingSessionCount) }} 场</span>
+        </div>
+        <span>最后更新 {{ dateTime(coverage.updatedAt) }}</span>
+    </section>
+
+    <section class="stats-grid">
+        <div class="metric-card">
+            <div class="metric-label">{{ selectedRoomId ? '房间场次' : (coverage.complete ? '总场次' : '已统计场次') }}</div>
+            <div class="metric-value is-blue">{{ number(metricSource.totalSessions || metricSource.liveCount) }}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">总时长</div>
+            <div class="metric-value">{{ duration(metricSource.totalDurationSeconds) }}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">平均时长</div>
+            <div class="metric-value">{{ duration(metricSource.avgDurationSeconds) }}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">总弹幕</div>
+            <div class="metric-value is-green">{{ number(metricSource.totalMsgCount) }}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">弹幕密度</div>
+            <div class="metric-value is-orange">{{ density(metricSource.msgDensityPerMinute) }}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">投稿成功率</div>
+            <div class="metric-value is-red">{{ percent(metricSource.publishSuccessRate) }}</div>
+        </div>
+    </section>
+
+    <main class="stats-dashboard">
+        <section class="stats-panel chart-panel chart-panel-large">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">{{ mainChartMode === 'hour' ? '开播时段热力图' : '开播趋势' }}</h2>
+                    <p class="panel-subtitle">{{ mainChartMode === 'hour' ? '按 24 小时统计开播次数，颜色越深代表越常开播' : '按日期展示场次、总时长和弹幕变化' }}</p>
+                </div>
+                <el-radio-group v-model="mainChartMode" size="mini" @change="renderCharts">
+                    <el-radio-button label="hour">时段</el-radio-button>
+                    <el-radio-button label="trend">趋势</el-radio-button>
+                </el-radio-group>
+            </div>
+            <div id="mainChart" class="chart-box chart-box-large"></div>
+        </section>
+
+        <section v-if="!selectedRoomId" class="stats-panel chart-panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">投稿结果</h2>
+                    <p class="panel-subtitle">作为状态概览展示，不占用主要图表空间</p>
+                </div>
+            </div>
+            <div class="publish-status-list">
+                <div v-for="item in overview.publishStatusDistribution || []" :key="item.name" class="publish-status-row">
+                    <span>{{ item.name }}</span>
+                    <strong>{{ number(item.value) }}</strong>
+                </div>
+            </div>
+        </section>
+
+        <section v-if="!selectedRoomId" class="stats-panel chart-panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">时长分布</h2>
+                    <p class="panel-subtitle">直播时长结构</p>
+                </div>
+            </div>
+            <div id="durationChart" class="chart-box"></div>
+        </section>
+
+        <section v-if="!selectedRoomId" class="stats-panel chart-panel chart-panel-wide">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">房间对比</h2>
+                    <p class="panel-subtitle">默认展示 Top 10，可切换对比指标</p>
+                </div>
+                <el-select v-model="comparisonMetric" size="mini" @change="renderCharts">
+                    <el-option label="场次" value="liveCount"></el-option>
+                    <el-option label="总时长" value="totalDurationSeconds"></el-option>
+                    <el-option label="总弹幕" value="totalMsgCount"></el-option>
+                    <el-option label="弹幕密度" value="msgDensityPerMinute"></el-option>
+                </el-select>
+            </div>
+            <div id="roomCompareChart" class="chart-box chart-box-wide"></div>
+        </section>
+
+        <section v-if="!selectedRoomId" class="stats-panel room-ranking-panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">房间排行</h2>
+                    <p class="panel-subtitle">点击列名可升序或降序排序</p>
+                </div>
+                <span class="panel-meta">{{ rooms.length }} 个房间</span>
+            </div>
+            <el-table
+                    :data="rooms"
+                    size="small"
+                    row-key="roomId"
+                    :default-sort="{ prop: 'liveCount', order: 'descending' }"
+                    highlight-current-row
+                    @row-click="selectRoom">
+                <el-table-column label="房间" min-width="190" sortable sort-by="uname">
+                    <template slot-scope="scope">
+                        <div class="room-name">{{ scope.row.uname || scope.row.roomId }}</div>
+                        <div class="session-meta">{{ scope.row.roomId }}</div>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="liveCount" label="场次" width="86" sortable></el-table-column>
+                <el-table-column prop="totalDurationSeconds" label="总时长" width="120" sortable>
+                    <template slot-scope="scope">{{ duration(scope.row.totalDurationSeconds) }}</template>
+                </el-table-column>
+                <el-table-column prop="avgDurationSeconds" label="平均时长" width="110" sortable>
+                    <template slot-scope="scope">{{ duration(scope.row.avgDurationSeconds) }}</template>
+                </el-table-column>
+                <el-table-column prop="msgDensityPerMinute" label="弹幕密度" width="110" sortable>
+                    <template slot-scope="scope">{{ density(scope.row.msgDensityPerMinute) }}</template>
+                </el-table-column>
+                <el-table-column prop="totalMsgCount" label="总弹幕" width="110" sortable>
+                    <template slot-scope="scope">{{ number(scope.row.totalMsgCount) }}</template>
+                </el-table-column>
+                <el-table-column prop="totalAdvancedMsgCount" label="高级弹幕" width="110" sortable>
+                    <template slot-scope="scope">{{ number(scope.row.totalAdvancedMsgCount) }}</template>
+                </el-table-column>
+                <el-table-column prop="publishSuccessRate" label="投稿成功率" width="120" sortable>
+                    <template slot-scope="scope">{{ percent(scope.row.publishSuccessRate) }}</template>
+                </el-table-column>
+                <el-table-column prop="latestStartTime" label="最近开播" min-width="140" sortable>
+                    <template slot-scope="scope">{{ dateTime(scope.row.latestStartTime) }}</template>
+                </el-table-column>
+            </el-table>
+        </section>
+
+        <section v-if="selectedRoomId" class="stats-panel room-detail-panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">房间总览 · {{ currentRoomTitle }}</h2>
+                    <p class="panel-subtitle">这个直播间在插件中累计到的开播习惯、总量与近期趋势</p>
+                </div>
+            </div>
+            <div v-if="selectedRoomId && detail.summary" class="room-detail-grid">
+                <div class="detail-metrics">
+                    <div class="detail-metric">
+                        <div class="metric-label">累计场次</div>
+                        <div class="metric-value is-blue">{{ number(detail.summary.liveCount) }}</div>
+                    </div>
+                    <div class="detail-metric">
+                        <div class="metric-label">总时长</div>
+                        <div class="metric-value">{{ duration(detail.summary.totalDurationSeconds) }}</div>
+                    </div>
+                    <div class="detail-metric">
+                        <div class="metric-label">总弹幕</div>
+                        <div class="metric-value is-green">{{ number(detail.summary.totalMsgCount) }}</div>
+                    </div>
+                    <div class="detail-metric">
+                        <div class="metric-label">常开播</div>
+                        <div class="metric-value is-blue">{{ hourText(detail.summary.favoriteHour) }}</div>
+                    </div>
+                    <div class="detail-metric">
+                        <div class="metric-label">礼物流水</div>
+                        <div class="metric-value is-orange">{{ money(detail.summary.totalGiftAmountCny) }}</div>
+                    </div>
+                    <div class="detail-metric">
+                        <div class="metric-label">活跃用户</div>
+                        <div class="metric-value is-red">{{ number(detail.summary.totalActiveUserCount) }}</div>
+                    </div>
+                </div>
+                <div class="room-overview-chart">
+                    <div class="subchart-title">单房间趋势</div>
+                    <div id="roomTrendChart" class="chart-box chart-box-small"></div>
+                </div>
+                <div class="session-list-card">
+                    <div class="subchart-title">最近场次</div>
+                    <el-table :data="sessionOptions" size="mini" height="220" highlight-current-row @row-click="selectSessionRow">
+                        <el-table-column label="开播" min-width="132">
+                            <template slot-scope="scope">{{ dateTime(scope.row.startTime) }}</template>
+                        </el-table-column>
+                        <el-table-column label="时长" width="86">
+                            <template slot-scope="scope">{{ duration(scope.row.durationSeconds) }}</template>
+                        </el-table-column>
+                        <el-table-column prop="msgCount" label="弹幕" width="82" sortable>
+                            <template slot-scope="scope">{{ number(scope.row.msgCount) }}</template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+            </div>
+            <div v-else class="empty-state">选择一个房间查看总览和单场明细</div>
+        </section>
+
+        <section v-if="selectedRoomId" class="stats-panel room-interaction-panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">单场明细</h2>
+                    <p class="panel-subtitle">{{ selectedSessionTitle || '选择一场直播后查看本场流水、弹幕趋势与用户分布' }}</p>
+                </div>
+                <el-select v-if="sessionOptions.length" class="session-select" v-model="selectedSessionId" size="mini" filterable placeholder="选择场次" @change="loadSessionBuckets">
+                    <el-option
+                            v-for="session in sessionOptions"
+                            :key="session.historyId"
+                            :label="sessionLabel(session)"
+                            :value="session.historyId">
+                    </el-option>
+                </el-select>
+            </div>
+            <div v-if="selectedSessionSummary.historyId" class="interaction-grid">
+                <div class="interaction-card">
+                    <div class="metric-label">本场流水</div>
+                    <div class="metric-value is-orange">{{ money(selectedSessionSummary.giftAmountCny) }}</div>
+                </div>
+                <div class="interaction-card">
+                    <div class="metric-label">本场弹幕</div>
+                    <div class="metric-value is-green">{{ number(selectedSessionSummary.msgCount) }}</div>
+                </div>
+                <div class="interaction-card">
+                    <div class="metric-label">SC 金额</div>
+                    <div class="metric-value is-red">{{ money(selectedSessionSummary.scAmount) }}</div>
+                </div>
+                <div class="interaction-card">
+                    <div class="metric-label">礼物数量 / 舰长</div>
+                    <div class="metric-value">{{ number(selectedSessionSummary.giftTotalCount) }} / {{ number(selectedSessionSummary.guardCount) }}</div>
+                </div>
+            </div>
+            <div v-if="selectedSessionSummary.historyId" class="session-chart-grid">
+                <div class="chart-cell chart-cell-wide">
+                    <h3 class="subchart-title">本场弹幕趋势</h3>
+                    <div id="bucketChart" class="chart-box chart-box-medium"></div>
+                </div>
+                <div class="chart-cell chart-cell-primary">
+                    <h3 class="subchart-title">礼物类型分布</h3>
+                    <div id="giftChart" class="chart-box chart-box-pie"></div>
+                </div>
+                <div class="chart-cell">
+                    <h3 class="subchart-title">弹幕用户 Top 10</h3>
+                    <div id="danmuUserChart" class="chart-box chart-box-pie"></div>
+                </div>
+            </div>
+            <div v-if="selectedSessionSummary.historyId" class="interaction-detail-grid">
+                <div>
+                    <h3 class="subchart-title">弹幕用户 Top 10</h3>
+                    <el-table :data="selectedSessionDetail.topDanmuUsers || []" size="mini" height="260">
+                        <el-table-column label="用户" min-width="130">
+                            <template slot-scope="scope">{{ scope.row.uname || scope.row.uid || '未知用户' }}</template>
+                        </el-table-column>
+                        <el-table-column prop="value" label="弹幕" width="82" sortable></el-table-column>
+                    </el-table>
+                </div>
+                <div>
+                    <div class="subchart-title table-title-with-action">
+                        <span>送礼用户 Top 10</span>
+                        <el-radio-group v-model="giftTopMode" size="mini">
+                            <el-radio-button label="amount">金额</el-radio-button>
+                            <el-radio-button label="count">数量</el-radio-button>
+                        </el-radio-group>
+                    </div>
+                    <el-table :data="activeGiftUsers" size="mini" height="260">
+                        <el-table-column label="用户" min-width="130">
+                            <template slot-scope="scope">{{ scope.row.uname || scope.row.uid || '未知用户' }}</template>
+                        </el-table-column>
+                        <el-table-column prop="giftCount" label="数量" width="82" sortable>
+                            <template slot-scope="scope">{{ number(scope.row.giftCount || scope.row.value) }}</template>
+                        </el-table-column>
+                        <el-table-column prop="amountCny" label="金额" width="100" sortable>
+                            <template slot-scope="scope">{{ money(scope.row.amountCny) }}</template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+            </div>
+            <div v-if="!selectedSessionSummary.historyId" class="empty-state">选择一场直播后查看本场明细</div>
+        </section>
+    </main>
+</div>
+
+<script>
+new Vue({
+    el: '#statsApp',
+    data: function () {
+        return {
+            loading: false,
+            rebuilding: false,
+            backfilling: false,
+            overview: {},
+            rooms: [],
+            selectedRoomId: '',
+            dateRange: [],
+            detail: {},
+            selectedSessionId: null,
+            selectedSessionDetail: {},
+            bucketData: [],
+            mainChartMode: 'hour',
+            comparisonMetric: 'liveCount',
+            giftTopMode: 'amount',
+            charts: {}
+        };
+    },
+    computed: {
+        coverage: function () {
+            return this.overview.coverage || {
+                totalHistoryCount: 0,
+                statsSessionCount: 0,
+                pendingSessionCount: 0,
+                staleSessionCount: 0,
+                complete: true,
+                updatedAt: null
+            };
+        },
+        activeHourBuckets: function () {
+            return this.selectedRoomId && this.detail.hourBuckets ? this.detail.hourBuckets : (this.overview.hourBuckets || []);
+        },
+        activeDailyTrend: function () {
+            return this.selectedRoomId && this.detail.dailyTrend ? this.detail.dailyTrend : (this.overview.dailyTrend || []);
+        },
+        metricSource: function () {
+            if (this.selectedRoomId && this.detail.summary) {
+                return this.detail.summary;
+            }
+            return this.overview || {};
+        },
+        currentRoomTitle: function () {
+            if (!this.selectedRoomId || !this.detail.summary) {
+                return '房间详情';
+            }
+            return this.detail.summary.uname || this.selectedRoomId;
+        },
+        currentRoomMeta: function () {
+            if (!this.selectedRoomId || !this.detail.summary) {
+                return '选择房间后查看单房间统计';
+            }
+            return this.selectedRoomId + ' · ' + this.number(this.detail.summary.liveCount) + ' 场';
+        },
+        sessionOptions: function () {
+            return this.detail.sessions || [];
+        },
+        selectedSessionTitle: function () {
+            var self = this;
+            var sessions = this.sessionOptions || [];
+            var found = sessions.find(function (item) { return String(item.historyId) === String(self.selectedSessionId); });
+            return found ? this.sessionLabel(found) : '';
+        },
+        selectedSessionSummary: function () {
+            return (this.selectedSessionDetail && this.selectedSessionDetail.session) || {};
+        },
+        activeGiftUsers: function () {
+            if (!this.selectedSessionDetail) {
+                return [];
+            }
+            return this.giftTopMode === 'count'
+                ? (this.selectedSessionDetail.topGiftUsersByCount || this.selectedSessionDetail.topGiftUsers || [])
+                : (this.selectedSessionDetail.topGiftUsersByAmount || this.selectedSessionDetail.topGiftUsers || []);
+        }
+    },
+    methods: {
+        reload: function () {
+            var self = this;
+            this.loading = true;
+            $.when(
+                $.getJSON('/stats/overview' + this.queryString()),
+                $.getJSON('/stats/rooms' + this.queryString())
+            ).done(function (overviewResp, roomsResp) {
+                self.overview = overviewResp[0] || {};
+                self.rooms = roomsResp[0] || [];
+                if (self.selectedRoomId) {
+                    self.loadRoomDetail(self.selectedRoomId, true);
+                } else {
+                    self.renderCharts();
+                }
+                self.notifyParentReady(false);
+            }).fail(function () {
+                self.notifyParentReady(true);
+                self.$message.error('统计数据加载失败');
+            }).always(function () {
+                self.loading = false;
+            });
+        },
+        loadRoomDetail: function (roomId, silent) {
+            var self = this;
+            if (!roomId) {
+                this.detail = {};
+                this.selectedSessionId = null;
+                this.selectedSessionDetail = {};
+                this.bucketData = [];
+                this.renderCharts();
+                return;
+            }
+            if (!silent) {
+                this.loading = true;
+            }
+            $.getJSON('/stats/room/' + encodeURIComponent(roomId) + this.queryString())
+                .done(function (data) {
+                    self.detail = data || {};
+                    self.selectedSessionId = self.detail.selectedHistoryId || null;
+                    self.selectedSessionDetail = self.detail.latestSessionDetail || {};
+                    self.bucketData = (self.selectedSessionDetail && self.selectedSessionDetail.buckets) || self.detail.latestBuckets || [];
+                    self.renderCharts();
+                })
+                .fail(function () {
+                    self.$message.error('房间统计加载失败');
+                })
+                .always(function () {
+                    if (!silent) {
+                        self.loading = false;
+                    }
+                });
+        },
+        loadSessionBuckets: function (historyId) {
+            var self = this;
+            if (!this.selectedRoomId || !historyId) {
+                this.bucketData = [];
+                this.selectedSessionDetail = {};
+                this.renderSessionCharts();
+                return;
+            }
+            $.getJSON('/stats/room/' + encodeURIComponent(this.selectedRoomId) + '/session/' + encodeURIComponent(historyId))
+                .done(function (data) {
+                    self.selectedSessionDetail = data || {};
+                    self.bucketData = self.selectedSessionDetail.buckets || [];
+                    self.renderSessionCharts();
+                })
+                .fail(function () {
+                    self.$message.error('本场明细加载失败');
+                });
+        },
+        selectRoom: function (row) {
+            var roomId = typeof row === 'string' ? row : row.roomId;
+            this.selectedRoomId = roomId;
+            this.loadRoomDetail(roomId);
+        },
+        selectSessionRow: function (row) {
+            if (!row || !row.historyId) {
+                return;
+            }
+            this.selectedSessionId = row.historyId;
+            this.loadSessionBuckets(row.historyId);
+        },
+        backfillStats: function () {
+            var self = this;
+            this.backfilling = true;
+            ApiUtil.post('/stats/backfill', {}, function (result) {
+                self.$message.success('已补算 ' + (result.updated || 0) + ' 场统计');
+                self.reload();
+                self.backfilling = false;
+            }, function () {
+                self.$message.error('补全统计失败');
+                self.backfilling = false;
+            });
+        },
+        rebuildStats: function () {
+            var self = this;
+            this.$confirm('重建会清空统计缓存并重新生成，耗时取决于历史和弹幕数量。', '重建统计', {
+                confirmButtonText: '开始重建',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(function () {
+                self.rebuilding = true;
+                ApiUtil.post('/stats/rebuild', {}, function (result) {
+                    self.$message.success('统计已重建：' + (result.updated || 0) + ' 场历史');
+                    self.reload();
+                    self.rebuilding = false;
+                }, function () {
+                    self.$message.error('统计重建失败');
+                    self.rebuilding = false;
+                });
+            }).catch(function () {});
+        },
+        queryString: function () {
+            if (!this.dateRange || this.dateRange.length !== 2) {
+                return '';
+            }
+            return '?from=' + encodeURIComponent(this.dateRange[0]) + '&to=' + encodeURIComponent(this.dateRange[1]);
+        },
+        renderCharts: function () {
+            var self = this;
+            this.$nextTick(function () {
+                self.renderMainChart();
+                self.renderPublishChart();
+                self.renderDurationChart();
+                self.renderRoomCompareChart();
+                self.renderRoomTrendChart();
+                self.renderSessionCharts();
+            });
+        },
+        renderSessionCharts: function () {
+            var self = this;
+            this.$nextTick(function () {
+                self.renderBucketChart();
+                self.renderGiftChart();
+                self.renderDanmuUserChart();
+            });
+        },
+        chart: function (id) {
+            var el = document.getElementById(id);
+            if (!el || !window.echarts) {
+                return null;
+            }
+            if (this.charts[id] && this.charts[id].getDom && this.charts[id].getDom() !== el) {
+                this.charts[id].dispose();
+                this.charts[id] = null;
+            }
+            if (!this.charts[id]) {
+                this.charts[id] = echarts.init(el);
+            }
+            return this.charts[id];
+        },
+        renderMainChart: function () {
+            var chart = this.chart('mainChart');
+            if (!chart) return;
+            if (this.mainChartMode === 'trend') {
+                this.renderTrendOption(chart, this.activeDailyTrend, true);
+                return;
+            }
+            var buckets = this.activeHourBuckets || [];
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'axis', formatter: '{b}:00<br/>开播 {c} 场' },
+                grid: { left: 42, right: 16, top: 24, bottom: 32 },
+                xAxis: this.categoryAxis(this.rangeLabels(24), { axisTick: { show: false } }),
+                yAxis: this.valueAxis({ minInterval: 1 }),
+                visualMap: { show: false, min: 0, max: Math.max.apply(null, buckets.concat([1])), inRange: { color: ['#d8ecff', '#409eff', '#20b26b'] } },
+                series: [{ type: 'bar', data: buckets, barMaxWidth: 26, itemStyle: { borderRadius: [4, 4, 0, 0] } }]
+            }, true);
+        },
+        renderPublishChart: function () {
+            var chart = this.chart('publishChart');
+            if (!chart) return;
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'item', formatter: '{b}<br/>{c} 场 · {d}%' },
+                legend: this.legend({ bottom: 0, type: 'scroll' }),
+                series: [{
+                    type: 'pie',
+                    radius: ['48%', '72%'],
+                    center: ['50%', '42%'],
+                    data: this.overview.publishStatusDistribution || [],
+                    label: this.pieLabel('{b}\n{c}')
+                }]
+            }, true);
+        },
+        renderDurationChart: function () {
+            var chart = this.chart('durationChart');
+            if (!chart) return;
+            var data = this.overview.durationDistribution || [];
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'axis', formatter: '{b}<br/>{c} 场' },
+                grid: { left: 36, right: 12, top: 20, bottom: 30 },
+                xAxis: this.categoryAxis(data.map(function (item) { return item.name; }), { axisTick: { show: false } }),
+                yAxis: this.valueAxis({ minInterval: 1 }),
+                series: [{ type: 'bar', data: data.map(function (item) { return item.value; }), barMaxWidth: 34, itemStyle: { borderRadius: [4, 4, 0, 0], color: '#7c8cff' } }]
+            }, true);
+        },
+        renderRoomCompareChart: function () {
+            var chart = this.chart('roomCompareChart');
+            if (!chart) return;
+            var metric = this.comparisonMetric;
+            var data = this.rooms.slice().sort(function (a, b) { return Number(b[metric] || 0) - Number(a[metric] || 0); }).slice(0, 10).reverse();
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: 96, right: 24, top: 16, bottom: 20 },
+                xAxis: this.valueAxis(),
+                yAxis: this.categoryAxis(data.map(function (item) { return item.uname || item.roomId; })),
+                series: [{
+                    type: 'bar',
+                    data: data.map(function (item) { return Number(item[metric] || 0); }),
+                    itemStyle: { borderRadius: [0, 4, 4, 0], color: '#409eff' },
+                    label: Object.assign({ show: true, position: 'right', formatter: this.compareLabel }, this.chartLabelStyle())
+                }]
+            }, true);
+        },
+        renderRoomTrendChart: function () {
+            var chart = this.chart('roomTrendChart');
+            if (!chart) return;
+            this.renderTrendOption(chart, this.detail.dailyTrend || [], false);
+        },
+        renderTrendOption: function (chart, rows, showDualAxis) {
+            rows = rows || [];
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'axis' },
+                legend: this.legend({ top: 0, data: ['场次', '总时长(h)', '弹幕'] }),
+                grid: { left: 42, right: showDualAxis ? 46 : 18, top: 36, bottom: 30 },
+                xAxis: this.categoryAxis(rows.map(function (item) { return String(item.liveDate || '').slice(5); })),
+                yAxis: showDualAxis ? [
+                    this.valueAxis({ minInterval: 1 }),
+                    this.valueAxis()
+                ] : this.valueAxis({ minInterval: 1 }),
+                series: [
+                    { name: '场次', type: 'bar', data: rows.map(function (item) { return item.liveCount || 0; }), barMaxWidth: 24 },
+                    { name: '总时长(h)', type: 'line', smooth: true, yAxisIndex: showDualAxis ? 1 : 0, data: rows.map(function (item) { return Math.round((Number(item.totalDurationSeconds || 0) / 3600) * 10) / 10; }) },
+                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: showDualAxis ? 1 : 0, data: rows.map(function (item) { return item.totalMsgCount || 0; }) }
+                ]
+            }, true);
+        },
+        renderBucketChart: function () {
+            var chart = this.chart('bucketChart');
+            if (!chart) return;
+            var rows = this.bucketData || [];
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'axis', formatter: function (items) {
+                    if (!items || !items.length) return '';
+                    var lines = ['第 ' + items[0].name + ' 分钟'];
+                    items.forEach(function (item) {
+                        lines.push(item.marker + item.seriesName + ' ' + item.value);
+                    });
+                    return lines.join('<br/>');
+                }},
+                legend: this.legend({ top: 0, data: ['弹幕', '礼物', 'SC', '舰长'] }),
+                grid: { left: 42, right: 16, top: 36, bottom: 30 },
+                xAxis: this.categoryAxis(rows.map(function (item) { return item.bucketIndex; })),
+                yAxis: this.valueAxis({ minInterval: 1 }),
+                series: [
+                    { name: '弹幕', type: 'line', smooth: true, areaStyle: {}, data: rows.map(function (item) { return item.msgCount || 0; }), itemStyle: { color: '#27b36a' } },
+                    { name: '礼物', type: 'bar', stack: 'event', barMaxWidth: 18, data: rows.map(function (item) { return item.giftEventCount || 0; }), itemStyle: { color: '#e6a23c' } },
+                    { name: 'SC', type: 'bar', stack: 'event', barMaxWidth: 18, data: rows.map(function (item) { return item.scCount || 0; }), itemStyle: { color: '#f56c6c' } },
+                    { name: '舰长', type: 'bar', stack: 'event', barMaxWidth: 18, data: rows.map(function (item) { return item.guardCount || 0; }), itemStyle: { color: '#7c8cff' } }
+                ]
+            }, true);
+        },
+        renderGiftChart: function () {
+            var chart = this.chart('giftChart');
+            if (!chart) return;
+            var rows = (this.selectedSessionDetail && this.selectedSessionDetail.giftDistribution) || this.detail.giftDistribution || [];
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'item', formatter: '{b}<br/>{c} 个 · {d}%' },
+                legend: this.legend({ bottom: 0, type: 'scroll' }),
+                series: [{
+                    type: 'pie',
+                    radius: ['44%', '70%'],
+                    center: ['50%', '43%'],
+                    data: rows,
+                    label: this.pieLabel('{b}\n{c}')
+                }]
+            }, true);
+        },
+        renderDanmuUserChart: function () {
+            var chart = this.chart('danmuUserChart');
+            if (!chart) return;
+            var rows = (this.selectedSessionDetail && this.selectedSessionDetail.topDanmuUsers) || [];
+            chart.setOption({
+                textStyle: this.chartTextStyle(),
+                tooltip: { trigger: 'item', formatter: '{b}<br/>{c} 条 · {d}%' },
+                legend: this.legend({ bottom: 0, type: 'scroll' }),
+                series: [{
+                    type: 'pie',
+                    radius: ['42%', '68%'],
+                    center: ['50%', '43%'],
+                    data: rows.map(function (item) {
+                        return { name: item.uname || item.uid || '未知用户', value: item.value || 0 };
+                    }),
+                    label: this.pieLabel('{b}\n{c}')
+                }]
+            }, true);
+        },
+        isDarkTheme: function () {
+            return document.documentElement.getAttribute('data-theme') === 'dark';
+        },
+        chartTextColor: function () {
+            return this.isDarkTheme() ? '#e5e7eb' : '#606266';
+        },
+        chartLineColor: function () {
+            return this.isDarkTheme() ? 'rgba(255,255,255,0.16)' : '#e4e7ed';
+        },
+        chartTextStyle: function () {
+            return { color: this.chartTextColor() };
+        },
+        chartLabelStyle: function () {
+            if (!this.isDarkTheme()) {
+                return { color: '#303133' };
+            }
+            return {
+                color: '#ffffff',
+                textBorderColor: 'rgba(0,0,0,0.78)',
+                textBorderWidth: 3,
+                textShadowColor: 'rgba(0,0,0,0.55)',
+                textShadowBlur: 2
+            };
+        },
+        pieLabel: function (formatter) {
+            return Object.assign({ formatter: formatter }, this.chartLabelStyle());
+        },
+        legend: function (extra) {
+            return Object.assign({
+                textStyle: this.isDarkTheme()
+                    ? {
+                        color: '#ffffff',
+                        textBorderColor: 'rgba(0,0,0,0.76)',
+                        textBorderWidth: 3,
+                        textShadowColor: 'rgba(0,0,0,0.55)',
+                        textShadowBlur: 2
+                    }
+                    : { color: '#606266' }
+            }, extra || {});
+        },
+        categoryAxis: function (data, extra) {
+            return Object.assign({
+                type: 'category',
+                data: data,
+                axisLine: { lineStyle: { color: this.chartLineColor() } },
+                axisLabel: { color: this.chartTextColor() },
+                splitLine: { lineStyle: { color: this.chartLineColor() } }
+            }, extra || {});
+        },
+        valueAxis: function (extra) {
+            return Object.assign({
+                type: 'value',
+                axisLine: { lineStyle: { color: this.chartLineColor() } },
+                axisLabel: { color: this.chartTextColor() },
+                splitLine: { lineStyle: { color: this.chartLineColor() } }
+            }, extra || {});
+        },
+        compareLabel: function (params) {
+            var value = Number(params.value || 0);
+            return value >= 1000 ? value.toLocaleString() : String(value);
+        },
+        notifyParentReady: function (error) {
+            this.$nextTick(function () {
+                try {
+                    if (parent && parent.answer && parent.answer.setConnectionStatus) {
+                        parent.answer.setConnectionStatus(!!error);
+                    }
+                } catch (e) {}
+            });
+        },
+        roomLabel: function (room) {
+            return (room.uname || room.roomId) + ' · ' + room.roomId;
+        },
+        sessionLabel: function (session) {
+            return this.dateTime(session.startTime) + ' · ' + this.duration(session.durationSeconds) + ' · ' + this.number(session.msgCount) + ' 条';
+        },
+        number: function (value) {
+            var n = Number(value || 0);
+            return n.toLocaleString();
+        },
+        percent: function (value) {
+            return Number(value || 0).toFixed(2) + '%';
+        },
+        density: function (value) {
+            return Number(value || 0).toFixed(2) + '/分';
+        },
+        money: function (value) {
+            var n = Number(value || 0);
+            return '¥' + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        },
+        duration: function (seconds) {
+            var total = Math.max(0, Number(seconds || 0));
+            var h = Math.floor(total / 3600);
+            var m = Math.floor((total % 3600) / 60);
+            if (h > 0) {
+                return h + 'h ' + m + 'm';
+            }
+            return m + 'm';
+        },
+        dateTime: function (value) {
+            if (!value) {
+                return '--';
+            }
+            return String(value).replace('T', ' ').slice(0, 16);
+        },
+        hourText: function (hour) {
+            if (hour === null || hour === undefined) {
+                return '--';
+            }
+            return hour + ':00';
+        },
+        rangeLabels: function (count) {
+            var labels = [];
+            for (var i = 0; i < count; i++) {
+                labels.push(String(i));
+            }
+            return labels;
+        }
+    },
+    created: function () {
+        this.reload();
+    },
+    mounted: function () {
+        var self = this;
+        window.addEventListener('resize', function () {
+            Object.keys(self.charts).forEach(function (key) {
+                if (self.charts[key]) {
+                    self.charts[key].resize();
+                }
+            });
+        });
+    }
+});
+</script>
+</body>
+</html>

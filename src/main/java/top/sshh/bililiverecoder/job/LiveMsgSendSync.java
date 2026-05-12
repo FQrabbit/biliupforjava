@@ -13,11 +13,15 @@ import org.springframework.util.CollectionUtils;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.service.RoomLiveEventParseService;
+import top.sshh.bililiverecoder.service.RoomLiveGiftCatalogService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -63,6 +67,18 @@ public class LiveMsgSendSync {
 
     @Autowired
     private LiveMsgService liveMsgService;
+
+    @Autowired
+    private RoomLiveEventParseService roomLiveEventParseService;
+
+    @Autowired
+    private RoomLiveEventRepository roomLiveEventRepository;
+
+    @Autowired
+    private RoomLiveGiftCatalogRepository roomLiveGiftCatalogRepository;
+
+    @Autowired
+    private RoomLiveGiftCatalogService roomLiveGiftCatalogService;
 
     private static final Lock lock = new ReentrantLock();
 
@@ -280,37 +296,32 @@ public class LiveMsgSendSync {
                     continue;
                 }
 
-                List<BiliReply> replies = new ArrayList<>();
-                StringBuilder context = new StringBuilder();
-                context.append("SC和上舰列表\n");
+                List<String> replyLines = new ArrayList<>();
+                boolean hasScReply = false;
+                boolean hasGuardReply = false;
+                boolean hasOtherHighLevelReply = false;
                 for (RecordHistoryPart part : parts) {
                     List<LiveMsg> msgList = msgRepository.findByPartIdAndPoolAndCidNotNullOrderBySendTimeAsc(part.getId(), 1);
                     for (LiveMsg liveMsg : msgList) {
-                        StringBuilder builder = new StringBuilder();
-                        builder.append(part.getPage()).append('#').append(format.format(new Date(liveMsg.getSendTime()))).append("  ").append(liveMsg.getContext()).append('\n');
-                        //发送限制为1000
-                        if (context.length() + builder.length() > 1000) {
-                            BiliReply reply = new BiliReply();
-                            reply.setType("1");
-                            reply.setOid(history.getAvId());
-                            reply.setAction("1");
-                            reply.setMessage(context.toString());
-                            replies.add(reply);
-                            //重置
-                            context = new StringBuilder();
-                            context.append("SC和上舰列表\n");
+                        String contextText = liveMsg.getContext();
+                        if (contextText != null && contextText.startsWith("SC [")) {
+                            hasScReply = true;
+                        } else if (contextText != null && contextText.startsWith("⚓")) {
+                            hasGuardReply = true;
+                        } else {
+                            hasOtherHighLevelReply = true;
                         }
-                        context.append(builder);
+                        replyLines.add(part.getPage() + "#" + format.format(new Date(liveMsg.getSendTime()))
+                                + "  " + contextText + "\n");
                     }
                 }
-                if (context.length() > 20) {
-                    BiliReply reply = new BiliReply();
-                    reply.setType("1");
-                    reply.setOid(history.getAvId());
-                    reply.setAction("1");
-                    reply.setMessage(context.toString());
-                    replies.add(reply);
+                int giftReplyCount = 0;
+                if (room != null && Boolean.TRUE.equals(room.getSendGiftReply())) {
+                    giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format);
                 }
+                List<BiliReply> replies = buildVideoReplies(history,
+                        buildReplyHeader(hasScReply, hasGuardReply, hasOtherHighLevelReply, giftReplyCount),
+                        replyLines);
                 // 需要发送评论但没有可用的上传账号：跳过本次评论发送，避免空指针
                 if (user == null && !replies.isEmpty()) {
                     log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.SkipNoUploadUser")
@@ -737,6 +748,151 @@ public class LiveMsgSendSync {
                     .addStageCostMs("total", roundStartNs));
         }
 
+    }
+
+    private String buildReplyHeader(boolean hasScReply, boolean hasGuardReply, boolean hasOtherHighLevelReply, int giftReplyCount) {
+        List<String> parts = new ArrayList<>();
+        if (hasScReply) {
+            parts.add("SC");
+        }
+        if (hasGuardReply) {
+            parts.add("上舰");
+        }
+        if (hasOtherHighLevelReply) {
+            parts.add("高级弹幕");
+        }
+        if (giftReplyCount > 0) {
+            parts.add("高价值礼物");
+        }
+        if (parts.isEmpty()) {
+            return "高价值互动列表\n";
+        }
+        return String.join("/", parts) + "列表\n";
+    }
+
+    private List<BiliReply> buildVideoReplies(RecordHistory history, String header, List<String> lines) {
+        List<BiliReply> replies = new ArrayList<>();
+        if (lines == null || lines.isEmpty()) {
+            return replies;
+        }
+        StringBuilder context = new StringBuilder(header);
+        for (String line : lines) {
+            if (context.length() + line.length() > 1000 && context.length() > header.length()) {
+                replies.add(buildVideoReply(history, context.toString()));
+                context = new StringBuilder(header);
+            }
+            context.append(line);
+        }
+        if (context.length() > header.length()) {
+            replies.add(buildVideoReply(history, context.toString()));
+        }
+        return replies;
+    }
+
+    private BiliReply buildVideoReply(RecordHistory history, String message) {
+        BiliReply reply = new BiliReply();
+        reply.setType("1");
+        reply.setOid(history.getAvId());
+        reply.setAction("1");
+        reply.setMessage(message);
+        return reply;
+    }
+
+    private int appendGiftReplyLines(List<String> replyLines, RecordHistory history, List<RecordHistoryPart> parts, RecordRoom room, DateFormat format) {
+        BigDecimal minPrice = room.getGiftReplyMinPriceCny() == null ? BigDecimal.ZERO : room.getGiftReplyMinPriceCny();
+        if (minPrice.compareTo(BigDecimal.ZERO) < 0) {
+            minPrice = BigDecimal.ZERO;
+        }
+        Map<Long, RecordHistoryPart> partById = new HashMap<>();
+        for (RecordHistoryPart part : parts) {
+            if (part == null || part.getId() == null) {
+                continue;
+            }
+            partById.put(part.getId(), part);
+            roomLiveEventParseService.parsePart(part, false);
+        }
+
+        List<RoomLiveEvent> giftEvents = roomLiveEventRepository.findByHistoryIdAndTypeOrderByPartIdAscSendTimeAsc(
+                history.getId(), RoomLiveEvent.TYPE_GIFT);
+        if (giftEvents.isEmpty()) {
+            return 0;
+        }
+
+        List<Integer> giftIds = giftEvents.stream()
+                .map(RoomLiveEvent::getGiftId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Integer, RoomLiveGiftCatalog> catalogByGiftId = new HashMap<>();
+        if (!giftIds.isEmpty()) {
+            String roomId = hasText(history.getRoomId()) ? history.getRoomId() : room.getRoomId();
+            for (RoomLiveGiftCatalog catalog : roomLiveGiftCatalogRepository.findByRoomIdAndGiftIdIn(roomId, giftIds)) {
+                if (catalog.getGiftId() != null) {
+                    catalogByGiftId.put(catalog.getGiftId(), catalog);
+                }
+            }
+        }
+        int appended = 0;
+        for (RoomLiveEvent event : giftEvents) {
+            RecordHistoryPart part = partById.get(event.getPartId());
+            if (part == null) {
+                continue;
+            }
+            RoomLiveGiftCatalog catalog = event.getGiftId() == null ? null : catalogByGiftId.get(event.getGiftId());
+            BigDecimal unitPrice = resolveGiftUnitPriceCny(event, catalog);
+            if (unitPrice == null || unitPrice.compareTo(minPrice) < 0) {
+                continue;
+            }
+            long count = event.getGiftCount() == null || event.getGiftCount() <= 0 ? 1L : event.getGiftCount();
+            BigDecimal totalPrice = resolveGiftTotalPriceCny(event, unitPrice, count);
+            String uname = hasText(event.getUname()) ? event.getUname() : "未知用户";
+            String giftName = hasText(event.getGiftName())
+                    ? event.getGiftName()
+                    : (catalog != null && hasText(catalog.getGiftName()) ? catalog.getGiftName() : "未知礼物");
+            long sendTime = event.getSendTime() == null ? 0L : event.getSendTime();
+            replyLines.add(part.getPage() + "#" + format.format(new Date(sendTime))
+                    + "  礼物 [💎" + formatMoney(unitPrice) + "] "
+                    + uname + ": " + giftName + " x" + count
+                    + "，总计💎" + formatMoney(totalPrice) + "\n");
+            appended++;
+        }
+        return appended;
+    }
+
+    private BigDecimal resolveGiftUnitPriceCny(RoomLiveEvent event, RoomLiveGiftCatalog catalog) {
+        Long unitCoin = event.getGiftPriceCoin();
+        long count = event.getGiftCount() == null || event.getGiftCount() <= 0 ? 1L : event.getGiftCount();
+        if ((unitCoin == null || unitCoin <= 0) && event.getGiftTotalCoin() != null && event.getGiftTotalCoin() > 0) {
+            unitCoin = event.getGiftTotalCoin() / count;
+        }
+        if (unitCoin != null && unitCoin > 0) {
+            return roomLiveGiftCatalogService.toCny(unitCoin);
+        }
+        if (catalog != null && catalog.getPriceCny() != null && catalog.getPriceCny().compareTo(BigDecimal.ZERO) > 0) {
+            return catalog.getPriceCny();
+        }
+        if (catalog != null && catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
+            return roomLiveGiftCatalogService.toCny(catalog.getPriceCoin());
+        }
+        return null;
+    }
+
+    private BigDecimal resolveGiftTotalPriceCny(RoomLiveEvent event, BigDecimal unitPrice, long count) {
+        if (event.getGiftTotalCoin() != null && event.getGiftTotalCoin() > 0) {
+            return roomLiveGiftCatalogService.toCny(event.getGiftTotalCoin());
+        }
+        return unitPrice.multiply(BigDecimal.valueOf(count));
+    }
+
+    private String formatMoney(BigDecimal value) {
+        if (value == null) {
+            return "0";
+        }
+        return value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
 }

@@ -3,6 +3,7 @@ package top.sshh.bililiverecoder.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -149,6 +150,12 @@ public class RecordRoom {
      * 发送SC和上舰信息
      */
     private Boolean sendSc = false;
+
+    @Column(name = "send_gift_reply", columnDefinition = "bit default 0")
+    private Boolean sendGiftReply = false;
+
+    @Column(name = "gift_reply_min_price_cny", columnDefinition = "decimal(10,2) default 0")
+    private BigDecimal giftReplyMinPriceCny = BigDecimal.ZERO;
 
     /**
      * 弹幕去除重复

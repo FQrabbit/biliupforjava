@@ -749,7 +749,23 @@
                                         </div>
                                         <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
                                     </el-tooltip>
-                                    <el-switch v-model="room.sendSc" active-color="#10b981"></el-switch>
+                                    <el-switch v-model="room.sendSc" active-color="#10b981" @change="handleSendScChange"></el-switch>
+                                </div>
+                                <div class="switch-card">
+                                    <span class="switch-label">礼物评论</span>
+                                    <el-tooltip effect="dark" placement="top">
+                                        <div slot="content">
+                                            开启后，单个礼物单价达到阈值时，会和SC/上舰一起同步到视频评论区；发送仍使用投稿账号。
+                                        </div>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                    </el-tooltip>
+                                    <el-switch v-model="room.sendGiftReply" :disabled="!room.sendSc" active-color="#10b981"></el-switch>
+                                </div>
+                                <div class="switch-card" v-if="room.sendGiftReply">
+                                    <span class="switch-label">礼物阈值</span>
+                                    <el-input class="gift-threshold-input" type="number" v-model="room.giftReplyMinPriceCny" size="mini" :min="0" :step="1" :disabled="!room.sendSc">
+                                        <span slot="suffix">元</span>
+                                    </el-input>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">高能投稿</span>
@@ -3196,6 +3212,7 @@
             },
             handleEdit: function (index, row) {
                 this.room = JSON.parse(JSON.stringify(row));
+                this.normalizeGiftReplyRoom(this.room);
                 // 转换推送标签字符串为数组
                 this.pushMsgTagsArray = this.room.pushMsgTags ? this.room.pushMsgTags.split(',').filter(t => t.trim()) : [];
                 this.dialogFormVisible = true;
@@ -3206,8 +3223,24 @@
             },
             handleEeditLiveMsg: function (index, row) {
                 this.room = JSON.parse(JSON.stringify(row));
+                this.normalizeGiftReplyRoom(this.room);
                 this.seasonsList = [];
                 this.editLiveMsgSettingVisible = true;
+            },
+            handleSendScChange: function (enabled) {
+                if (!enabled) {
+                    this.room.sendGiftReply = false;
+                }
+                this.normalizeGiftReplyRoom(this.room);
+            },
+            normalizeGiftReplyRoom: function (room) {
+                if (!room) {
+                    return;
+                }
+                room.sendSc = !!room.sendSc;
+                room.sendGiftReply = room.sendSc && !!room.sendGiftReply;
+                var price = Number(room.giftReplyMinPriceCny);
+                room.giftReplyMinPriceCny = Number.isFinite(price) && price >= 0 ? price : 0;
             },
             updateRoom: function () {
                 let _this = this;
@@ -3217,6 +3250,7 @@
 
                 // 转换推送标签数组为字符串
                 _this.room.pushMsgTags = _this.pushMsgTagsArray.join(',');
+                _this.normalizeGiftReplyRoom(_this.room);
 
                 // 提交前强制同步封面状态
                 if (_this.room.coverType === 'live') {

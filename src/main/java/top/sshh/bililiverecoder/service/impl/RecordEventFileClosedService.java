@@ -15,6 +15,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.service.StatsAggregationService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.LogKvs;
 
@@ -55,6 +56,9 @@ public class RecordEventFileClosedService implements RecordEventService {
 
     @Autowired
     private ShutdownState shutdownState;
+
+    @Autowired
+    private StatsAggregationService statsAggregationService;
 
     @PostConstruct
     public void initWorkPath() {
@@ -209,6 +213,7 @@ public class RecordEventFileClosedService implements RecordEventService {
             history.setUpdateTime(LocalDateTime.now());
             history.setEndTime(LocalDateTime.now());
             history = historyRepository.save(history);
+            statsAggregationService.refreshHistoryStatsAsync(history.getId());
             if (!vidleFile.exists()) {
                 return;
             }

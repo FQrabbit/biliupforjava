@@ -3275,6 +3275,38 @@
 
 }
 
+.gift-threshold-input {
+
+    width: 116px;
+
+    flex-shrink: 0;
+
+}
+
+.gift-threshold-input .el-input__inner {
+
+    height: 32px;
+
+    line-height: 32px;
+
+    padding-left: 12px;
+
+    padding-right: 30px;
+
+    text-align: right;
+
+}
+
+.gift-threshold-input .el-input__suffix {
+
+    right: 9px;
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+}
+
 
 
 .divider {

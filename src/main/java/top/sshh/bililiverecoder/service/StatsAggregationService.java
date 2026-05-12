@@ -1,0 +1,992 @@
+package top.sshh.bililiverecoder.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import top.sshh.bililiverecoder.entity.*;
+import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.util.LogKvs;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class StatsAggregationService {
+
+    public static final int STATS_VERSION = 2;
+
+    @Autowired
+    private RecordHistoryRepository historyRepository;
+    @Autowired
+    private RecordHistoryPartRepository partRepository;
+    @Autowired
+    private LiveMsgRepository liveMsgRepository;
+    @Autowired
+    private RoomLiveEventRepository eventRepository;
+    @Autowired
+    private RoomLiveEventParseStateRepository eventParseStateRepository;
+    @Autowired
+    private RoomLiveGiftCatalogRepository giftCatalogRepository;
+    @Autowired
+    private RoomLiveGiftCatalogService giftCatalogService;
+    @Autowired
+    private RecordRoomRepository roomRepository;
+    @Autowired
+    private RoomLiveSessionStatsRepository sessionStatsRepository;
+    @Autowired
+    private RoomLiveDailyStatsRepository dailyStatsRepository;
+    @Autowired
+    private RoomLiveMsgBucketStatsRepository bucketStatsRepository;
+
+    @Async("myAsyncPool")
+    public void refreshRecentCompletedHistoriesAsync(int limit) {
+        try {
+            refreshRecentCompletedHistories(limit);
+        } catch (Throwable e) {
+            log.warn("[BLR] {}", LogKvs.event("Stats.RefreshRecent.Failed")
+                    .add("limit", limit)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+    }
+
+    public Map<String, Object> refreshRecentCompletedHistories(int limit) {
+        int safeLimit = Math.max(1, limit);
+        List<RecordHistory> histories = historyRepository.findCompletedOrderByEndTimeDesc(PageRequest.of(0, safeLimit));
+        int updated = 0;
+        for (RecordHistory history : histories) {
+            if (history == null || history.getId() == null) {
+                continue;
+            }
+            refreshHistoryStats(history.getId());
+            updated++;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("updated", updated);
+        result.put("statsVersion", STATS_VERSION);
+        result.put("status", getStatsStatus());
+        return result;
+    }
+
+    public Map<String, Object> backfillMissingStats() {
+        int updated = 0;
+        for (RecordHistory history : historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc()) {
+            if (history == null || history.getId() == null) {
+                continue;
+            }
+            RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
+            if (stats == null || stats.getStatsVersion() < STATS_VERSION) {
+                refreshHistoryStats(history.getId());
+                updated++;
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("updated", updated);
+        result.put("statsVersion", STATS_VERSION);
+        result.put("status", getStatsStatus());
+        return result;
+    }
+
+    @Async("myAsyncPool")
+    public void refreshHistoryStatsAsync(Long historyId) {
+        try {
+            refreshHistoryStats(historyId);
+        } catch (Throwable e) {
+            log.warn("[BLR] {}", LogKvs.event("Stats.RefreshHistory.Failed")
+                    .add("historyId", historyId)
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+    }
+
+    @Transactional
+    public Map<String, Object> rebuildAllStats() {
+        bucketStatsRepository.deleteAll();
+        dailyStatsRepository.deleteAll();
+        sessionStatsRepository.deleteAll();
+
+        int updated = 0;
+        for (RecordHistory history : historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc()) {
+            if (history == null || history.getId() == null) {
+                continue;
+            }
+            aggregateHistory(history);
+            updated++;
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("updated", updated);
+        result.put("statsVersion", STATS_VERSION);
+        result.put("rebuiltAt", LocalDateTime.now());
+        result.put("status", getStatsStatus());
+        return result;
+    }
+
+    @Transactional
+    public void refreshHistoryStats(Long historyId) {
+        if (historyId == null) {
+            return;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            return;
+        }
+        aggregateHistory(historyOptional.get());
+    }
+
+    private void aggregateHistory(RecordHistory history) {
+        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        LocalDateTime startTime = resolveStartTime(history, parts);
+        LocalDateTime endTime = resolveEndTime(history, parts);
+        if (startTime == null && endTime == null) {
+            return;
+        }
+        if (startTime == null) {
+            startTime = endTime;
+        }
+        if (endTime == null) {
+            endTime = startTime;
+        }
+
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        List<Long> partIds = parts.stream()
+                .map(RecordHistoryPart::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        EventStats eventStats = buildEventStats(history.getId(), partIds);
+
+        LocalDate liveDate = startTime.toLocalDate();
+        LocalDateTime now = LocalDateTime.now();
+        RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
+        if (stats == null) {
+            stats = new RoomLiveSessionStats();
+            stats.setHistoryId(history.getId());
+        }
+        stats.setRoomId(history.getRoomId());
+        stats.setUname(room == null ? null : room.getUname());
+        stats.setTitle(history.getTitle());
+        stats.setBvId(history.getBvId());
+        stats.setLiveDate(liveDate);
+        stats.setStartHour(startTime.getHour());
+        stats.setStartTime(startTime);
+        stats.setEndTime(endTime);
+        stats.setDurationSeconds(resolveDurationSeconds(startTime, endTime, parts));
+        stats.setPartCount(parts.size());
+        stats.setFileSize(resolveFileSize(history, parts));
+        stats.setUploadEnabled(history.isUpload());
+        stats.setPublished(history.isPublish());
+        stats.setPublishCode(history.getCode());
+        stats.setSendReply(history.isSendReply());
+        stats.setMsgCount(eventStats.msgCount);
+        stats.setNormalMsgCount(eventStats.normalMsgCount);
+        stats.setAdvancedMsgCount(eventStats.advancedMsgCount);
+        stats.setGiftEventCount(eventStats.giftEventCount);
+        stats.setGiftTotalCount(eventStats.giftTotalCount);
+        stats.setGiftTotalCoin(eventStats.giftTotalCoin);
+        stats.setGiftAmountCny(eventStats.giftAmountCny);
+        stats.setGiftTypeCount(eventStats.giftTypeCount);
+        stats.setScCount(eventStats.scCount);
+        stats.setScAmount(eventStats.scAmount);
+        stats.setGuardCount(eventStats.guardCount);
+        stats.setActiveUserCount(eventStats.activeUserCount);
+        stats.setStatsUpdatedAt(now);
+        stats.setStatsVersion(STATS_VERSION);
+
+        bucketStatsRepository.deleteByHistoryId(history.getId());
+        BucketPeak peak = saveBucketStats(history.getId(), history.getRoomId(), partIds, eventStats.fromRawEvents, now);
+        stats.setPeakMinuteIndex(peak.bucketIndex);
+        stats.setPeakMinuteMsgCount(peak.msgCount);
+        sessionStatsRepository.save(stats);
+        recomputeDailyStats(history.getRoomId(), liveDate, room, now);
+    }
+
+    private EventStats buildEventStats(Long historyId, List<Long> partIds) {
+        EventStats stats = new EventStats();
+        long rawEventCount = eventRepository.countByHistoryId(historyId);
+        long parsedDanmuCount = nullToZero(eventParseStateRepository.sumDanmuCountByHistoryId(historyId));
+        if (rawEventCount > 0 || parsedDanmuCount > 0) {
+            stats.fromRawEvents = rawEventCount > 0 && (partIds.isEmpty() || liveMsgRepository.countByPartIdIn(partIds) == 0);
+            stats.normalMsgCount = parsedDanmuCount > 0
+                    ? parsedDanmuCount
+                    : (partIds.isEmpty() ? 0L : liveMsgRepository.countByPartIdInAndPool(partIds, 0));
+            stats.scCount = eventRepository.countByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_SC);
+            stats.guardCount = nullToZero(eventRepository.sumGuardCountByHistoryId(historyId));
+            stats.advancedMsgCount = stats.scCount + eventRepository.countByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_GUARD);
+            stats.msgCount = stats.normalMsgCount + stats.advancedMsgCount;
+            stats.giftEventCount = eventRepository.countByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_GIFT);
+            GiftValueStats giftValueStats = buildGiftValueStats(historyId);
+            stats.giftTotalCount = giftValueStats.giftCount;
+            stats.giftTotalCoin = giftValueStats.totalCoin;
+            stats.giftAmountCny = giftValueStats.amountCny;
+            stats.giftTypeCount = eventRepository.countDistinctGiftNameByHistoryId(historyId);
+            stats.scAmount = defaultBigDecimal(eventRepository.sumScPriceByHistoryId(historyId));
+            stats.activeUserCount = eventRepository.countDistinctUidByHistoryId(historyId);
+            return stats;
+        }
+
+        stats.msgCount = partIds.isEmpty() ? 0L : liveMsgRepository.countByPartIdIn(partIds);
+        stats.normalMsgCount = partIds.isEmpty() ? 0L : liveMsgRepository.countByPartIdInAndPool(partIds, 0);
+        stats.advancedMsgCount = partIds.isEmpty() ? 0L : liveMsgRepository.countByPartIdInAndPool(partIds, 1);
+        return stats;
+    }
+
+    private GiftValueStats buildGiftValueStats(Long historyId) {
+        List<RoomLiveEvent> gifts = eventRepository.findByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_GIFT);
+        if (gifts.isEmpty()) {
+            return new GiftValueStats(0L, 0L, BigDecimal.ZERO);
+        }
+        Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId = new HashMap<>();
+        Map<String, List<Integer>> giftIdsByRoom = gifts.stream()
+                .filter(event -> event.getGiftId() != null && event.getRoomId() != null)
+                .collect(Collectors.groupingBy(RoomLiveEvent::getRoomId,
+                        Collectors.mapping(RoomLiveEvent::getGiftId,
+                                Collectors.collectingAndThen(Collectors.toSet(), ArrayList::new))));
+        for (Map.Entry<String, List<Integer>> entry : giftIdsByRoom.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+            giftCatalogRepository.findByRoomIdAndGiftIdIn(entry.getKey(), entry.getValue()).stream()
+                    .filter(item -> item.getRoomId() != null && item.getGiftId() != null)
+                    .forEach(item -> catalogByRoomGiftId.put(giftCatalogKey(item.getRoomId(), item.getGiftId()), item));
+        }
+        long giftCount = 0L;
+        long totalCoin = 0L;
+        for (RoomLiveEvent event : gifts) {
+            long count = event.getGiftCount() == null ? 1L : Math.max(0L, event.getGiftCount());
+            giftCount += count;
+            Long eventCoin = event.getGiftTotalCoin();
+            if (eventCoin == null && event.getGiftPriceCoin() != null) {
+                eventCoin = event.getGiftPriceCoin() * count;
+            }
+            if (eventCoin == null && event.getGiftId() != null) {
+                RoomLiveGiftCatalog catalog = catalogByRoomGiftId.get(giftCatalogKey(event.getRoomId(), event.getGiftId()));
+                if (catalog != null && catalog.getPriceCoin() != null) {
+                    eventCoin = catalog.getPriceCoin() * count;
+                }
+            }
+            if (eventCoin != null && eventCoin > 0) {
+                totalCoin += eventCoin;
+            }
+        }
+        return new GiftValueStats(giftCount, totalCoin, giftCatalogService.toCny(totalCoin));
+    }
+
+    private String giftCatalogKey(String roomId, Integer giftId) {
+        return roomId + "#" + giftId;
+    }
+
+    private BucketPeak saveBucketStats(Long historyId, String roomId, List<Long> partIds, boolean fromRawEvents, LocalDateTime now) {
+        if (fromRawEvents) {
+            return saveRawEventBucketStats(historyId, roomId, now);
+        }
+        if (partIds.isEmpty()) {
+            return new BucketPeak(null, 0L);
+        }
+        List<RoomLiveMsgBucketStats> buckets = new ArrayList<>();
+        Integer peakIndex = null;
+        long peakCount = 0L;
+        for (Object[] row : liveMsgRepository.getMsgBucketCountByPartIds(partIds)) {
+            int bucketIndex = toNumber(row[0]).intValue();
+            long msgCount = toNumber(row[1]).longValue();
+            RoomLiveMsgBucketStats bucket = new RoomLiveMsgBucketStats();
+            bucket.setHistoryId(historyId);
+            bucket.setRoomId(roomId);
+            bucket.setBucketIndex(bucketIndex);
+            bucket.setBucketStartMs(bucketIndex * 60_000L);
+            bucket.setMsgCount(msgCount);
+            bucket.setNormalMsgCount(toNumber(row[2]).longValue());
+            bucket.setAdvancedMsgCount(toNumber(row[3]).longValue());
+            bucket.setStatsUpdatedAt(now);
+            bucket.setStatsVersion(STATS_VERSION);
+            buckets.add(bucket);
+            if (msgCount > peakCount) {
+                peakCount = msgCount;
+                peakIndex = bucketIndex;
+            }
+        }
+        bucketStatsRepository.saveAll(buckets);
+        return new BucketPeak(peakIndex, peakCount);
+    }
+
+    private BucketPeak saveRawEventBucketStats(Long historyId, String roomId, LocalDateTime now) {
+        Map<Integer, RoomLiveMsgBucketStats> bucketMap = new TreeMap<>();
+        Integer peakIndex = null;
+        long peakCount = 0L;
+        for (Object[] row : eventRepository.getEventBucketCountByHistoryId(historyId)) {
+            int bucketIndex = toNumber(row[0]).intValue();
+            String type = row[1] == null ? "" : row[1].toString();
+            long count = toNumber(row[2]).longValue();
+            RoomLiveMsgBucketStats bucket = bucketMap.computeIfAbsent(bucketIndex, index -> {
+                RoomLiveMsgBucketStats value = new RoomLiveMsgBucketStats();
+                value.setHistoryId(historyId);
+                value.setRoomId(roomId);
+                value.setBucketIndex(index);
+                value.setBucketStartMs(index * 60_000L);
+                value.setStatsUpdatedAt(now);
+                value.setStatsVersion(STATS_VERSION);
+                return value;
+            });
+            if (RoomLiveEvent.TYPE_DANMU.equals(type)) {
+                bucket.setNormalMsgCount(count);
+                bucket.setMsgCount(bucket.getMsgCount() + count);
+            } else if (RoomLiveEvent.TYPE_SC.equals(type)) {
+                bucket.setScCount(count);
+                bucket.setAdvancedMsgCount(bucket.getAdvancedMsgCount() + count);
+                bucket.setMsgCount(bucket.getMsgCount() + count);
+            } else if (RoomLiveEvent.TYPE_GUARD.equals(type)) {
+                bucket.setGuardCount(count);
+                bucket.setAdvancedMsgCount(bucket.getAdvancedMsgCount() + count);
+                bucket.setMsgCount(bucket.getMsgCount() + count);
+            } else if (RoomLiveEvent.TYPE_GIFT.equals(type)) {
+                bucket.setGiftEventCount(count);
+            }
+            if (bucket.getMsgCount() > peakCount) {
+                peakCount = bucket.getMsgCount();
+                peakIndex = bucketIndex;
+            }
+        }
+        bucketStatsRepository.saveAll(bucketMap.values());
+        return new BucketPeak(peakIndex, peakCount);
+    }
+
+    private void recomputeDailyStats(String roomId, LocalDate liveDate, RecordRoom room, LocalDateTime now) {
+        if (roomId == null || liveDate == null) {
+            return;
+        }
+        List<RoomLiveSessionStats> sessions = sessionStatsRepository.findByRoomIdAndLiveDate(roomId, liveDate);
+        RoomLiveDailyStats daily = dailyStatsRepository.findByRoomIdAndLiveDate(roomId, liveDate);
+        if (daily == null) {
+            daily = new RoomLiveDailyStats();
+            daily.setRoomId(roomId);
+            daily.setLiveDate(liveDate);
+        }
+        daily.setUname(room == null ? null : room.getUname());
+        daily.setLiveCount(sessions.size());
+        long totalDuration = sessions.stream().mapToLong(RoomLiveSessionStats::getDurationSeconds).sum();
+        daily.setTotalDurationSeconds(totalDuration);
+        daily.setAverageDurationSeconds(sessions.isEmpty() ? 0L : totalDuration / sessions.size());
+        daily.setTotalFileSize(sessions.stream().mapToLong(RoomLiveSessionStats::getFileSize).sum());
+        daily.setTotalMsgCount(sessions.stream().mapToLong(RoomLiveSessionStats::getMsgCount).sum());
+        daily.setTotalNormalMsgCount(sessions.stream().mapToLong(RoomLiveSessionStats::getNormalMsgCount).sum());
+        daily.setTotalAdvancedMsgCount(sessions.stream().mapToLong(RoomLiveSessionStats::getAdvancedMsgCount).sum());
+        daily.setTotalGiftEventCount(sessions.stream().mapToLong(RoomLiveSessionStats::getGiftEventCount).sum());
+        daily.setTotalGiftCount(sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCount).sum());
+        daily.setTotalGiftCoin(sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCoin).sum());
+        daily.setTotalGiftAmountCny(sessions.stream().map(RoomLiveSessionStats::getGiftAmountCny).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        daily.setTotalScCount(sessions.stream().mapToLong(RoomLiveSessionStats::getScCount).sum());
+        daily.setTotalScAmount(sessions.stream().map(RoomLiveSessionStats::getScAmount).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        daily.setTotalGuardCount(sessions.stream().mapToLong(RoomLiveSessionStats::getGuardCount).sum());
+        daily.setTotalActiveUserCount(sessions.stream().mapToLong(RoomLiveSessionStats::getActiveUserCount).sum());
+        daily.setPublishedCount((int) sessions.stream().filter(RoomLiveSessionStats::isPublished).count());
+        daily.setSuccessfulPublishCount((int) sessions.stream().filter(this::isPublishSuccess).count());
+        daily.setStatsUpdatedAt(now);
+        daily.setStatsVersion(STATS_VERSION);
+        dailyStatsRepository.save(daily);
+    }
+
+    public Map<String, Object> getOverview() {
+        return getOverview(null, null);
+    }
+
+    public Map<String, Object> getOverview(LocalDate from, LocalDate to) {
+        List<RoomLiveSessionStats> allSessions = toList(sessionStatsRepository.findAll());
+        List<RoomLiveSessionStats> sessions = filterSessionsByDate(allSessions, from, to);
+        StatsCoverage coverage = buildStatsCoverage(allSessions);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("statsVersion", STATS_VERSION);
+        result.put("totalSessions", sessions.size());
+        result.put("totalDurationSeconds", sessions.stream().mapToLong(RoomLiveSessionStats::getDurationSeconds).sum());
+        result.put("avgDurationSeconds", averageLong(sessions.stream().mapToLong(RoomLiveSessionStats::getDurationSeconds).sum(), sessions.size()));
+        result.put("totalMsgCount", sessions.stream().mapToLong(RoomLiveSessionStats::getMsgCount).sum());
+        result.put("totalNormalMsgCount", sessions.stream().mapToLong(RoomLiveSessionStats::getNormalMsgCount).sum());
+        result.put("totalAdvancedMsgCount", sessions.stream().mapToLong(RoomLiveSessionStats::getAdvancedMsgCount).sum());
+        result.put("totalGiftEventCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftEventCount).sum());
+        result.put("totalGiftCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCount).sum());
+        result.put("totalGiftCoin", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCoin).sum());
+        result.put("totalGiftAmountCny", sessions.stream().map(RoomLiveSessionStats::getGiftAmountCny).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        result.put("totalScCount", sessions.stream().mapToLong(RoomLiveSessionStats::getScCount).sum());
+        result.put("totalScAmount", sessions.stream().map(RoomLiveSessionStats::getScAmount).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        result.put("totalGuardCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGuardCount).sum());
+        result.put("totalActiveUserCount", sessions.stream().mapToLong(RoomLiveSessionStats::getActiveUserCount).sum());
+        long totalDuration = sessions.stream().mapToLong(RoomLiveSessionStats::getDurationSeconds).sum();
+        result.put("msgDensityPerMinute", totalDuration <= 0 ? 0.0d : round(resultLong(result, "totalMsgCount") / (totalDuration / 60.0d)));
+        int uploadEnabledCount = (int) sessions.stream().filter(RoomLiveSessionStats::isUploadEnabled).count();
+        int successCount = (int) sessions.stream().filter(this::isPublishSuccess).count();
+        result.put("publishSuccessRate", uploadEnabledCount == 0 ? 0.0d : round(successCount * 100.0d / uploadEnabledCount));
+        long[] hourBuckets = buildHourBuckets(sessions);
+        result.put("hourBuckets", toLongList(hourBuckets));
+        result.put("favoriteHour", favoriteHour(hourBuckets));
+        result.put("coverage", coverage.toMap());
+        result.put("publishStatusDistribution", buildPublishStatusDistribution(sessions));
+        result.put("durationDistribution", buildDurationDistribution(sessions));
+        result.put("dailyTrend", buildDailyTrend(filterDailyStatsByDate(toList(dailyStatsRepository.findAll()), from, to)));
+        result.put("updatedAt", sessions.stream()
+                .map(RoomLiveSessionStats::getStatsUpdatedAt)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null));
+        return result;
+    }
+
+    public Map<String, Object> getStatsStatus() {
+        return buildStatsCoverage(toList(sessionStatsRepository.findAll())).toMap();
+    }
+
+    public List<Map<String, Object>> getRoomSummaries() {
+        return getRoomSummaries(null, null);
+    }
+
+    public List<Map<String, Object>> getRoomSummaries(LocalDate from, LocalDate to) {
+        Map<String, List<RoomLiveSessionStats>> byRoom = filterSessionsByDate(toList(sessionStatsRepository.findAll()), from, to).stream()
+                .filter(s -> s.getRoomId() != null)
+                .collect(Collectors.groupingBy(RoomLiveSessionStats::getRoomId));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<String, List<RoomLiveSessionStats>> entry : byRoom.entrySet()) {
+            result.add(buildRoomSummary(entry.getKey(), entry.getValue()));
+        }
+        result.sort((a, b) -> Long.compare(asLong(b.get("liveCount")), asLong(a.get("liveCount"))));
+        return result;
+    }
+
+    public Map<String, Object> getRoomDetail(String roomId) {
+        return getRoomDetail(roomId, null, null);
+    }
+
+    public Map<String, Object> getRoomDetail(String roomId, LocalDate from, LocalDate to) {
+        List<RoomLiveSessionStats> sessions = filterSessionsByDate(sessionStatsRepository.findByRoomId(roomId), from, to);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("summary", buildRoomSummary(roomId, sessions));
+        result.put("hourBuckets", toLongList(buildHourBuckets(sessions)));
+        result.put("dailyTrend", buildDailyTrend(filterDailyStatsByDate(dailyStatsRepository.findByRoomId(roomId), from, to)));
+        List<RoomLiveSessionStats> recentSessions = sessions.stream()
+                .sorted(Comparator.comparing(RoomLiveSessionStats::getStartTime, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(50)
+                .collect(Collectors.toList());
+        result.put("sessions", recentSessions);
+        result.put("interactionOverview", buildInteractionOverview(sessions));
+        result.put("topDanmuUsers", topUsers(eventRepository.findTopUsersByRoomIdAndType(roomId, RoomLiveEvent.TYPE_DANMU, from, to, PageRequest.of(0, 10))));
+        result.put("topScUsers", topUsers(eventRepository.findTopUsersByRoomIdAndType(roomId, RoomLiveEvent.TYPE_SC, from, to, PageRequest.of(0, 10))));
+        result.put("topGiftUsers", topUsers(eventRepository.findTopGiftUsersByRoomId(roomId, from, to, PageRequest.of(0, 10))));
+        result.put("giftDistribution", namedValues(eventRepository.findGiftDistributionByRoomId(roomId, from, to, PageRequest.of(0, 12))));
+        if (!recentSessions.isEmpty()) {
+            result.put("selectedHistoryId", recentSessions.get(0).getHistoryId());
+            result.put("latestBuckets", bucketStatsRepository.findByHistoryIdOrderByBucketIndexAsc(recentSessions.get(0).getHistoryId()));
+            result.put("latestSessionDetail", getSessionDetail(roomId, recentSessions.get(0).getHistoryId()));
+        } else {
+            result.put("selectedHistoryId", null);
+            result.put("latestBuckets", Collections.emptyList());
+            result.put("latestSessionDetail", Collections.emptyMap());
+        }
+        return result;
+    }
+
+    public List<RoomLiveMsgBucketStats> getSessionBuckets(String roomId, Long historyId) {
+        RoomLiveSessionStats session = sessionStatsRepository.findByHistoryId(historyId);
+        if (session == null || roomId == null || !roomId.equals(session.getRoomId())) {
+            return Collections.emptyList();
+        }
+        return bucketStatsRepository.findByHistoryIdOrderByBucketIndexAsc(historyId);
+    }
+
+    public Map<String, Object> getSessionDetail(String roomId, Long historyId) {
+        RoomLiveSessionStats session = sessionStatsRepository.findByHistoryId(historyId);
+        if (session == null || roomId == null || !roomId.equals(session.getRoomId())) {
+            return Collections.emptyMap();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("session", session);
+        result.put("buckets", bucketStatsRepository.findByHistoryIdOrderByBucketIndexAsc(historyId));
+        result.put("topDanmuUsers", topUsers(eventRepository.findTopUsersByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_DANMU, PageRequest.of(0, 10))));
+        result.put("topScUsers", topUsers(eventRepository.findTopUsersByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_SC, PageRequest.of(0, 10))));
+        List<Map<String, Object>> topGiftUsersByCount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::giftCount).reversed());
+        List<Map<String, Object>> topGiftUsersByAmount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::totalCoin).reversed());
+        result.put("topGiftUsers", topGiftUsersByCount);
+        result.put("topGiftUsersByCount", topGiftUsersByCount);
+        result.put("topGiftUsersByAmount", topGiftUsersByAmount);
+        result.put("giftDistribution", namedValues(eventRepository.findGiftDistributionByHistoryId(historyId, PageRequest.of(0, 12))));
+        return result;
+    }
+
+    private Map<String, Object> buildRoomSummary(String roomId, List<RoomLiveSessionStats> sessions) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        RecordRoom room = roomRepository.findByRoomId(roomId);
+        long totalDuration = sessions.stream().mapToLong(RoomLiveSessionStats::getDurationSeconds).sum();
+        long totalMsg = sessions.stream().mapToLong(RoomLiveSessionStats::getMsgCount).sum();
+        long[] hourBuckets = buildHourBuckets(sessions);
+        map.put("roomId", roomId);
+        map.put("uname", room != null ? room.getUname() : sessions.stream().map(RoomLiveSessionStats::getUname).filter(Objects::nonNull).findFirst().orElse(""));
+        map.put("liveCount", sessions.size());
+        map.put("totalDurationSeconds", totalDuration);
+        map.put("avgDurationSeconds", averageLong(totalDuration, sessions.size()));
+        map.put("totalMsgCount", totalMsg);
+        map.put("totalNormalMsgCount", sessions.stream().mapToLong(RoomLiveSessionStats::getNormalMsgCount).sum());
+        map.put("totalAdvancedMsgCount", sessions.stream().mapToLong(RoomLiveSessionStats::getAdvancedMsgCount).sum());
+        map.put("totalGiftEventCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftEventCount).sum());
+        map.put("totalGiftCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCount).sum());
+        map.put("totalGiftCoin", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCoin).sum());
+        map.put("totalGiftAmountCny", sessions.stream().map(RoomLiveSessionStats::getGiftAmountCny).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        map.put("totalScCount", sessions.stream().mapToLong(RoomLiveSessionStats::getScCount).sum());
+        map.put("totalScAmount", sessions.stream().map(RoomLiveSessionStats::getScAmount).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        map.put("totalGuardCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGuardCount).sum());
+        map.put("totalActiveUserCount", sessions.stream().mapToLong(RoomLiveSessionStats::getActiveUserCount).sum());
+        map.put("msgDensityPerMinute", totalDuration <= 0 ? 0.0d : round(totalMsg / (totalDuration / 60.0d)));
+        int uploadEnabledCount = (int) sessions.stream().filter(RoomLiveSessionStats::isUploadEnabled).count();
+        int successCount = (int) sessions.stream().filter(this::isPublishSuccess).count();
+        map.put("publishSuccessRate", uploadEnabledCount == 0 ? 0.0d : round(successCount * 100.0d / uploadEnabledCount));
+        map.put("favoriteHour", favoriteHour(hourBuckets));
+        map.put("latestStartTime", sessions.stream().map(RoomLiveSessionStats::getStartTime).filter(Objects::nonNull).max(LocalDateTime::compareTo).orElse(null));
+        return map;
+    }
+
+    private Map<String, Object> buildInteractionOverview(List<RoomLiveSessionStats> sessions) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("totalDanmu", sessions.stream().mapToLong(RoomLiveSessionStats::getNormalMsgCount).sum());
+        map.put("totalGiftEventCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftEventCount).sum());
+        map.put("totalGiftCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCount).sum());
+        map.put("totalGiftCoin", sessions.stream().mapToLong(RoomLiveSessionStats::getGiftTotalCoin).sum());
+        map.put("totalGiftAmountCny", sessions.stream().map(RoomLiveSessionStats::getGiftAmountCny).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        map.put("totalScCount", sessions.stream().mapToLong(RoomLiveSessionStats::getScCount).sum());
+        map.put("totalScAmount", sessions.stream().map(RoomLiveSessionStats::getScAmount).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        map.put("totalGuardCount", sessions.stream().mapToLong(RoomLiveSessionStats::getGuardCount).sum());
+        map.put("totalActiveUserCount", sessions.stream().mapToLong(RoomLiveSessionStats::getActiveUserCount).sum());
+        return map;
+    }
+
+    private List<Map<String, Object>> topUsers(List<Object[]> rows) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object[] row : rows) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("uid", row.length > 0 ? row[0] : null);
+            map.put("uname", row.length > 1 ? row[1] : null);
+            map.put("value", row.length > 2 ? toNumber(row[2]).longValue() : 0L);
+            result.add(map);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> namedValues(List<Object[]> rows) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object[] row : rows) {
+            String name = row.length > 0 && row[0] != null ? row[0].toString() : "未知礼物";
+            result.add(namedCount(name, row.length > 1 ? toNumber(row[1]).longValue() : 0L));
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> topGiftUsersByHistoryId(Long historyId, Comparator<GiftUserStats> comparator) {
+        List<RoomLiveEvent> gifts = eventRepository.findByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_GIFT);
+        if (gifts.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId = loadGiftCatalog(gifts);
+        Map<String, GiftUserStats> users = new LinkedHashMap<>();
+        for (RoomLiveEvent event : gifts) {
+            String key = event.getUid() == null ? "name:" + nullToEmpty(event.getUname()) : "uid:" + event.getUid();
+            GiftUserStats stats = users.computeIfAbsent(key, ignored -> new GiftUserStats(event.getUid(), event.getUname()));
+            stats.giftCount += eventGiftCount(event);
+            stats.eventCount++;
+            stats.totalCoin += giftCoinForEvent(event, catalogByRoomGiftId);
+        }
+        return users.values().stream()
+                .sorted(comparator.thenComparing(GiftUserStats::eventCount, Comparator.reverseOrder()))
+                .limit(10)
+                .map(this::giftUserStatsMap)
+                .collect(Collectors.toList());
+    }
+
+    private Map<String, RoomLiveGiftCatalog> loadGiftCatalog(List<RoomLiveEvent> gifts) {
+        Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId = new HashMap<>();
+        Map<String, List<Integer>> giftIdsByRoom = gifts.stream()
+                .filter(event -> event.getGiftId() != null && event.getRoomId() != null)
+                .collect(Collectors.groupingBy(RoomLiveEvent::getRoomId,
+                        Collectors.mapping(RoomLiveEvent::getGiftId,
+                                Collectors.collectingAndThen(Collectors.toSet(), ArrayList::new))));
+        for (Map.Entry<String, List<Integer>> entry : giftIdsByRoom.entrySet()) {
+            giftCatalogRepository.findByRoomIdAndGiftIdIn(entry.getKey(), entry.getValue()).stream()
+                    .filter(item -> item.getRoomId() != null && item.getGiftId() != null)
+                    .forEach(item -> catalogByRoomGiftId.put(giftCatalogKey(item.getRoomId(), item.getGiftId()), item));
+        }
+        return catalogByRoomGiftId;
+    }
+
+    private long eventGiftCount(RoomLiveEvent event) {
+        return event.getGiftCount() == null ? 1L : Math.max(0L, event.getGiftCount());
+    }
+
+    private long giftCoinForEvent(RoomLiveEvent event, Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId) {
+        long count = eventGiftCount(event);
+        Long eventCoin = event.getGiftTotalCoin();
+        if (eventCoin == null && event.getGiftPriceCoin() != null) {
+            eventCoin = event.getGiftPriceCoin() * count;
+        }
+        if (eventCoin == null && event.getGiftId() != null) {
+            RoomLiveGiftCatalog catalog = catalogByRoomGiftId.get(giftCatalogKey(event.getRoomId(), event.getGiftId()));
+            if (catalog != null && catalog.getPriceCoin() != null) {
+                eventCoin = catalog.getPriceCoin() * count;
+            }
+        }
+        return eventCoin == null ? 0L : Math.max(0L, eventCoin);
+    }
+
+    private Map<String, Object> giftUserStatsMap(GiftUserStats stats) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("uid", stats.uid);
+        map.put("uname", stats.uname);
+        map.put("value", stats.giftCount);
+        map.put("giftCount", stats.giftCount);
+        map.put("eventCount", stats.eventCount);
+        map.put("totalCoin", stats.totalCoin);
+        map.put("amountCny", giftCatalogService.toCny(stats.totalCoin));
+        return map;
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private StatsCoverage buildStatsCoverage(List<RoomLiveSessionStats> sessions) {
+        List<RecordHistory> completedHistories = historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc();
+        Map<Long, RoomLiveSessionStats> statsByHistoryId = sessions.stream()
+                .filter(s -> s.getHistoryId() != null)
+                .collect(Collectors.toMap(RoomLiveSessionStats::getHistoryId, s -> s, (a, b) -> a));
+        long stale = 0L;
+        long pending = 0L;
+        for (RecordHistory history : completedHistories) {
+            if (history == null || history.getId() == null) {
+                continue;
+            }
+            RoomLiveSessionStats stats = statsByHistoryId.get(history.getId());
+            if (stats == null) {
+                pending++;
+            } else if (stats.getStatsVersion() < STATS_VERSION) {
+                stale++;
+                pending++;
+            }
+        }
+        LocalDateTime updatedAt = sessions.stream()
+                .map(RoomLiveSessionStats::getStatsUpdatedAt)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+        return new StatsCoverage(completedHistories.size(), sessions.size(), pending, stale, updatedAt);
+    }
+
+    private List<Map<String, Object>> buildPublishStatusDistribution(List<RoomLiveSessionStats> sessions) {
+        long success = sessions.stream().filter(this::isPublishSuccess).count();
+        long invisible = sessions.stream().filter(s -> s.getPublishCode() == 62002).count();
+        long failed = sessions.stream()
+                .filter(s -> s.isUploadEnabled() && s.isPublished() && !isPublishSuccess(s) && s.getPublishCode() != 62002)
+                .count();
+        long waiting = sessions.stream().filter(s -> s.isUploadEnabled() && !s.isPublished()).count();
+        long notSubmitted = sessions.stream().filter(s -> !s.isUploadEnabled()).count();
+        List<Map<String, Object>> result = new ArrayList<>();
+        result.add(namedCount("投稿成功", success));
+        result.add(namedCount("等待投稿", waiting));
+        result.add(namedCount("投稿失败/退回", failed));
+        result.add(namedCount("稿件不可见", invisible));
+        result.add(namedCount("未开启投稿", notSubmitted));
+        return result;
+    }
+
+    private List<Map<String, Object>> buildDurationDistribution(List<RoomLiveSessionStats> sessions) {
+        long under1h = 0L;
+        long h1to3 = 0L;
+        long h3to6 = 0L;
+        long over6h = 0L;
+        for (RoomLiveSessionStats session : sessions) {
+            long seconds = session.getDurationSeconds();
+            if (seconds < 3600L) {
+                under1h++;
+            } else if (seconds < 10_800L) {
+                h1to3++;
+            } else if (seconds < 21_600L) {
+                h3to6++;
+            } else {
+                over6h++;
+            }
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        result.add(namedCount("0-1h", under1h));
+        result.add(namedCount("1-3h", h1to3));
+        result.add(namedCount("3-6h", h3to6));
+        result.add(namedCount("6h+", over6h));
+        return result;
+    }
+
+    private List<Map<String, Object>> buildDailyTrend(List<RoomLiveDailyStats> dailyStats) {
+        Map<LocalDate, DailyAggregate> byDate = new TreeMap<>();
+        for (RoomLiveDailyStats daily : dailyStats) {
+            if (daily == null || daily.getLiveDate() == null) {
+                continue;
+            }
+            DailyAggregate aggregate = byDate.computeIfAbsent(daily.getLiveDate(), DailyAggregate::new);
+            aggregate.liveCount += daily.getLiveCount();
+            aggregate.totalDurationSeconds += daily.getTotalDurationSeconds();
+            aggregate.totalMsgCount += daily.getTotalMsgCount();
+            aggregate.totalAdvancedMsgCount += daily.getTotalAdvancedMsgCount();
+            aggregate.totalGiftCount += daily.getTotalGiftCount();
+            aggregate.totalScCount += daily.getTotalScCount();
+            aggregate.totalGuardCount += daily.getTotalGuardCount();
+            aggregate.publishedCount += daily.getPublishedCount();
+            aggregate.successfulPublishCount += daily.getSuccessfulPublishCount();
+        }
+        List<DailyAggregate> aggregates = new ArrayList<>(byDate.values());
+        int from = Math.max(0, aggregates.size() - 30);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (DailyAggregate aggregate : aggregates.subList(from, aggregates.size())) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("liveDate", aggregate.liveDate);
+            map.put("liveCount", aggregate.liveCount);
+            map.put("totalDurationSeconds", aggregate.totalDurationSeconds);
+            map.put("averageDurationSeconds", averageLong(aggregate.totalDurationSeconds, aggregate.liveCount));
+            map.put("totalMsgCount", aggregate.totalMsgCount);
+            map.put("totalAdvancedMsgCount", aggregate.totalAdvancedMsgCount);
+            map.put("totalGiftCount", aggregate.totalGiftCount);
+            map.put("totalScCount", aggregate.totalScCount);
+            map.put("totalGuardCount", aggregate.totalGuardCount);
+            map.put("publishedCount", aggregate.publishedCount);
+            map.put("successfulPublishCount", aggregate.successfulPublishCount);
+            result.add(map);
+        }
+        return result;
+    }
+
+    private List<RoomLiveSessionStats> filterSessionsByDate(List<RoomLiveSessionStats> sessions, LocalDate from, LocalDate to) {
+        return sessions.stream()
+                .filter(s -> isDateInRange(s.getLiveDate(), from, to))
+                .collect(Collectors.toList());
+    }
+
+    private List<RoomLiveDailyStats> filterDailyStatsByDate(List<RoomLiveDailyStats> dailyStats, LocalDate from, LocalDate to) {
+        return dailyStats.stream()
+                .filter(s -> isDateInRange(s.getLiveDate(), from, to))
+                .collect(Collectors.toList());
+    }
+
+    private boolean isDateInRange(LocalDate value, LocalDate from, LocalDate to) {
+        if (value == null) {
+            return false;
+        }
+        if (from != null && value.isBefore(from)) {
+            return false;
+        }
+        return to == null || !value.isAfter(to);
+    }
+
+    private Map<String, Object> namedCount(String name, long count) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("name", name);
+        map.put("value", count);
+        return map;
+    }
+
+    private <T> List<T> reverseList(List<T> values) {
+        List<T> result = new ArrayList<>(values);
+        Collections.reverse(result);
+        return result;
+    }
+
+    private LocalDateTime resolveStartTime(RecordHistory history, List<RecordHistoryPart> parts) {
+        if (history.getStartTime() != null) {
+            return history.getStartTime();
+        }
+        return parts.stream().map(RecordHistoryPart::getStartTime).filter(Objects::nonNull).min(LocalDateTime::compareTo).orElse(null);
+    }
+
+    private LocalDateTime resolveEndTime(RecordHistory history, List<RecordHistoryPart> parts) {
+        if (history.getEndTime() != null) {
+            return history.getEndTime();
+        }
+        return parts.stream().map(RecordHistoryPart::getEndTime).filter(Objects::nonNull).max(LocalDateTime::compareTo).orElse(null);
+    }
+
+    private long resolveDurationSeconds(LocalDateTime startTime, LocalDateTime endTime, List<RecordHistoryPart> parts) {
+        double partDuration = parts.stream().mapToDouble(RecordHistoryPart::getDuration).filter(v -> v > 0).sum();
+        if (partDuration > 0) {
+            return Math.round(partDuration);
+        }
+        if (startTime != null && endTime != null) {
+            return Math.max(0L, Duration.between(startTime, endTime).getSeconds());
+        }
+        return 0L;
+    }
+
+    private long resolveFileSize(RecordHistory history, List<RecordHistoryPart> parts) {
+        long partFileSize = parts.stream().mapToLong(RecordHistoryPart::getFileSize).sum();
+        return partFileSize > 0 ? partFileSize : history.getFileSize();
+    }
+
+    private boolean isPublishSuccess(RoomLiveSessionStats stats) {
+        return stats.isPublished() && (stats.getPublishCode() == 0 || stats.getPublishCode() == -50);
+    }
+
+    private long[] buildHourBuckets(List<RoomLiveSessionStats> sessions) {
+        long[] buckets = new long[24];
+        for (RoomLiveSessionStats session : sessions) {
+            Integer hour = session.getStartHour();
+            if (hour != null && hour >= 0 && hour < 24) {
+                buckets[hour]++;
+            }
+        }
+        return buckets;
+    }
+
+    private Integer favoriteHour(long[] buckets) {
+        long max = 0L;
+        Integer hour = null;
+        for (int i = 0; i < buckets.length; i++) {
+            if (buckets[i] > max) {
+                max = buckets[i];
+                hour = i;
+            }
+        }
+        return hour;
+    }
+
+    private long averageLong(long total, int count) {
+        return count == 0 ? 0L : total / count;
+    }
+
+    private double round(double value) {
+        return Math.round(value * 100.0d) / 100.0d;
+    }
+
+    private List<Long> toLongList(long[] values) {
+        List<Long> result = new ArrayList<>(values.length);
+        for (long value : values) {
+            result.add(value);
+        }
+        return result;
+    }
+
+    private <T> List<T> toList(Iterable<T> iterable) {
+        List<T> list = new ArrayList<>();
+        if (iterable != null) {
+            iterable.forEach(list::add);
+        }
+        return list;
+    }
+
+    private Number toNumber(Object value) {
+        if (value instanceof Number) {
+            return (Number) value;
+        }
+        if (value instanceof BigInteger) {
+            return (BigInteger) value;
+        }
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        }
+        return 0;
+    }
+
+    private long asLong(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        return 0L;
+    }
+
+    private long nullToZero(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    private BigDecimal defaultBigDecimal(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private long resultLong(Map<String, Object> values, String key) {
+        return asLong(values.get(key));
+    }
+
+    private record StatsCoverage(long totalHistoryCount, long statsSessionCount, long pendingSessionCount,
+                                 long staleSessionCount, LocalDateTime updatedAt) {
+        private Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("totalHistoryCount", totalHistoryCount);
+            map.put("statsSessionCount", statsSessionCount);
+            map.put("pendingSessionCount", pendingSessionCount);
+            map.put("staleSessionCount", staleSessionCount);
+            map.put("complete", pendingSessionCount == 0);
+            map.put("statsVersion", STATS_VERSION);
+            map.put("updatedAt", updatedAt);
+            return map;
+        }
+    }
+
+    private static class DailyAggregate {
+        private final LocalDate liveDate;
+        private int liveCount;
+        private long totalDurationSeconds;
+        private long totalMsgCount;
+        private long totalAdvancedMsgCount;
+        private long totalGiftCount;
+        private long totalScCount;
+        private long totalGuardCount;
+        private int publishedCount;
+        private int successfulPublishCount;
+
+        private DailyAggregate(LocalDate liveDate) {
+            this.liveDate = liveDate;
+        }
+    }
+
+    private record BucketPeak(Integer bucketIndex, long msgCount) {
+    }
+
+    private static class EventStats {
+        private boolean fromRawEvents;
+        private long msgCount;
+        private long normalMsgCount;
+        private long advancedMsgCount;
+        private long giftEventCount;
+        private long giftTotalCount;
+        private long giftTotalCoin;
+        private BigDecimal giftAmountCny = BigDecimal.ZERO;
+        private long giftTypeCount;
+        private long scCount;
+        private BigDecimal scAmount = BigDecimal.ZERO;
+        private long guardCount;
+        private long activeUserCount;
+    }
+
+    private record GiftValueStats(long giftCount, long totalCoin, BigDecimal amountCny) {
+    }
+
+    private static class GiftUserStats {
+        private final Long uid;
+        private final String uname;
+        private long giftCount;
+        private long eventCount;
+        private long totalCoin;
+
+        private GiftUserStats(Long uid, String uname) {
+            this.uid = uid;
+            this.uname = uname;
+        }
+
+        private long giftCount() {
+            return giftCount;
+        }
+
+        private long eventCount() {
+            return eventCount;
+        }
+
+        private long totalCoin() {
+            return totalCoin;
+        }
+    }
+}

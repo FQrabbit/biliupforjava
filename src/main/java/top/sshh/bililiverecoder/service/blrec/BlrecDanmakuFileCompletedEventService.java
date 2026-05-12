@@ -34,21 +34,23 @@ public class BlrecDanmakuFileCompletedEventService implements BlrecEventService 
         // 弹幕文件通常与视频文件同名（扩展名不同）
         String videoFilePath = danmakuFilePath.substring(0, danmakuFilePath.lastIndexOf(".")) + ".flv"; // 或者 .mp4，这里需要一个约定
 
-        RecordRoom room = roomRepository.findByRoomId(roomId);
-        if (room == null || !room.isRecording()) {
-            log.warn("[BLR] {}", LogKvs.event("Blrec.DanmakuCompleted.Skip")
-                    .add("reason", "Room not found or not in recording state")
-                    .add("roomId", roomId));
-            return;
-        }
-
         // 尝试通过视频文件路径找到对应的分P
         RecordHistoryPart part = partRepository.findByFilePath(videoFilePath);
         if (part == null) {
+            RecordRoom room = roomRepository.findByRoomId(roomId);
             log.error("[BLR] {}", LogKvs.event("Blrec.DanmakuCompleted.PartNotFound")
                     .add("roomId", roomId)
-                    .add("historyId", room.getHistoryId())
+                    .add("historyId", room == null ? null : room.getHistoryId())
                     .add("videoFilePath", videoFilePath));
+            return;
+        }
+
+        RecordRoom room = roomRepository.findByRoomId(roomId);
+        if (room == null || !room.isRecording()) {
+            log.info("[BLR] {}", LogKvs.event("Blrec.DanmakuCompleted.LiveMsgSkip")
+                    .add("reason", "Room not found or not in recording state")
+                    .add("roomId", roomId)
+                    .add("partId", part.getId()));
             return;
         }
 

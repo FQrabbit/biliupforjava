@@ -384,6 +384,8 @@ public final class LogKvs {
         EVENT_ZH.put("VideoSync.File.CopySuccess", "视频状态同步：复制文件成功");
         EVENT_ZH.put("VideoSync.File.CopyFailed", "视频状态同步：复制文件失败");
         EVENT_ZH.put("VideoSync.Part.ExceptionCleared", "视频状态同步：分P缺失CID异常已清除");
+        EVENT_ZH.put("Stats.RefreshRecent.Failed", "统计刷新：最近历史补算失败");
+        EVENT_ZH.put("Stats.RefreshHistory.Failed", "统计刷新：单场历史补算失败");
 
         // 弹幕发送同步
         EVENT_ZH.put("LiveMsgSendSync.Start", "定时任务：弹幕/评论发送开始");

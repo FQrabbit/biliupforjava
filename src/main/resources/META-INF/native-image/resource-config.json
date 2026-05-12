@@ -866,6 +866,9 @@
       "pattern":"\\Qstatic/css/room.css\\E"
     }, 
     {
+      "pattern":"\\Qstatic/css/stats.css\\E"
+    }, 
+    {
       "pattern":"\\Qstatic/css/user.css\\E"
     }, 
     {
@@ -873,6 +876,9 @@
     }, 
     {
       "pattern":"\\Qstatic/html/room.html\\E"
+    }, 
+    {
+      "pattern":"\\Qstatic/html/stats.html\\E"
     }, 
     {
       "pattern":"\\Qstatic/img/icon.svg\\E"
@@ -885,6 +891,9 @@
     }, 
     {
       "pattern":"\\Qstatic/js/element-ui.js\\E"
+    }, 
+    {
+      "pattern":"\\Qstatic/js/echarts.min.js\\E"
     }, 
     {
       "pattern":"\\Qstatic/js/jquery-3.3.1.min.js\\E"

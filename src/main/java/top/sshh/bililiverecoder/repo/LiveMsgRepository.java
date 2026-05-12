@@ -33,6 +33,12 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     int countByPartId(Long partId);
 
+    @Query("select count(m) from LiveMsg m where m.partId in ?1")
+    long countByPartIdIn(List<Long> partIds);
+
+    @Query("select count(m) from LiveMsg m where m.partId in ?1 and m.pool = ?2")
+    long countByPartIdInAndPool(List<Long> partIds, int pool);
+
     int countByBvid(String bvId);
 
     int countByBvidAndCode(String bvId, Integer code);
@@ -58,21 +64,32 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     List<LiveMsg> queryByPartId(Long partId);
 
-    @Query(value = "SELECT " +
-            "   FLOOR(send_time / 60000) AS time, " +
-            "   COUNT(*) AS num " +
-            "FROM live_msg " +
-            "WHERE part_id = ?1 " +
-            "GROUP BY FLOOR(send_time / 60000)",
-            nativeQuery = true)
+    @Query("""
+            select floor(m.sendTime / 60000), count(m)
+            from LiveMsg m
+            where m.partId = ?1
+            group by floor(m.sendTime / 60000)
+            """)
     List<Object[]> getMsgCountByMinute(Long partId);
 
-    @Query(value = "SELECT " +
-            "   FLOOR(send_time / 1000) AS time, " +
-            "   COUNT(*) AS num " +
-            "FROM live_msg " +
-            "WHERE part_id = ?1 " +
-            "GROUP BY FLOOR(send_time / 1000)",
-            nativeQuery = true)
+    @Query("""
+            select floor(m.sendTime / 1000), count(m)
+            from LiveMsg m
+            where m.partId = ?1
+            group by floor(m.sendTime / 1000)
+            """)
     List<Object[]> getMsgCountBySecond(Long partId);
+
+    @Query("""
+            select floor(m.sendTime / 60000),
+                   count(m),
+                   sum(case when m.pool = 0 then 1 else 0 end),
+                   sum(case when m.pool = 1 then 1 else 0 end)
+            from LiveMsg m
+            where m.partId in ?1
+              and m.sendTime is not null
+            group by floor(m.sendTime / 60000)
+            order by floor(m.sendTime / 60000)
+            """)
+    List<Object[]> getMsgBucketCountByPartIds(List<Long> partIds);
 }

@@ -123,6 +123,13 @@
                     <i class="el-icon-time"></i>
                     <span>录制历史</span>
                 </div>
+                <div class="nav-item" ref="navStats"
+                     :class="{ 'is-active': activeName === 'stats', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '统计'"
+                     @click="switchTab('stats')">
+                    <i class="el-icon-data-analysis"></i>
+                    <span>统计</span>
+                </div>
                 <div class="nav-item" ref="navLog"
                      :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts, 'is-disabled': iframeOperating }"
                      :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '日志'"
@@ -891,6 +898,7 @@
                 room: { title: '直播间监控', desc: '主模块负责房间状态监控与配置管理' },
                 user: { title: '用户管理', desc: '管理投稿账号状态、导入导出与登录会话' },
                 history: { title: '录制历史', desc: '查看录制投稿工作进度记录并执行补充处理操作' },
+                stats: { title: '统计中心', desc: '汇总直播场次、时长、投稿与弹幕数据' },
                 log: { title: '日志中心', desc: '实时日志和告警追踪' }
             },
             systemConfig: {
@@ -989,6 +997,9 @@
                     // user, log 已组件化，不再使用 iframe
                     case 'history':
                         baseUrl = 'html/history.html';
+                        break;
+                    case 'stats':
+                        baseUrl = 'html/stats.html';
                         break;
                     default:
                         return '';
@@ -1136,7 +1147,7 @@
                     return userContainer ? (userContainer.scrollTop || 0) : 0;
                 }
 
-                if (this.activeName === 'room' || this.activeName === 'history') {
+                if (this.activeName === 'room' || this.activeName === 'history' || this.activeName === 'stats') {
                     var iframe = this.$el.querySelector('.tab-frame');
                     if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
                         return 0;
@@ -1145,6 +1156,8 @@
                     var target = null;
                     if (this.activeName === 'room') {
                         target = doc.querySelector('.room-container');
+                    } else if (this.activeName === 'stats') {
+                        target = doc.querySelector('.stats-container');
                     } else {
                         target = doc.querySelector('.history-main') || doc.querySelector('.history-container');
                     }
@@ -1563,13 +1576,13 @@
                 this.stopConnectionCheck();
             },
             keepViewOnDisconnect: function() {
-                return this.activeName === 'room' || this.activeName === 'history';
+                return this.activeName === 'room' || this.activeName === 'history' || this.activeName === 'stats';
             },
             keepIframeOnDisconnect: function() {
                 return this.connectionLost && this.keepViewOnDisconnect();
             },
             getErrorDelay: function() {
-                if (this.activeName === 'room' || this.activeName === 'history') {
+                if (this.activeName === 'room' || this.activeName === 'history' || this.activeName === 'stats') {
                     return 10000;
                 }
                 if (this.isTabSwitching) {
@@ -1805,7 +1818,7 @@
                     return;
                 }
 
-                if (this.activeName === 'room' || this.activeName === 'history') {
+                if (this.activeName === 'room' || this.activeName === 'history' || this.activeName === 'stats') {
                     var iframe = this.$el.querySelector('.tab-frame');
                     if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
                         this.scheduleScrollBindRetry();
@@ -1814,7 +1827,9 @@
                     var doc = iframe.contentDocument;
                     var preferredSelectors = (this.activeName === 'room')
                         ? ['.room-container', 'main', '.app-container']
-                        : ['.history-main', '.history-container', 'main', '.app-container'];
+                        : (this.activeName === 'stats'
+                            ? ['.stats-container', 'main', '.app-container']
+                            : ['.history-main', '.history-container', 'main', '.app-container']);
                     var iframeScrollable = this.detectScrollableContainer(doc, preferredSelectors);
                     if (bindElementScroll(iframeScrollable)) {
                         return;
@@ -1895,13 +1910,15 @@
                     if (userContainer && typeof userContainer.scrollTo === 'function') {
                         userContainer.scrollTo({ top: 0, behavior: 'smooth' });
                     }
-                } else if (this.activeName === 'room' || this.activeName === 'history') {
+                } else if (this.activeName === 'room' || this.activeName === 'history' || this.activeName === 'stats') {
                     var iframe = this.$el.querySelector('.tab-frame');
                     if (iframe && iframe.contentWindow && iframe.contentDocument) {
                         var doc = iframe.contentDocument;
                         var target = null;
                         if (this.activeName === 'room') {
                             target = doc.querySelector('.room-container');
+                        } else if (this.activeName === 'stats') {
+                            target = doc.querySelector('.stats-container');
                         } else {
                             target = doc.querySelector('.history-main') || doc.querySelector('.history-container');
                         }
@@ -1980,7 +1997,7 @@
                 }
             },
             updateNavIndicator: function() {
-                var refMap = { home: 'navHome', room: 'navRoom', user: 'navUser', history: 'navHistory', log: 'navLog' };
+                var refMap = { home: 'navHome', room: 'navRoom', user: 'navUser', history: 'navHistory', stats: 'navStats', log: 'navLog' };
                 var refName = refMap[this.activeName];
                 var el = this.$refs[refName];
                 var nav = this.$refs.headerNav;

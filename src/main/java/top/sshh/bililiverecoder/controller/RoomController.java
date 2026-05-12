@@ -25,12 +25,11 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.repo.SystemConfigRepository;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.util.BiliApi;
+import top.sshh.bililiverecoder.util.ImageDimensionsReader;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.UploadEnums;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -230,6 +229,7 @@ public class RoomController {
                 if (room.getSortOrder() == null) {
                     room.setSortOrder(nextSortOrder());
                 }
+                normalizeGiftReplySettings(room);
                 roomRepository.save(room);
                 importedRoomCount++;
             }
@@ -385,6 +385,8 @@ public class RoomController {
             dbRoom.setMoveDir(room.getMoveDir());
             dbRoom.setSendDm(room.getSendDm());
             dbRoom.setSendSc(room.getSendSc());
+            dbRoom.setSendGiftReply(Boolean.TRUE.equals(room.getSendSc()) && Boolean.TRUE.equals(room.getSendGiftReply()));
+            dbRoom.setGiftReplyMinPriceCny(normalizeGiftReplyMinPrice(room.getGiftReplyMinPriceCny()));
             roomRepository.save(dbRoom);
             log.info("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Fixed")
                     .add("roomId", dbRoom.getRoomId())
@@ -606,6 +608,21 @@ public class RoomController {
         return result;
     }
 
+    private void normalizeGiftReplySettings(RecordRoom room) {
+        if (room == null) {
+            return;
+        }
+        room.setSendGiftReply(Boolean.TRUE.equals(room.getSendSc()) && Boolean.TRUE.equals(room.getSendGiftReply()));
+        room.setGiftReplyMinPriceCny(normalizeGiftReplyMinPrice(room.getGiftReplyMinPriceCny()));
+    }
+
+    private java.math.BigDecimal normalizeGiftReplyMinPrice(java.math.BigDecimal value) {
+        if (value == null || value.compareTo(java.math.BigDecimal.ZERO) < 0) {
+            return java.math.BigDecimal.ZERO;
+        }
+        return value;
+    }
+
     @GetMapping("/delete/{roomId}")
     public Map<String, String> delete(@PathVariable("roomId") Long roomId) {
         Map<String, String> result = new HashMap<>();
@@ -644,15 +661,16 @@ public class RoomController {
             return result;
         }
         try {
-            BufferedImage image = ImageIO.read(file.getInputStream());
-            if (image == null) {
+            Optional<ImageDimensionsReader.Dimensions> image = ImageDimensionsReader.read(file.getInputStream());
+            if (image.isEmpty()) {
                 result.put("type", "warning");
                 result.put("msg", "请上传图片文件");
                 return result;
             }
-            if (image.getWidth() < 1146 || image.getHeight() < 717) {
+            ImageDimensionsReader.Dimensions dimensions = image.get();
+            if (dimensions.getWidth() < 1146 || dimensions.getHeight() < 717) {
                 result.put("type", "warning");
-                result.put("msg", "上传图片分辨率不低于1146*717,当前分辨率为"+image.getWidth()+"*"+image.getHeight());
+                result.put("msg", "上传图片分辨率不低于1146*717,当前分辨率为"+dimensions.getWidth()+"*"+dimensions.getHeight());
                 return result;
             }
         } catch (IOException e) {

@@ -4,7 +4,6 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.google.zxing.BarcodeFormat;
-import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.jayway.jsonpath.JsonPath;
@@ -17,10 +16,8 @@ import top.sshh.bililiverecoder.entity.data.BiliSessionDto;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.PngBitMatrixWriter;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -81,10 +78,7 @@ public class BiliUserController {
         long qrEncodeStartNs = System.nanoTime();
         BitMatrix bm = new QRCodeWriter().encode(s.getData().getUrl(),
                 BarcodeFormat.QR_CODE, 256, 256);
-        BufferedImage bi = MatrixToImageWriter.toBufferedImage(bm);
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        ImageIO.write(bi, "jpg", stream);
-        byte[] bytes = Base64.encodeBase64(stream.toByteArray());
+        byte[] bytes = Base64.encodeBase64(PngBitMatrixWriter.toPng(bm));
         String imagesBase64 = new String(bytes);
         
         // 生成会话key并存储

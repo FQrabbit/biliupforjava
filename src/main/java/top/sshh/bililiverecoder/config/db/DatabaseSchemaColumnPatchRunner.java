@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.util.LogKvs;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -36,6 +37,8 @@ public class DatabaseSchemaColumnPatchRunner implements ApplicationRunner {
             ensureColumnIfMissing("record_history", "publish_user_id", "BIGINT");
             ensureColumnIfMissing("record_history_part", "manual_skip", "BOOLEAN DEFAULT FALSE");
             ensureColumnIfMissing("record_history_part", "skip_reason", "VARCHAR(255)");
+            ensureColumnIfMissing("room_live_gift_catalog", "room_id", "VARCHAR(255)");
+            dropSingleColumnUniqueConstraintIfExists("room_live_gift_catalog", "gift_id");
         } catch (Exception e) {
             log.warn("[BLR] {}", LogKvs.event("Database.Schema.ColumnPatch.Failed")
                     .add("err", e.getMessage())
@@ -73,6 +76,58 @@ public class DatabaseSchemaColumnPatchRunner implements ApplicationRunner {
         log.info("[BLR] {}", LogKvs.event("Database.Schema.ColumnPatch.Success")
                 .add("table", tableName)
                 .add("column", columnName));
+    }
+
+    private void dropSingleColumnUniqueConstraintIfExists(String tableName, String columnName) {
+        if (!tableExists(tableName)) {
+            return;
+        }
+        List<String> constraintNames;
+        try {
+            constraintNames = jdbcTemplate.queryForList(
+                    """
+                            SELECT K.CONSTRAINT_NAME
+                            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE K
+                            JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS T
+                              ON K.CONSTRAINT_CATALOG = T.CONSTRAINT_CATALOG
+                             AND K.CONSTRAINT_SCHEMA = T.CONSTRAINT_SCHEMA
+                             AND K.CONSTRAINT_NAME = T.CONSTRAINT_NAME
+                            WHERE UPPER(K.TABLE_NAME) = ?
+                              AND UPPER(K.COLUMN_NAME) = ?
+                              AND UPPER(T.CONSTRAINT_TYPE) = 'UNIQUE'
+                            GROUP BY K.CONSTRAINT_NAME
+                            HAVING COUNT(*) = 1
+                            """,
+                    String.class,
+                    tableName.toUpperCase(),
+                    columnName.toUpperCase()
+            );
+        } catch (Exception e) {
+            log.info("[BLR] {}", LogKvs.event("Database.Schema.ColumnPatch.Skip")
+                    .add("table", tableName)
+                    .add("column", columnName)
+                    .add("reason", "constraint-query-failed")
+                    .addIfNotBlank("err", e.getMessage()));
+            return;
+        }
+        for (String constraintName : constraintNames) {
+            if (constraintName == null || constraintName.isBlank()) {
+                continue;
+            }
+            String sql = "ALTER TABLE " + tableName + " DROP CONSTRAINT " + quoteIdentifier(constraintName);
+            log.info("[BLR] {}", LogKvs.event("Database.Schema.ColumnPatch.Start")
+                    .add("table", tableName)
+                    .add("column", columnName + "_unique")
+                    .add("sql", sql));
+            jdbcTemplate.execute(sql);
+            log.info("[BLR] {}", LogKvs.event("Database.Schema.ColumnPatch.Success")
+                    .add("table", tableName)
+                    .add("column", columnName + "_unique"));
+        }
+    }
+
+    private String quoteIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
     private boolean tableExists(String tableName) {
