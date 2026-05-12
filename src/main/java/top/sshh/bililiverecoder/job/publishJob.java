@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskRejectedException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
@@ -69,6 +70,7 @@ public class publishJob {
     private static final java.util.concurrent.ConcurrentHashMap<String, FileProbe> fileProbeMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
+    private static final int ORPHAN_CLEANUP_LIMIT_PER_ROUND = 200;
 
     @Value("${publish.compensate.max-trigger-per-round:12}")
     private int compensateMaxTriggerPerRound;
@@ -371,7 +373,8 @@ public class publishJob {
         try {
         // 清理已投稿稿件中残留的未上传分P，防止对已投稿稿件继续触发上传
         try {
-            List<RecordHistoryPart> orphanedParts = partRepository.findOrphanedPartsOfPublishedHistories();
+            List<RecordHistoryPart> orphanedParts = partRepository.findOrphanedPartsOfPublishedHistories(
+                    PageRequest.of(0, ORPHAN_CLEANUP_LIMIT_PER_ROUND));
             if (!orphanedParts.isEmpty()) {
                 log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.CleanOrphanedParts")
                         .add("count", orphanedParts.size()));
@@ -407,8 +410,17 @@ public class publishJob {
             }
             // 查询该房间下所有已录制完成（endTime > 5分钟前）但未上传的分P
             // 仅扫描所属history存在且已开启上传(upload=true)的分P，避免无意义重复扫描
+            int roomQuota = Math.max(1, compensateMaxTriggerPerRound) - roundTriggeredCount;
+            if (roomQuota <= 0) {
+                log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipByRoundQuota")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("roundTriggered", roundTriggeredCount)
+                        .add("roundQuota", Math.max(1, compensateMaxTriggerPerRound)));
+                break;
+            }
             List<RecordHistoryPart> pendingParts = partRepository.findPendingUploadPartsWithHistoryUploadEnabled(
-                room.getRoomId(), now.minusMonths(1L), now.minusMinutes(5L));
+                room.getRoomId(), now.minusMonths(1L), now.minusMinutes(5L), PageRequest.of(0, roomQuota));
 
             int triggeredCount = 0;
             for (RecordHistoryPart part : pendingParts) {

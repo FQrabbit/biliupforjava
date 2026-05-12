@@ -1,5 +1,6 @@
 package top.sshh.bililiverecoder.repo;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
@@ -95,6 +96,24 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         String roomId, LocalDateTime startTime, LocalDateTime endTime);
 
     @Query("""
+        select p from RecordHistoryPart p
+        where p.roomId = :roomId
+          and p.recording = false
+          and p.upload = false
+                    and p.uploadRetryCount < 9999
+          and p.endTime between :startTime and :endTime
+          and exists (
+              select 1 from RecordHistory h
+              where h.id = p.historyId
+                and h.upload = true
+                and h.publish = false
+          )
+        order by p.endTime asc
+        """)
+    List<RecordHistoryPart> findPendingUploadPartsWithHistoryUploadEnabled(
+        String roomId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
+
+    @Query("""
         select count(p) from RecordHistoryPart p
         where p.recording = false
           and p.upload = false
@@ -122,4 +141,17 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           )
         """)
     List<RecordHistoryPart> findOrphanedPartsOfPublishedHistories();
+
+    @Query("""
+        select p from RecordHistoryPart p
+        where p.upload = false
+          and p.uploadRetryCount < 9999
+          and exists (
+              select 1 from RecordHistory h
+              where h.id = p.historyId
+                and (h.publish = true or (h.bvId is not null and trim(h.bvId) <> ''))
+          )
+        order by p.endTime asc
+        """)
+    List<RecordHistoryPart> findOrphanedPartsOfPublishedHistories(Pageable pageable);
 }

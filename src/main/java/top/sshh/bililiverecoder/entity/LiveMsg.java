@@ -7,7 +7,9 @@ import lombok.Data;
 @Entity
 @Table(indexes = {
     @Index(name = "idx_part_id", columnList = "partId"),
-    @Index(name = "idx_bvid", columnList = "bvid")
+    @Index(name = "idx_bvid", columnList = "bvid"),
+    @Index(name = "idx_live_msg_code_part", columnList = "code,partId"),
+    @Index(name = "idx_live_msg_pending_send", columnList = "pool,code,partId,sendTime")
 })
 public class LiveMsg {
 

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -103,6 +104,7 @@ public class LiveMsgSendSync {
             
             // 获取有待发送弹幕的分P，找到其对应的稿件，如果没在 historyList 中则加进去
             List<Long> pendingPartIds = msgRepository.findDistinctPartIdByCode(-1);
+            Set<Long> pendingPartIdSet = pendingPartIds == null ? Collections.emptySet() : new HashSet<>(pendingPartIds);
             if (pendingPartIds != null && !pendingPartIds.isEmpty()) {
                 Set<Long> pendingHistoryIds = new HashSet<>();
                 // 分批查询，防止 IN 语句过长报错
@@ -499,18 +501,35 @@ public class LiveMsgSendSync {
         List<RecordRoom> roomList = roomRepository.findBySendDmIsTrue();
         List<String> roomIds = roomList.stream().map(RecordRoom::getRoomId).toList();
         List<Long> partIds = partList.stream().map(RecordHistoryPart::getId).toList();
+        List<Long> pendingCandidatePartIds = partIds.stream()
+                .filter(pendingPartIdSet::contains)
+                .toList();
+        if (pendingCandidatePartIds.isEmpty()) {
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.PendingPart.Empty")
+                    .add("candidatePart", partIds.size()));
+            return;
+        }
         
         // 高级弹幕 (分批查询避免 IN 语句过长)
         List<LiveMsg> allHighLevelMsg = new ArrayList<>();
         int pBatchSize = 500;
-        for (int i = 0; i < partIds.size(); i += pBatchSize) {
-            List<Long> subList = partIds.subList(i, Math.min(i + pBatchSize, partIds.size()));
-            allHighLevelMsg.addAll(msgRepository.findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(1, -1, subList));
+        for (int i = 0; i < pendingCandidatePartIds.size(); i += pBatchSize) {
+            List<Long> subList = pendingCandidatePartIds.subList(i, Math.min(i + pBatchSize, pendingCandidatePartIds.size()));
+            int remain = 500 - allHighLevelMsg.size();
+            if (remain <= 0) break;
+            Page<LiveMsg> msgPage = msgRepository.findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(1, -1, subList, PageRequest.of(0, remain));
+            if (!msgPage.isEmpty()) {
+                allHighLevelMsg.addAll(msgPage.get().toList());
+            }
         }
         pendingHighCount = allHighLevelMsg.size();
 
         // 房间设置是否发送弹幕
-        List<Long> normalPartIds = partList.stream().filter(p -> roomIds.contains(p.getRoomId())).map(RecordHistoryPart::getId).toList();
+        List<Long> normalPartIds = partList.stream()
+                .filter(p -> roomIds.contains(p.getRoomId()))
+                .map(RecordHistoryPart::getId)
+                .filter(pendingPartIdSet::contains)
+                .toList();
         //一个用户一小时发送150条弹幕
         for (int i = 0; i < normalPartIds.size(); i += pBatchSize) {
             List<Long> subList = normalPartIds.subList(i, Math.min(i + pBatchSize, normalPartIds.size()));
