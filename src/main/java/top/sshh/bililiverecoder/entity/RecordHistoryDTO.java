@@ -65,4 +65,6 @@ public class RecordHistoryDTO {
     private int total;
 
     private String viewType; // "working" | "archived"
+
+    private Boolean skipCategoryCounts;
 }

@@ -3172,7 +3172,7 @@
                 if (this.isMultiSelectMode) return;
                 this.form.pageSize=val;
                 this.userChangedPageSize = true;
-                this.initTable();
+                this.initTable(false, { skipCategoryCounts: false });
             },
             handleCurrentChange(val) {
                 if (this.isMultiSelectMode) return;
@@ -3184,20 +3184,24 @@
                     this.transitionName = 'fade-transform';
                 }
                 this.form.current=val;
-                this.initTable();
+                this.initTable(false, { skipCategoryCounts: true });
             },
-            initTable: function (silent) {
+            initTable: function (silent, options) {
                 if (this.isMultiSelectMode) {
                     if (!silent) this.loading = false;
                     return;
                 }
                 if (!silent) this.loading = true;
                 let _this = this;
+                var requestBody = Object.assign({}, _this.form);
+                if (options && options.skipCategoryCounts === true) {
+                    requestBody.skipCategoryCounts = true;
+                }
                 $.ajax({
                     url: '/history/list',
                     contentType: 'application/json;charset=utf-8',
                     type: 'post',
-                    data: JSON.stringify(_this.form),
+                    data: JSON.stringify(requestBody),
                     dataType: 'json',
                     success: function (data) {
                         _this.tableData = data.data;

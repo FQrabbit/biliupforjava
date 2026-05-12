@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveSessionStatsRepository;
 import top.sshh.bililiverecoder.service.impl.HighEnergyCutPublishService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
@@ -62,6 +63,8 @@ public class HistoryController {
     private RecordBiliPublishService publishService;
     @Autowired
     private LiveMsgRepository msgRepository;
+    @Autowired
+    private RoomLiveSessionStatsRepository sessionStatsRepository;
     @Autowired
     private LiveMsgService msgService;
     @Autowired
@@ -127,47 +130,54 @@ public class HistoryController {
             roomCache.put(recordRoom.getRoomId(),recordRoom.getUname());
             roomEntityCache.put(recordRoom.getRoomId(), recordRoom);
         }
+
+        Map<Long, RoomLiveSessionStats> sessionStatsMap = buildPageSessionStats(list);
+        Map<Long, PartListStats> partStatsMap = buildPagePartStats(list);
+        Map<String, MsgListStats> msgStatsMap = buildPageMsgStats(list, sessionStatsMap);
         
         // 同步执行数据库查询操作，避免并行流中的 EntityManager 会话问题
         for (RecordHistory history : list) {
             history.setRoomName(roomCache.get(history.getRoomId()));
             // 使用统一方法填充额外字段（分P统计、放弃分P、弹幕统计等）
-            populateHistoryFields(history, configMap, roomEntityCache.get(history.getRoomId()));
+            populateHistoryFields(history, configMap, roomEntityCache.get(history.getRoomId()),
+                    partStatsMap.get(history.getId()), msgStatsMap.get(history.getBvId()));
         }
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
         result.put("total",total);
 
-        // 统计“工作中”和“已归档”的稿件总数
-        try {
-            // 计算“工作中”的稿件数量
-            CriteriaQuery<Long> workingQuery = criteriaBuilder.createQuery(Long.class);
-            Root<RecordHistory> workingRoot = workingQuery.from(RecordHistory.class);
-            workingQuery.select(criteriaBuilder.count(workingRoot));
-            
-            // 重新构建归档状态的判断条件（因为查询的主体对象变了，所以需要重建条件）
-            Predicate isArchivedForWorking = buildFullArchivedPredicate(criteriaBuilder, workingRoot);
-            workingQuery.where(criteriaBuilder.not(isArchivedForWorking));
-            Long workingCount = entityManager.createQuery(workingQuery).getSingleResult();
-            result.put("workingCount", workingCount);
+        if (!Boolean.TRUE.equals(request.getSkipCategoryCounts())) {
+            // 统计“工作中”和“已归档”的稿件总数。翻页请求会跳过这里，避免每页额外全局扫描。
+            try {
+                // 计算“工作中”的稿件数量
+                CriteriaQuery<Long> workingQuery = criteriaBuilder.createQuery(Long.class);
+                Root<RecordHistory> workingRoot = workingQuery.from(RecordHistory.class);
+                workingQuery.select(criteriaBuilder.count(workingRoot));
+                
+                // 重新构建归档状态的判断条件（因为查询的主体对象变了，所以需要重建条件）
+                Predicate isArchivedForWorking = buildFullArchivedPredicate(criteriaBuilder, workingRoot);
+                workingQuery.where(criteriaBuilder.not(isArchivedForWorking));
+                Long workingCount = entityManager.createQuery(workingQuery).getSingleResult();
+                result.put("workingCount", workingCount);
 
-            // 计算“已归档”的稿件数量
-            CriteriaQuery<Long> archivedQuery = criteriaBuilder.createQuery(Long.class);
-            Root<RecordHistory> archivedRoot = archivedQuery.from(RecordHistory.class);
-            archivedQuery.select(criteriaBuilder.count(archivedRoot));
-            
-            // 重新构建归档状态的判断条件（用于已归档查询）
-            Predicate isArchivedForArchived = buildFullArchivedPredicate(criteriaBuilder, archivedRoot);
-            archivedQuery.where(isArchivedForArchived);
-            Long archivedCount = entityManager.createQuery(archivedQuery).getSingleResult();
-            result.put("archivedCount", archivedCount);
+                // 计算“已归档”的稿件数量
+                CriteriaQuery<Long> archivedQuery = criteriaBuilder.createQuery(Long.class);
+                Root<RecordHistory> archivedRoot = archivedQuery.from(RecordHistory.class);
+                archivedQuery.select(criteriaBuilder.count(archivedRoot));
+                
+                // 重新构建归档状态的判断条件（用于已归档查询）
+                Predicate isArchivedForArchived = buildFullArchivedPredicate(criteriaBuilder, archivedRoot);
+                archivedQuery.where(isArchivedForArchived);
+                Long archivedCount = entityManager.createQuery(archivedQuery).getSingleResult();
+                result.put("archivedCount", archivedCount);
 
-        } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("History.Count.CalcFailed")
-                    .add("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
-            result.put("workingCount", 0);
-            result.put("archivedCount", 0);
+            } catch (Exception e) {
+                log.error("[BLR] {}", LogKvs.event("History.Count.CalcFailed")
+                        .add("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()), e);
+                result.put("workingCount", 0);
+                result.put("archivedCount", 0);
+            }
         }
 
         return result;
@@ -1270,25 +1280,29 @@ public class HistoryController {
      * 注意：房间名(roomName)需要调用方单独设置，通常通过roomCache获取。
      * 此方法用于确保返回给前端的数据一致性。
      */
-    private void populateHistoryFields(RecordHistory history, Map<String, String> configMap, RecordRoom room) {
+    private void populateHistoryFields(RecordHistory history,
+                                       Map<String, String> configMap,
+                                       RecordRoom room,
+                                       PartListStats partStats,
+                                       MsgListStats msgStats) {
         if (history == null) {
             return;
         }
         // 动态计算该稿件下所有分P的总文件大小，避免历史数据统计遗漏或0B问题
-        long totalFileSize = partRepository.sumHistoryFileSizeByHistoryId(history.getId());
+        long totalFileSize = partStats == null ? partRepository.sumHistoryFileSizeByHistoryId(history.getId()) : partStats.totalFileSize();
         if (totalFileSize > 0 || history.getFileSize() == 0) {
             history.setFileSize(totalFileSize);
         }
         
         // 分P统计
-        history.setPartCount(partRepository.countByHistoryId(history.getId()));
-        history.setPartDuration(partRepository.sumHistoryDurationByHistoryId(history.getId()));
-        history.setUploadPartCount(partRepository.countByHistoryIdAndFileNameNotNull(history.getId()));
+        history.setPartCount(partStats == null ? partRepository.countByHistoryId(history.getId()) : partStats.partCount());
+        history.setPartDuration(partStats == null ? partRepository.sumHistoryDurationByHistoryId(history.getId()) : partStats.partDuration());
+        history.setUploadPartCount(partStats == null ? partRepository.countByHistoryIdAndFileNameNotNull(history.getId()) : partStats.uploadPartCount());
 
         // 标记“永久放弃上传”的分P
         int giveUpCount = 0;
         try {
-            giveUpCount = partRepository.countGiveUpPartsByHistoryId(history.getId());
+            giveUpCount = partStats == null ? partRepository.countGiveUpPartsByHistoryId(history.getId()) : partStats.giveUpPartCount();
         } catch (Exception e) {
             log.error("[BLR] {}", LogKvs.event("History.GiveUpCount.QueryFailed")
                     .add("historyId", history.getId())
@@ -1298,7 +1312,7 @@ public class HistoryController {
         // 计算真正的异常分P数量（排除低于阈值和手动跳过的）
         int abnormalCount = 0;
         try {
-            abnormalCount = partRepository.countAbnormalPartsByHistoryId(history.getId());
+            abnormalCount = partStats == null ? partRepository.countAbnormalPartsByHistoryId(history.getId()) : partStats.abnormalPartCount();
         } catch (Exception e) {
             log.error("[BLR] {}", LogKvs.event("History.AbnormalCount.QueryFailed")
                     .add("historyId", history.getId())
@@ -1308,7 +1322,7 @@ public class HistoryController {
 
         int uploadFlowFallbackCount = 0;
         try {
-            uploadFlowFallbackCount = partRepository.countUploadFlowFallbackPartsByHistoryId(history.getId());
+            uploadFlowFallbackCount = partStats == null ? partRepository.countUploadFlowFallbackPartsByHistoryId(history.getId()) : partStats.uploadFlowFallbackCount();
             history.setUploadFlowFallbackCount(uploadFlowFallbackCount);
             if (uploadFlowFallbackCount > 0) {
                 List<RecordHistoryPart> fallbackParts = partRepository.findUploadFlowFallbackPartsByHistoryId(history.getId());
@@ -1355,25 +1369,25 @@ public class HistoryController {
         }
 
         // 计算实际录制中的分P数量
-        int actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());
+        int actuallyRecordingParts = partStats == null ? partRepository.countActuallyRecordingPartsByHistoryId(history.getId()) : partStats.recordingPartCount();
         history.setRecordPartCount(actuallyRecordingParts);
         history.setRecording(actuallyRecordingParts > 0);
 
         // 弹幕统计
         if (StringUtils.isNotBlank(history.getBvId())) {
-            history.setMsgCount(msgRepository.countByBvid(history.getBvId()));
-            history.setSuccessMsgCount(msgRepository.countByBvidAndCode(history.getBvId(), 0));
-            history.setNormalMsgCount(msgRepository.countByBvidAndPool(history.getBvId(), 0));
-            history.setScMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC ["));
-            history.setGuardMsgCount(msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓"));
+            history.setMsgCount(msgStats == null ? msgRepository.countByBvid(history.getBvId()) : msgStats.msgCount());
+            history.setSuccessMsgCount(msgStats == null ? msgRepository.countByBvidAndCode(history.getBvId(), 0) : msgStats.successMsgCount());
+            history.setNormalMsgCount(msgStats == null ? msgRepository.countByBvidAndPool(history.getBvId(), 0) : msgStats.normalMsgCount());
+            history.setScMsgCount(msgStats == null ? msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC [") : msgStats.scMsgCount());
+            history.setGuardMsgCount(msgStats == null ? msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓") : msgStats.guardMsgCount());
 
             // 发送开关与待发送数量（仅用于状态展示，不影响后台任务）
             boolean sendDm = room != null && Boolean.TRUE.equals(room.getSendDm());
             boolean sendSc = room != null && Boolean.TRUE.equals(room.getSendSc());
             history.setRoomSendDm(sendDm);
             history.setRoomSendSc(sendSc);
-            history.setPendingNormalMsgCount(sendDm ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : 0);
-            history.setPendingHighMsgCount(sendSc ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : 0);
+            history.setPendingNormalMsgCount(sendDm ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : msgStats.pendingNormalMsgCount()) : 0);
+            history.setPendingHighMsgCount(sendSc ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : msgStats.pendingHighMsgCount()) : 0);
         }
 
     // 计算是否处于等待投稿状态
@@ -1409,5 +1423,157 @@ public class HistoryController {
         }
     }
     history.setWaitingForPublish(waitingForPublish);
+    }
+
+    private Map<Long, RoomLiveSessionStats> buildPageSessionStats(List<RecordHistory> histories) {
+        List<Long> historyIds = histories.stream()
+                .map(RecordHistory::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (historyIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return sessionStatsRepository.findByHistoryIdIn(historyIds).stream()
+                .filter(stats -> stats.getHistoryId() != null)
+                .collect(java.util.stream.Collectors.toMap(RoomLiveSessionStats::getHistoryId, stats -> stats, (a, b) -> a));
+    }
+
+    private Map<Long, PartListStats> buildPagePartStats(List<RecordHistory> histories) {
+        List<Long> historyIds = histories.stream()
+                .map(RecordHistory::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (historyIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, PartListStats> result = new HashMap<>();
+        for (Object[] row : partRepository.aggregateListStatsByHistoryIds(historyIds)) {
+            Long historyId = toLong(row[0]);
+            if (historyId != null) {
+                result.put(historyId, new PartListStats(
+                        toInt(row[1]),
+                        toFloat(row[2]),
+                        toLongValue(row[3]),
+                        toInt(row[4]),
+                        toInt(row[5]),
+                        toInt(row[6]),
+                        toInt(row[7]),
+                        toInt(row[8])
+                ));
+            }
+        }
+        return result;
+    }
+
+    private Map<String, MsgListStats> buildPageMsgStats(List<RecordHistory> histories,
+                                                        Map<Long, RoomLiveSessionStats> sessionStatsMap) {
+        Map<String, MsgListStats> result = new HashMap<>();
+        for (RecordHistory history : histories) {
+            if (history == null || StringUtils.isBlank(history.getBvId())) {
+                continue;
+            }
+            RoomLiveSessionStats stats = sessionStatsMap.get(history.getId());
+            if (stats == null) {
+                continue;
+            }
+            int msgCount = safeLongToInt(stats.getMsgCount());
+            int successMsgCount = history.isSendReply() && history.getCode() == 0 ? msgCount : 0;
+            result.put(history.getBvId(), new MsgListStats(
+                    msgCount,
+                    successMsgCount,
+                    safeLongToInt(stats.getNormalMsgCount()),
+                    safeLongToInt(stats.getScCount()),
+                    safeLongToInt(stats.getGuardCount()),
+                    0,
+                    0
+            ));
+        }
+        List<String> bvids = histories.stream()
+                .map(RecordHistory::getBvId)
+                .filter(StringUtils::isNotBlank)
+                .filter(bvid -> !result.containsKey(bvid))
+                .distinct()
+                .toList();
+        if (bvids.isEmpty()) {
+            return result;
+        }
+        for (Object[] row : msgRepository.aggregateListStatsByBvids(bvids, "SC [%", "⚓%")) {
+            String bvid = row[0] == null ? null : row[0].toString();
+            if (StringUtils.isNotBlank(bvid)) {
+                result.put(bvid, new MsgListStats(
+                        toInt(row[1]),
+                        toInt(row[2]),
+                        toInt(row[3]),
+                        toInt(row[4]),
+                        toInt(row[5]),
+                        toInt(row[6]),
+                        toInt(row[7])
+                ));
+            }
+        }
+        return result;
+    }
+
+    private int safeLongToInt(long value) {
+        if (value <= 0) {
+            return 0;
+        }
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(value.toString());
+    }
+
+    private long toLongValue(Object value) {
+        Long longValue = toLong(value);
+        return longValue == null ? 0L : longValue;
+    }
+
+    private int toInt(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(value.toString());
+    }
+
+    private float toFloat(Object value) {
+        if (value == null) {
+            return 0F;
+        }
+        if (value instanceof Number number) {
+            return number.floatValue();
+        }
+        return Float.parseFloat(value.toString());
+    }
+
+    private record PartListStats(int partCount,
+                                 float partDuration,
+                                 long totalFileSize,
+                                 int uploadPartCount,
+                                 int recordingPartCount,
+                                 int giveUpPartCount,
+                                 int abnormalPartCount,
+                                 int uploadFlowFallbackCount) {
+    }
+
+    private record MsgListStats(int msgCount,
+                                int successMsgCount,
+                                int normalMsgCount,
+                                int scMsgCount,
+                                int guardMsgCount,
+                                int pendingNormalMsgCount,
+                                int pendingHighMsgCount) {
     }
 }

@@ -14,6 +14,8 @@ public interface RoomLiveSessionStatsRepository extends CrudRepository<RoomLiveS
 
     RoomLiveSessionStats findByHistoryId(Long historyId);
 
+    List<RoomLiveSessionStats> findByHistoryIdIn(List<Long> historyIds);
+
     List<RoomLiveSessionStats> findByRoomId(String roomId);
 
     List<RoomLiveSessionStats> findByStatsVersionLessThan(int statsVersion);
