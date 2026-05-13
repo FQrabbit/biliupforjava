@@ -1,4 +1,4 @@
-window.BILIUPFORJAVA_VERSION = 'v1.4.1-beta7.3';
+window.BILIUPFORJAVA_VERSION = 'v1.4.1-beta7.3.3';
 
 window.BILIUPFORJAVA_CHANGELOG = [
     { time: '2026-05-13', version: '1.4.1-beta7.3', content: '修复某些情况下会遍历整个磁盘根目录的问题。\n修复特定情况下同一场直播还是被拆分2个稿件的问题，目前严格按用户设置的时间分割。\n使用异步日志输出避免Windows用户遇到控制台长按复制导致进程被暂停的问题。\n新增直播间页面卡片顺序调整功能。\n优化导出配置功能，支持导出系统配置和弹幕数据。\n新增数据统计页面，目前处于实验性统计，尚未完善。\n修复Windows用户使用exe版本时登录二维码无法显示的问题。\n新增根据礼物价格发送到评论区的功能。\n优化定时任务时扫描特定数据库时的性能，做了索引。' },

@@ -13,6 +13,7 @@ import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.util.LogKvs;
 
+import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
@@ -894,6 +895,7 @@ public class StatsAggregationService {
         result.put("session", session);
         result.put("buckets", bucketStatsRepository.findByHistoryIdOrderByBucketIndexAsc(historyId));
         result.put("topDanmuUsers", topUsers(danmuUserStatsRepository.findTopUsersByHistoryId(historyId, PageRequest.of(0, 10))));
+        result.put("danmuUserDiagnostics", buildDanmuUserDiagnostics(historyId));
         result.put("topScUsers", topUsers(eventRepository.findTopUsersByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_SC, PageRequest.of(0, 10))));
         List<Map<String, Object>> topGiftUsersByCount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::giftCount).reversed());
         List<Map<String, Object>> topGiftUsersByAmount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::totalCoin).reversed());
@@ -902,6 +904,122 @@ public class StatsAggregationService {
         result.put("topGiftUsersByAmount", topGiftUsersByAmount);
         result.put("giftDistribution", namedValues(eventRepository.findGiftDistributionByHistoryId(historyId, PageRequest.of(0, 12))));
         return result;
+    }
+
+    private Map<String, Object> buildDanmuUserDiagnostics(Long historyId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(historyId);
+        List<RoomLiveEventParseState> states = eventParseStateRepository.findByHistoryId(historyId);
+        Map<Long, RoomLiveEventParseState> stateByPartId = states.stream()
+                .filter(state -> state.getPartId() != null)
+                .collect(Collectors.toMap(RoomLiveEventParseState::getPartId, state -> state, (a, b) -> a));
+
+        int partCount = parts.size();
+        int stateCount = states.size();
+        int successStateCount = 0;
+        int failedStateCount = 0;
+        int missingStateCount = 0;
+        int xmlExistsCount = 0;
+        int xmlMissingCount = 0;
+        int xmlUnknownCount = 0;
+        long parsedDanmuCount = 0L;
+        List<Map<String, Object>> partDetails = new ArrayList<>();
+
+        for (RecordHistoryPart part : parts) {
+            RoomLiveEventParseState state = part.getId() == null ? null : stateByPartId.get(part.getId());
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("partId", part.getId());
+            detail.put("filePath", part.getFilePath());
+            if (state == null) {
+                missingStateCount++;
+                xmlUnknownCount++;
+                detail.put("state", "missing");
+                detail.put("reason", "没有解析状态");
+            } else {
+                parsedDanmuCount += Math.max(0, state.getDanmuCount());
+                if (state.isSuccess()) {
+                    successStateCount++;
+                } else {
+                    failedStateCount++;
+                }
+                XmlFileStatus xmlStatus = xmlFileStatus(state.getXmlPath());
+                if (xmlStatus.exists()) {
+                    xmlExistsCount++;
+                } else if (xmlStatus.known()) {
+                    xmlMissingCount++;
+                } else {
+                    xmlUnknownCount++;
+                }
+                detail.put("state", state.isSuccess() ? "success" : "failed");
+                detail.put("danmuCount", state.getDanmuCount());
+                detail.put("parserVersion", state.getParserVersion());
+                detail.put("parsedAt", state.getParsedAt());
+                detail.put("xmlPath", state.getXmlPath());
+                detail.put("xmlExists", xmlStatus.exists());
+                detail.put("errorMessage", state.getErrorMessage());
+            }
+            partDetails.add(detail);
+        }
+
+        long userStatsRows = danmuUserStatsRepository.countByHistoryId(historyId);
+        long userStatsDanmuCount = nullToZero(danmuUserStatsRepository.sumDanmuCountByHistoryId(historyId));
+        boolean hasDanmu = parsedDanmuCount > 0;
+        boolean hasUserStats = userStatsRows > 0;
+        String status;
+        String message;
+        boolean rebuildMayHelp = false;
+        if (!hasDanmu) {
+            status = "no_danmu";
+            message = "这场没有解析到弹幕，用户 Top 为空是正常的";
+        } else if (hasUserStats) {
+            status = userStatsDanmuCount < parsedDanmuCount ? "partial" : "ok";
+            message = userStatsDanmuCount < parsedDanmuCount
+                    ? "弹幕用户统计存在，但数量少于解析到的弹幕数，可能有部分弹幕缺少用户信息"
+                    : "弹幕用户统计正常";
+        } else if (xmlExistsCount > 0) {
+            status = "missing_user_stats_rebuildable";
+            message = "弹幕总数存在，但用户统计为空；检测到 XML 文件仍存在，重建统计有机会补齐";
+            rebuildMayHelp = true;
+        } else if (xmlMissingCount > 0) {
+            status = "missing_xml";
+            message = "弹幕总数存在，但用户统计为空；对应 XML 文件已不存在，重建统计也无法恢复用户 Top";
+        } else if (failedStateCount > 0) {
+            status = "parse_failed";
+            message = "弹幕解析曾失败，用户 Top 无法生成；请查看解析错误或确认 XML 文件是否可读";
+            rebuildMayHelp = xmlExistsCount > 0;
+        } else {
+            status = "unknown";
+            message = "弹幕用户统计为空，但缺少足够的解析状态信息，建议检查 XML 文件和解析日志";
+        }
+
+        result.put("status", status);
+        result.put("message", message);
+        result.put("rebuildMayHelp", rebuildMayHelp);
+        result.put("historyId", historyId);
+        result.put("partCount", partCount);
+        result.put("parseStateCount", stateCount);
+        result.put("missingStateCount", missingStateCount);
+        result.put("successStateCount", successStateCount);
+        result.put("failedStateCount", failedStateCount);
+        result.put("parsedDanmuCount", parsedDanmuCount);
+        result.put("userStatsRows", userStatsRows);
+        result.put("userStatsDanmuCount", userStatsDanmuCount);
+        result.put("xmlExistsCount", xmlExistsCount);
+        result.put("xmlMissingCount", xmlMissingCount);
+        result.put("xmlUnknownCount", xmlUnknownCount);
+        result.put("parts", partDetails);
+        return result;
+    }
+
+    private XmlFileStatus xmlFileStatus(String xmlPath) {
+        if (xmlPath == null || xmlPath.isBlank()) {
+            return new XmlFileStatus(false, false);
+        }
+        File file = new File(xmlPath);
+        return new XmlFileStatus(true, file.exists() && file.isFile());
+    }
+
+    private record XmlFileStatus(boolean known, boolean exists) {
     }
 
     private Map<String, Object> buildRoomSummary(String roomId, List<RoomLiveSessionStats> sessions) {

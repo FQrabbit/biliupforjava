@@ -344,6 +344,25 @@
                     </el-tooltip>
                 </div>
             </div>
+            <div v-if="showDanmuDiagnostic" class="danmu-diagnostic-strip" :class="'is-' + danmuDiagnostic.status">
+                <div class="diagnostic-icon">
+                    <i :class="danmuDiagnostic.rebuildMayHelp ? 'el-icon-refresh' : 'el-icon-warning-outline'"></i>
+                </div>
+                <div class="diagnostic-main">
+                    <div class="diagnostic-title">{{ danmuDiagnosticTitle }}</div>
+                    <div class="diagnostic-message">{{ danmuDiagnostic.message }}</div>
+                    <div class="diagnostic-meta">
+                        <span>解析弹幕：{{ number(danmuDiagnostic.parsedDanmuCount || 0) }} 条</span>
+                        <span>用户统计：{{ number(danmuDiagnostic.userStatsDanmuCount || 0) }} 条 / {{ number(danmuDiagnostic.userStatsRows || 0) }} 个用户</span>
+                        <span>XML：存在 {{ number(danmuDiagnostic.xmlExistsCount || 0) }}，缺失 {{ number(danmuDiagnostic.xmlMissingCount || 0) }}</span>
+                    </div>
+                </div>
+                <el-tooltip placement="top" :content="danmuDiagnostic.rebuildMayHelp ? '可以尝试点击重建统计补齐用户 Top' : '重建统计大概率无法恢复缺失的用户维度'">
+                    <el-tag size="mini" :type="danmuDiagnostic.rebuildMayHelp ? 'success' : 'warning'">
+                        {{ danmuDiagnostic.rebuildMayHelp ? '重建可能有效' : '需检查源文件' }}
+                    </el-tag>
+                </el-tooltip>
+            </div>
             <div v-if="selectedSessionSummary.historyId" class="session-chart-grid">
                 <div class="chart-cell chart-cell-wide">
                     <h3 class="subchart-title">本场弹幕趋势</h3>
@@ -476,6 +495,24 @@ new Vue({
         },
         selectedSessionSummary: function () {
             return (this.selectedSessionDetail && this.selectedSessionDetail.session) || {};
+        },
+        danmuDiagnostic: function () {
+            return (this.selectedSessionDetail && this.selectedSessionDetail.danmuUserDiagnostics) || {};
+        },
+        showDanmuDiagnostic: function () {
+            var status = this.danmuDiagnostic.status;
+            if (!this.selectedSessionSummary.historyId || !status) {
+                return false;
+            }
+            return status !== 'ok' && status !== 'no_danmu';
+        },
+        danmuDiagnosticTitle: function () {
+            var status = this.danmuDiagnostic.status;
+            if (status === 'partial') return '弹幕用户统计不完整';
+            if (status === 'missing_user_stats_rebuildable') return '弹幕用户统计缺失';
+            if (status === 'missing_xml') return '弹幕源文件已缺失';
+            if (status === 'parse_failed') return '弹幕解析失败';
+            return '弹幕统计需要检查';
         },
         activeGiftUsers: function () {
             if (!this.selectedSessionDetail) {

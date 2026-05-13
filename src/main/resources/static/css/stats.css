@@ -424,6 +424,77 @@ body {
     font-size: 22px;
 }
 
+.danmu-diagnostic-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: -2px 0 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--warning-color, #e6a23c);
+    border-radius: 10px;
+    background:
+            radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--warning-color, #e6a23c) 18%, transparent), transparent 36%),
+            var(--bg-secondary, #fafafa);
+    color: var(--text-primary, #303133);
+}
+
+.danmu-diagnostic-strip.is-missing_user_stats_rebuildable,
+.danmu-diagnostic-strip.is-partial {
+    border-color: var(--primary-color, #409eff);
+    background:
+            radial-gradient(circle at 0% 0%, var(--brand-soft-bg-active, rgba(64, 158, 255, 0.12)), transparent 36%),
+            var(--bg-secondary, #fafafa);
+}
+
+.danmu-diagnostic-strip.is-missing_xml,
+.danmu-diagnostic-strip.is-parse_failed {
+    border-color: var(--warning-color, #e6a23c);
+}
+
+.diagnostic-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--brand-soft-bg, rgba(64, 158, 255, 0.1));
+    color: var(--primary-color, #409eff);
+    flex: 0 0 auto;
+}
+
+.danmu-diagnostic-strip.is-missing_xml .diagnostic-icon,
+.danmu-diagnostic-strip.is-parse_failed .diagnostic-icon {
+    background: color-mix(in srgb, var(--warning-color, #e6a23c) 14%, transparent);
+    color: var(--warning-color, #e6a23c);
+}
+
+.diagnostic-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.diagnostic-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 3px;
+}
+
+.diagnostic-message {
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.diagnostic-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin-top: 6px;
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+}
+
 .interaction-detail-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

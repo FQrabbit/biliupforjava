@@ -29,6 +29,11 @@ public interface RoomLiveDanmuUserStatsRepository extends CrudRepository<RoomLiv
 
     boolean existsByPartId(Long partId);
 
+    long countByHistoryId(Long historyId);
+
+    @Query("select sum(s.danmuCount) from RoomLiveDanmuUserStats s where s.historyId = ?1")
+    Long sumDanmuCountByHistoryId(Long historyId);
+
     @Query("""
             select s.uid, s.uname, sum(s.danmuCount)
             from RoomLiveDanmuUserStats s
