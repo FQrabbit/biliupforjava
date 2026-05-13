@@ -22,37 +22,47 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RoomLiveGiftCatalogService {
 
     private static final long SYNC_INTERVAL_MS = 24L * 60L * 60L * 1000L;
-    private static final long FAILED_SYNC_COOLDOWN_MS = 60L * 60L * 1000L;
+    private static final long[] FAILED_SYNC_COOLDOWN_STEPS_MS = {
+            5L * 60L * 1000L,
+            15L * 60L * 1000L,
+            60L * 60L * 1000L
+    };
 
     @Autowired
     private RoomLiveGiftCatalogRepository giftCatalogRepository;
 
-    private final Map<String, Long> roomNextSyncAt = new ConcurrentHashMap<>();
+    private final Map<String, Long> roomNextSuccessSyncAt = new ConcurrentHashMap<>();
+    private final Map<String, FailureState> roomFailureState = new ConcurrentHashMap<>();
 
-    public int syncRoomGiftCatalog(String roomId, boolean force) {
+    public GiftCatalogSyncResult syncRoomGiftCatalog(String roomId, boolean force) {
         if (StringUtils.isBlank(roomId)) {
-            return 0;
+            return GiftCatalogSyncResult.skipped("invalid-room", "roomId为空", 0);
         }
         long nowMs = System.currentTimeMillis();
-        Long nextSyncAt = roomNextSyncAt.get(roomId);
-        if (!force && nextSyncAt != null && nowMs < nextSyncAt) {
-            return 0;
+        Long nextSuccessSyncAt = roomNextSuccessSyncAt.get(roomId);
+        if (!force && nextSuccessSyncAt != null && nowMs < nextSuccessSyncAt) {
+            return GiftCatalogSyncResult.skipped("success-cooldown", "礼物价格目录仍在成功同步冷却期", 0);
+        }
+        FailureState failureState = roomFailureState.get(roomId);
+        if (failureState != null && nowMs < failureState.nextRetryAt()) {
+            return GiftCatalogSyncResult.skipped("failure-cooldown", "礼物价格目录同步刚失败过，暂时使用本地缓存", 0);
         }
         try {
             String response = BiliApi.getLiveGiftConfig(roomId);
             JSONObject root = JSON.parseObject(response);
             if (root == null || root.getIntValue("code") != 0) {
+                GiftCatalogSyncResult result = failedResult(roomId, nowMs,
+                        "接口返回异常: code=" + (root == null ? "null" : root.getInteger("code"))
+                                + ", msg=" + (root == null ? "" : root.getString("message")));
                 log.info("[BLR] {}", LogKvs.event("GiftCatalog.Sync.Skip")
                         .add("roomId", roomId)
                         .add("code", root == null ? null : root.getInteger("code"))
                         .addIfNotBlank("msg", root == null ? null : root.getString("message")));
-                roomNextSyncAt.put(roomId, nowMs + FAILED_SYNC_COOLDOWN_MS);
-                return 0;
+                return result;
             }
             JSONArray list = extractGiftList(root.getJSONObject("data"));
             if (list == null || list.isEmpty()) {
-                roomNextSyncAt.put(roomId, nowMs + FAILED_SYNC_COOLDOWN_MS);
-                return 0;
+                return failedResult(roomId, nowMs, "接口返回的礼物列表为空");
             }
             List<Integer> giftIds = new ArrayList<>();
             for (Object itemObject : list) {
@@ -98,19 +108,29 @@ public class RoomLiveGiftCatalogService {
                 existing.put(giftId, catalog);
             }
             giftCatalogRepository.saveAll(toSave);
-            roomNextSyncAt.put(roomId, nowMs + SYNC_INTERVAL_MS);
+            roomFailureState.remove(roomId);
+            roomNextSuccessSyncAt.put(roomId, nowMs + SYNC_INTERVAL_MS);
             log.info("[BLR] {}", LogKvs.event("GiftCatalog.Sync.Done")
                     .add("roomId", roomId)
                     .add("count", toSave.size()));
-            return toSave.size();
+            return GiftCatalogSyncResult.success("api", "礼物价格目录同步成功", toSave.size());
         } catch (Exception e) {
-            roomNextSyncAt.put(roomId, System.currentTimeMillis() + FAILED_SYNC_COOLDOWN_MS);
+            GiftCatalogSyncResult result = failedResult(roomId, System.currentTimeMillis(),
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
             log.info("[BLR] {}", LogKvs.event("GiftCatalog.Sync.Failed")
                     .add("roomId", roomId)
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()));
-            return 0;
+            return result;
         }
+    }
+
+    private GiftCatalogSyncResult failedResult(String roomId, long nowMs, String message) {
+        FailureState previous = roomFailureState.get(roomId);
+        int nextFailures = previous == null ? 1 : previous.failures() + 1;
+        long cooldownMs = FAILED_SYNC_COOLDOWN_STEPS_MS[Math.min(nextFailures - 1, FAILED_SYNC_COOLDOWN_STEPS_MS.length - 1)];
+        roomFailureState.put(roomId, new FailureState(nextFailures, nowMs + cooldownMs));
+        return GiftCatalogSyncResult.failed("api", message, 0);
     }
 
     public BigDecimal toCny(Long priceCoin) {
@@ -159,5 +179,39 @@ public class RoomLiveGiftCatalogService {
             }
         }
         return null;
+    }
+
+    private record FailureState(int failures, long nextRetryAt) {
+    }
+
+    public record GiftCatalogSyncResult(boolean success,
+                                        boolean skipped,
+                                        boolean failed,
+                                        String source,
+                                        String message,
+                                        int syncedCount) {
+
+        static GiftCatalogSyncResult success(String source, String message, int syncedCount) {
+            return new GiftCatalogSyncResult(true, false, false, source, message, syncedCount);
+        }
+
+        static GiftCatalogSyncResult skipped(String source, String message, int syncedCount) {
+            return new GiftCatalogSyncResult(false, true, false, source, message, syncedCount);
+        }
+
+        static GiftCatalogSyncResult failed(String source, String message, int syncedCount) {
+            return new GiftCatalogSyncResult(false, false, true, source, message, syncedCount);
+        }
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("success", success);
+            map.put("skipped", skipped);
+            map.put("failed", failed);
+            map.put("source", source);
+            map.put("message", message);
+            map.put("syncedCount", syncedCount);
+            return map;
+        }
     }
 }

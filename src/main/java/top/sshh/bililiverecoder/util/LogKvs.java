@@ -386,6 +386,7 @@ public final class LogKvs {
         EVENT_ZH.put("VideoSync.Part.ExceptionCleared", "视频状态同步：分P缺失CID异常已清除");
         EVENT_ZH.put("Stats.RefreshRecent.Failed", "统计刷新：最近历史补算失败");
         EVENT_ZH.put("Stats.RefreshHistory.Failed", "统计刷新：单场历史补算失败");
+        EVENT_ZH.put("Stats.Aggregate.SkipActive", "统计聚合：跳过仍在录制或直播中的历史");
 
         // 弹幕发送同步
         EVENT_ZH.put("LiveMsgSendSync.Start", "定时任务：弹幕/评论发送开始");
@@ -437,6 +438,9 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsg.Parse.Saved", "弹幕解析：保存成功");
         EVENT_ZH.put("LiveMsg.Parse.Failed", "弹幕解析：失败");
         EVENT_ZH.put("LiveMsg.Parse.CloseFailed", "弹幕解析：关闭文件流失败");
+        EVENT_ZH.put("GiftCatalog.Sync.Skip", "礼物价格目录同步：跳过或接口返回异常");
+        EVENT_ZH.put("GiftCatalog.Sync.Done", "礼物价格目录同步：成功");
+        EVENT_ZH.put("GiftCatalog.Sync.Failed", "礼物价格目录同步：请求失败");
 
         // 验证码
         EVENT_ZH.put("Captcha.WaitInterrupted", "等待验证码被中断");
@@ -520,6 +524,7 @@ public final class LogKvs {
         // 直播事件解析/统计缓存
         EVENT_ZH.put("RoomLiveEvent.Parse.Saved", "直播事件解析：已保存统计缓存");
         EVENT_ZH.put("RoomLiveEvent.Parse.Failed", "直播事件解析：解析失败");
+        EVENT_ZH.put("RoomLiveEvent.Parse.SkipActive", "直播事件解析：跳过仍在写入的分P");
         EVENT_ZH.put("RoomLiveEvent.Parse.DisableSecureFailed", "直播事件解析：关闭 XML 安全处理失败");
         
         // 系统配置

@@ -52,7 +52,18 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
     @org.springframework.data.jpa.repository.Query("select r from RecordHistory r where r.bvId is not null and r.publish = true and r.code in (-1, -9, -30, -40)")
     List<RecordHistory> findSyncList();
 
-    @org.springframework.data.jpa.repository.Query("select h from RecordHistory h where h.endTime is not null order by h.endTime desc")
+    @org.springframework.data.jpa.repository.Query("""
+            select h from RecordHistory h
+            where h.endTime is not null
+              and h.recording = false
+              and h.streaming = false
+              and not exists (
+                  select 1 from RecordHistoryPart p
+                  where p.historyId = h.id
+                    and (p.recording = true or p.endTime is null)
+              )
+            order by h.endTime desc
+            """)
     List<RecordHistory> findCompletedOrderByEndTimeDesc(Pageable pageable);
 
     @org.springframework.data.jpa.repository.Query("select h from RecordHistory h where h.endTime is not null and h.recording = false and h.streaming = false and h.endTime <= ?1 order by h.endTime asc")

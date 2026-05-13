@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
@@ -93,8 +94,9 @@ public class StatsAggregationService {
                 if (history == null || history.getId() == null) {
                     continue;
                 }
-                aggregateHistory(history);
-                updated++;
+                if (aggregateHistory(history)) {
+                    updated++;
+                }
             }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
@@ -122,8 +124,9 @@ public class StatsAggregationService {
                 }
                 RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
                 if (stats == null || stats.getStatsVersion() < STATS_VERSION) {
-                    aggregateHistory(history);
-                    updated++;
+                    if (aggregateHistory(history)) {
+                        updated++;
+                    }
                 }
             }
             Map<String, Object> result = new LinkedHashMap<>();
@@ -180,8 +183,9 @@ public class StatsAggregationService {
                 if (history == null || history.getId() == null) {
                     continue;
                 }
-                aggregateHistory(history);
-                updated++;
+                if (aggregateHistory(history)) {
+                    updated++;
+                }
             }
 
             Map<String, Object> result = new LinkedHashMap<>();
@@ -271,8 +275,9 @@ public class StatsAggregationService {
             int updated = 0;
             for (RecordHistory history : targets) {
                 updateTaskProgress("正在补全", updated, targets.size(), history.getRoomId() + " / " + history.getId());
-                aggregateHistory(history);
-                updated++;
+                if (aggregateHistory(history)) {
+                    updated++;
+                }
                 updateTaskProgress("正在补全", updated, targets.size(), history.getRoomId() + " / " + history.getId());
             }
             Map<String, Object> result = new LinkedHashMap<>();
@@ -305,8 +310,9 @@ public class StatsAggregationService {
             int updated = 0;
             for (RecordHistory history : histories) {
                 updateTaskProgress("正在重建", updated, histories.size(), history.getRoomId() + " / " + history.getId());
-                aggregateHistory(history);
-                updated++;
+                if (aggregateHistory(history)) {
+                    updated++;
+                }
                 updateTaskProgress("正在重建", updated, histories.size(), history.getRoomId() + " / " + history.getId());
             }
             Map<String, Object> result = new LinkedHashMap<>();
@@ -529,12 +535,21 @@ public class StatsAggregationService {
         }
     }
 
-    private void aggregateHistory(RecordHistory history) {
+    private boolean aggregateHistory(RecordHistory history) {
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        if (!isHistoryReadyForStats(history, parts)) {
+            log.debug("[BLR] {}", LogKvs.event("Stats.Aggregate.SkipActive")
+                    .add("roomId", history.getRoomId())
+                    .add("historyId", history.getId())
+                    .add("recording", history.isRecording())
+                    .add("streaming", history.isStreaming())
+                    .add("activeParts", countActiveParts(parts)));
+            return false;
+        }
         LocalDateTime startTime = resolveStartTime(history, parts);
         LocalDateTime endTime = resolveEndTime(history, parts);
         if (startTime == null && endTime == null) {
-            return;
+            return false;
         }
         if (startTime == null) {
             startTime = endTime;
@@ -548,6 +563,7 @@ public class StatsAggregationService {
                 .map(RecordHistoryPart::getId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+        giftCatalogService.syncRoomGiftCatalog(history.getRoomId(), false);
         for (RecordHistoryPart part : parts) {
             roomLiveEventParseService.parsePart(part, false);
         }
@@ -596,6 +612,32 @@ public class StatsAggregationService {
         stats.setPeakMinuteMsgCount(peak.msgCount);
         sessionStatsRepository.save(stats);
         recomputeDailyStats(history.getRoomId(), liveDate, room, now);
+        return true;
+    }
+
+    private boolean isHistoryReadyForStats(RecordHistory history, List<RecordHistoryPart> parts) {
+        if (history == null || history.getId() == null || history.getEndTime() == null || history.isRecording() || history.isStreaming()) {
+            return false;
+        }
+        if (parts == null || parts.isEmpty()) {
+            return true;
+        }
+        for (RecordHistoryPart part : parts) {
+            if (part != null && (part.isRecording() || part.getEndTime() == null)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private long countActiveParts(List<RecordHistoryPart> parts) {
+        if (parts == null || parts.isEmpty()) {
+            return 0L;
+        }
+        return parts.stream()
+                .filter(Objects::nonNull)
+                .filter(part -> part.isRecording() || part.getEndTime() == null)
+                .count();
     }
 
     private EventStats buildEventStats(Long historyId, List<Long> partIds) {
@@ -633,38 +675,12 @@ public class StatsAggregationService {
         if (gifts.isEmpty()) {
             return new GiftValueStats(0L, 0L, BigDecimal.ZERO);
         }
-        Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId = new HashMap<>();
-        Map<String, List<Integer>> giftIdsByRoom = gifts.stream()
-                .filter(event -> event.getGiftId() != null && event.getRoomId() != null)
-                .collect(Collectors.groupingBy(RoomLiveEvent::getRoomId,
-                        Collectors.mapping(RoomLiveEvent::getGiftId,
-                                Collectors.collectingAndThen(Collectors.toSet(), ArrayList::new))));
-        for (Map.Entry<String, List<Integer>> entry : giftIdsByRoom.entrySet()) {
-            if (entry.getValue().isEmpty()) {
-                continue;
-            }
-            giftCatalogRepository.findByRoomIdAndGiftIdIn(entry.getKey(), entry.getValue()).stream()
-                    .filter(item -> item.getRoomId() != null && item.getGiftId() != null)
-                    .forEach(item -> catalogByRoomGiftId.put(giftCatalogKey(item.getRoomId(), item.getGiftId()), item));
-        }
+        GiftCatalogLookup lookup = loadGiftCatalog(gifts);
         long giftCount = 0L;
         long totalCoin = 0L;
         for (RoomLiveEvent event : gifts) {
-            long count = event.getGiftCount() == null ? 1L : Math.max(0L, event.getGiftCount());
-            giftCount += count;
-            Long eventCoin = event.getGiftTotalCoin();
-            if (eventCoin == null && event.getGiftPriceCoin() != null) {
-                eventCoin = event.getGiftPriceCoin() * count;
-            }
-            if (eventCoin == null && event.getGiftId() != null) {
-                RoomLiveGiftCatalog catalog = catalogByRoomGiftId.get(giftCatalogKey(event.getRoomId(), event.getGiftId()));
-                if (catalog != null && catalog.getPriceCoin() != null) {
-                    eventCoin = catalog.getPriceCoin() * count;
-                }
-            }
-            if (eventCoin != null && eventCoin > 0) {
-                totalCoin += eventCoin;
-            }
+            giftCount += eventGiftCount(event);
+            totalCoin += resolveGiftCoin(event, lookup).coin();
         }
         return new GiftValueStats(giftCount, totalCoin, giftCatalogService.toCny(totalCoin));
     }
@@ -897,12 +913,14 @@ public class StatsAggregationService {
         result.put("topDanmuUsers", topUsers(danmuUserStatsRepository.findTopUsersByHistoryId(historyId, PageRequest.of(0, 10))));
         result.put("danmuUserDiagnostics", buildDanmuUserDiagnostics(historyId));
         result.put("topScUsers", topUsers(eventRepository.findTopUsersByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_SC, PageRequest.of(0, 10))));
+        RoomLiveGiftCatalogService.GiftCatalogSyncResult giftSyncResult = giftCatalogService.syncRoomGiftCatalog(roomId, false);
         List<Map<String, Object>> topGiftUsersByCount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::giftCount).reversed());
         List<Map<String, Object>> topGiftUsersByAmount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::totalCoin).reversed());
         result.put("topGiftUsers", topGiftUsersByCount);
         result.put("topGiftUsersByCount", topGiftUsersByCount);
         result.put("topGiftUsersByAmount", topGiftUsersByAmount);
         result.put("giftDistribution", namedValues(eventRepository.findGiftDistributionByHistoryId(historyId, PageRequest.of(0, 12))));
+        result.put("giftPriceDiagnostics", buildGiftPriceDiagnostics(historyId, giftSyncResult));
         return result;
     }
 
@@ -1022,6 +1040,76 @@ public class StatsAggregationService {
     private record XmlFileStatus(boolean known, boolean exists) {
     }
 
+    private Map<String, Object> buildGiftPriceDiagnostics(Long historyId,
+                                                          RoomLiveGiftCatalogService.GiftCatalogSyncResult syncResult) {
+        List<RoomLiveEvent> gifts = eventRepository.findByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_GIFT);
+        GiftCatalogLookup lookup = loadGiftCatalog(gifts);
+        long rawPriceHitCount = 0L;
+        long roomCatalogHitCount = 0L;
+        long localGiftIdFallbackCount = 0L;
+        long localGiftNameFallbackCount = 0L;
+        long missingPriceEventCount = 0L;
+        long pricedEventCount = 0L;
+        long totalCoin = 0L;
+        boolean estimated = false;
+
+        for (RoomLiveEvent gift : gifts) {
+            GiftCoinResolution resolution = resolveGiftCoin(gift, lookup);
+            totalCoin += resolution.coin();
+            if (resolution.coin() > 0) {
+                pricedEventCount++;
+            }
+            switch (resolution.source()) {
+                case "raw_total", "raw_price" -> rawPriceHitCount++;
+                case "room_catalog" -> roomCatalogHitCount++;
+                case "local_gift_id" -> localGiftIdFallbackCount++;
+                case "local_gift_name" -> {
+                    localGiftNameFallbackCount++;
+                    estimated = true;
+                }
+                default -> missingPriceEventCount++;
+            }
+        }
+
+        String status;
+        String message;
+        boolean rebuildMayHelp = false;
+        if (gifts.isEmpty()) {
+            status = "ok";
+            message = "本场没有礼物事件";
+        } else if (missingPriceEventCount == 0) {
+            status = estimated ? "estimated" : "ok";
+            message = estimated ? "礼物金额已按本地历史礼物名进行部分估算" : "礼物金额统计正常";
+        } else if (syncResult != null && syncResult.failed()) {
+            status = "api_failed";
+            message = "礼物数量已统计，但价格接口请求失败，已尽量使用本地历史价格兜底";
+            rebuildMayHelp = true;
+        } else if (pricedEventCount > 0) {
+            status = "partial";
+            message = "部分礼物缺少价格来源，金额可能偏低";
+        } else {
+            status = "missing_price";
+            message = "礼物数量已统计，但没有可用价格来源，金额暂时为 0";
+            rebuildMayHelp = true;
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", status);
+        result.put("message", message);
+        result.put("rebuildMayHelp", rebuildMayHelp);
+        result.put("giftEventCount", gifts.size());
+        result.put("pricedEventCount", pricedEventCount);
+        result.put("missingPriceEventCount", missingPriceEventCount);
+        result.put("rawPriceHitCount", rawPriceHitCount);
+        result.put("roomCatalogHitCount", roomCatalogHitCount);
+        result.put("localGiftIdFallbackCount", localGiftIdFallbackCount);
+        result.put("localGiftNameFallbackCount", localGiftNameFallbackCount);
+        result.put("totalCoin", totalCoin);
+        result.put("amountCny", giftCatalogService.toCny(totalCoin));
+        result.put("apiSyncStatus", syncResult == null ? Collections.emptyMap() : syncResult.toMap());
+        return result;
+    }
+
     private Map<String, Object> buildRoomSummary(String roomId, List<RoomLiveSessionStats> sessions) {
         Map<String, Object> map = new LinkedHashMap<>();
         RecordRoom room = roomRepository.findByRoomId(roomId);
@@ -1093,14 +1181,14 @@ public class StatsAggregationService {
         if (gifts.isEmpty()) {
             return Collections.emptyList();
         }
-        Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId = loadGiftCatalog(gifts);
+        GiftCatalogLookup lookup = loadGiftCatalog(gifts);
         Map<String, GiftUserStats> users = new LinkedHashMap<>();
         for (RoomLiveEvent event : gifts) {
             String key = event.getUid() == null ? "name:" + nullToEmpty(event.getUname()) : "uid:" + event.getUid();
             GiftUserStats stats = users.computeIfAbsent(key, ignored -> new GiftUserStats(event.getUid(), event.getUname()));
             stats.giftCount += eventGiftCount(event);
             stats.eventCount++;
-            stats.totalCoin += giftCoinForEvent(event, catalogByRoomGiftId);
+            stats.totalCoin += resolveGiftCoin(event, lookup).coin();
         }
         return users.values().stream()
                 .sorted(comparator.thenComparing(GiftUserStats::eventCount, Comparator.reverseOrder()))
@@ -1109,7 +1197,7 @@ public class StatsAggregationService {
                 .collect(Collectors.toList());
     }
 
-    private Map<String, RoomLiveGiftCatalog> loadGiftCatalog(List<RoomLiveEvent> gifts) {
+    private GiftCatalogLookup loadGiftCatalog(List<RoomLiveEvent> gifts) {
         Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId = new HashMap<>();
         Map<String, List<Integer>> giftIdsByRoom = gifts.stream()
                 .filter(event -> event.getGiftId() != null && event.getRoomId() != null)
@@ -1121,26 +1209,65 @@ public class StatsAggregationService {
                     .filter(item -> item.getRoomId() != null && item.getGiftId() != null)
                     .forEach(item -> catalogByRoomGiftId.put(giftCatalogKey(item.getRoomId(), item.getGiftId()), item));
         }
-        return catalogByRoomGiftId;
+        Set<Integer> giftIds = gifts.stream()
+                .map(RoomLiveEvent::getGiftId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<Integer, RoomLiveGiftCatalog> localByGiftId = new HashMap<>();
+        if (!giftIds.isEmpty()) {
+            giftCatalogRepository.findPricedByGiftIdIn(new ArrayList<>(giftIds)).stream()
+                    .filter(item -> item.getGiftId() != null && item.getPriceCoin() != null && item.getPriceCoin() > 0)
+                    .forEach(item -> localByGiftId.putIfAbsent(item.getGiftId(), item));
+        }
+        Set<String> giftNames = gifts.stream()
+                .map(RoomLiveEvent::getGiftName)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<String, RoomLiveGiftCatalog> localByGiftName = new HashMap<>();
+        if (!giftNames.isEmpty()) {
+            giftCatalogRepository.findPricedByGiftNameIn(new ArrayList<>(giftNames)).stream()
+                    .filter(item -> StringUtils.isNotBlank(item.getGiftName()) && item.getPriceCoin() != null && item.getPriceCoin() > 0)
+                    .forEach(item -> localByGiftName.putIfAbsent(item.getGiftName(), item));
+        }
+        return new GiftCatalogLookup(catalogByRoomGiftId, localByGiftId, localByGiftName);
     }
 
     private long eventGiftCount(RoomLiveEvent event) {
         return event.getGiftCount() == null ? 1L : Math.max(0L, event.getGiftCount());
     }
 
-    private long giftCoinForEvent(RoomLiveEvent event, Map<String, RoomLiveGiftCatalog> catalogByRoomGiftId) {
+    private GiftCoinResolution resolveGiftCoin(RoomLiveEvent event, GiftCatalogLookup lookup) {
         long count = eventGiftCount(event);
         Long eventCoin = event.getGiftTotalCoin();
-        if (eventCoin == null && event.getGiftPriceCoin() != null) {
-            eventCoin = event.getGiftPriceCoin() * count;
+        if (eventCoin != null && eventCoin > 0) {
+            return new GiftCoinResolution(eventCoin, "raw_total", false);
         }
-        if (eventCoin == null && event.getGiftId() != null) {
-            RoomLiveGiftCatalog catalog = catalogByRoomGiftId.get(giftCatalogKey(event.getRoomId(), event.getGiftId()));
+        if (event.getGiftPriceCoin() != null && event.getGiftPriceCoin() > 0) {
+            eventCoin = event.getGiftPriceCoin() * count;
+            return new GiftCoinResolution(Math.max(0L, eventCoin), "raw_price", false);
+        }
+        if (event.getGiftId() != null) {
+            RoomLiveGiftCatalog catalog = lookup.roomCatalogByRoomGiftId().get(giftCatalogKey(event.getRoomId(), event.getGiftId()));
             if (catalog != null && catalog.getPriceCoin() != null) {
                 eventCoin = catalog.getPriceCoin() * count;
+                return new GiftCoinResolution(Math.max(0L, eventCoin), "room_catalog", false);
             }
         }
-        return eventCoin == null ? 0L : Math.max(0L, eventCoin);
+        if (event.getGiftId() != null) {
+            RoomLiveGiftCatalog catalog = lookup.localByGiftId().get(event.getGiftId());
+            if (catalog != null && catalog.getPriceCoin() != null) {
+                eventCoin = catalog.getPriceCoin() * count;
+                return new GiftCoinResolution(Math.max(0L, eventCoin), "local_gift_id", false);
+            }
+        }
+        if (StringUtils.isNotBlank(event.getGiftName())) {
+            RoomLiveGiftCatalog catalog = lookup.localByGiftName().get(event.getGiftName());
+            if (catalog != null && catalog.getPriceCoin() != null) {
+                eventCoin = catalog.getPriceCoin() * count;
+                return new GiftCoinResolution(Math.max(0L, eventCoin), "local_gift_name", true);
+            }
+        }
+        return new GiftCoinResolution(0L, "missing", false);
     }
 
     private Map<String, Object> giftUserStatsMap(GiftUserStats stats) {
@@ -1466,6 +1593,14 @@ public class StatsAggregationService {
     }
 
     private record GiftValueStats(long giftCount, long totalCoin, BigDecimal amountCny) {
+    }
+
+    private record GiftCatalogLookup(Map<String, RoomLiveGiftCatalog> roomCatalogByRoomGiftId,
+                                     Map<Integer, RoomLiveGiftCatalog> localByGiftId,
+                                     Map<String, RoomLiveGiftCatalog> localByGiftName) {
+    }
+
+    private record GiftCoinResolution(long coin, String source, boolean estimated) {
     }
 
     private static class GiftUserStats {

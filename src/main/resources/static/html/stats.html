@@ -363,6 +363,28 @@
                     </el-tag>
                 </el-tooltip>
             </div>
+            <div v-if="showGiftPriceDiagnostic" class="danmu-diagnostic-strip gift-price-diagnostic-strip" :class="'is-' + giftPriceDiagnostic.status">
+                <div class="diagnostic-icon">
+                    <i :class="giftPriceDiagnostic.rebuildMayHelp ? 'el-icon-refresh' : 'el-icon-warning-outline'"></i>
+                </div>
+                <div class="diagnostic-main">
+                    <div class="diagnostic-title">{{ giftPriceDiagnosticTitle }}</div>
+                    <div class="diagnostic-message">{{ giftPriceDiagnostic.message }}</div>
+                    <div class="diagnostic-meta">
+                        <span>礼物事件：{{ number(giftPriceDiagnostic.giftEventCount || 0) }}</span>
+                        <span>已定价：{{ number(giftPriceDiagnostic.pricedEventCount || 0) }}</span>
+                        <span>缺价格：{{ number(giftPriceDiagnostic.missingPriceEventCount || 0) }}</span>
+                        <span>raw：{{ number(giftPriceDiagnostic.rawPriceHitCount || 0) }}</span>
+                        <span>房间目录：{{ number(giftPriceDiagnostic.roomCatalogHitCount || 0) }}</span>
+                        <span>本地兜底：{{ number((giftPriceDiagnostic.localGiftIdFallbackCount || 0) + (giftPriceDiagnostic.localGiftNameFallbackCount || 0)) }}</span>
+                    </div>
+                </div>
+                <el-tooltip placement="top" :content="giftPriceDiagnosticTooltip">
+                    <el-tag size="mini" :type="giftPriceDiagnostic.status === 'estimated' ? 'warning' : (giftPriceDiagnostic.rebuildMayHelp ? 'success' : 'warning')">
+                        {{ giftPriceDiagnosticTag }}
+                    </el-tag>
+                </el-tooltip>
+            </div>
             <div v-if="selectedSessionSummary.historyId" class="session-chart-grid">
                 <div class="chart-cell chart-cell-wide">
                     <h3 class="subchart-title">本场弹幕趋势</h3>
@@ -513,6 +535,36 @@ new Vue({
             if (status === 'missing_xml') return '弹幕源文件已缺失';
             if (status === 'parse_failed') return '弹幕解析失败';
             return '弹幕统计需要检查';
+        },
+        giftPriceDiagnostic: function () {
+            return (this.selectedSessionDetail && this.selectedSessionDetail.giftPriceDiagnostics) || {};
+        },
+        showGiftPriceDiagnostic: function () {
+            var status = this.giftPriceDiagnostic.status;
+            if (!this.selectedSessionSummary.historyId || !status) {
+                return false;
+            }
+            return status !== 'ok' && (this.giftPriceDiagnostic.giftEventCount || 0) > 0;
+        },
+        giftPriceDiagnosticTitle: function () {
+            var status = this.giftPriceDiagnostic.status;
+            if (status === 'estimated') return '礼物金额包含估算';
+            if (status === 'partial') return '礼物金额统计不完整';
+            if (status === 'api_failed') return '礼物价格接口请求失败';
+            if (status === 'missing_price') return '礼物价格来源缺失';
+            return '礼物金额需要检查';
+        },
+        giftPriceDiagnosticTag: function () {
+            if (this.giftPriceDiagnostic.status === 'estimated') return '本地估算';
+            return this.giftPriceDiagnostic.rebuildMayHelp ? '重建可能有效' : '需检查价格来源';
+        },
+        giftPriceDiagnosticTooltip: function () {
+            var api = this.giftPriceDiagnostic.apiSyncStatus || {};
+            var apiText = api.message || '暂无接口同步信息';
+            if (this.giftPriceDiagnostic.status === 'estimated') {
+                return '部分金额按本地历史礼物名估算：' + apiText;
+            }
+            return apiText;
         },
         activeGiftUsers: function () {
             if (!this.selectedSessionDetail) {
@@ -949,11 +1001,18 @@ new Vue({
         renderRoomTrendChart: function () {
             var chart = this.chart('roomTrendChart');
             if (!chart) return;
-            this.renderTrendOption(chart, this.detail.dailyTrend || [], false);
+            this.renderTrendOption(chart, this.detail.dailyTrend || [], { splitMsgAxis: true });
         },
         renderTrendOption: function (chart, rows, showDualAxis) {
             rows = rows || [];
             var self = this;
+            var splitMsgAxis = !!(showDualAxis && showDualAxis.splitMsgAxis);
+            if (showDualAxis && typeof showDualAxis === 'object') {
+                showDualAxis = !!showDualAxis.dualAxis || splitMsgAxis;
+            }
+            var useDualAxis = !!showDualAxis || splitMsgAxis;
+            var durationAxisIndex = splitMsgAxis ? 0 : (useDualAxis ? 1 : 0);
+            var msgAxisIndex = useDualAxis ? 1 : 0;
             chart.setOption({
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: function (items) {
@@ -973,16 +1032,16 @@ new Vue({
                     return lines.join('<br/>');
                 } },
                 legend: this.legend({ top: 0, data: ['场次', '总时长(h)', '弹幕'] }),
-                grid: { left: 42, right: showDualAxis ? 46 : 18, top: 36, bottom: 30 },
+                grid: { left: 42, right: useDualAxis ? 54 : 18, top: 36, bottom: 30 },
                 xAxis: this.categoryAxis(rows.map(function (item) { return String(item.liveDate || '').slice(5); })),
-                yAxis: showDualAxis ? [
-                    this.valueAxis({ minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } }),
-                    this.valueAxis({ axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } })
+                yAxis: useDualAxis ? [
+                    this.valueAxis({ name: splitMsgAxis ? '场次 / 小时' : '', minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } }),
+                    this.valueAxis({ name: splitMsgAxis ? '弹幕' : '', minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } })
                 ] : this.valueAxis({ minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } }),
                 series: [
-                    { name: '场次', type: 'bar', data: rows.map(function (item) { return item.liveCount || 0; }), barMaxWidth: 24 },
-                    { name: '总时长(h)', type: 'line', smooth: true, yAxisIndex: showDualAxis ? 1 : 0, data: rows.map(function (item) { return Math.round((Number(item.totalDurationSeconds || 0) / 3600) * 10) / 10; }) },
-                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: showDualAxis ? 1 : 0, data: rows.map(function (item) { return item.totalMsgCount || 0; }) }
+                    { name: '场次', type: 'bar', yAxisIndex: 0, data: rows.map(function (item) { return item.liveCount || 0; }), barMaxWidth: 24 },
+                    { name: '总时长(h)', type: 'line', smooth: true, yAxisIndex: durationAxisIndex, symbolSize: splitMsgAxis ? 8 : 4, lineStyle: { width: splitMsgAxis ? 3 : 2 }, z: 4, data: rows.map(function (item) { return Math.round((Number(item.totalDurationSeconds || 0) / 3600) * 10) / 10; }) },
+                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: msgAxisIndex, data: rows.map(function (item) { return item.totalMsgCount || 0; }) }
                 ]
             }, true);
         },

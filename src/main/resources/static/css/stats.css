@@ -447,7 +447,10 @@ body {
 }
 
 .danmu-diagnostic-strip.is-missing_xml,
-.danmu-diagnostic-strip.is-parse_failed {
+.danmu-diagnostic-strip.is-parse_failed,
+.danmu-diagnostic-strip.is-missing_price,
+.danmu-diagnostic-strip.is-api_failed,
+.danmu-diagnostic-strip.is-estimated {
     border-color: var(--warning-color, #e6a23c);
 }
 
@@ -464,7 +467,10 @@ body {
 }
 
 .danmu-diagnostic-strip.is-missing_xml .diagnostic-icon,
-.danmu-diagnostic-strip.is-parse_failed .diagnostic-icon {
+.danmu-diagnostic-strip.is-parse_failed .diagnostic-icon,
+.danmu-diagnostic-strip.is-missing_price .diagnostic-icon,
+.danmu-diagnostic-strip.is-api_failed .diagnostic-icon,
+.danmu-diagnostic-strip.is-estimated .diagnostic-icon {
     background: color-mix(in srgb, var(--warning-color, #e6a23c) 14%, transparent);
     color: var(--warning-color, #e6a23c);
 }

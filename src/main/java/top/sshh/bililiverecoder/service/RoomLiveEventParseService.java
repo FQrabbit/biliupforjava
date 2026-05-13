@@ -74,6 +74,15 @@ public class RoomLiveEventParseService {
         if (part == null || part.getId() == null || StringUtils.isBlank(part.getFilePath())) {
             return ParseResult.skipped("invalid part");
         }
+        if (!force && (part.isRecording() || part.getEndTime() == null)) {
+            log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipActive")
+                    .add("roomId", part.getRoomId())
+                    .add("historyId", part.getHistoryId())
+                    .add("partId", part.getId())
+                    .add("recording", part.isRecording())
+                    .add("endTimeNull", part.getEndTime() == null));
+            return ParseResult.skipped("part active");
+        }
         File xmlFile = resolveXmlFile(part);
         RoomLiveEventParseState state = parseStateRepository.findByPartId(part.getId());
         if (state == null) {

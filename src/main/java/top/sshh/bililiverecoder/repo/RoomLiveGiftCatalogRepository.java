@@ -12,4 +12,22 @@ public interface RoomLiveGiftCatalogRepository extends CrudRepository<RoomLiveGi
     RoomLiveGiftCatalog findByRoomIdAndGiftId(String roomId, Integer giftId);
 
     List<RoomLiveGiftCatalog> findByRoomIdAndGiftIdIn(String roomId, List<Integer> giftIds);
+
+    @org.springframework.data.jpa.repository.Query("""
+            select c from RoomLiveGiftCatalog c
+            where c.giftId in ?1
+              and c.priceCoin is not null
+              and c.priceCoin > 0
+            order by c.updatedAt desc
+            """)
+    List<RoomLiveGiftCatalog> findPricedByGiftIdIn(List<Integer> giftIds);
+
+    @org.springframework.data.jpa.repository.Query("""
+            select c from RoomLiveGiftCatalog c
+            where c.giftName in ?1
+              and c.priceCoin is not null
+              and c.priceCoin > 0
+            order by c.updatedAt desc
+            """)
+    List<RoomLiveGiftCatalog> findPricedByGiftNameIn(List<String> giftNames);
 }
