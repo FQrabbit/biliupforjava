@@ -763,7 +763,7 @@
                                 </div>
                                 <div class="switch-card" v-if="room.sendGiftReply">
                                     <span class="switch-label">礼物阈值</span>
-                                    <el-input class="gift-threshold-input" type="number" v-model="room.giftReplyMinPriceCny" size="mini" :min="0" :step="1" :disabled="!room.sendSc">
+                                    <el-input class="gift-threshold-input" type="text" v-model="room.giftReplyMinPriceCny" size="mini" inputmode="numeric" :disabled="!room.sendSc" @input="normalizeGiftReplyPriceInput" @blur="normalizeGiftReplyRoom(room)">
                                         <span slot="suffix">元</span>
                                     </el-input>
                                 </div>
@@ -3239,8 +3239,20 @@
                 }
                 room.sendSc = !!room.sendSc;
                 room.sendGiftReply = room.sendSc && !!room.sendGiftReply;
-                var price = Number(room.giftReplyMinPriceCny);
-                room.giftReplyMinPriceCny = Number.isFinite(price) && price >= 0 ? price : 0;
+                room.giftReplyMinPriceCny = this.normalizeGiftReplyPriceValue(room.giftReplyMinPriceCny);
+            },
+            normalizeGiftReplyPriceInput: function (value) {
+                if (value === '' || value === null || value === undefined) {
+                    return;
+                }
+                this.room.giftReplyMinPriceCny = this.normalizeGiftReplyPriceValue(value);
+            },
+            normalizeGiftReplyPriceValue: function (value) {
+                var price = Number(value);
+                if (!Number.isFinite(price) || price < 0) {
+                    return 0;
+                }
+                return Math.ceil(price);
             },
             updateRoom: function () {
                 let _this = this;

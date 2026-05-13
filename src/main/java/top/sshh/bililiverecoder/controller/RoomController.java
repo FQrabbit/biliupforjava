@@ -620,7 +620,12 @@ public class RoomController {
         if (value == null || value.compareTo(java.math.BigDecimal.ZERO) < 0) {
             return java.math.BigDecimal.ZERO;
         }
-        return value;
+        java.math.BigDecimal normalized = value.setScale(0, java.math.RoundingMode.CEILING);
+        java.math.BigDecimal maxSupported = new java.math.BigDecimal("99999999");
+        if (normalized.compareTo(maxSupported) > 0) {
+            return maxSupported;
+        }
+        return normalized;
     }
 
     @GetMapping("/delete/{roomId}")

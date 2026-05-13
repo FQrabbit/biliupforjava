@@ -3277,7 +3277,7 @@
 
 .gift-threshold-input {
 
-    width: 116px;
+    width: 124px;
 
     flex-shrink: 0;
 
@@ -3291,7 +3291,7 @@
 
     padding-left: 12px;
 
-    padding-right: 30px;
+    padding-right: 38px;
 
     text-align: right;
 
@@ -3299,11 +3299,21 @@
 
 .gift-threshold-input .el-input__suffix {
 
-    right: 9px;
+    right: 12px;
 
     color: var(--text-secondary);
 
     font-size: 12px;
+
+    display: inline-flex;
+
+    align-items: center;
+
+}
+
+.gift-threshold-input .el-input__suffix-inner {
+
+    line-height: 32px;
 
 }
 
