@@ -274,7 +274,6 @@ public class RoomLiveEventParseService {
         event.setLiveDate(liveStart == null ? null : liveStart.toLocalDate());
         event.setType(type);
         event.setUname(truncate(attr(element, "user"), 255));
-        event.setRawJson(truncate(attr(element, "raw"), 4000));
         event.setCreatedAt(now);
         return event;
     }

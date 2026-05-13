@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.BlrecData;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
+import top.sshh.bililiverecoder.service.DatabaseMaintenanceService;
 import top.sshh.bililiverecoder.service.RecordEventFactory;
 import top.sshh.bililiverecoder.service.WebhookEventDispatcher;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -23,13 +24,21 @@ public class RecordWebHook {
     @Autowired
     private WebhookEventDispatcher webhookEventDispatcher;
 
+    @Autowired
+    private DatabaseMaintenanceService databaseMaintenanceService;
+
     @PostMapping
-    public ResponseEntity<String> processing(@RequestBody RecordEventDTO recordEvent) {
+    public ResponseEntity<String> processing(@RequestBody String payload) {
+        RecordEventDTO recordEvent = JSON.parseObject(payload, RecordEventDTO.class);
         // Webhook 必须尽快响应：把耗时逻辑放到后台队列里执行，避免 servlet 线程被上传/限速/重试占满
         String lockKey = buildLockKey(recordEvent);
         String source = detectSource(recordEvent);
         String eventType = getEffectiveEventType(recordEvent);
         long delayMs = "SessionEnded".equals(eventType) ? 10000L : 0L;
+
+        if (databaseMaintenanceService.spoolRecordWebhookIfMaintenance(payload, lockKey, delayMs)) {
+            return ResponseEntity.ok("QUEUED");
+        }
 
         boolean accepted = webhookEventDispatcher.submit(lockKey, delayMs, () -> {
             long dispatchStartNs = System.nanoTime();

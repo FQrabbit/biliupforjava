@@ -1,7 +1,10 @@
 package top.sshh.bililiverecoder.repo;
 
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.RoomLiveDailyStats;
 
 import java.time.LocalDate;
@@ -15,4 +18,9 @@ public interface RoomLiveDailyStatsRepository extends CrudRepository<RoomLiveDai
     List<RoomLiveDailyStats> findByRoomId(String roomId);
 
     List<RoomLiveDailyStats> findTop30ByRoomIdOrderByLiveDateDesc(String roomId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("delete from RoomLiveDailyStats d")
+    int deleteAllRows();
 }

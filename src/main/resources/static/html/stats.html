@@ -58,10 +58,37 @@
                     @change="reload">
             </el-date-picker>
             <el-button size="small" icon="el-icon-refresh" @click="reload">刷新</el-button>
-            <el-button size="small" icon="el-icon-finished" :loading="backfilling" @click="backfillStats">补全未统计</el-button>
-            <el-button size="small" type="primary" icon="el-icon-magic-stick" :loading="rebuilding" @click="rebuildStats">重建统计</el-button>
+            <div class="stats-more">
+                <el-button size="small" icon="el-icon-more" @click="toggleMoreActions">更多操作</el-button>
+                <transition name="stats-action-menu">
+                    <div v-if="moreActionsVisible" class="stats-action-menu">
+                        <el-button size="small" icon="el-icon-finished" :loading="backfilling" @click="backfillStats">补全未统计</el-button>
+                        <el-button size="small" type="warning" plain icon="el-icon-delete" :loading="cleaning" @click="cleanupStats">清理缓存</el-button>
+                        <el-button size="small" type="danger" plain icon="el-icon-box" :loading="compacting" @click="compactDatabase">压缩数据库</el-button>
+                        <el-button size="small" type="primary" icon="el-icon-magic-stick" :loading="rebuilding" @click="rebuildStats">重建统计</el-button>
+                    </div>
+                </transition>
+            </div>
         </div>
     </header>
+
+    <transition name="stats-progress">
+        <section v-if="operationProgress.visible" class="operation-progress-panel" :class="'is-' + operationProgress.status">
+            <div class="operation-progress-head">
+                <div>
+                    <strong>{{ operationProgress.title }}</strong>
+                    <span>{{ operationProgress.message }}</span>
+                </div>
+                <em>{{ operationProgress.percent }}%</em>
+            </div>
+            <el-progress
+                    :percentage="operationProgress.percent"
+                    :status="operationProgress.status === 'error' ? 'exception' : (operationProgress.percent >= 100 ? 'success' : undefined)"
+                    :stroke-width="8">
+            </el-progress>
+            <div v-if="operationProgress.detail" class="operation-progress-detail">{{ operationProgress.detail }}</div>
+        </section>
+    </transition>
 
     <section class="coverage-strip" :class="{ 'is-complete': coverage.complete }">
         <div>
@@ -347,6 +374,19 @@ new Vue({
             loading: false,
             rebuilding: false,
             backfilling: false,
+            cleaning: false,
+            compacting: false,
+            moreActionsVisible: false,
+            maintenancePoller: null,
+            operationProgressTimer: null,
+            operationProgress: {
+                visible: false,
+                title: '',
+                message: '',
+                detail: '',
+                percent: 0,
+                status: 'active'
+            },
             overview: {},
             rooms: [],
             selectedRoomId: '',
@@ -500,15 +540,84 @@ new Vue({
             this.selectedSessionId = row.historyId;
             this.loadSessionBuckets(row.historyId);
         },
+        toggleMoreActions: function () {
+            this.moreActionsVisible = !this.moreActionsVisible;
+        },
+        startOperationProgress: function (title, message, detail) {
+            var self = this;
+            if (this.operationProgressTimer) {
+                clearInterval(this.operationProgressTimer);
+                this.operationProgressTimer = null;
+            }
+            this.operationProgress = {
+                visible: true,
+                title: title,
+                message: message || '正在处理，请稍候',
+                detail: detail || '',
+                percent: 8,
+                status: 'active'
+            };
+            this.operationProgressTimer = setInterval(function () {
+                if (!self.operationProgress.visible || self.operationProgress.percent >= 88) {
+                    return;
+                }
+                var next = self.operationProgress.percent + (self.operationProgress.percent < 50 ? 7 : 3);
+                self.operationProgress.percent = Math.min(88, next);
+            }, 700);
+        },
+        updateOperationProgress: function (percent, message, detail) {
+            this.operationProgress.visible = true;
+            this.operationProgress.percent = Math.max(0, Math.min(100, Number(percent) || 0));
+            if (message) {
+                this.operationProgress.message = message;
+            }
+            if (detail !== undefined) {
+                this.operationProgress.detail = detail;
+            }
+        },
+        finishOperationProgress: function (message, detail) {
+            var self = this;
+            if (this.operationProgressTimer) {
+                clearInterval(this.operationProgressTimer);
+                this.operationProgressTimer = null;
+            }
+            this.operationProgress.status = 'success';
+            this.operationProgress.percent = 100;
+            this.operationProgress.message = message || '处理完成';
+            if (detail !== undefined) {
+                this.operationProgress.detail = detail;
+            }
+            setTimeout(function () {
+                if (self.operationProgress.status === 'success') {
+                    self.operationProgress.visible = false;
+                }
+            }, 3500);
+        },
+        failOperationProgress: function (message, detail) {
+            if (this.operationProgressTimer) {
+                clearInterval(this.operationProgressTimer);
+                this.operationProgressTimer = null;
+            }
+            this.operationProgress.visible = true;
+            this.operationProgress.status = 'error';
+            this.operationProgress.percent = 100;
+            this.operationProgress.message = message || '处理失败';
+            if (detail !== undefined) {
+                this.operationProgress.detail = detail;
+            }
+        },
         backfillStats: function () {
             var self = this;
             this.backfilling = true;
+            this.startOperationProgress('补全未统计', '正在扫描缺失统计并补算', '耗时取决于历史场次和弹幕数量');
             ApiUtil.post('/stats/backfill', {}, function (result) {
                 self.$message.success('已补算 ' + (result.updated || 0) + ' 场统计');
+                self.finishOperationProgress('补全完成', '已补算 ' + (result.updated || 0) + ' 场统计');
                 self.reload();
                 self.backfilling = false;
             }, function () {
                 self.$message.error('补全统计失败');
+                self.failOperationProgress('补全统计失败');
                 self.backfilling = false;
             });
         },
@@ -520,15 +629,119 @@ new Vue({
                 type: 'warning'
             }).then(function () {
                 self.rebuilding = true;
+                self.startOperationProgress('重建统计', '正在清理并重新生成统计', '重建期间请尽量不要重复触发统计维护操作');
                 ApiUtil.post('/stats/rebuild', {}, function (result) {
                     self.$message.success('统计已重建：' + (result.updated || 0) + ' 场历史');
+                    self.finishOperationProgress('重建完成', '已重建 ' + (result.updated || 0) + ' 场历史');
                     self.reload();
                     self.rebuilding = false;
                 }, function () {
                     self.$message.error('统计重建失败');
+                    self.failOperationProgress('统计重建失败');
                     self.rebuilding = false;
                 });
             }).catch(function () {});
+        },
+        cleanupStats: function () {
+            var self = this;
+            this.$confirm('清理会删除统计中心生成的缓存/汇总表，并同步置空事件表中遗留的原始JSON文本；不会删除录制历史、分P、原始弹幕或已解析出的统计字段。', '清理缓存', {
+                confirmButtonText: '确认清理',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(function () {
+                self.cleaning = true;
+                self.startOperationProgress('清理缓存', '正在清理统计缓存', '随后会同步清理遗留的原始 JSON');
+                ApiUtil.post('/stats/cleanup', {}, function (result) {
+                    if (result && result.busy) {
+                        self.$message.warning(result.message || '统计任务正在执行中，请稍后再试');
+                        self.failOperationProgress('清理被占用', result.message || '统计任务正在执行中，请稍后再试');
+                        self.reload();
+                        self.cleaning = false;
+                        return;
+                    }
+                    self.updateOperationProgress(58, '统计缓存已清理，正在清理原始 JSON', '已清理统计缓存 ' + (result.deletedTotalStats || 0) + ' 条');
+                    ApiUtil.post('/stats/cleanup-event-raw-json', {}, function (rawResult) {
+                        if (rawResult && rawResult.busy) {
+                            self.$message.warning(rawResult.message || '原始JSON清理被其他统计任务占用，请稍后再试');
+                            self.failOperationProgress('原始 JSON 清理被占用', rawResult.message || '请稍后再试');
+                        } else {
+                            self.$message.success('缓存已清理：统计 ' + (result.deletedTotalStats || 0) + ' 条，原始JSON ' + ((rawResult && rawResult.updated) || 0) + ' 行');
+                            self.finishOperationProgress('清理完成', '统计 ' + (result.deletedTotalStats || 0) + ' 条，原始JSON ' + ((rawResult && rawResult.updated) || 0) + ' 行');
+                        }
+                        self.reload();
+                        self.cleaning = false;
+                    }, function () {
+                        self.$message.error('原始JSON清理失败');
+                        self.failOperationProgress('原始 JSON 清理失败');
+                        self.reload();
+                        self.cleaning = false;
+                    });
+                }, function () {
+                    self.$message.error('缓存清理失败');
+                    self.failOperationProgress('缓存清理失败');
+                    self.cleaning = false;
+                });
+            }).catch(function () {});
+        },
+        compactDatabase: function () {
+            var self = this;
+            this.$confirm('数据库压缩会进入维护模式：期间 webhook 会先写入本地队列，投稿/统计等本地后台任务可能被中断并在后续自愈恢复。开始前会自动备份数据库。', '压缩数据库', {
+                confirmButtonText: '开始压缩',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(function () {
+                self.compacting = true;
+                self.startOperationProgress('压缩数据库', '正在进入维护模式', 'webhook 会先写入本地队列，完成后按顺序回放');
+                ApiUtil.post('/stats/maintenance/compact', {}, function (result) {
+                    if (result && result.busy) {
+                        self.$message.warning(result.message || '数据库压缩正在执行中');
+                    } else {
+                        self.$message.success(result.message || '数据库压缩已开始');
+                    }
+                    self.pollMaintenanceStatus();
+                }, function () {
+                    self.$message.error('启动数据库压缩失败');
+                    self.failOperationProgress('启动数据库压缩失败');
+                    self.compacting = false;
+                });
+            }).catch(function () {});
+        },
+        pollMaintenanceStatus: function () {
+            var self = this;
+            if (this.maintenancePoller) {
+                clearInterval(this.maintenancePoller);
+            }
+            var check = function () {
+                $.getJSON('/stats/maintenance/status')
+                    .done(function (status) {
+                        if (status) {
+                            var detail = '待回放 ' + (status.spoolPendingFiles || 0) + ' 个，已回放 ' + (status.replayed || 0) + ' 个，失败 ' + (status.failed || 0) + ' 个';
+                            self.updateOperationProgress(status.progress || 0, status.phaseLabel || status.message || '数据库维护中', detail);
+                        }
+                        if (!status || (!status.running && !status.maintenance)) {
+                            clearInterval(self.maintenancePoller);
+                            self.maintenancePoller = null;
+                            self.compacting = false;
+                            if (status && status.phase === 'DONE') {
+                                self.$message.success('数据库压缩完成，已回放 webhook：' + (status.replayed || 0) + ' 个');
+                                self.finishOperationProgress('数据库压缩完成', '已回放 webhook：' + (status.replayed || 0) + ' 个，失败 ' + (status.failed || 0) + ' 个');
+                            } else if (status && status.phase === 'FAILED') {
+                                self.$message.error(status.message || '数据库压缩失败');
+                                self.failOperationProgress(status.message || '数据库压缩失败');
+                            }
+                            self.reload();
+                        }
+                    })
+                    .fail(function () {
+                        clearInterval(self.maintenancePoller);
+                        self.maintenancePoller = null;
+                        self.compacting = false;
+                        self.$message.error('查询维护状态失败');
+                        self.failOperationProgress('查询维护状态失败');
+                    });
+            };
+            check();
+            this.maintenancePoller = setInterval(check, 2000);
         },
         queryString: function () {
             if (!this.dateRange || this.dateRange.length !== 2) {

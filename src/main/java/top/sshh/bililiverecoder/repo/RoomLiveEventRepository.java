@@ -121,4 +121,9 @@ public interface RoomLiveEventRepository extends CrudRepository<RoomLiveEvent, L
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     void deleteByHistoryId(Long historyId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("update RoomLiveEvent e set e.rawJson = null where e.rawJson is not null")
+    int clearRawJson();
 }

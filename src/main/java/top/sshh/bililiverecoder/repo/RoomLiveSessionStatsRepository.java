@@ -1,9 +1,11 @@
 package top.sshh.bililiverecoder.repo;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.RoomLiveSessionStats;
 
 import java.time.LocalDate;
@@ -26,4 +28,9 @@ public interface RoomLiveSessionStatsRepository extends CrudRepository<RoomLiveS
 
     @Query("select s from RoomLiveSessionStats s order by s.startTime desc")
     List<RoomLiveSessionStats> findLatest(Pageable pageable);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("delete from RoomLiveSessionStats s")
+    int deleteAllRows();
 }

@@ -3,6 +3,7 @@ package top.sshh.bililiverecoder.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import top.sshh.bililiverecoder.service.DatabaseMaintenanceService;
 import top.sshh.bililiverecoder.service.StatsAggregationService;
 
 import java.time.LocalDate;
@@ -15,6 +16,9 @@ public class StatsController {
 
     @Autowired
     private StatsAggregationService statsAggregationService;
+
+    @Autowired
+    private DatabaseMaintenanceService databaseMaintenanceService;
 
     @GetMapping("/overview")
     public Map<String, Object> overview(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -58,5 +62,25 @@ public class StatsController {
     @PostMapping("/rebuild")
     public Map<String, Object> rebuild() {
         return statsAggregationService.rebuildAllStats();
+    }
+
+    @PostMapping("/cleanup")
+    public Map<String, Object> cleanup() {
+        return statsAggregationService.cleanupStats();
+    }
+
+    @PostMapping("/cleanup-event-raw-json")
+    public Map<String, Object> cleanupEventRawJson() {
+        return statsAggregationService.cleanupEventRawJson();
+    }
+
+    @GetMapping("/maintenance/status")
+    public Map<String, Object> maintenanceStatus() {
+        return databaseMaintenanceService.status();
+    }
+
+    @PostMapping("/maintenance/compact")
+    public Map<String, Object> compactDatabase() {
+        return databaseMaintenanceService.compactAsync();
     }
 }

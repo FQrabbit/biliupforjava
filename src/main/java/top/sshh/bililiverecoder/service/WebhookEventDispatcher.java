@@ -118,6 +118,25 @@ public class WebhookEventDispatcher {
         }
     }
 
+    public boolean isIdle() {
+        for (SerialExecutor executor : executors.values()) {
+            if (executor != null && !executor.isIdle()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public int pendingTaskCount() {
+        int count = 0;
+        for (SerialExecutor executor : executors.values()) {
+            if (executor != null) {
+                count += executor.pendingCount();
+            }
+        }
+        return count;
+    }
+
     @PreDestroy
     public void shutdown() {
         try {
@@ -209,6 +228,10 @@ public class WebhookEventDispatcher {
 
         private synchronized boolean isIdle() {
             return active == null && tasks.isEmpty() && pending == 0;
+        }
+
+        private synchronized int pendingCount() {
+            return pending;
         }
     }
 

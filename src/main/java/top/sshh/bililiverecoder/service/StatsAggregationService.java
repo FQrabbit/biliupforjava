@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -46,6 +47,10 @@ public class StatsAggregationService {
     private RoomLiveDailyStatsRepository dailyStatsRepository;
     @Autowired
     private RoomLiveMsgBucketStatsRepository bucketStatsRepository;
+    @Autowired
+    private DatabaseMaintenanceState databaseMaintenanceState;
+
+    private final ReentrantLock statsWriteLock = new ReentrantLock();
 
     @Async("myAsyncPool")
     public void refreshRecentCompletedHistoriesAsync(int limit) {
@@ -60,82 +65,171 @@ public class StatsAggregationService {
     }
 
     public Map<String, Object> refreshRecentCompletedHistories(int limit) {
-        int safeLimit = Math.max(1, limit);
-        List<RecordHistory> histories = historyRepository.findCompletedOrderByEndTimeDesc(PageRequest.of(0, safeLimit));
-        int updated = 0;
-        for (RecordHistory history : histories) {
-            if (history == null || history.getId() == null) {
-                continue;
-            }
-            refreshHistoryStats(history.getId());
-            updated++;
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            return statsBusyResult("recent", limit);
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("success", true);
-        result.put("updated", updated);
-        result.put("statsVersion", STATS_VERSION);
-        result.put("status", getStatsStatus());
-        return result;
+        if (!statsWriteLock.tryLock()) {
+            return statsBusyResult("recent", limit);
+        }
+        try {
+            int safeLimit = Math.max(1, limit);
+            List<RecordHistory> histories = historyRepository.findCompletedOrderByEndTimeDesc(PageRequest.of(0, safeLimit));
+            int updated = 0;
+            for (RecordHistory history : histories) {
+                if (history == null || history.getId() == null) {
+                    continue;
+                }
+                aggregateHistory(history);
+                updated++;
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("updated", updated);
+            result.put("statsVersion", STATS_VERSION);
+            result.put("status", getStatsStatus());
+            return result;
+        } finally {
+            statsWriteLock.unlock();
+        }
     }
 
     public Map<String, Object> backfillMissingStats() {
-        int updated = 0;
-        for (RecordHistory history : historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc()) {
-            if (history == null || history.getId() == null) {
-                continue;
-            }
-            RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
-            if (stats == null || stats.getStatsVersion() < STATS_VERSION) {
-                refreshHistoryStats(history.getId());
-                updated++;
-            }
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            return statsBusyResult("backfill", null);
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("success", true);
-        result.put("updated", updated);
-        result.put("statsVersion", STATS_VERSION);
-        result.put("status", getStatsStatus());
-        return result;
+        if (!statsWriteLock.tryLock()) {
+            return statsBusyResult("backfill", null);
+        }
+        try {
+            int updated = 0;
+            for (RecordHistory history : historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc()) {
+                if (history == null || history.getId() == null) {
+                    continue;
+                }
+                RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
+                if (stats == null || stats.getStatsVersion() < STATS_VERSION) {
+                    aggregateHistory(history);
+                    updated++;
+                }
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("updated", updated);
+            result.put("statsVersion", STATS_VERSION);
+            result.put("status", getStatsStatus());
+            return result;
+        } finally {
+            statsWriteLock.unlock();
+        }
     }
 
     @Async("myAsyncPool")
     public void refreshHistoryStatsAsync(Long historyId) {
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            log.info("[BLR] {}", LogKvs.event("Stats.RefreshHistory.SkipMaintenance")
+                    .add("historyId", historyId));
+            return;
+        }
+        if (!statsWriteLock.tryLock()) {
+            log.info("[BLR] {}", LogKvs.event("Stats.RefreshHistory.SkipBusy")
+                    .add("historyId", historyId));
+            return;
+        }
         try {
-            refreshHistoryStats(historyId);
+            refreshHistoryStatsUnlocked(historyId);
         } catch (Throwable e) {
             log.warn("[BLR] {}", LogKvs.event("Stats.RefreshHistory.Failed")
                     .add("historyId", historyId)
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()));
+        } finally {
+            statsWriteLock.unlock();
         }
     }
 
-    @Transactional
     public Map<String, Object> rebuildAllStats() {
-        bucketStatsRepository.deleteAll();
-        dailyStatsRepository.deleteAll();
-        sessionStatsRepository.deleteAll();
-
-        int updated = 0;
-        for (RecordHistory history : historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc()) {
-            if (history == null || history.getId() == null) {
-                continue;
-            }
-            aggregateHistory(history);
-            updated++;
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            return statsBusyResult("rebuild", null);
         }
+        if (!statsWriteLock.tryLock()) {
+            return statsBusyResult("rebuild", null);
+        }
+        try {
+            StatsCleanupResult cleanup = cleanupStatsRows();
 
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("success", true);
-        result.put("updated", updated);
-        result.put("statsVersion", STATS_VERSION);
-        result.put("rebuiltAt", LocalDateTime.now());
-        result.put("status", getStatsStatus());
-        return result;
+            int updated = 0;
+            for (RecordHistory history : historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc()) {
+                if (history == null || history.getId() == null) {
+                    continue;
+                }
+                aggregateHistory(history);
+                updated++;
+            }
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("updated", updated);
+            result.putAll(cleanup.toMap());
+            result.put("statsVersion", STATS_VERSION);
+            result.put("rebuiltAt", LocalDateTime.now());
+            result.put("status", getStatsStatus());
+            return result;
+        } finally {
+            statsWriteLock.unlock();
+        }
     }
 
-    @Transactional
+    public Map<String, Object> cleanupStats() {
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            return statsBusyResult("cleanup", null);
+        }
+        if (!statsWriteLock.tryLock()) {
+            return statsBusyResult("cleanup", null);
+        }
+        try {
+            StatsCleanupResult cleanup = cleanupStatsRows();
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.putAll(cleanup.toMap());
+            result.put("statsVersion", STATS_VERSION);
+            result.put("cleanedAt", LocalDateTime.now());
+            result.put("status", getStatsStatus());
+            return result;
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
+    public Map<String, Object> cleanupEventRawJson() {
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            return statsBusyResult("cleanupEventRawJson", null);
+        }
+        if (!statsWriteLock.tryLock()) {
+            return statsBusyResult("cleanupEventRawJson", null);
+        }
+        try {
+            int updated = eventRepository.clearRawJson();
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("updated", updated);
+            result.put("message", "已清理事件原始JSON，统计字段已保留");
+            result.put("cleanedAt", LocalDateTime.now());
+            return result;
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
     public void refreshHistoryStats(Long historyId) {
+        statsWriteLock.lock();
+        try {
+            refreshHistoryStatsUnlocked(historyId);
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
+    private void refreshHistoryStatsUnlocked(Long historyId) {
         if (historyId == null) {
             return;
         }
@@ -144,6 +238,39 @@ public class StatsAggregationService {
             return;
         }
         aggregateHistory(historyOptional.get());
+    }
+
+    private Map<String, Object> statsBusyResult(String task, Object limit) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", false);
+        result.put("busy", true);
+        result.put("task", task);
+        if (limit != null) {
+            result.put("limit", limit);
+        }
+        result.put("message", "统计任务正在执行中，请稍后再试");
+        result.put("statsVersion", STATS_VERSION);
+        return result;
+    }
+
+    private StatsCleanupResult cleanupStatsRows() {
+        int deletedBuckets = bucketStatsRepository.deleteAllRows();
+        int deletedDailyStats = dailyStatsRepository.deleteAllRows();
+        int deletedSessionStats = sessionStatsRepository.deleteAllRows();
+        return new StatsCleanupResult(deletedBuckets, deletedDailyStats, deletedSessionStats);
+    }
+
+    private record StatsCleanupResult(int deletedBucketStats,
+                                      int deletedDailyStats,
+                                      int deletedSessionStats) {
+        Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("deletedBucketStats", deletedBucketStats);
+            map.put("deletedDailyStats", deletedDailyStats);
+            map.put("deletedSessionStats", deletedSessionStats);
+            map.put("deletedTotalStats", deletedBucketStats + deletedDailyStats + deletedSessionStats);
+            return map;
+        }
     }
 
     private void aggregateHistory(RecordHistory history) {
