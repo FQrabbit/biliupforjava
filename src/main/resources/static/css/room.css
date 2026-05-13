@@ -5235,6 +5235,16 @@
 
 /* 封面上传小组件*/
 
+.cover-uploader-mini {
+
+    display: block;
+
+    margin-top: 10px;
+
+}
+
+
+
 .cover-uploader-mini .el-upload {
 
     border: 1px dashed var(--border-light);
@@ -5474,6 +5484,138 @@
 .cover-option-grid {
 
     margin-bottom: 12px;
+
+}
+
+
+
+.cover-segmented {
+
+    display: grid;
+
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    gap: 4px;
+
+    padding: 4px;
+
+    border: 1px solid var(--border-color);
+
+    border-radius: var(--radius-md);
+
+    background: var(--bg-tertiary);
+
+}
+
+
+
+.cover-segment {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 6px;
+
+    min-width: 0;
+
+    min-height: 38px;
+
+    padding: 0 10px;
+
+    border: 1px solid transparent;
+
+    border-radius: calc(var(--radius-md) - 2px);
+
+    background: transparent;
+
+    color: var(--text-secondary);
+
+    font: inherit;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+
+}
+
+
+
+.cover-segment i {
+
+    flex: 0 0 auto;
+
+    font-size: 16px;
+
+}
+
+
+
+.cover-segment span {
+
+    min-width: 0;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+}
+
+
+
+.cover-segment:hover {
+
+    color: var(--primary-color);
+
+    background: var(--brand-soft-bg-hover);
+
+}
+
+
+
+.cover-segment.is-active {
+
+    color: var(--primary-color);
+
+    background: var(--bg-primary);
+
+    border-color: var(--brand-accent-border);
+
+    box-shadow: var(--shadow-sm);
+
+}
+
+
+
+.cover-segment:focus-visible {
+
+    outline: 2px solid var(--primary-color);
+
+    outline-offset: 2px;
+
+}
+
+
+
+.cover-mode-hint {
+
+    min-height: 20px;
+
+    margin-top: 8px;
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    line-height: 1.6;
 
 }
 
@@ -5762,6 +5904,14 @@
 
 
 @media (max-width: 768px) {
+
+    .cover-segmented {
+
+        grid-template-columns: 1fr;
+
+    }
+
+
 
     .option-card-grid-two,
     .option-card-grid-three {

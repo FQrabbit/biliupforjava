@@ -676,46 +676,40 @@
                             </el-form-item>
 
                             <el-form-item label="封面设置" class="option-card-form-item">
-                                <div class="option-card-grid option-card-grid-three cover-option-grid">
+                                <div class="cover-segmented" role="group" aria-label="封面设置">
                                     <button
                                         type="button"
-                                        class="option-card option-card-compact"
+                                        class="cover-segment"
                                         :class="{ 'is-active': room.coverType === 'default' }"
                                         @click="selectCoverType('default')"
                                         title="自动截取视频画面作为封面">
-                                        <span class="option-card-icon"><i class="el-icon-crop"></i></span>
-                                        <span class="option-card-main">
-                                            <strong>默认</strong>
-                                            <em>自动截帧</em>
-                                        </span>
-                                        <i class="el-icon-check option-card-check"></i>
+                                        <i class="el-icon-crop"></i>
+                                        <span>默认</span>
                                     </button>
                                     <button
                                         type="button"
-                                        class="option-card option-card-compact"
+                                        class="cover-segment"
                                         :class="{ 'is-active': room.coverType === 'live' }"
                                         @click="selectCoverType('live')"
                                         title="使用主播当前的直播间封面">
-                                        <span class="option-card-icon"><i class="el-icon-picture-outline"></i></span>
-                                        <span class="option-card-main">
-                                            <strong>直播</strong>
-                                            <em>同步封面</em>
-                                        </span>
-                                        <i class="el-icon-check option-card-check"></i>
+                                        <i class="el-icon-picture-outline"></i>
+                                        <span>直播封面</span>
                                     </button>
                                     <button
                                         type="button"
-                                        class="option-card option-card-compact"
+                                        class="cover-segment"
                                         :class="{ 'is-active': room.coverType === 'diy' }"
                                         @click="selectCoverType('diy')"
                                         title="手动上传或指定封面图片">
-                                        <span class="option-card-icon"><i class="el-icon-upload2"></i></span>
-                                        <span class="option-card-main">
-                                            <strong>自定义</strong>
-                                            <em>手动上传</em>
-                                        </span>
-                                        <i class="el-icon-check option-card-check"></i>
+                                        <i class="el-icon-upload2"></i>
+                                        <span>自定义</span>
                                     </button>
+                                </div>
+
+                                <div class="cover-mode-hint">
+                                    <span v-if="room.coverType === 'default'">自动截取视频画面作为投稿封面。</span>
+                                    <span v-else-if="room.coverType === 'live'">使用主播当前直播间封面，并在保存前预览。</span>
+                                    <span v-else>手动上传 JPG/PNG 图片作为投稿封面。</span>
                                 </div>
                                 
                                 <!-- 直播封面预览 -->
