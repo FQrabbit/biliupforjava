@@ -98,14 +98,15 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     @Query("""
             select floor(m.sendTime / 60000),
+                   m.partId,
                    count(m),
                    sum(case when m.pool = 0 then 1 else 0 end),
                    sum(case when m.pool = 1 then 1 else 0 end)
             from LiveMsg m
             where m.partId in ?1
               and m.sendTime is not null
-            group by floor(m.sendTime / 60000)
-            order by floor(m.sendTime / 60000)
+            group by m.partId, floor(m.sendTime / 60000)
+            order by m.partId, floor(m.sendTime / 60000)
             """)
     List<Object[]> getMsgBucketCountByPartIds(List<Long> partIds);
 }

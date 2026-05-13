@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 public class StatsAggregationService {
 
     public static final int STATS_VERSION = 3;
+    private static final Duration TASK_STATUS_RETENTION = Duration.ofMinutes(10);
 
     @Autowired
     private RecordHistoryRepository historyRepository;
@@ -231,6 +232,14 @@ public class StatsAggregationService {
     }
 
     public Map<String, Object> getStatsTaskStatus() {
+        synchronized (taskStatusLock) {
+            if (!taskStatus.running
+                    && !"idle".equals(taskStatus.task)
+                    && taskStatus.updatedAt != null
+                    && Duration.between(taskStatus.updatedAt, LocalDateTime.now()).compareTo(TASK_STATUS_RETENTION) > 0) {
+                taskStatus = StatsTaskStatus.idle();
+            }
+        }
         return taskStatus.toMap();
     }
 
@@ -478,17 +487,19 @@ public class StatsAggregationService {
                                    int processed,
                                    int total,
                                    int percent,
+                                   LocalDateTime startedAt,
                                    LocalDateTime updatedAt,
                                    Map<String, Object> result) {
 
         private static StatsTaskStatus idle() {
             return new StatsTaskStatus(null, "idle", "空闲", false, true, false,
-                    "IDLE", "当前没有统计维护任务", "", 0, 0, 0, LocalDateTime.now(), Collections.emptyMap());
+                    "IDLE", "当前没有统计维护任务", "", 0, 0, 0, null, LocalDateTime.now(), Collections.emptyMap());
         }
 
         private static StatsTaskStatus running(String task, String title) {
+            LocalDateTime now = LocalDateTime.now();
             return new StatsTaskStatus(UUID.randomUUID().toString(), task, title, true, true, false,
-                    "STARTING", "正在启动任务", "", 0, 0, 1, LocalDateTime.now(), Collections.emptyMap());
+                    "STARTING", "正在启动任务", "", 0, 0, 1, now, now, Collections.emptyMap());
         }
 
         private StatsTaskStatus progress(String phase, int processed, int total, String detail) {
@@ -496,23 +507,23 @@ public class StatsAggregationService {
             int safeProcessed = Math.max(0, Math.min(processed, safeTotal));
             int nextPercent = safeTotal <= 0 ? 5 : Math.max(1, Math.min(99, (int) Math.floor(safeProcessed * 100.0d / safeTotal)));
             return new StatsTaskStatus(taskId, task, title, true, true, false,
-                    phase, phase, detail == null ? "" : detail, safeProcessed, safeTotal, nextPercent, LocalDateTime.now(), result);
+                    phase, phase, detail == null ? "" : detail, safeProcessed, safeTotal, nextPercent, startedAt, LocalDateTime.now(), result);
         }
 
         private StatsTaskStatus done(String message, Map<String, Object> result) {
             return new StatsTaskStatus(taskId, task, title, false, true, false,
-                    "DONE", message, detail, total, total, 100, LocalDateTime.now(),
+                    "DONE", message, detail, total, total, 100, startedAt, LocalDateTime.now(),
                     result == null ? Collections.emptyMap() : result);
         }
 
         private StatsTaskStatus failed(String message) {
             return new StatsTaskStatus(taskId, task, title, false, false, false,
-                    "FAILED", message, detail, processed, total, 100, LocalDateTime.now(), result);
+                    "FAILED", message, detail, processed, total, 100, startedAt, LocalDateTime.now(), result);
         }
 
         private StatsTaskStatus busy(String message) {
             return new StatsTaskStatus(taskId, task, title, false, false, true,
-                    "BUSY", message, detail, processed, total, 100, LocalDateTime.now(), result);
+                    "BUSY", message, detail, processed, total, 100, startedAt, LocalDateTime.now(), result);
         }
 
         private Map<String, Object> toMap() {
@@ -529,9 +540,19 @@ public class StatsAggregationService {
             map.put("processed", processed);
             map.put("total", total);
             map.put("percent", percent);
+            map.put("startedAt", startedAt);
             map.put("updatedAt", updatedAt);
+            map.put("elapsedSeconds", elapsedSeconds());
             map.put("result", result == null ? Collections.emptyMap() : result);
             return map;
+        }
+
+        private long elapsedSeconds() {
+            if (startedAt == null) {
+                return 0L;
+            }
+            LocalDateTime end = updatedAt == null ? LocalDateTime.now() : updatedAt;
+            return Math.max(0L, Duration.between(startedAt, end).getSeconds());
         }
     }
 
@@ -607,7 +628,7 @@ public class StatsAggregationService {
         stats.setStatsVersion(STATS_VERSION);
 
         bucketStatsRepository.deleteByHistoryId(history.getId());
-        BucketPeak peak = saveBucketStats(history.getId(), history.getRoomId(), partIds, eventStats.fromRawEvents, now);
+        BucketPeak peak = saveBucketStats(history.getId(), history.getRoomId(), startTime, parts, eventStats.fromRawEvents, now);
         stats.setPeakMinuteIndex(peak.bucketIndex);
         stats.setPeakMinuteMsgCount(peak.msgCount);
         sessionStatsRepository.save(stats);
@@ -689,78 +710,134 @@ public class StatsAggregationService {
         return roomId + "#" + giftId;
     }
 
-    private BucketPeak saveBucketStats(Long historyId, String roomId, List<Long> partIds, boolean fromRawEvents, LocalDateTime now) {
+    private BucketPeak saveBucketStats(Long historyId, String roomId, LocalDateTime historyStart,
+                                       List<RecordHistoryPart> parts, boolean fromRawEvents, LocalDateTime now) {
+        List<Long> partIds = parts.stream()
+                .map(RecordHistoryPart::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        Map<Long, Long> partOffsetMs = buildPartOffsetMs(historyStart, parts);
         if (fromRawEvents) {
-            return saveRawEventBucketStats(historyId, roomId, now);
+            return saveRawEventBucketStats(historyId, roomId, partOffsetMs, now);
         }
         if (partIds.isEmpty()) {
             return new BucketPeak(null, 0L);
         }
-        List<RoomLiveMsgBucketStats> buckets = new ArrayList<>();
+        Map<Integer, RoomLiveMsgBucketStats> bucketMap = new TreeMap<>();
         Integer peakIndex = null;
         long peakCount = 0L;
         for (Object[] row : liveMsgRepository.getMsgBucketCountByPartIds(partIds)) {
-            int bucketIndex = toNumber(row[0]).intValue();
-            long msgCount = toNumber(row[1]).longValue();
-            RoomLiveMsgBucketStats bucket = new RoomLiveMsgBucketStats();
-            bucket.setHistoryId(historyId);
-            bucket.setRoomId(roomId);
-            bucket.setBucketIndex(bucketIndex);
-            bucket.setBucketStartMs(bucketIndex * 60_000L);
+            Long partId = row[1] == null ? null : toNumber(row[1]).longValue();
+            int bucketIndex = absoluteBucketIndex(row[0], partId, partOffsetMs);
+            long msgCount = toNumber(row[2]).longValue();
+            RoomLiveMsgBucketStats bucket = bucketMap.computeIfAbsent(bucketIndex,
+                    index -> newBucketStats(historyId, roomId, index, now));
             bucket.setMsgCount(msgCount);
-            bucket.setNormalMsgCount(toNumber(row[2]).longValue());
-            bucket.setAdvancedMsgCount(toNumber(row[3]).longValue());
-            bucket.setStatsUpdatedAt(now);
-            bucket.setStatsVersion(STATS_VERSION);
-            buckets.add(bucket);
+            bucket.setNormalMsgCount(toNumber(row[3]).longValue());
+            bucket.setAdvancedMsgCount(toNumber(row[4]).longValue());
             if (msgCount > peakCount) {
                 peakCount = msgCount;
                 peakIndex = bucketIndex;
             }
         }
-        bucketStatsRepository.saveAll(buckets);
+        mergeEventBucketStats(historyId, roomId, partOffsetMs, now, bucketMap, false);
+        bucketStatsRepository.saveAll(bucketMap.values());
         return new BucketPeak(peakIndex, peakCount);
     }
 
-    private BucketPeak saveRawEventBucketStats(Long historyId, String roomId, LocalDateTime now) {
+    private BucketPeak saveRawEventBucketStats(Long historyId, String roomId, Map<Long, Long> partOffsetMs, LocalDateTime now) {
         Map<Integer, RoomLiveMsgBucketStats> bucketMap = new TreeMap<>();
         Integer peakIndex = null;
         long peakCount = 0L;
-        for (Object[] row : eventRepository.getEventBucketCountByHistoryId(historyId)) {
-            int bucketIndex = toNumber(row[0]).intValue();
-            String type = row[1] == null ? "" : row[1].toString();
-            long count = toNumber(row[2]).longValue();
-            RoomLiveMsgBucketStats bucket = bucketMap.computeIfAbsent(bucketIndex, index -> {
-                RoomLiveMsgBucketStats value = new RoomLiveMsgBucketStats();
-                value.setHistoryId(historyId);
-                value.setRoomId(roomId);
-                value.setBucketIndex(index);
-                value.setBucketStartMs(index * 60_000L);
-                value.setStatsUpdatedAt(now);
-                value.setStatsVersion(STATS_VERSION);
-                return value;
-            });
-            if (RoomLiveEvent.TYPE_DANMU.equals(type)) {
-                bucket.setNormalMsgCount(count);
-                bucket.setMsgCount(bucket.getMsgCount() + count);
-            } else if (RoomLiveEvent.TYPE_SC.equals(type)) {
-                bucket.setScCount(count);
-                bucket.setAdvancedMsgCount(bucket.getAdvancedMsgCount() + count);
-                bucket.setMsgCount(bucket.getMsgCount() + count);
-            } else if (RoomLiveEvent.TYPE_GUARD.equals(type)) {
-                bucket.setGuardCount(count);
-                bucket.setAdvancedMsgCount(bucket.getAdvancedMsgCount() + count);
-                bucket.setMsgCount(bucket.getMsgCount() + count);
-            } else if (RoomLiveEvent.TYPE_GIFT.equals(type)) {
-                bucket.setGiftEventCount(count);
-            }
+        mergeEventBucketStats(historyId, roomId, partOffsetMs, now, bucketMap, true);
+        for (RoomLiveMsgBucketStats bucket : bucketMap.values()) {
             if (bucket.getMsgCount() > peakCount) {
                 peakCount = bucket.getMsgCount();
-                peakIndex = bucketIndex;
+                peakIndex = bucket.getBucketIndex();
             }
         }
         bucketStatsRepository.saveAll(bucketMap.values());
         return new BucketPeak(peakIndex, peakCount);
+    }
+
+    private void mergeEventBucketStats(Long historyId, String roomId, Map<Long, Long> partOffsetMs, LocalDateTime now,
+                                       Map<Integer, RoomLiveMsgBucketStats> bucketMap,
+                                       boolean includeMsgCounts) {
+        for (Object[] row : eventRepository.getEventBucketCountByHistoryIdWithPartId(historyId)) {
+            Long partId = row[0] == null ? null : toNumber(row[0]).longValue();
+            int bucketIndex = absoluteBucketIndex(row[1], partId, partOffsetMs);
+            String type = row[2] == null ? "" : row[2].toString();
+            long count = toNumber(row[3]).longValue();
+            RoomLiveMsgBucketStats bucket = bucketMap.computeIfAbsent(bucketIndex,
+                    index -> newBucketStats(historyId, roomId, index, now));
+            if (RoomLiveEvent.TYPE_DANMU.equals(type)) {
+                if (includeMsgCounts) {
+                    bucket.setNormalMsgCount(count);
+                    bucket.setMsgCount(bucket.getMsgCount() + count);
+                }
+            } else if (RoomLiveEvent.TYPE_SC.equals(type)) {
+                bucket.setScCount(count);
+                if (includeMsgCounts) {
+                    bucket.setAdvancedMsgCount(bucket.getAdvancedMsgCount() + count);
+                    bucket.setMsgCount(bucket.getMsgCount() + count);
+                }
+            } else if (RoomLiveEvent.TYPE_GUARD.equals(type)) {
+                bucket.setGuardCount(count);
+                if (includeMsgCounts) {
+                    bucket.setAdvancedMsgCount(bucket.getAdvancedMsgCount() + count);
+                    bucket.setMsgCount(bucket.getMsgCount() + count);
+                }
+            } else if (RoomLiveEvent.TYPE_GIFT.equals(type)) {
+                bucket.setGiftEventCount(count);
+            }
+        }
+    }
+
+    private Map<Long, Long> buildPartOffsetMs(LocalDateTime historyStart, List<RecordHistoryPart> parts) {
+        Map<Long, Long> result = new HashMap<>();
+        if (parts == null || parts.isEmpty()) {
+            return result;
+        }
+        long cumulativeMs = 0L;
+        for (RecordHistoryPart part : parts) {
+            if (part == null || part.getId() == null) {
+                continue;
+            }
+            long offsetMs = cumulativeMs;
+            if (historyStart != null && part.getStartTime() != null) {
+                offsetMs = Math.max(0L, Duration.between(historyStart, part.getStartTime()).toMillis());
+            }
+            result.put(part.getId(), offsetMs);
+            cumulativeMs += partDurationMs(part);
+        }
+        return result;
+    }
+
+    private long partDurationMs(RecordHistoryPart part) {
+        if (part.getDuration() > 0) {
+            return Math.round(part.getDuration() * 1000.0d);
+        }
+        if (part.getStartTime() != null && part.getEndTime() != null) {
+            return Math.max(0L, Duration.between(part.getStartTime(), part.getEndTime()).toMillis());
+        }
+        return 0L;
+    }
+
+    private int absoluteBucketIndex(Object relativeBucket, Long partId, Map<Long, Long> partOffsetMs) {
+        long relativeMs = Math.max(0L, toNumber(relativeBucket).longValue()) * 60_000L;
+        long offsetMs = partId == null ? 0L : partOffsetMs.getOrDefault(partId, 0L);
+        return (int) Math.floor((offsetMs + relativeMs) / 60_000.0d);
+    }
+
+    private RoomLiveMsgBucketStats newBucketStats(Long historyId, String roomId, int bucketIndex, LocalDateTime now) {
+        RoomLiveMsgBucketStats bucket = new RoomLiveMsgBucketStats();
+        bucket.setHistoryId(historyId);
+        bucket.setRoomId(roomId);
+        bucket.setBucketIndex(bucketIndex);
+        bucket.setBucketStartMs(bucketIndex * 60_000L);
+        bucket.setStatsUpdatedAt(now);
+        bucket.setStatsVersion(STATS_VERSION);
+        return bucket;
     }
 
     private void recomputeDailyStats(String roomId, LocalDate liveDate, RecordRoom room, LocalDateTime now) {

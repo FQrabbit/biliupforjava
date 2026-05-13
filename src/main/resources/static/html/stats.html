@@ -448,6 +448,7 @@ new Vue({
             moreActionsVisible: false,
             maintenancePoller: null,
             statsTaskPoller: null,
+            activeStatsTaskId: null,
             operationProgressTimer: null,
             operationProgress: {
                 visible: false,
@@ -686,7 +687,7 @@ new Vue({
                 this.operationProgress.detail = detail;
             }
         },
-        finishOperationProgress: function (message, detail) {
+        finishOperationProgress: function (message, detail, keepVisible) {
             var self = this;
             if (this.operationProgressTimer) {
                 clearInterval(this.operationProgressTimer);
@@ -697,6 +698,9 @@ new Vue({
             this.operationProgress.message = message || '处理完成';
             if (detail !== undefined) {
                 this.operationProgress.detail = detail;
+            }
+            if (keepVisible) {
+                return;
             }
             setTimeout(function () {
                 if (self.operationProgress.status === 'success') {
@@ -792,28 +796,12 @@ new Vue({
             var check = function () {
                 $.getJSON('/stats/task/status')
                     .done(function (status) {
-                        if (!status || (task && status.task !== task && status.running)) {
+                        if (!self.applyStatsTaskStatus(status, task, false)) {
                             return;
                         }
-                        var detail = status.detail || '';
-                        if (status.total > 0) {
-                            detail = (detail ? detail + ' · ' : '') + '已处理 ' + status.processed + ' / ' + status.total;
-                        }
-                        self.updateOperationProgress(status.percent || 0, status.message || status.phase || '处理中', detail);
                         if (!status.running) {
                             clearInterval(self.statsTaskPoller);
                             self.statsTaskPoller = null;
-                            self.backfilling = false;
-                            self.rebuilding = false;
-                            self.cleaning = false;
-                            if (status.success && status.phase === 'DONE') {
-                                self.$message.success(status.message || '处理完成');
-                                self.finishOperationProgress(status.message || '处理完成', detail);
-                            } else {
-                                self.$message.error(status.message || '处理失败');
-                                self.failOperationProgress(status.message || '处理失败', detail);
-                            }
-                            self.reload();
                         }
                     })
                     .fail(function () {
@@ -827,6 +815,97 @@ new Vue({
             };
             check();
             this.statsTaskPoller = setInterval(check, 1000);
+        },
+        recoverStatsTaskStatus: function () {
+            var self = this;
+            $.getJSON('/stats/task/status')
+                .done(function (status) {
+                    if (!self.applyStatsTaskStatus(status, null, true)) {
+                        return;
+                    }
+                    if (status.running) {
+                        self.pollStatsTaskStatus(status.task);
+                    }
+                });
+        },
+        applyStatsTaskStatus: function (status, expectedTask, recovering) {
+            if (!status || status.task === 'idle') {
+                return false;
+            }
+            if (expectedTask && status.task !== expectedTask && status.running) {
+                this.activeStatsTaskId = status.taskId || null;
+                this.setStatsTaskLoading(status.task, true);
+                return false;
+            }
+            this.activeStatsTaskId = status.taskId || this.activeStatsTaskId;
+            this.setStatsTaskLoading(status.task, !!status.running);
+            var detail = this.statsTaskDetail(status);
+            this.operationProgress.title = status.title || this.statsTaskTitle(status.task);
+            this.updateOperationProgress(status.percent || 0, status.message || status.phase || '处理中', detail);
+            if (status.running) {
+                this.operationProgress.status = 'active';
+                return true;
+            }
+            this.backfilling = false;
+            this.rebuilding = false;
+            this.cleaning = false;
+            if (status.success && status.phase === 'DONE') {
+                if (!recovering) {
+                    this.$message.success(status.message || '处理完成');
+                }
+                this.finishOperationProgress(status.message || '处理完成', detail, true);
+                if (!recovering) {
+                    this.reload();
+                }
+            } else {
+                if (!recovering) {
+                    this.$message.error(status.message || '处理失败');
+                }
+                this.failOperationProgress(status.message || '处理失败', detail);
+                if (!recovering) {
+                    this.reload();
+                }
+            }
+            return true;
+        },
+        setStatsTaskLoading: function (task, running) {
+            this.backfilling = running && task === 'backfill';
+            this.rebuilding = running && task === 'rebuild';
+            this.cleaning = running && task === 'cleanup';
+        },
+        statsTaskTitle: function (task) {
+            if (task === 'backfill') return '补全未统计';
+            if (task === 'rebuild') return '重建统计';
+            if (task === 'cleanup') return '清理缓存';
+            return '统计任务';
+        },
+        statsTaskDetail: function (status) {
+            var detail = status.detail || '';
+            if (status.total > 0) {
+                detail = (detail ? detail + ' · ' : '') + '已处理 ' + status.processed + ' / ' + status.total;
+            }
+            if (!status.running && status.result) {
+                var result = status.result;
+                var extra = [];
+                if (status.elapsedSeconds !== undefined) extra.push('耗时 ' + this.durationText(status.elapsedSeconds));
+                if (result.updated !== undefined) extra.push('更新 ' + result.updated + ' 场');
+                if (result.deletedTotalStats !== undefined) extra.push('清理统计缓存 ' + result.deletedTotalStats + ' 条');
+                if (extra.length) {
+                    detail = (detail ? detail + ' · ' : '') + extra.join('，');
+                }
+            }
+            return detail;
+        },
+        durationText: function (seconds) {
+            var total = Math.max(0, Math.round(Number(seconds || 0)));
+            var h = Math.floor(total / 3600);
+            var m = Math.floor((total % 3600) / 60);
+            var s = total % 60;
+            var parts = [];
+            if (h > 0) parts.push(h + '小时');
+            if (m > 0 || h > 0) parts.push(m + '分钟');
+            parts.push(s + '秒');
+            return parts.join(' ');
         },
         compactDatabase: function () {
             var self = this;
@@ -931,7 +1010,7 @@ new Vue({
             var chart = this.chart('mainChart');
             if (!chart) return;
             if (this.mainChartMode === 'trend') {
-                this.renderTrendOption(chart, this.activeDailyTrend, true);
+                this.renderTrendOption(chart, this.activeDailyTrend, { splitMsgAxis: true });
                 return;
             }
             var buckets = this.activeHourBuckets || [];
@@ -1049,6 +1128,22 @@ new Vue({
             var chart = this.chart('bucketChart');
             if (!chart) return;
             var rows = this.bucketData || [];
+            var bucketByIndex = {};
+            var maxBucketIndex = 0;
+            rows.forEach(function (item) {
+                var index = Number(item.bucketIndex || 0);
+                bucketByIndex[index] = item;
+                maxBucketIndex = Math.max(maxBucketIndex, index);
+            });
+            var durationMinutes = Math.ceil(Number((this.selectedSessionSummary || {}).durationSeconds || 0) / 60);
+            if (durationMinutes > 0) {
+                maxBucketIndex = Math.max(maxBucketIndex, durationMinutes - 1);
+            }
+            var timeline = this.rangeLabels(maxBucketIndex + 1);
+            var bucketValue = function (index, field) {
+                var item = bucketByIndex[index];
+                return item ? (item[field] || 0) : 0;
+            };
             chart.setOption({
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: function (items) {
@@ -1060,14 +1155,17 @@ new Vue({
                     return lines.join('<br/>');
                 }},
                 legend: this.legend({ top: 0, data: ['弹幕', '礼物', 'SC', '舰长'] }),
-                grid: { left: 42, right: 16, top: 36, bottom: 30 },
-                xAxis: this.categoryAxis(rows.map(function (item) { return item.bucketIndex; })),
-                yAxis: this.valueAxis({ minInterval: 1 }),
+                grid: { left: 42, right: 54, top: 36, bottom: 30 },
+                xAxis: this.categoryAxis(timeline),
+                yAxis: [
+                    this.valueAxis({ name: '弹幕', minInterval: 1 }),
+                    this.valueAxis({ name: '礼物 / SC / 舰长', minInterval: 1 })
+                ],
                 series: [
-                    { name: '弹幕', type: 'line', smooth: true, areaStyle: {}, data: rows.map(function (item) { return item.msgCount || 0; }), itemStyle: { color: '#27b36a' } },
-                    { name: '礼物', type: 'bar', stack: 'event', barMaxWidth: 18, data: rows.map(function (item) { return item.giftEventCount || 0; }), itemStyle: { color: '#e6a23c' } },
-                    { name: 'SC', type: 'bar', stack: 'event', barMaxWidth: 18, data: rows.map(function (item) { return item.scCount || 0; }), itemStyle: { color: '#f56c6c' } },
-                    { name: '舰长', type: 'bar', stack: 'event', barMaxWidth: 18, data: rows.map(function (item) { return item.guardCount || 0; }), itemStyle: { color: '#7c8cff' } }
+                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: 0, areaStyle: { opacity: 0.22 }, z: 2, data: timeline.map(function (_, index) { return bucketValue(index, 'msgCount'); }), itemStyle: { color: '#27b36a' } },
+                    { name: '礼物', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'giftEventCount'); }), itemStyle: { color: '#e6a23c' } },
+                    { name: 'SC', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'scCount'); }), itemStyle: { color: '#f56c6c' } },
+                    { name: '舰长', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'guardCount'); }), itemStyle: { color: '#7c8cff' } }
                 ]
             }, true);
         },
@@ -1323,6 +1421,7 @@ new Vue({
     },
     mounted: function () {
         var self = this;
+        this.recoverStatsTaskStatus();
         window.addEventListener('resize', function () {
             Object.keys(self.charts).forEach(function (key) {
                 if (self.charts[key]) {

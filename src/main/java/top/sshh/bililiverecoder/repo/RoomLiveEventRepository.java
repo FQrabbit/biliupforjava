@@ -49,6 +49,17 @@ public interface RoomLiveEventRepository extends CrudRepository<RoomLiveEvent, L
     List<Object[]> getEventBucketCountByHistoryId(Long historyId);
 
     @Query("""
+            select e.partId, floor(e.sendTime / 60000), e.type, count(e)
+            from RoomLiveEvent e
+            where e.historyId = ?1
+              and e.sendTime is not null
+              and e.type in ('DANMU', 'SC', 'GUARD', 'GIFT')
+            group by e.partId, floor(e.sendTime / 60000), e.type
+            order by e.partId, floor(e.sendTime / 60000)
+            """)
+    List<Object[]> getEventBucketCountByHistoryIdWithPartId(Long historyId);
+
+    @Query("""
             select e.uid, e.uname, count(e)
             from RoomLiveEvent e
             where e.roomId = ?1
