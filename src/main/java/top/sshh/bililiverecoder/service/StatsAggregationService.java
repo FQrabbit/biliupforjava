@@ -2,7 +2,9 @@ package top.sshh.bililiverecoder.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -55,8 +57,13 @@ public class StatsAggregationService {
     @Lazy
     @Autowired
     private RoomLiveEventParseService roomLiveEventParseService;
+    @Autowired
+    @Qualifier("myAsyncPool")
+    private TaskExecutor taskExecutor;
 
     private final ReentrantLock statsWriteLock = new ReentrantLock();
+    private final Object taskStatusLock = new Object();
+    private volatile StatsTaskStatus taskStatus = StatsTaskStatus.idle();
 
     @Async("myAsyncPool")
     public void refreshRecentCompletedHistoriesAsync(int limit) {
@@ -129,6 +136,10 @@ public class StatsAggregationService {
         }
     }
 
+    public Map<String, Object> startBackfillMissingStats() {
+        return startStatsTask("backfill", "补全未统计", this::runBackfillMissingStatsTask);
+    }
+
     @Async("myAsyncPool")
     public void refreshHistoryStatsAsync(Long historyId) {
         if (databaseMaintenanceState.isMaintenanceActive()) {
@@ -185,6 +196,10 @@ public class StatsAggregationService {
         }
     }
 
+    public Map<String, Object> startRebuildAllStats() {
+        return startStatsTask("rebuild", "重建统计", this::runRebuildAllStatsTask);
+    }
+
     public Map<String, Object> cleanupStats() {
         if (databaseMaintenanceState.isMaintenanceActive()) {
             return statsBusyResult("cleanup", null);
@@ -203,6 +218,164 @@ public class StatsAggregationService {
             return result;
         } finally {
             statsWriteLock.unlock();
+        }
+    }
+
+    public Map<String, Object> startCleanupStats() {
+        return startStatsTask("cleanup", "清理缓存", this::runCleanupStatsTask);
+    }
+
+    public Map<String, Object> getStatsTaskStatus() {
+        return taskStatus.toMap();
+    }
+
+    private Map<String, Object> startStatsTask(String task, String title, Runnable runnable) {
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            return statsBusyResult(task, null);
+        }
+        synchronized (taskStatusLock) {
+            if (taskStatus.running) {
+                Map<String, Object> result = taskStatus.toMap();
+                result.put("success", false);
+                result.put("busy", true);
+                result.put("message", taskStatus.title + "正在执行中，请稍后再试");
+                return result;
+            }
+            taskStatus = StatsTaskStatus.running(task, title);
+        }
+        try {
+            taskExecutor.execute(runnable);
+        } catch (RuntimeException e) {
+            updateTaskFailed("任务启动失败：" + e.getMessage());
+            throw e;
+        }
+        return taskStatus.toMap();
+    }
+
+    private void runBackfillMissingStatsTask() {
+        if (!statsWriteLock.tryLock()) {
+            updateTaskBusy("已有统计任务正在执行");
+            return;
+        }
+        try {
+            List<RecordHistory> histories = historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc();
+            List<RecordHistory> targets = histories.stream()
+                    .filter(history -> history != null && history.getId() != null)
+                    .filter(history -> {
+                        RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
+                        return stats == null || stats.getStatsVersion() < STATS_VERSION;
+                    })
+                    .collect(Collectors.toList());
+            updateTaskProgress("扫描完成", 0, targets.size(), "需要补全 " + targets.size() + " 场");
+            int updated = 0;
+            for (RecordHistory history : targets) {
+                updateTaskProgress("正在补全", updated, targets.size(), history.getRoomId() + " / " + history.getId());
+                aggregateHistory(history);
+                updated++;
+                updateTaskProgress("正在补全", updated, targets.size(), history.getRoomId() + " / " + history.getId());
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("updated", updated);
+            result.put("statsVersion", STATS_VERSION);
+            result.put("status", getStatsStatus());
+            updateTaskDone("补全完成", result);
+        } catch (Throwable e) {
+            updateTaskFailed("补全失败：" + e.getMessage());
+            log.warn("[BLR] {}", LogKvs.event("Stats.Backfill.Failed")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
+    private void runRebuildAllStatsTask() {
+        if (!statsWriteLock.tryLock()) {
+            updateTaskBusy("已有统计任务正在执行");
+            return;
+        }
+        try {
+            updateTaskProgress("正在清理旧缓存", 0, 1, "清理统计缓存表");
+            StatsCleanupResult cleanup = cleanupStatsRows();
+            List<RecordHistory> histories = historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc().stream()
+                    .filter(history -> history != null && history.getId() != null)
+                    .collect(Collectors.toList());
+            int updated = 0;
+            for (RecordHistory history : histories) {
+                updateTaskProgress("正在重建", updated, histories.size(), history.getRoomId() + " / " + history.getId());
+                aggregateHistory(history);
+                updated++;
+                updateTaskProgress("正在重建", updated, histories.size(), history.getRoomId() + " / " + history.getId());
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("updated", updated);
+            result.putAll(cleanup.toMap());
+            result.put("statsVersion", STATS_VERSION);
+            result.put("rebuiltAt", LocalDateTime.now());
+            result.put("status", getStatsStatus());
+            updateTaskDone("重建完成", result);
+        } catch (Throwable e) {
+            updateTaskFailed("重建失败：" + e.getMessage());
+            log.warn("[BLR] {}", LogKvs.event("Stats.Rebuild.Failed")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
+    private void runCleanupStatsTask() {
+        if (!statsWriteLock.tryLock()) {
+            updateTaskBusy("已有统计任务正在执行");
+            return;
+        }
+        try {
+            updateTaskProgress("正在清理统计缓存", 0, 2, "清理统计汇总表");
+            StatsCleanupResult cleanup = cleanupStatsRows();
+            updateTaskProgress("正在清理原始 JSON", 1, 2, "清理历史遗留 rawJson 字段");
+            int rawJsonRows = eventRepository.clearRawJson();
+            updateTaskProgress("清理完成", 2, 2, "统计缓存 " + cleanup.deletedTotal() + " 条，rawJson " + rawJsonRows + " 行");
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.putAll(cleanup.toMap());
+            result.put("rawJsonRows", rawJsonRows);
+            result.put("statsVersion", STATS_VERSION);
+            result.put("cleanedAt", LocalDateTime.now());
+            result.put("status", getStatsStatus());
+            updateTaskDone("清理完成", result);
+        } catch (Throwable e) {
+            updateTaskFailed("清理失败：" + e.getMessage());
+            log.warn("[BLR] {}", LogKvs.event("Stats.Cleanup.Failed")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
+    private void updateTaskProgress(String phase, int processed, int total, String detail) {
+        synchronized (taskStatusLock) {
+            taskStatus = taskStatus.progress(phase, processed, total, detail);
+        }
+    }
+
+    private void updateTaskDone(String message, Map<String, Object> result) {
+        synchronized (taskStatusLock) {
+            taskStatus = taskStatus.done(message, result);
+        }
+    }
+
+    private void updateTaskFailed(String message) {
+        synchronized (taskStatusLock) {
+            taskStatus = taskStatus.failed(message);
+        }
+    }
+
+    private void updateTaskBusy(String message) {
+        synchronized (taskStatusLock) {
+            taskStatus = taskStatus.busy(message);
         }
     }
 
@@ -271,13 +444,86 @@ public class StatsAggregationService {
                                       int deletedDailyStats,
                                       int deletedSessionStats,
                                       int deletedDanmuUserStats) {
+        int deletedTotal() {
+            return deletedBucketStats + deletedDailyStats + deletedSessionStats + deletedDanmuUserStats;
+        }
+
         Map<String, Object> toMap() {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("deletedBucketStats", deletedBucketStats);
             map.put("deletedDailyStats", deletedDailyStats);
             map.put("deletedSessionStats", deletedSessionStats);
             map.put("deletedDanmuUserStats", deletedDanmuUserStats);
-            map.put("deletedTotalStats", deletedBucketStats + deletedDailyStats + deletedSessionStats + deletedDanmuUserStats);
+            map.put("deletedTotalStats", deletedTotal());
+            return map;
+        }
+    }
+
+    private record StatsTaskStatus(String taskId,
+                                   String task,
+                                   String title,
+                                   boolean running,
+                                   boolean success,
+                                   boolean busy,
+                                   String phase,
+                                   String message,
+                                   String detail,
+                                   int processed,
+                                   int total,
+                                   int percent,
+                                   LocalDateTime updatedAt,
+                                   Map<String, Object> result) {
+
+        private static StatsTaskStatus idle() {
+            return new StatsTaskStatus(null, "idle", "空闲", false, true, false,
+                    "IDLE", "当前没有统计维护任务", "", 0, 0, 0, LocalDateTime.now(), Collections.emptyMap());
+        }
+
+        private static StatsTaskStatus running(String task, String title) {
+            return new StatsTaskStatus(UUID.randomUUID().toString(), task, title, true, true, false,
+                    "STARTING", "正在启动任务", "", 0, 0, 1, LocalDateTime.now(), Collections.emptyMap());
+        }
+
+        private StatsTaskStatus progress(String phase, int processed, int total, String detail) {
+            int safeTotal = Math.max(0, total);
+            int safeProcessed = Math.max(0, Math.min(processed, safeTotal));
+            int nextPercent = safeTotal <= 0 ? 5 : Math.max(1, Math.min(99, (int) Math.floor(safeProcessed * 100.0d / safeTotal)));
+            return new StatsTaskStatus(taskId, task, title, true, true, false,
+                    phase, phase, detail == null ? "" : detail, safeProcessed, safeTotal, nextPercent, LocalDateTime.now(), result);
+        }
+
+        private StatsTaskStatus done(String message, Map<String, Object> result) {
+            return new StatsTaskStatus(taskId, task, title, false, true, false,
+                    "DONE", message, detail, total, total, 100, LocalDateTime.now(),
+                    result == null ? Collections.emptyMap() : result);
+        }
+
+        private StatsTaskStatus failed(String message) {
+            return new StatsTaskStatus(taskId, task, title, false, false, false,
+                    "FAILED", message, detail, processed, total, 100, LocalDateTime.now(), result);
+        }
+
+        private StatsTaskStatus busy(String message) {
+            return new StatsTaskStatus(taskId, task, title, false, false, true,
+                    "BUSY", message, detail, processed, total, 100, LocalDateTime.now(), result);
+        }
+
+        private Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("taskId", taskId);
+            map.put("task", task);
+            map.put("title", title);
+            map.put("running", running);
+            map.put("success", success);
+            map.put("busy", busy);
+            map.put("phase", phase);
+            map.put("message", message);
+            map.put("detail", detail);
+            map.put("processed", processed);
+            map.put("total", total);
+            map.put("percent", percent);
+            map.put("updatedAt", updatedAt);
+            map.put("result", result == null ? Collections.emptyMap() : result);
             return map;
         }
     }

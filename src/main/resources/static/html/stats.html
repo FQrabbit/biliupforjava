@@ -101,23 +101,33 @@
     <section class="stats-grid">
         <div class="metric-card">
             <div class="metric-label">{{ selectedRoomId ? '房间场次' : (coverage.complete ? '总场次' : '已统计场次') }}</div>
-            <div class="metric-value is-blue">{{ number(metricSource.totalSessions || metricSource.liveCount) }}</div>
+            <el-tooltip :content="exactNumber(metricSource.totalSessions || metricSource.liveCount, '场')" placement="top">
+                <div class="metric-value is-blue">{{ compactNumber(metricSource.totalSessions || metricSource.liveCount, '场') }}</div>
+            </el-tooltip>
         </div>
         <div class="metric-card">
             <div class="metric-label">总时长</div>
-            <div class="metric-value">{{ duration(metricSource.totalDurationSeconds) }}</div>
+            <el-tooltip :content="exactDuration(metricSource.totalDurationSeconds)" placement="top">
+                <div class="metric-value">{{ compactDuration(metricSource.totalDurationSeconds) }}</div>
+            </el-tooltip>
         </div>
         <div class="metric-card">
             <div class="metric-label">平均时长</div>
-            <div class="metric-value">{{ duration(metricSource.avgDurationSeconds) }}</div>
+            <el-tooltip :content="exactDuration(metricSource.avgDurationSeconds)" placement="top">
+                <div class="metric-value">{{ compactDuration(metricSource.avgDurationSeconds) }}</div>
+            </el-tooltip>
         </div>
         <div class="metric-card">
             <div class="metric-label">总弹幕</div>
-            <div class="metric-value is-green">{{ number(metricSource.totalMsgCount) }}</div>
+            <el-tooltip :content="exactNumber(metricSource.totalMsgCount, '条')" placement="top">
+                <div class="metric-value is-green">{{ compactNumber(metricSource.totalMsgCount, '条') }}</div>
+            </el-tooltip>
         </div>
         <div class="metric-card">
             <div class="metric-label">弹幕密度</div>
-            <div class="metric-value is-orange">{{ density(metricSource.msgDensityPerMinute) }}</div>
+            <el-tooltip :content="exactDensity(metricSource.msgDensityPerMinute)" placement="top">
+                <div class="metric-value is-orange">{{ compactDensity(metricSource.msgDensityPerMinute) }}</div>
+            </el-tooltip>
         </div>
         <div class="metric-card">
             <div class="metric-label">投稿成功率</div>
@@ -238,15 +248,21 @@
                 <div class="detail-metrics">
                     <div class="detail-metric">
                         <div class="metric-label">累计场次</div>
-                        <div class="metric-value is-blue">{{ number(detail.summary.liveCount) }}</div>
+                        <el-tooltip :content="exactNumber(detail.summary.liveCount, '场')" placement="top">
+                            <div class="metric-value is-blue">{{ compactNumber(detail.summary.liveCount, '场') }}</div>
+                        </el-tooltip>
                     </div>
                     <div class="detail-metric">
                         <div class="metric-label">总时长</div>
-                        <div class="metric-value">{{ duration(detail.summary.totalDurationSeconds) }}</div>
+                        <el-tooltip :content="exactDuration(detail.summary.totalDurationSeconds)" placement="top">
+                            <div class="metric-value">{{ compactDuration(detail.summary.totalDurationSeconds) }}</div>
+                        </el-tooltip>
                     </div>
                     <div class="detail-metric">
                         <div class="metric-label">总弹幕</div>
-                        <div class="metric-value is-green">{{ number(detail.summary.totalMsgCount) }}</div>
+                        <el-tooltip :content="exactNumber(detail.summary.totalMsgCount, '条')" placement="top">
+                            <div class="metric-value is-green">{{ compactNumber(detail.summary.totalMsgCount, '条') }}</div>
+                        </el-tooltip>
                     </div>
                     <div class="detail-metric">
                         <div class="metric-label">常开播</div>
@@ -254,11 +270,15 @@
                     </div>
                     <div class="detail-metric">
                         <div class="metric-label">礼物流水</div>
-                        <div class="metric-value is-orange">{{ money(detail.summary.totalGiftAmountCny) }}</div>
+                        <el-tooltip :content="exactMoney(detail.summary.totalGiftAmountCny)" placement="top">
+                            <div class="metric-value is-orange">{{ compactMoney(detail.summary.totalGiftAmountCny) }}</div>
+                        </el-tooltip>
                     </div>
                     <div class="detail-metric">
                         <div class="metric-label">活跃用户</div>
-                        <div class="metric-value is-red">{{ number(detail.summary.totalActiveUserCount) }}</div>
+                        <el-tooltip :content="exactNumber(detail.summary.totalActiveUserCount, '人')" placement="top">
+                            <div class="metric-value is-red">{{ compactNumber(detail.summary.totalActiveUserCount, '人') }}</div>
+                        </el-tooltip>
                     </div>
                 </div>
                 <div class="room-overview-chart">
@@ -301,19 +321,27 @@
             <div v-if="selectedSessionSummary.historyId" class="interaction-grid">
                 <div class="interaction-card">
                     <div class="metric-label">本场流水</div>
-                    <div class="metric-value is-orange">{{ money(selectedSessionSummary.giftAmountCny) }}</div>
+                    <el-tooltip :content="exactMoney(selectedSessionSummary.giftAmountCny)" placement="top">
+                        <div class="metric-value is-orange">{{ compactMoney(selectedSessionSummary.giftAmountCny) }}</div>
+                    </el-tooltip>
                 </div>
                 <div class="interaction-card">
                     <div class="metric-label">本场弹幕</div>
-                    <div class="metric-value is-green">{{ number(selectedSessionSummary.msgCount) }}</div>
+                    <el-tooltip :content="exactNumber(selectedSessionSummary.msgCount, '条')" placement="top">
+                        <div class="metric-value is-green">{{ compactNumber(selectedSessionSummary.msgCount, '条') }}</div>
+                    </el-tooltip>
                 </div>
                 <div class="interaction-card">
                     <div class="metric-label">SC 金额</div>
-                    <div class="metric-value is-red">{{ money(selectedSessionSummary.scAmount) }}</div>
+                    <el-tooltip :content="exactMoney(selectedSessionSummary.scAmount)" placement="top">
+                        <div class="metric-value is-red">{{ compactMoney(selectedSessionSummary.scAmount) }}</div>
+                    </el-tooltip>
                 </div>
                 <div class="interaction-card">
                     <div class="metric-label">礼物数量 / 舰长</div>
-                    <div class="metric-value">{{ number(selectedSessionSummary.giftTotalCount) }} / {{ number(selectedSessionSummary.guardCount) }}</div>
+                    <el-tooltip :content="exactNumber(selectedSessionSummary.giftTotalCount, '个') + ' / ' + exactNumber(selectedSessionSummary.guardCount, '个')" placement="top">
+                        <div class="metric-value">{{ compactNumber(selectedSessionSummary.giftTotalCount, '个') }} / {{ compactNumber(selectedSessionSummary.guardCount, '个') }}</div>
+                    </el-tooltip>
                 </div>
             </div>
             <div v-if="selectedSessionSummary.historyId" class="session-chart-grid">
@@ -378,6 +406,7 @@ new Vue({
             compacting: false,
             moreActionsVisible: false,
             maintenancePoller: null,
+            statsTaskPoller: null,
             operationProgressTimer: null,
             operationProgress: {
                 visible: false,
@@ -554,16 +583,9 @@ new Vue({
                 title: title,
                 message: message || '正在处理，请稍候',
                 detail: detail || '',
-                percent: 8,
+                percent: 1,
                 status: 'active'
             };
-            this.operationProgressTimer = setInterval(function () {
-                if (!self.operationProgress.visible || self.operationProgress.percent >= 88) {
-                    return;
-                }
-                var next = self.operationProgress.percent + (self.operationProgress.percent < 50 ? 7 : 3);
-                self.operationProgress.percent = Math.min(88, next);
-            }, 700);
         },
         updateOperationProgress: function (percent, message, detail) {
             this.operationProgress.visible = true;
@@ -609,12 +631,15 @@ new Vue({
         backfillStats: function () {
             var self = this;
             this.backfilling = true;
-            this.startOperationProgress('补全未统计', '正在扫描缺失统计并补算', '耗时取决于历史场次和弹幕数量');
+            this.startOperationProgress('补全未统计', '正在启动补全任务', '后端会按已处理场次返回真实进度');
             ApiUtil.post('/stats/backfill', {}, function (result) {
-                self.$message.success('已补算 ' + (result.updated || 0) + ' 场统计');
-                self.finishOperationProgress('补全完成', '已补算 ' + (result.updated || 0) + ' 场统计');
-                self.reload();
-                self.backfilling = false;
+                if (result && result.busy) {
+                    self.$message.warning(result.message || '统计任务正在执行中，请稍后再试');
+                    self.failOperationProgress('补全被占用', result.message || '');
+                    self.backfilling = false;
+                    return;
+                }
+                self.pollStatsTaskStatus('backfill');
             }, function () {
                 self.$message.error('补全统计失败');
                 self.failOperationProgress('补全统计失败');
@@ -629,12 +654,15 @@ new Vue({
                 type: 'warning'
             }).then(function () {
                 self.rebuilding = true;
-                self.startOperationProgress('重建统计', '正在清理并重新生成统计', '重建期间请尽量不要重复触发统计维护操作');
+                self.startOperationProgress('重建统计', '正在启动重建任务', '后端会按已重建场次返回真实进度');
                 ApiUtil.post('/stats/rebuild', {}, function (result) {
-                    self.$message.success('统计已重建：' + (result.updated || 0) + ' 场历史');
-                    self.finishOperationProgress('重建完成', '已重建 ' + (result.updated || 0) + ' 场历史');
-                    self.reload();
-                    self.rebuilding = false;
+                    if (result && result.busy) {
+                        self.$message.warning(result.message || '统计任务正在执行中，请稍后再试');
+                        self.failOperationProgress('重建被占用', result.message || '');
+                        self.rebuilding = false;
+                        return;
+                    }
+                    self.pollStatsTaskStatus('rebuild');
                 }, function () {
                     self.$message.error('统计重建失败');
                     self.failOperationProgress('统计重建失败');
@@ -650,7 +678,7 @@ new Vue({
                 type: 'warning'
             }).then(function () {
                 self.cleaning = true;
-                self.startOperationProgress('清理缓存', '正在清理统计缓存', '随后会同步清理遗留的原始 JSON');
+                self.startOperationProgress('清理缓存', '正在启动清理任务', '后端会返回当前清理阶段和处理数量');
                 ApiUtil.post('/stats/cleanup', {}, function (result) {
                     if (result && result.busy) {
                         self.$message.warning(result.message || '统计任务正在执行中，请稍后再试');
@@ -659,29 +687,57 @@ new Vue({
                         self.cleaning = false;
                         return;
                     }
-                    self.updateOperationProgress(58, '统计缓存已清理，正在清理原始 JSON', '已清理统计缓存 ' + (result.deletedTotalStats || 0) + ' 条');
-                    ApiUtil.post('/stats/cleanup-event-raw-json', {}, function (rawResult) {
-                        if (rawResult && rawResult.busy) {
-                            self.$message.warning(rawResult.message || '原始JSON清理被其他统计任务占用，请稍后再试');
-                            self.failOperationProgress('原始 JSON 清理被占用', rawResult.message || '请稍后再试');
-                        } else {
-                            self.$message.success('缓存已清理：统计 ' + (result.deletedTotalStats || 0) + ' 条，原始JSON ' + ((rawResult && rawResult.updated) || 0) + ' 行');
-                            self.finishOperationProgress('清理完成', '统计 ' + (result.deletedTotalStats || 0) + ' 条，原始JSON ' + ((rawResult && rawResult.updated) || 0) + ' 行');
-                        }
-                        self.reload();
-                        self.cleaning = false;
-                    }, function () {
-                        self.$message.error('原始JSON清理失败');
-                        self.failOperationProgress('原始 JSON 清理失败');
-                        self.reload();
-                        self.cleaning = false;
-                    });
+                    self.pollStatsTaskStatus('cleanup');
                 }, function () {
                     self.$message.error('缓存清理失败');
                     self.failOperationProgress('缓存清理失败');
                     self.cleaning = false;
                 });
             }).catch(function () {});
+        },
+        pollStatsTaskStatus: function (task) {
+            var self = this;
+            if (this.statsTaskPoller) {
+                clearInterval(this.statsTaskPoller);
+            }
+            var check = function () {
+                $.getJSON('/stats/task/status')
+                    .done(function (status) {
+                        if (!status || (task && status.task !== task && status.running)) {
+                            return;
+                        }
+                        var detail = status.detail || '';
+                        if (status.total > 0) {
+                            detail = (detail ? detail + ' · ' : '') + '已处理 ' + status.processed + ' / ' + status.total;
+                        }
+                        self.updateOperationProgress(status.percent || 0, status.message || status.phase || '处理中', detail);
+                        if (!status.running) {
+                            clearInterval(self.statsTaskPoller);
+                            self.statsTaskPoller = null;
+                            self.backfilling = false;
+                            self.rebuilding = false;
+                            self.cleaning = false;
+                            if (status.success && status.phase === 'DONE') {
+                                self.$message.success(status.message || '处理完成');
+                                self.finishOperationProgress(status.message || '处理完成', detail);
+                            } else {
+                                self.$message.error(status.message || '处理失败');
+                                self.failOperationProgress(status.message || '处理失败', detail);
+                            }
+                            self.reload();
+                        }
+                    })
+                    .fail(function () {
+                        clearInterval(self.statsTaskPoller);
+                        self.statsTaskPoller = null;
+                        self.backfilling = false;
+                        self.rebuilding = false;
+                        self.cleaning = false;
+                        self.failOperationProgress('查询任务进度失败');
+                    });
+            };
+            check();
+            this.statsTaskPoller = setInterval(check, 1000);
         },
         compactDatabase: function () {
             var self = this;
@@ -832,13 +888,18 @@ new Vue({
         renderRoomCompareChart: function () {
             var chart = this.chart('roomCompareChart');
             if (!chart) return;
+            var self = this;
             var metric = this.comparisonMetric;
             var data = this.rooms.slice().sort(function (a, b) { return Number(b[metric] || 0) - Number(a[metric] || 0); }).slice(0, 10).reverse();
             chart.setOption({
                 textStyle: this.chartTextStyle(),
-                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: function (items) {
+                    if (!items || !items.length) return '';
+                    var item = items[0];
+                    return item.name + '<br/>' + item.marker + self.compareMetricName(metric) + ' ' + self.compareExactValue(metric, item.value);
+                } },
                 grid: { left: 96, right: 24, top: 16, bottom: 20 },
-                xAxis: this.valueAxis(),
+                xAxis: this.valueAxis({ axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compareShortValue(metric, value); } } }),
                 yAxis: this.categoryAxis(data.map(function (item) { return item.uname || item.roomId; })),
                 series: [{
                     type: 'bar',
@@ -855,16 +916,32 @@ new Vue({
         },
         renderTrendOption: function (chart, rows, showDualAxis) {
             rows = rows || [];
+            var self = this;
             chart.setOption({
                 textStyle: this.chartTextStyle(),
-                tooltip: { trigger: 'axis' },
+                tooltip: { trigger: 'axis', formatter: function (items) {
+                    if (!items || !items.length) return '';
+                    var index = items[0].dataIndex;
+                    var row = rows[index] || {};
+                    var lines = [items[0].axisValue || String(row.liveDate || '').slice(5)];
+                    items.forEach(function (item) {
+                        if (item.seriesIndex === 1) {
+                            lines.push(item.marker + item.seriesName + ' ' + self.exactDuration(row.totalDurationSeconds));
+                        } else if (item.seriesIndex === 2) {
+                            lines.push(item.marker + item.seriesName + ' ' + self.exactNumber(row.totalMsgCount, '条'));
+                        } else {
+                            lines.push(item.marker + item.seriesName + ' ' + self.exactNumber(item.value, '场'));
+                        }
+                    });
+                    return lines.join('<br/>');
+                } },
                 legend: this.legend({ top: 0, data: ['场次', '总时长(h)', '弹幕'] }),
                 grid: { left: 42, right: showDualAxis ? 46 : 18, top: 36, bottom: 30 },
                 xAxis: this.categoryAxis(rows.map(function (item) { return String(item.liveDate || '').slice(5); })),
                 yAxis: showDualAxis ? [
-                    this.valueAxis({ minInterval: 1 }),
-                    this.valueAxis()
-                ] : this.valueAxis({ minInterval: 1 }),
+                    this.valueAxis({ minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } }),
+                    this.valueAxis({ axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } })
+                ] : this.valueAxis({ minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } }),
                 series: [
                     { name: '场次', type: 'bar', data: rows.map(function (item) { return item.liveCount || 0; }), barMaxWidth: 24 },
                     { name: '总时长(h)', type: 'line', smooth: true, yAxisIndex: showDualAxis ? 1 : 0, data: rows.map(function (item) { return Math.round((Number(item.totalDurationSeconds || 0) / 3600) * 10) / 10; }) },
@@ -901,6 +978,7 @@ new Vue({
         renderGiftChart: function () {
             var chart = this.chart('giftChart');
             if (!chart) return;
+            var self = this;
             var rows = (this.selectedSessionDetail && this.selectedSessionDetail.giftDistribution) || this.detail.giftDistribution || [];
             chart.setOption({
                 textStyle: this.chartTextStyle(),
@@ -911,13 +989,14 @@ new Vue({
                     radius: ['44%', '70%'],
                     center: ['50%', '43%'],
                     data: rows,
-                    label: this.pieLabel('{b}\n{c}')
+                    label: this.pieLabel(function (item) { return item.name + '\n' + self.compactNumber(item.value, '个'); })
                 }]
             }, true);
         },
         renderDanmuUserChart: function () {
             var chart = this.chart('danmuUserChart');
             if (!chart) return;
+            var self = this;
             var rows = (this.selectedSessionDetail && this.selectedSessionDetail.topDanmuUsers) || [];
             chart.setOption({
                 textStyle: this.chartTextStyle(),
@@ -930,7 +1009,7 @@ new Vue({
                     data: rows.map(function (item) {
                         return { name: item.uname || item.uid || '未知用户', value: item.value || 0 };
                     }),
-                    label: this.pieLabel('{b}\n{c}')
+                    label: this.pieLabel(function (item) { return item.name + '\n' + self.compactNumber(item.value, '条'); })
                 }]
             }, true);
         },
@@ -992,8 +1071,46 @@ new Vue({
             }, extra || {});
         },
         compareLabel: function (params) {
-            var value = Number(params.value || 0);
-            return value >= 1000 ? value.toLocaleString() : String(value);
+            return this.compareShortValue(this.comparisonMetric, params.value);
+        },
+        compareMetricName: function (metric) {
+            var names = {
+                liveCount: '场次',
+                totalDurationSeconds: '总时长',
+                totalMsgCount: '总弹幕',
+                msgDensityPerMinute: '弹幕密度'
+            };
+            return names[metric] || '数值';
+        },
+        compareShortValue: function (metric, value) {
+            if (metric === 'totalDurationSeconds') {
+                return this.compactDuration(value);
+            }
+            if (metric === 'totalMsgCount') {
+                return this.compactNumber(value, '条');
+            }
+            if (metric === 'liveCount') {
+                return this.compactNumber(value, '场');
+            }
+            if (metric === 'msgDensityPerMinute') {
+                return this.compactDensity(value);
+            }
+            return this.compactNumber(value);
+        },
+        compareExactValue: function (metric, value) {
+            if (metric === 'totalDurationSeconds') {
+                return this.exactDuration(value);
+            }
+            if (metric === 'totalMsgCount') {
+                return this.exactNumber(value, '条');
+            }
+            if (metric === 'liveCount') {
+                return this.exactNumber(value, '场');
+            }
+            if (metric === 'msgDensityPerMinute') {
+                return this.exactDensity(value);
+            }
+            return this.exactNumber(value);
         },
         notifyParentReady: function (error) {
             this.$nextTick(function () {
@@ -1014,6 +1131,20 @@ new Vue({
             var n = Number(value || 0);
             return n.toLocaleString();
         },
+        compactNumber: function (value, unit) {
+            var n = Math.max(0, Number(value || 0));
+            var suffix = unit || '';
+            if (n >= 100000000) {
+                return (n / 100000000).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '亿' + suffix;
+            }
+            if (n >= 10000) {
+                return (n / 10000).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '万' + suffix;
+            }
+            return n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + suffix;
+        },
+        exactNumber: function (value, unit) {
+            return this.number(value) + (unit || '');
+        },
         percent: function (value) {
             return Number(value || 0).toFixed(2) + '%';
         },
@@ -1021,6 +1152,30 @@ new Vue({
             return Number(value || 0).toFixed(2) + '/分';
         },
         money: function (value) {
+            var n = Number(value || 0);
+            return '¥' + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        },
+        compactDensity: function (value) {
+            var n = Number(value || 0);
+            if (n >= 10000) {
+                return (n / 10000).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '万/分钟';
+            }
+            return n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + '/分钟';
+        },
+        exactDensity: function (value) {
+            return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' 条/分钟';
+        },
+        compactMoney: function (value) {
+            var n = Math.max(0, Number(value || 0));
+            if (n >= 100000000) {
+                return '¥' + (n / 100000000).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '亿';
+            }
+            if (n >= 10000) {
+                return '¥' + (n / 10000).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '万';
+            }
+            return '¥' + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        },
+        exactMoney: function (value) {
             var n = Number(value || 0);
             return '¥' + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
         },
@@ -1032,6 +1187,20 @@ new Vue({
                 return h + 'h ' + m + 'm';
             }
             return m + 'm';
+        },
+        compactDuration: function (seconds) {
+            var total = Math.max(0, Number(seconds || 0));
+            if (total >= 3600) {
+                return (total / 3600).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '小时';
+            }
+            return Math.round(total / 60).toLocaleString() + '分钟';
+        },
+        exactDuration: function (seconds) {
+            var total = Math.max(0, Math.round(Number(seconds || 0)));
+            var h = Math.floor(total / 3600);
+            var m = Math.floor((total % 3600) / 60);
+            var s = total % 60;
+            return h + '小时 ' + m + '分钟 ' + s + '秒';
         },
         dateTime: function (value) {
             if (!value) {

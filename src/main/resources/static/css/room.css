@@ -5815,6 +5815,51 @@
 
 }
 
+.config-progress-panel {
+    margin: 12px 0 16px;
+    padding: 16px 20px;
+    border: 1px solid rgba(64, 158, 255, 0.35);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(120deg, rgba(64, 158, 255, 0.14), rgba(16, 185, 129, 0.08));
+    box-shadow: var(--shadow-sm);
+}
+
+.config-progress-panel.is-error {
+    border-color: rgba(245, 108, 108, 0.5);
+    background: linear-gradient(120deg, rgba(245, 108, 108, 0.16), rgba(245, 108, 108, 0.06));
+}
+
+.config-progress-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.config-progress-head strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+
+.config-progress-head span,
+.config-progress-detail {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.config-progress-head em {
+    color: var(--primary-color);
+    font-style: normal;
+    font-weight: 700;
+}
+
+.config-progress-detail {
+    margin-top: 8px;
+}
+
 
 
 

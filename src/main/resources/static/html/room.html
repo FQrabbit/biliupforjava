@@ -157,7 +157,7 @@
                     导出配置
                 </el-button>
             </el-tooltip>
-            <el-upload action="/room/uploadConfig" accept=".json" :on-success="uploadSuccess" :show-file-list="false" style="display: inline-block;">
+            <el-upload action="/room/uploadConfig" accept=".json" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false" style="display: inline-block;">
                 <el-button class="modern-btn" type="primary" icon="el-icon-upload2">导入配置</el-button>
             </el-upload>
             <el-radio-group v-model="viewMode" size="small">
@@ -166,6 +166,24 @@
             </el-radio-group>
         </div>
     </div>
+
+    <transition name="fade-slide">
+        <section v-if="configOperationProgress.visible" class="config-progress-panel" :class="'is-' + configOperationProgress.status">
+            <div class="config-progress-head">
+                <div>
+                    <strong>{{ configOperationProgress.title }}</strong>
+                    <span>{{ configOperationProgress.message }}</span>
+                </div>
+                <em>{{ configOperationProgress.percent }}%</em>
+            </div>
+            <el-progress
+                    :percentage="configOperationProgress.percent"
+                    :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)"
+                    :stroke-width="8">
+            </el-progress>
+            <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>
+        </section>
+    </transition>
 
     <!-- 内容区域 -->
     <transition name="fade-slide">
@@ -2811,6 +2829,15 @@
                 exportHistory: false,
                 exportLiveMsg: false
             },
+            configTaskPoller: null,
+            configOperationProgress: {
+                visible: false,
+                title: '',
+                message: '',
+                detail: '',
+                percent: 0,
+                status: 'active'
+            },
             seasonsList: [],
             seasonCoverObjectUrls: {},
             seasonCoverPreloadQueue: [],
@@ -3328,6 +3355,8 @@
                 if (_this.exportConfig.exportLiveMsg && !_this.exportConfig.exportHistory) {
                     _this.exportConfig.exportHistory = true;
                 }
+                _this.startConfigProgress('导出配置', '正在启动导出任务', '后端会按已读取数据量返回真实进度');
+                _this.pollConfigTaskStatus('export');
                 $.ajax({
                     url: '/room/exportConfig',
                     contentType: 'application/json;charset=utf-8',
@@ -3354,6 +3383,10 @@
                         link.click();
                         window.URL.revokeObjectURL(link.href);
                         _this.exportConfigDialog = false;
+                        _this.finishConfigProgress('导出完成', '配置文件已生成');
+                    },
+                    error: function () {
+                        _this.failConfigProgress('导出失败');
                     }
                 });
             },
@@ -3833,7 +3866,93 @@
                     message: '导入成功',
                     type: 'success'
                 });
+                this.finishConfigProgress('导入完成', '配置已导入');
                 this.initTable();
+            },
+            beforeConfigUpload: function () {
+                this.startConfigProgress('导入配置', '正在上传并解析配置文件', '后端解析完成后会按导入数量返回真实进度');
+                this.pollConfigTaskStatus('import');
+                return true;
+            },
+            uploadConfigError: function () {
+                this.failConfigProgress('导入失败');
+            },
+            startConfigProgress: function (title, message, detail) {
+                this.configOperationProgress = {
+                    visible: true,
+                    title: title,
+                    message: message || '正在处理',
+                    detail: detail || '',
+                    percent: 1,
+                    status: 'active'
+                };
+            },
+            updateConfigProgress: function (percent, message, detail) {
+                this.configOperationProgress.visible = true;
+                this.configOperationProgress.percent = Math.max(0, Math.min(100, Number(percent) || 0));
+                this.configOperationProgress.message = message || this.configOperationProgress.message;
+                if (detail !== undefined) {
+                    this.configOperationProgress.detail = detail;
+                }
+            },
+            finishConfigProgress: function (message, detail) {
+                var self = this;
+                if (this.configTaskPoller) {
+                    clearInterval(this.configTaskPoller);
+                    this.configTaskPoller = null;
+                }
+                this.configOperationProgress.status = 'success';
+                this.configOperationProgress.percent = 100;
+                this.configOperationProgress.message = message || '处理完成';
+                if (detail !== undefined) {
+                    this.configOperationProgress.detail = detail;
+                }
+                setTimeout(function () {
+                    if (self.configOperationProgress.status === 'success') {
+                        self.configOperationProgress.visible = false;
+                    }
+                }, 3500);
+            },
+            failConfigProgress: function (message, detail) {
+                if (this.configTaskPoller) {
+                    clearInterval(this.configTaskPoller);
+                    this.configTaskPoller = null;
+                }
+                this.configOperationProgress.visible = true;
+                this.configOperationProgress.status = 'error';
+                this.configOperationProgress.percent = 100;
+                this.configOperationProgress.message = message || '处理失败';
+                if (detail !== undefined) {
+                    this.configOperationProgress.detail = detail;
+                }
+            },
+            pollConfigTaskStatus: function (task) {
+                var self = this;
+                if (this.configTaskPoller) {
+                    clearInterval(this.configTaskPoller);
+                }
+                var check = function () {
+                    $.getJSON('/room/configTask/status')
+                        .done(function (status) {
+                            if (!status || (task && status.task !== task)) {
+                                return;
+                            }
+                            var detail = status.detail || '';
+                            if (status.total > 0) {
+                                detail = (detail ? detail + ' · ' : '') + '已处理 ' + status.processed + ' / ' + status.total;
+                            }
+                            self.updateConfigProgress(status.percent || 0, status.message || status.phase || '处理中', detail);
+                            if (!status.running) {
+                                if (status.success && status.phase === 'DONE') {
+                                    self.finishConfigProgress(status.message || '处理完成', detail);
+                                } else if (status.phase === 'FAILED') {
+                                    self.failConfigProgress(status.message || '处理失败', detail);
+                                }
+                            }
+                        });
+                };
+                check();
+                this.configTaskPoller = setInterval(check, 1000);
             },
             startPolling: function () {
                 var self = this;

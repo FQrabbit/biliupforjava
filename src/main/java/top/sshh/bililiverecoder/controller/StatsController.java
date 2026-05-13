@@ -31,6 +31,11 @@ public class StatsController {
         return statsAggregationService.getStatsStatus();
     }
 
+    @GetMapping("/task/status")
+    public Map<String, Object> taskStatus() {
+        return statsAggregationService.getStatsTaskStatus();
+    }
+
     @GetMapping("/rooms")
     public List<Map<String, Object>> rooms(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
@@ -56,17 +61,17 @@ public class StatsController {
 
     @PostMapping("/backfill")
     public Map<String, Object> backfill() {
-        return statsAggregationService.backfillMissingStats();
+        return statsAggregationService.startBackfillMissingStats();
     }
 
     @PostMapping("/rebuild")
     public Map<String, Object> rebuild() {
-        return statsAggregationService.rebuildAllStats();
+        return statsAggregationService.startRebuildAllStats();
     }
 
     @PostMapping("/cleanup")
     public Map<String, Object> cleanup() {
-        return statsAggregationService.cleanupStats();
+        return statsAggregationService.startCleanupStats();
     }
 
     @PostMapping("/cleanup-event-raw-json")

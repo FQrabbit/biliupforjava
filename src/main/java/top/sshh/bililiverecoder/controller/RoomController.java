@@ -81,6 +81,7 @@ public class RoomController {
     private final Semaphore imageProxySemaphore = new Semaphore(3, true);
     // 记录上一次请求B站的时间戳
     private final AtomicLong lastRequestTime = new AtomicLong(0);
+    private volatile ConfigTaskStatus configTaskStatus = ConfigTaskStatus.idle();
 
     @Data
     @AllArgsConstructor
@@ -91,6 +92,85 @@ public class RoomController {
 
     private record SeasonSectionFixResult(Long seasonId, Long sectionId, String action) {}
 
+    private record ConfigTaskStatus(String taskId,
+                                    String task,
+                                    String title,
+                                    boolean running,
+                                    boolean success,
+                                    String phase,
+                                    String message,
+                                    String detail,
+                                    long processed,
+                                    long total,
+                                    int percent,
+                                    LocalDateTime updatedAt) {
+        private static ConfigTaskStatus idle() {
+            return new ConfigTaskStatus(null, "idle", "空闲", false, true, "IDLE",
+                    "当前没有导入导出任务", "", 0, 0, 0, LocalDateTime.now());
+        }
+
+        private static ConfigTaskStatus start(String task, String title, long total) {
+            return new ConfigTaskStatus(UUID.randomUUID().toString(), task, title, true, true, "STARTING",
+                    "正在启动任务", "", 0, Math.max(0, total), 1, LocalDateTime.now());
+        }
+
+        private ConfigTaskStatus progress(String phase, String detail, long processed) {
+            long safeTotal = Math.max(0, total);
+            long safeProcessed = Math.max(0, safeTotal > 0 ? Math.min(processed, safeTotal) : processed);
+            int nextPercent = safeTotal <= 0 ? 5 : Math.max(1, Math.min(99, (int) Math.floor(safeProcessed * 100.0d / safeTotal)));
+            return new ConfigTaskStatus(taskId, task, title, true, true, phase, phase,
+                    detail == null ? "" : detail, safeProcessed, safeTotal, nextPercent, LocalDateTime.now());
+        }
+
+        private ConfigTaskStatus done(String message) {
+            return new ConfigTaskStatus(taskId, task, title, false, true, "DONE", message,
+                    detail, total, total, 100, LocalDateTime.now());
+        }
+
+        private ConfigTaskStatus failed(String message) {
+            return new ConfigTaskStatus(taskId, task, title, false, false, "FAILED", message,
+                    detail, processed, total, 100, LocalDateTime.now());
+        }
+
+        private Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("taskId", taskId);
+            map.put("task", task);
+            map.put("title", title);
+            map.put("running", running);
+            map.put("success", success);
+            map.put("phase", phase);
+            map.put("message", message);
+            map.put("detail", detail);
+            map.put("processed", processed);
+            map.put("total", total);
+            map.put("percent", percent);
+            map.put("updatedAt", updatedAt);
+            return map;
+        }
+    }
+
+    @GetMapping("/configTask/status")
+    public Map<String, Object> configTaskStatus() {
+        return configTaskStatus.toMap();
+    }
+
+    private void startConfigTask(String task, String title, long total) {
+        configTaskStatus = ConfigTaskStatus.start(task, title, total);
+    }
+
+    private void updateConfigTask(String phase, String detail, long processed) {
+        configTaskStatus = configTaskStatus.progress(phase, detail, processed);
+    }
+
+    private void finishConfigTask(String message) {
+        configTaskStatus = configTaskStatus.done(message);
+    }
+
+    private void failConfigTask(String message) {
+        configTaskStatus = configTaskStatus.failed(message);
+    }
+
 
     @PostMapping
     public List<RecordRoom> list() {
@@ -100,36 +180,76 @@ public class RoomController {
 
     @PostMapping("/exportConfig")
     public void exportConfig(@RequestBody ExportConfigParams params, HttpServletResponse response) throws IOException {
+        long total = 1;
+        if (params.isExportRoom()) total += roomRepository.count();
+        if (params.isExportUser()) total += userRepository.count();
+        if (params.isExportHistory()) total += historyRepository.count() + partRepository.count();
+        if (params.isExportSystemConfig()) total += systemConfigRepository.count();
+        if (params.isExportLiveMsg()) total += liveMsgRepository.count();
+        long processed = 0;
+        startConfigTask("export", "导出配置", total);
         Map<String,Object> map = new LinkedHashMap<>();
+        try {
         if(params.isExportRoom()){
+            updateConfigTask("导出房间", "正在读取房间配置", processed);
             List<RecordRoom> roomList = this.list();
+            processed += roomList.size();
+            updateConfigTask("导出房间", "房间 " + roomList.size() + " 条", processed);
             map.put("roomList",roomList);
         }
         if(params.isExportUser()){
+            updateConfigTask("导出用户", "正在读取用户配置", processed);
             List<BiliBiliUser> userList = new ArrayList<>();
             Iterator<BiliBiliUser> userIterator = userRepository.findAll().iterator();
-            userIterator.forEachRemaining(userList::add);
+            while (userIterator.hasNext()) {
+                userList.add(userIterator.next());
+                processed++;
+                if (processed % 500 == 0) updateConfigTask("导出用户", "已读取 " + userList.size() + " 个用户", processed);
+            }
+            updateConfigTask("导出用户", "用户 " + userList.size() + " 条", processed);
             map.put("userList",userList);
         }
         if(params.isExportHistory()){
+            updateConfigTask("导出历史", "正在读取录制历史", processed);
             List<RecordHistory> historyList = new ArrayList<>();
             Iterator<RecordHistory> historyIterator = historyRepository.findAll().iterator();
-            historyIterator.forEachRemaining(historyList::add);
+            while (historyIterator.hasNext()) {
+                historyList.add(historyIterator.next());
+                processed++;
+                if (processed % 1000 == 0) updateConfigTask("导出历史", "已读取 " + historyList.size() + " 场历史", processed);
+            }
             map.put("historyList",historyList);
+            updateConfigTask("导出分P", "正在读取分P记录", processed);
             List<RecordHistoryPart> partList = new ArrayList<>();
             Iterator<RecordHistoryPart> partIterator = partRepository.findAll().iterator();
-            partIterator.forEachRemaining(partList::add);
+            while (partIterator.hasNext()) {
+                partList.add(partIterator.next());
+                processed++;
+                if (processed % 1000 == 0) updateConfigTask("导出分P", "已读取 " + partList.size() + " 个分P", processed);
+            }
             map.put("partList",partList);
         }
         if(params.isExportSystemConfig()){
-            map.put("systemConfigList", systemConfigRepository.findAll());
+            updateConfigTask("导出系统配置", "正在读取系统配置", processed);
+            List<SystemConfig> systemConfigList = new ArrayList<>();
+            systemConfigRepository.findAll().forEach(item -> systemConfigList.add(item));
+            processed += systemConfigList.size();
+            updateConfigTask("导出系统配置", "系统配置 " + systemConfigList.size() + " 条", processed);
+            map.put("systemConfigList", systemConfigList);
         }
         if(params.isExportLiveMsg()){
+            updateConfigTask("导出弹幕", "正在读取弹幕数据", processed);
             List<LiveMsg> liveMsgList = new ArrayList<>();
             Iterator<LiveMsg> liveMsgIterator = liveMsgRepository.findAll().iterator();
-            liveMsgIterator.forEachRemaining(liveMsgList::add);
+            while (liveMsgIterator.hasNext()) {
+                liveMsgList.add(liveMsgIterator.next());
+                processed++;
+                if (processed % 5000 == 0) updateConfigTask("导出弹幕", "已读取 " + liveMsgList.size() + " 条弹幕", processed);
+            }
+            updateConfigTask("导出弹幕", "弹幕 " + liveMsgList.size() + " 条", processed);
             map.put("liveMsgList", liveMsgList);
         }
+        updateConfigTask("生成文件", "正在序列化 JSON", Math.max(processed, total - 1));
         String jsonString = JSON.toJSONString(map);
         String timeString = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分"));
         // 构造响应头，指定文件名，并将文件名进行URL编码
@@ -142,6 +262,11 @@ public class RoomController {
         out.write(jsonString.getBytes(StandardCharsets.UTF_8));
         out.flush();
         out.close();
+        finishConfigTask("导出完成");
+        } catch (IOException | RuntimeException e) {
+            failConfigTask("导出失败：" + e.getMessage());
+            throw e;
+        }
     }
 
     @PostMapping("/uploadConfig")
@@ -178,11 +303,17 @@ public class RoomController {
         List<RecordHistoryPart> partList = parseConfigList(configMap, "partList", new TypeReference<>() {});
         List<SystemConfig> systemConfigList = parseConfigList(configMap, "systemConfigList", new TypeReference<>() {});
         List<LiveMsg> liveMsgList = parseConfigList(configMap, "liveMsgList", new TypeReference<>() {});
+        long importTotal = (long) userList.size() + roomList.size() + historyList.size()
+                + partList.size() + systemConfigList.size() + liveMsgList.size();
+        long importProcessed = 0L;
+        startConfigTask("import", "导入配置", Math.max(1L, importTotal));
+        try {
 
 
         Map<Long,Long> userIdConverMap = new HashMap<>();
         if(userList.size()>0){
             importUsersStartNs = System.nanoTime();
+            updateConfigTask("导入用户", "正在导入用户配置", importProcessed);
             for (BiliBiliUser user : userList) {
                 if (user.getUid() == null) {
                     continue;
@@ -199,11 +330,14 @@ public class RoomController {
                 }
                 importedUserCount++;
             }
+            importProcessed += userList.size();
+            updateConfigTask("导入用户", "用户 " + importedUserCount + " 条", importProcessed);
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Users.Success")
                     .add("count", importedUserCount));
         }
         if(roomList.size()>0){
             importRoomsStartNs = System.nanoTime();
+            updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
             for (RecordRoom room : roomList) {
                 if (StringUtils.isBlank(room.getRoomId())) {
                     continue;
@@ -233,12 +367,15 @@ public class RoomController {
                 roomRepository.save(room);
                 importedRoomCount++;
             }
+            importProcessed += roomList.size();
+            updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
                     .add("count", importedRoomCount));
         }
         Map<Long,Long> historyIdConverMap = new HashMap<>();
         if(historyList.size()>0){
             importHistoriesStartNs = System.nanoTime();
+            updateConfigTask("导入历史", "正在导入录制历史", importProcessed);
             for (RecordHistory history : historyList) {
                 Long oldId = history.getId();
                 history.setId(null);
@@ -252,12 +389,15 @@ public class RoomController {
                 }
                 importedHistoryCount++;
             }
+            importProcessed += historyList.size();
+            updateConfigTask("导入历史", "历史 " + importedHistoryCount + " 条", importProcessed);
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Histories.Success")
                     .add("count", importedHistoryCount));
         }
         Map<Long,Long> partIdConverMap = new HashMap<>();
         if(partList.size()>0){
             importPartsStartNs = System.nanoTime();
+            updateConfigTask("导入分P", "正在导入分P记录", importProcessed);
             for (RecordHistoryPart part : partList) {
                 Long oldId = part.getId();
                 Long oldHistoryId = part.getHistoryId();
@@ -282,12 +422,15 @@ public class RoomController {
                 }
                 importedPartCount++;
             }
+            importProcessed += partList.size();
+            updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
                     .add("count", importedPartCount));
         }
         // 在控制台输出转换后的Map对象
         if(systemConfigList.size()>0){
             importSystemConfigsStartNs = System.nanoTime();
+            updateConfigTask("导入系统配置", "正在导入系统配置", importProcessed);
             for (SystemConfig systemConfig : systemConfigList) {
                 if (StringUtils.isBlank(systemConfig.getConfigKey()) || systemConfig.getConfigValue() == null) {
                     continue;
@@ -295,11 +438,14 @@ public class RoomController {
                 systemConfigService.updateConfig(systemConfig.getConfigKey(), systemConfig.getConfigValue());
                 importedSystemConfigCount++;
             }
+            importProcessed += systemConfigList.size();
+            updateConfigTask("导入系统配置", "系统配置 " + importedSystemConfigCount + " 条", importProcessed);
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.SystemConfigs.Success")
                     .add("count", importedSystemConfigCount));
         }
         if(liveMsgList.size()>0){
             importLiveMsgsStartNs = System.nanoTime();
+            updateConfigTask("导入弹幕", "正在导入弹幕数据", importProcessed);
             Set<Long> mappedPartIds = new HashSet<>(partIdConverMap.values());
             for (Long partId : mappedPartIds) {
                 liveMsgRepository.deleteByPartId(partId);
@@ -314,7 +460,13 @@ public class RoomController {
                 liveMsg.setPartId(newPartId);
                 liveMsgRepository.save(liveMsg);
                 importedLiveMsgCount++;
+                importProcessed++;
+                if (importProcessed % 5000 == 0) {
+                    updateConfigTask("导入弹幕", "已导入 " + importedLiveMsgCount + " 条弹幕", importProcessed);
+                }
             }
+            importProcessed = importTotal;
+            updateConfigTask("导入弹幕", "弹幕 " + importedLiveMsgCount + " 条，跳过 " + skippedLiveMsgCount + " 条", importProcessed);
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.LiveMsgs.Success")
                     .add("count", importedLiveMsgCount)
                     .add("skipped", skippedLiveMsgCount));
@@ -335,6 +487,11 @@ public class RoomController {
                 .addStageCostMs("importSystemConfigs", importSystemConfigsStartNs)
                 .addStageCostMs("importLiveMsgs", importLiveMsgsStartNs)
                 .addStageCostMs("total", totalStartNs));
+        finishConfigTask("导入完成");
+        } catch (RuntimeException e) {
+            failConfigTask("导入失败：" + e.getMessage());
+            throw e;
+        }
     }
 
     private <T> List<T> parseConfigList(Map<String,Object> configMap, String key, TypeReference<List<T>> typeReference) {
