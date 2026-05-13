@@ -47,16 +47,28 @@
             <el-select v-model="selectedRoomId" size="small" clearable filterable placeholder="全部房间" @change="loadRoomDetail">
                 <el-option v-for="room in rooms" :key="room.roomId" :label="roomLabel(room)" :value="room.roomId"></el-option>
             </el-select>
-            <el-date-picker
-                    v-model="dateRange"
-                    type="daterange"
-                    size="small"
-                    value-format="yyyy-MM-dd"
-                    range-separator="至"
-                    start-placeholder="开始日期"
-                    end-placeholder="结束日期"
-                    @change="reload">
-            </el-date-picker>
+            <div class="stats-date-range">
+                <i class="el-icon-date"></i>
+                <el-date-picker
+                        v-model="dateRangeStart"
+                        type="date"
+                        size="small"
+                        value-format="yyyy-MM-dd"
+                        placeholder="开始日期"
+                        :clearable="true"
+                        @change="handleDateRangeChange">
+                </el-date-picker>
+                <span class="stats-date-separator">至</span>
+                <el-date-picker
+                        v-model="dateRangeEnd"
+                        type="date"
+                        size="small"
+                        value-format="yyyy-MM-dd"
+                        placeholder="结束日期"
+                        :clearable="true"
+                        @change="handleDateRangeChange">
+                </el-date-picker>
+            </div>
             <el-button size="small" icon="el-icon-refresh" @click="reload">刷新</el-button>
             <div class="stats-more">
                 <el-button size="small" icon="el-icon-more" @click="toggleMoreActions">更多操作</el-button>
@@ -462,6 +474,8 @@ new Vue({
             rooms: [],
             selectedRoomId: '',
             dateRange: [],
+            dateRangeStart: '',
+            dateRangeEnd: '',
             detail: {},
             selectedSessionId: null,
             selectedSessionDetail: {},
@@ -646,6 +660,15 @@ new Vue({
                 .fail(function () {
                     self.$message.error('本场明细加载失败');
                 });
+        },
+        handleDateRangeChange: function () {
+            if (this.dateRangeStart && this.dateRangeEnd && this.dateRangeStart > this.dateRangeEnd) {
+                var tmp = this.dateRangeStart;
+                this.dateRangeStart = this.dateRangeEnd;
+                this.dateRangeEnd = tmp;
+            }
+            this.dateRange = (this.dateRangeStart && this.dateRangeEnd) ? [this.dateRangeStart, this.dateRangeEnd] : [];
+            this.reload();
         },
         selectRoom: function (row) {
             var roomId = typeof row === 'string' ? row : row.roomId;
