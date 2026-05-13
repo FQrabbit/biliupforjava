@@ -65,6 +65,7 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
             "top.sshh.bililiverecoder.entity.LiveMsg",
             "top.sshh.bililiverecoder.entity.HighEnergyCut",
             "top.sshh.bililiverecoder.entity.RecordHistoryDTO",
+            "top.sshh.bililiverecoder.util.FastjsonWebhookDateDeserializer",
             "top.sshh.bililiverecoder.util.bili.user.Fans_medal",
             "top.sshh.bililiverecoder.util.bili.user.Label",
             "top.sshh.bililiverecoder.util.bili.user.Level_exp",

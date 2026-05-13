@@ -1,7 +1,9 @@
 package top.sshh.bililiverecoder.entity;
 
+import com.alibaba.fastjson.annotation.JSONField;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+import top.sshh.bililiverecoder.util.FastjsonWebhookDateDeserializer;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -24,8 +26,10 @@ class RecordEventData implements Serializable {
     @JsonProperty("Duration")
     private float Duration;
     @JsonProperty("FileOpenTime")
+    @JSONField(deserializeUsing = FastjsonWebhookDateDeserializer.class)
     private Date FileOpenTime;
     @JsonProperty("FileCloseTime")
+    @JSONField(deserializeUsing = FastjsonWebhookDateDeserializer.class)
     private Date FileCloseTime;
     @JsonProperty("SessionId")
     private String SessionId;

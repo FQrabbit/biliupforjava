@@ -1,9 +1,11 @@
 package top.sshh.bililiverecoder.entity;
 
+import com.alibaba.fastjson.annotation.JSONField;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
+import top.sshh.bililiverecoder.util.FastjsonWebhookDateDeserializer;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -15,6 +17,7 @@ public class RecordEventDTO implements Serializable {
     @JsonProperty("EventType")
     private String EventType;
     @JsonProperty("EventTimestamp")
+    @JSONField(deserializeUsing = FastjsonWebhookDateDeserializer.class)
     private Date EventTimestamp;
     @JsonProperty("EventId")
     private String EventId;
@@ -26,6 +29,7 @@ public class RecordEventDTO implements Serializable {
     private String id;
     @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JSONField(deserializeUsing = FastjsonWebhookDateDeserializer.class)
     private Date date;
     private String type;
     private BlrecData data;
