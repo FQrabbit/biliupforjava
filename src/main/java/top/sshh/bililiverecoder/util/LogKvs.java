@@ -516,6 +516,11 @@ public final class LogKvs {
         EVENT_ZH.put("Blrec.DanmakuCompleted.Skip", "blrec 事件: 弹幕文件完成-跳过(房间不存在或未在录制)");
         EVENT_ZH.put("Blrec.DanmakuCompleted.PartNotFound", "blrec 事件: 弹幕文件完成-未找到对应的视频分P");
         EVENT_ZH.put("Blrec.DanmakuCompleted.Processed", "blrec 事件: 弹幕文件完成，已触发解析");
+
+        // 直播事件解析/统计缓存
+        EVENT_ZH.put("RoomLiveEvent.Parse.Saved", "直播事件解析：已保存统计缓存");
+        EVENT_ZH.put("RoomLiveEvent.Parse.Failed", "直播事件解析：解析失败");
+        EVENT_ZH.put("RoomLiveEvent.Parse.DisableSecureFailed", "直播事件解析：关闭 XML 安全处理失败");
         
         // 系统配置
         EVENT_ZH.put("RoomConfig.Import.SystemConfigs.Success", "导入系统配置成功");

@@ -2,6 +2,7 @@ package top.sshh.bililiverecoder.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
 @Service
 public class StatsAggregationService {
 
-    public static final int STATS_VERSION = 2;
+    public static final int STATS_VERSION = 3;
 
     @Autowired
     private RecordHistoryRepository historyRepository;
@@ -33,6 +34,8 @@ public class StatsAggregationService {
     private LiveMsgRepository liveMsgRepository;
     @Autowired
     private RoomLiveEventRepository eventRepository;
+    @Autowired
+    private RoomLiveDanmuUserStatsRepository danmuUserStatsRepository;
     @Autowired
     private RoomLiveEventParseStateRepository eventParseStateRepository;
     @Autowired
@@ -49,6 +52,9 @@ public class StatsAggregationService {
     private RoomLiveMsgBucketStatsRepository bucketStatsRepository;
     @Autowired
     private DatabaseMaintenanceState databaseMaintenanceState;
+    @Lazy
+    @Autowired
+    private RoomLiveEventParseService roomLiveEventParseService;
 
     private final ReentrantLock statsWriteLock = new ReentrantLock();
 
@@ -257,18 +263,21 @@ public class StatsAggregationService {
         int deletedBuckets = bucketStatsRepository.deleteAllRows();
         int deletedDailyStats = dailyStatsRepository.deleteAllRows();
         int deletedSessionStats = sessionStatsRepository.deleteAllRows();
-        return new StatsCleanupResult(deletedBuckets, deletedDailyStats, deletedSessionStats);
+        int deletedDanmuUserStats = danmuUserStatsRepository.deleteAllRows();
+        return new StatsCleanupResult(deletedBuckets, deletedDailyStats, deletedSessionStats, deletedDanmuUserStats);
     }
 
     private record StatsCleanupResult(int deletedBucketStats,
                                       int deletedDailyStats,
-                                      int deletedSessionStats) {
+                                      int deletedSessionStats,
+                                      int deletedDanmuUserStats) {
         Map<String, Object> toMap() {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("deletedBucketStats", deletedBucketStats);
             map.put("deletedDailyStats", deletedDailyStats);
             map.put("deletedSessionStats", deletedSessionStats);
-            map.put("deletedTotalStats", deletedBucketStats + deletedDailyStats + deletedSessionStats);
+            map.put("deletedDanmuUserStats", deletedDanmuUserStats);
+            map.put("deletedTotalStats", deletedBucketStats + deletedDailyStats + deletedSessionStats + deletedDanmuUserStats);
             return map;
         }
     }
@@ -292,6 +301,9 @@ public class StatsAggregationService {
                 .map(RecordHistoryPart::getId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+        for (RecordHistoryPart part : parts) {
+            roomLiveEventParseService.parsePart(part, false);
+        }
         EventStats eventStats = buildEventStats(history.getId(), partIds);
 
         LocalDate liveDate = startTime.toLocalDate();
@@ -603,7 +615,7 @@ public class StatsAggregationService {
                 .collect(Collectors.toList());
         result.put("sessions", recentSessions);
         result.put("interactionOverview", buildInteractionOverview(sessions));
-        result.put("topDanmuUsers", topUsers(eventRepository.findTopUsersByRoomIdAndType(roomId, RoomLiveEvent.TYPE_DANMU, from, to, PageRequest.of(0, 10))));
+        result.put("topDanmuUsers", topUsers(danmuUserStatsRepository.findTopUsersByRoomId(roomId, from, to, PageRequest.of(0, 10))));
         result.put("topScUsers", topUsers(eventRepository.findTopUsersByRoomIdAndType(roomId, RoomLiveEvent.TYPE_SC, from, to, PageRequest.of(0, 10))));
         result.put("topGiftUsers", topUsers(eventRepository.findTopGiftUsersByRoomId(roomId, from, to, PageRequest.of(0, 10))));
         result.put("giftDistribution", namedValues(eventRepository.findGiftDistributionByRoomId(roomId, from, to, PageRequest.of(0, 12))));
@@ -635,7 +647,7 @@ public class StatsAggregationService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("session", session);
         result.put("buckets", bucketStatsRepository.findByHistoryIdOrderByBucketIndexAsc(historyId));
-        result.put("topDanmuUsers", topUsers(eventRepository.findTopUsersByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_DANMU, PageRequest.of(0, 10))));
+        result.put("topDanmuUsers", topUsers(danmuUserStatsRepository.findTopUsersByHistoryId(historyId, PageRequest.of(0, 10))));
         result.put("topScUsers", topUsers(eventRepository.findTopUsersByHistoryIdAndType(historyId, RoomLiveEvent.TYPE_SC, PageRequest.of(0, 10))));
         List<Map<String, Object>> topGiftUsersByCount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::giftCount).reversed());
         List<Map<String, Object>> topGiftUsersByAmount = topGiftUsersByHistoryId(historyId, Comparator.comparingLong(GiftUserStats::totalCoin).reversed());

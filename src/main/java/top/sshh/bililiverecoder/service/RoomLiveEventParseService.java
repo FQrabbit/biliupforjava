@@ -25,7 +25,7 @@ import java.util.*;
 @Service
 public class RoomLiveEventParseService {
 
-    public static final int PARSER_VERSION = 1;
+    public static final int PARSER_VERSION = 2;
     private static final int BATCH_SIZE = 500;
 
     @Autowired
@@ -36,6 +36,8 @@ public class RoomLiveEventParseService {
     private RoomLiveEventRepository eventRepository;
     @Autowired
     private RoomLiveEventParseStateRepository parseStateRepository;
+    @Autowired
+    private RoomLiveDanmuUserStatsRepository danmuUserStatsRepository;
     @Autowired
     private RoomLiveGiftCatalogRepository giftCatalogRepository;
     @Autowired
@@ -93,7 +95,10 @@ public class RoomLiveEventParseService {
 
         long lastModified = xmlFile.lastModified();
         long size = xmlFile.length();
-        if (!force && state.isSuccess()
+        boolean missingDanmuUserStats = state.isSuccess()
+                && state.getDanmuCount() > 0
+                && !danmuUserStatsRepository.existsByPartId(part.getId());
+        if (!force && !missingDanmuUserStats && state.isSuccess()
                 && state.getParserVersion() >= PARSER_VERSION
                 && state.getXmlLastModified() == lastModified
                 && state.getXmlSize() == size) {
@@ -108,12 +113,14 @@ public class RoomLiveEventParseService {
         LocalDateTime now = LocalDateTime.now();
         EventCounter counter = new EventCounter();
         List<RoomLiveEvent> batch = new ArrayList<>(BATCH_SIZE);
+        Map<DanmuUserKey, RoomLiveDanmuUserStats> danmuUsers = new LinkedHashMap<>();
         Map<Integer, RoomLiveEvent> giftCatalogCandidates = new HashMap<>();
         long parseStartNs = System.nanoTime();
 
         try (FileInputStream stream = new FileInputStream(xmlFile)) {
             giftCatalogService.syncRoomGiftCatalog(part.getRoomId(), false);
             eventRepository.deleteByPartId(part.getId());
+            danmuUserStatsRepository.deleteByPartId(part.getId());
             SAXReader saxReader = new SAXReader();
             try {
                 saxReader.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", false);
@@ -128,6 +135,7 @@ public class RoomLiveEventParseService {
             saxReader.addHandler("/i/d", eventHandler(path -> {
                 Element element = path.getCurrent();
                 counter.danmu++;
+                addDanmuUserStats(danmuUsers, part, liveStart, now, element);
             }));
 
             saxReader.addHandler("/i/gift", eventHandler(path -> {
@@ -170,6 +178,7 @@ public class RoomLiveEventParseService {
 
             saxReader.read(stream);
             flush(batch);
+            flushDanmuUsers(danmuUsers);
             for (RoomLiveEvent event : giftCatalogCandidates.values()) {
                 upsertGiftCatalog(event);
             }
@@ -187,7 +196,7 @@ public class RoomLiveEventParseService {
             state.setParserVersion(PARSER_VERSION);
             parseStateRepository.save(state);
 
-            log.info("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.Saved")
+            log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.Saved")
                     .add("roomId", part.getRoomId())
                     .add("historyId", part.getHistoryId())
                     .add("partId", part.getId())
@@ -294,6 +303,51 @@ public class RoomLiveEventParseService {
             eventRepository.saveAll(batch);
             batch.clear();
         }
+    }
+
+    private void addDanmuUserStats(Map<DanmuUserKey, RoomLiveDanmuUserStats> danmuUsers,
+                                   RecordHistoryPart part,
+                                   LocalDateTime liveStart,
+                                   LocalDateTime now,
+                                   Element element) {
+        Long uid = danmuUid(element);
+        String uname = truncate(attr(element, "user"), 255);
+        if (uid == null && StringUtils.isBlank(uname)) {
+            return;
+        }
+        DanmuUserKey key = new DanmuUserKey(uid, uname == null ? "" : uname);
+        RoomLiveDanmuUserStats stats = danmuUsers.computeIfAbsent(key, ignored -> {
+            RoomLiveDanmuUserStats value = new RoomLiveDanmuUserStats();
+            value.setHistoryId(part.getHistoryId());
+            value.setPartId(part.getId());
+            value.setRoomId(part.getRoomId());
+            value.setLiveDate(liveStart == null ? null : liveStart.toLocalDate());
+            value.setUid(uid);
+            value.setUname(uname);
+            value.setStatsUpdatedAt(now);
+            value.setParserVersion(PARSER_VERSION);
+            return value;
+        });
+        stats.setDanmuCount(stats.getDanmuCount() + 1);
+    }
+
+    private void flushDanmuUsers(Map<DanmuUserKey, RoomLiveDanmuUserStats> danmuUsers) {
+        if (!danmuUsers.isEmpty()) {
+            danmuUserStatsRepository.saveAll(danmuUsers.values());
+            danmuUsers.clear();
+        }
+    }
+
+    private Long danmuUid(Element element) {
+        String p = attr(element, "p");
+        if (StringUtils.isBlank(p)) {
+            return null;
+        }
+        String[] values = p.split(",");
+        if (values.length <= 6) {
+            return null;
+        }
+        return parseLong(values[6]);
     }
 
     private void enrichGift(RoomLiveEvent event, String raw) {
@@ -441,6 +495,9 @@ public class RoomLiveEventParseService {
         private int gift;
         private int sc;
         private int guard;
+    }
+
+    private record DanmuUserKey(Long uid, String uname) {
     }
 
     public record ParseResult(boolean parsed, int count, String reason) {
