@@ -64,9 +64,10 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
             """)
     List<Object[]> aggregateListStatsByBvids(List<String> bvids, String scLike, String guardLike);
 
-    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
     @Query("delete from LiveMsg where partId = ?1")
-    void deleteByPartId(Long partId);
+    int deleteByPartId(Long partId);
 
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional

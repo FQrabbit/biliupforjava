@@ -716,6 +716,52 @@
 
 
 
+[data-theme="dark"] .export-config-dialog .el-checkbox,
+[data-theme="dark"] .export-config-dialog .el-checkbox__label {
+
+    color: var(--text-primary);
+
+}
+
+
+
+[data-theme="dark"] .export-config-dialog .el-checkbox.is-checked .el-checkbox__label {
+
+    color: var(--primary-color);
+
+}
+
+
+
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled + .el-checkbox__label,
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled.is-checked + .el-checkbox__label {
+
+    color: var(--text-disabled);
+
+}
+
+
+
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled .el-checkbox__inner {
+
+    background-color: var(--bg-primary);
+
+    border-color: var(--border-color);
+
+}
+
+
+
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled.is-checked .el-checkbox__inner {
+
+    background-color: var(--bg-tertiary);
+
+    border-color: var(--border-color);
+
+}
+
+
+
 .room-card::before {
 
     content: '';
@@ -5382,6 +5428,347 @@
 .copyright-group .el-radio-button:last-child .el-radio-button__inner {
 
     border-radius: 0 4px 4px 0;
+
+}
+
+
+
+/* 配置选项卡片 */
+
+.option-card-form-item .el-form-item__content {
+
+    width: 100%;
+
+}
+
+
+
+.option-card-grid {
+
+    display: grid;
+
+    gap: 10px;
+
+    width: 100%;
+
+}
+
+
+
+.option-card-grid-two {
+
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+}
+
+
+
+.option-card-grid-three {
+
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+}
+
+
+
+.cover-option-grid {
+
+    margin-bottom: 12px;
+
+}
+
+
+
+.option-card {
+
+    position: relative;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    min-height: 74px;
+
+    padding: 12px 14px;
+
+    border: 1px solid var(--border-color);
+
+    border-radius: var(--radius-lg);
+
+    background:
+
+        linear-gradient(145deg, color-mix(in srgb, var(--bg-tertiary) 84%, transparent), color-mix(in srgb, var(--bg-primary) 96%, transparent));
+
+    color: var(--text-primary);
+
+    font: inherit;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    overflow: hidden;
+
+    transition:
+
+        transform var(--transition-base),
+
+        border-color var(--transition-base),
+
+        background var(--transition-base),
+
+        box-shadow var(--transition-base);
+
+}
+
+
+
+.option-card::before {
+
+    content: "";
+
+    position: absolute;
+
+    inset: 0;
+
+    background: radial-gradient(circle at 20% 0%, var(--brand-soft-bg-faint), transparent 42%);
+
+    opacity: 0;
+
+    transition: opacity var(--transition-base);
+
+    pointer-events: none;
+
+}
+
+
+
+.option-card-compact {
+
+    min-height: 64px;
+
+    padding: 10px 12px;
+
+}
+
+
+
+.option-card:hover:not(:disabled) {
+
+    transform: translateY(-1px);
+
+    border-color: var(--primary-color);
+
+    background:
+
+        linear-gradient(145deg, var(--brand-soft-bg-hover), color-mix(in srgb, var(--bg-primary) 94%, transparent));
+
+    box-shadow: 0 10px 26px -18px var(--brand-soft-bg-strong);
+
+}
+
+
+
+.option-card:hover:not(:disabled)::before,
+.option-card.is-active::before {
+
+    opacity: 1;
+
+}
+
+
+
+.option-card.is-active {
+
+    border-color: var(--primary-color);
+
+    background:
+
+        linear-gradient(145deg, var(--brand-soft-bg-active), color-mix(in srgb, var(--bg-primary) 90%, transparent));
+
+    box-shadow:
+
+        0 12px 32px -20px var(--brand-soft-bg-strong),
+
+        inset 0 0 0 1px var(--brand-soft-bg-strong);
+
+}
+
+
+
+.option-card-icon {
+
+    position: relative;
+
+    z-index: 1;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    width: 34px;
+
+    height: 34px;
+
+    border-radius: var(--radius-md);
+
+    background: var(--brand-soft-bg);
+
+    color: var(--primary-color);
+
+    flex: 0 0 auto;
+
+    transition:
+
+        background var(--transition-base),
+
+        color var(--transition-base),
+
+        transform var(--transition-base);
+
+}
+
+
+
+.option-card.is-active .option-card-icon {
+
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+
+    color: var(--text-inverse);
+
+    transform: scale(1.03);
+
+}
+
+
+
+.option-card-main {
+
+    position: relative;
+
+    z-index: 1;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 3px;
+
+    min-width: 0;
+
+    padding-right: 18px;
+
+}
+
+
+
+.option-card-main strong {
+
+    color: var(--text-primary);
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    line-height: 1.25;
+
+}
+
+
+
+.option-card-main em {
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    font-style: normal;
+
+    line-height: 1.25;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+}
+
+
+
+.option-card-check {
+
+    position: absolute;
+
+    z-index: 1;
+
+    right: 10px;
+
+    top: 10px;
+
+    color: var(--primary-color);
+
+    opacity: 0;
+
+    transform: scale(0.72);
+
+    transition:
+
+        opacity var(--transition-base),
+
+        transform var(--transition-base);
+
+}
+
+
+
+.option-card.is-active .option-card-check {
+
+    opacity: 1;
+
+    transform: scale(1);
+
+}
+
+
+
+.option-card:disabled,
+.option-card.is-disabled {
+
+    cursor: not-allowed;
+
+    opacity: 0.58;
+
+    transform: none;
+
+    box-shadow: none;
+
+}
+
+
+
+.option-card:focus-visible {
+
+    outline: 2px solid var(--primary-color);
+
+    outline-offset: 2px;
+
+}
+
+
+
+@media (max-width: 768px) {
+
+    .option-card-grid-two,
+    .option-card-grid-three {
+
+        grid-template-columns: 1fr;
+
+    }
 
 }
 

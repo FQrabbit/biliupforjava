@@ -6,6 +6,10 @@ server:
       worker: 16
       io: 4
 spring:
+  servlet:
+    multipart:
+      max-file-size: 1024MB
+      max-request-size: 1100MB
   datasource:
     username: bup
     password: bup

@@ -157,7 +157,7 @@
                     导出配置
                 </el-button>
             </el-tooltip>
-            <el-upload action="/room/uploadConfig" accept=".json" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false" style="display: inline-block;">
+            <el-upload action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false" style="display: inline-block;">
                 <el-button class="modern-btn" type="primary" icon="el-icon-upload2">导入配置</el-button>
             </el-upload>
             <el-radio-group v-model="viewMode" size="small">
@@ -644,25 +644,79 @@
                                 </div>
                             </div>
 
-                            <el-form-item label="版权类型" style="margin-top: 15px;">
-                                <el-radio-group v-model="room.copyright" :disabled="room.copyrightDisabled" size="small" class="copyright-group">
-                                    <el-radio-button :label="1">自制</el-radio-button>
-                                    <el-radio-button :label="2">转载</el-radio-button>
-                                </el-radio-group>
+                            <el-form-item label="版权类型" class="option-card-form-item" style="margin-top: 15px;">
+                                <div class="option-card-grid option-card-grid-two" :class="{ 'is-disabled': room.copyrightDisabled }">
+                                    <button
+                                        type="button"
+                                        class="option-card"
+                                        :class="{ 'is-active': room.copyright == 1, 'is-disabled': room.copyrightDisabled }"
+                                        :disabled="room.copyrightDisabled"
+                                        @click="selectCopyright(1)">
+                                        <span class="option-card-icon"><i class="el-icon-video-camera"></i></span>
+                                        <span class="option-card-main">
+                                            <strong>自制</strong>
+                                            <em>原创录制内容</em>
+                                        </span>
+                                        <i class="el-icon-check option-card-check"></i>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="option-card"
+                                        :class="{ 'is-active': room.copyright == 2, 'is-disabled': room.copyrightDisabled }"
+                                        :disabled="room.copyrightDisabled"
+                                        @click="selectCopyright(2)">
+                                        <span class="option-card-icon"><i class="el-icon-link"></i></span>
+                                        <span class="option-card-main">
+                                            <strong>转载</strong>
+                                            <em>注明来源信息</em>
+                                        </span>
+                                        <i class="el-icon-check option-card-check"></i>
+                                    </button>
+                                </div>
                             </el-form-item>
 
-                            <el-form-item label="封面设置">
-                                <el-radio-group v-model="room.coverType" size="mini" style="margin-bottom: 10px;">
-                                    <el-tooltip content="自动截取视频画面作为封面" placement="top" :open-delay="500">
-                                        <el-radio-button label="default">默认</el-radio-button>
-                                    </el-tooltip>
-                                    <el-tooltip content="使用主播当前的直播间封面" placement="top" :open-delay="500">
-                                        <el-radio-button label="live">直播</el-radio-button>
-                                    </el-tooltip>
-                                    <el-tooltip content="手动上传或指定封面图片" placement="top" :open-delay="500">
-                                        <el-radio-button label="diy">自定义</el-radio-button>
-                                    </el-tooltip>
-                                </el-radio-group>
+                            <el-form-item label="封面设置" class="option-card-form-item">
+                                <div class="option-card-grid option-card-grid-three cover-option-grid">
+                                    <button
+                                        type="button"
+                                        class="option-card option-card-compact"
+                                        :class="{ 'is-active': room.coverType === 'default' }"
+                                        @click="selectCoverType('default')"
+                                        title="自动截取视频画面作为封面">
+                                        <span class="option-card-icon"><i class="el-icon-crop"></i></span>
+                                        <span class="option-card-main">
+                                            <strong>默认</strong>
+                                            <em>自动截帧</em>
+                                        </span>
+                                        <i class="el-icon-check option-card-check"></i>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="option-card option-card-compact"
+                                        :class="{ 'is-active': room.coverType === 'live' }"
+                                        @click="selectCoverType('live')"
+                                        title="使用主播当前的直播间封面">
+                                        <span class="option-card-icon"><i class="el-icon-picture-outline"></i></span>
+                                        <span class="option-card-main">
+                                            <strong>直播</strong>
+                                            <em>同步封面</em>
+                                        </span>
+                                        <i class="el-icon-check option-card-check"></i>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="option-card option-card-compact"
+                                        :class="{ 'is-active': room.coverType === 'diy' }"
+                                        @click="selectCoverType('diy')"
+                                        title="手动上传或指定封面图片">
+                                        <span class="option-card-icon"><i class="el-icon-upload2"></i></span>
+                                        <span class="option-card-main">
+                                            <strong>自定义</strong>
+                                            <em>手动上传</em>
+                                        </span>
+                                        <i class="el-icon-check option-card-check"></i>
+                                    </button>
+                                </div>
                                 
                                 <!-- 直播封面预览 -->
                                 <div v-if="room.coverType == 'live'" class="cover-display-mini">
@@ -1078,7 +1132,7 @@
             <el-button @click="addRoomF()" type="primary">保 存</el-button>
         </div>
     </el-dialog>
-    <el-dialog :visible.sync="exportConfigDialog" :fullscreen="isMobile" title="导出配置">
+    <el-dialog :visible.sync="exportConfigDialog" :fullscreen="isMobile" title="导出配置" custom-class="export-config-dialog">
         <el-form :model="exportConfig">
             <el-form-item :label-width="formLabelWidth" label="导出选项">
                 <el-checkbox v-model="exportConfig.exportRoom">导出房间信息</el-checkbox>
@@ -2883,6 +2937,10 @@
             currentDetail: {}
         },
         computed: {
+            uploadConfigHeaders: function () {
+                var token = localStorage.getItem('biliup_auth');
+                return token ? { Authorization: token } : {};
+            },
             filteredTableData: function () {
                 if (this.roomFilter === 'live') {
                     return this.tableData.filter(function (item) { return !!item.streaming; });
@@ -3355,7 +3413,7 @@
                 if (_this.exportConfig.exportLiveMsg && !_this.exportConfig.exportHistory) {
                     _this.exportConfig.exportHistory = true;
                 }
-                _this.startConfigProgress('导出配置', '正在启动导出任务', '后端会按已读取数据量返回真实进度');
+                _this.startConfigProgress('导出配置', '正在启动导出任务', '后端读取中...');
                 _this.pollConfigTaskStatus('export');
                 $.ajax({
                     url: '/room/exportConfig',
@@ -3747,6 +3805,16 @@
                 this.partitionDialogVisible = false;
                 this.typeChange(true, item);
             },
+            selectCopyright(value) {
+                if (this.room.copyrightDisabled) {
+                    return;
+                }
+                this.room.copyright = value;
+            },
+            selectCoverType(type) {
+                this.room.coverType = type;
+                this.coverTypeChange(type);
+            },
             coverTypeChange(change) {
                 if (change === 'default') {
                     this.room.coverUrl = '';
@@ -3869,8 +3937,14 @@
                 this.finishConfigProgress('导入完成', '配置已导入');
                 this.initTable();
             },
-            beforeConfigUpload: function () {
-                this.startConfigProgress('导入配置', '正在上传并解析配置文件', '后端解析完成后会按导入数量返回真实进度');
+            beforeConfigUpload: function (file) {
+                var maxConfigSize = 1024 * 1024 * 1024;
+                if (file && file.size > maxConfigSize) {
+                    this.$message.error('导入配置文件不能超过 1GB，请重新导出时减少弹幕数据范围或暂不包含弹幕数据');
+                    this.failConfigProgress('导入失败', '配置文件超过 1GB');
+                    return false;
+                }
+                this.startConfigProgress('导入配置', '正在上传并解析配置文件', '后端解析中...');
                 this.pollConfigTaskStatus('import');
                 return true;
             },
