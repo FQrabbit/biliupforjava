@@ -313,6 +313,7 @@ public class StatsAggregationService {
         try {
             updateTaskProgress("正在清理旧缓存", 0, 1, "清理统计缓存表");
             StatsCleanupResult cleanup = cleanupStatsRows();
+            int deletedParseStates = eventParseStateRepository.deleteAllRows();
             List<RecordHistory> histories = historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc().stream()
                     .filter(history -> history != null && history.getId() != null)
                     .collect(Collectors.toList());
@@ -328,6 +329,7 @@ public class StatsAggregationService {
             result.put("success", true);
             result.put("updated", updated);
             result.putAll(cleanup.toMap());
+            result.put("deletedParseStates", deletedParseStates);
             result.put("statsVersion", STATS_VERSION);
             result.put("rebuiltAt", LocalDateTime.now());
             result.put("status", getStatsStatus());
@@ -805,7 +807,8 @@ public class StatsAggregationService {
             }
             long offsetMs = cumulativeMs;
             if (historyStart != null && part.getStartTime() != null) {
-                offsetMs = Math.max(0L, Duration.between(historyStart, part.getStartTime()).toMillis());
+                long timeOffsetMs = Math.max(0L, Duration.between(historyStart, part.getStartTime()).toMillis());
+                offsetMs = Math.max(timeOffsetMs, cumulativeMs);
             }
             result.put(part.getId(), offsetMs);
             cumulativeMs += partDurationMs(part);
@@ -1063,7 +1066,11 @@ public class StatsAggregationService {
         String status;
         String message;
         boolean rebuildMayHelp = false;
-        if (!hasDanmu) {
+        if (failedStateCount > 0) {
+            status = "parse_failed";
+            message = "检测到 XML 解析失败，损坏或未完整的 XML 不会反复重试；该场部分弹幕趋势或用户 Top 可能缺失";
+            rebuildMayHelp = false;
+        } else if (!hasDanmu) {
             status = "no_danmu";
             message = "这场没有解析到弹幕，用户 Top 为空是正常的";
         } else if (hasUserStats) {
@@ -1078,10 +1085,6 @@ public class StatsAggregationService {
         } else if (xmlMissingCount > 0) {
             status = "missing_xml";
             message = "弹幕总数存在，但用户统计为空；对应 XML 文件已不存在，重建统计也无法恢复用户 Top";
-        } else if (failedStateCount > 0) {
-            status = "parse_failed";
-            message = "弹幕解析曾失败，用户 Top 无法生成；请查看解析错误或确认 XML 文件是否可读";
-            rebuildMayHelp = xmlExistsCount > 0;
         } else {
             status = "unknown";
             message = "弹幕用户统计为空，但缺少足够的解析状态信息，建议检查 XML 文件和解析日志";

@@ -129,6 +129,68 @@ body {
     margin-left: 0;
 }
 
+.stats-hidden-file {
+    display: none;
+}
+
+.stats-xml-repair-dialog .el-dialog__body {
+    padding-top: 12px;
+}
+
+.xml-repair-result {
+    display: grid;
+    gap: 10px;
+    color: var(--text-primary, #303133);
+}
+
+.xml-repair-result p {
+    margin: 0;
+    color: var(--text-secondary, #606266);
+    font-size: 13px;
+}
+
+.xml-repair-result-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #20a86b;
+}
+
+.xml-repair-result.is-error .xml-repair-result-title {
+    color: #e6a23c;
+}
+
+.xml-repair-meta,
+.xml-repair-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.xml-repair-meta span,
+.xml-repair-counts span {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color-light, #ebeef5);
+    border-radius: 999px;
+    background: var(--bg-secondary, #f5f7fa);
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+}
+
+.xml-repair-error {
+    color: #f56c6c !important;
+}
+
+.xml-repair-tip,
+.xml-repair-empty {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(64, 158, 255, 0.10);
+    color: var(--text-secondary, #606266);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
 .stats-action-menu-enter-active,
 .stats-action-menu-leave-active {
     transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;

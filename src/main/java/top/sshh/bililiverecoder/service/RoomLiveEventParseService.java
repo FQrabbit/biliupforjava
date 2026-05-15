@@ -107,11 +107,20 @@ public class RoomLiveEventParseService {
         boolean missingDanmuUserStats = state.isSuccess()
                 && state.getDanmuCount() > 0
                 && !danmuUserStatsRepository.existsByPartId(part.getId());
-        if (!force && !missingDanmuUserStats && state.isSuccess()
+        if (!force && !missingDanmuUserStats
                 && state.getParserVersion() >= PARSER_VERSION
                 && state.getXmlLastModified() == lastModified
                 && state.getXmlSize() == size) {
-            return ParseResult.skipped("up to date");
+            if (state.isSuccess()) {
+                return ParseResult.skipped("up to date");
+            }
+            log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipFailedCached")
+                    .add("roomId", part.getRoomId())
+                    .add("historyId", part.getHistoryId())
+                    .add("partId", part.getId())
+                    .add("filePath", xmlFile.getPath())
+                    .add("err", state.getErrorMessage()));
+            return ParseResult.skipped("parse failed cached");
         }
 
         Optional<RecordHistory> historyOptional = part.getHistoryId() == null
@@ -217,6 +226,8 @@ public class RoomLiveEventParseService {
                     .addStageCostMs("total", parseStartNs));
             return ParseResult.parsed(counter.total);
         } catch (Exception e) {
+            state.setXmlLastModified(lastModified);
+            state.setXmlSize(size);
             state.setSuccess(false);
             state.setErrorMessage(truncate(e.getMessage(), 1000));
             state.setParsedAt(LocalDateTime.now());

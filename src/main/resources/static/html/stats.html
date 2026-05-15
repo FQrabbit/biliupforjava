@@ -77,10 +77,12 @@
                         <el-button size="small" icon="el-icon-finished" :loading="backfilling" @click="backfillStats">补全未统计</el-button>
                         <el-button size="small" type="warning" plain icon="el-icon-delete" :loading="cleaning" @click="cleanupStats">清理缓存</el-button>
                         <el-button size="small" type="danger" plain icon="el-icon-box" :loading="compacting" @click="compactDatabase">压缩数据库</el-button>
+                        <el-button size="small" plain icon="el-icon-document-checked" :loading="xmlRepairing" @click="chooseXmlRepairFile">XML 文件简单修复工具</el-button>
                         <el-button size="small" type="primary" icon="el-icon-magic-stick" :loading="rebuilding" @click="rebuildStats">重建统计</el-button>
                     </div>
                 </transition>
             </div>
+            <input ref="xmlRepairInput" class="stats-hidden-file" type="file" accept=".xml,text/xml,application/xml" @change="handleXmlRepairSelected">
         </div>
     </header>
 
@@ -445,6 +447,40 @@
             <div v-if="!selectedSessionSummary.historyId" class="empty-state">选择一场直播后查看本场明细</div>
         </section>
     </main>
+    <el-dialog
+            title="XML 文件简单修复工具"
+            :visible.sync="xmlRepairDialogVisible"
+            width="520px"
+            custom-class="stats-xml-repair-dialog">
+        <div v-if="xmlRepairResult" class="xml-repair-result" :class="{ 'is-error': !xmlRepairResult.success }">
+            <div class="xml-repair-result-title">
+                <i :class="xmlRepairResult.success ? 'el-icon-success' : 'el-icon-warning-outline'"></i>
+                <strong>{{ xmlRepairResult.message }}</strong>
+            </div>
+            <p v-if="xmlRepairResult.fileName">文件：{{ xmlRepairResult.fileName }}</p>
+            <div class="xml-repair-meta">
+                <span>修复前：{{ xmlRepairResult.beforeValid ? '可解析' : '不可解析' }}</span>
+                <span>修复后：{{ xmlRepairResult.afterValid ? '可解析' : '不可解析' }}</span>
+                <span>是否改动：{{ xmlRepairResult.changed ? '已修复' : '未改动' }}</span>
+            </div>
+            <div class="xml-repair-counts">
+                <span>弹幕 {{ number(xmlRepairResult.danmu) }}</span>
+                <span>礼物 {{ number(xmlRepairResult.gift) }}</span>
+                <span>SC {{ number(xmlRepairResult.sc) }}</span>
+                <span>舰长 {{ number(xmlRepairResult.guard) }}</span>
+            </div>
+            <p v-if="xmlRepairResult.actions && xmlRepairResult.actions.length">动作：{{ xmlRepairResult.actions.join('、') }}</p>
+            <p v-if="xmlRepairResult.error" class="xml-repair-error">失败原因：{{ xmlRepairResult.error }}</p>
+            <p class="xml-repair-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再点击“重建统计”。</p>
+        </div>
+        <div v-else class="xml-repair-empty">
+            请选择一个录播姬 XML 文件，系统会尝试做简单语法修复并返回可下载文件。
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button size="small" @click="xmlRepairDialogVisible = false">关闭</el-button>
+            <el-button size="small" type="primary" :loading="xmlRepairing" @click="chooseXmlRepairFile">选择 XML 文件</el-button>
+        </span>
+    </el-dialog>
 </div>
 
 <script>
@@ -457,6 +493,9 @@ new Vue({
             backfilling: false,
             cleaning: false,
             compacting: false,
+            xmlRepairing: false,
+            xmlRepairDialogVisible: false,
+            xmlRepairResult: null,
             moreActionsVisible: false,
             maintenancePoller: null,
             statsTaskPoller: null,
@@ -684,6 +723,135 @@ new Vue({
         },
         toggleMoreActions: function () {
             this.moreActionsVisible = !this.moreActionsVisible;
+        },
+        chooseXmlRepairFile: function () {
+            var self = this;
+            this.moreActionsVisible = false;
+            this.xmlRepairDialogVisible = true;
+            this.$nextTick(function () {
+                if (self.$refs.xmlRepairInput) {
+                    self.$refs.xmlRepairInput.value = '';
+                    self.$refs.xmlRepairInput.click();
+                }
+            });
+        },
+        handleXmlRepairSelected: function (event) {
+            var file = event && event.target && event.target.files ? event.target.files[0] : null;
+            if (!file) {
+                return;
+            }
+            this.repairXmlFile(file);
+        },
+        repairXmlFile: function (file) {
+            var self = this;
+            var formData = new FormData();
+            formData.append('file', file);
+            this.xmlRepairing = true;
+            this.xmlRepairResult = {
+                success: true,
+                message: '正在上传并尝试修复 XML 文件...',
+                fileName: file.name,
+                beforeValid: false,
+                afterValid: false,
+                changed: false,
+                actions: [],
+                danmu: 0,
+                gift: 0,
+                sc: 0,
+                guard: 0
+            };
+            fetch('/stats/xml/repair', {
+                method: 'POST',
+                body: formData
+            }).then(function (response) {
+                if (!response.ok) {
+                    return response.json().then(function (data) {
+                        throw data;
+                    }).catch(function (err) {
+                        throw err && err.message ? err : { message: 'XML 修复失败' };
+                    });
+                }
+                return response.blob().then(function (blob) {
+                    var result = self.xmlRepairResultFromHeaders(response.headers, file.name);
+                    self.xmlRepairResult = result;
+                    self.downloadBlob(blob, result.outputName || self.repairedXmlFileName(file.name));
+                    self.$message.success(result.message || 'XML 修复完成，已开始下载修复版文件');
+                });
+            }).catch(function (err) {
+                self.xmlRepairResult = {
+                    success: false,
+                    message: err.message || 'XML 修复失败',
+                    fileName: file.name,
+                    beforeValid: !!err.beforeValid,
+                    afterValid: !!err.afterValid,
+                    changed: !!err.changed,
+                    actions: err.actions || [],
+                    danmu: err.danmu || 0,
+                    gift: err.gift || 0,
+                    sc: err.sc || 0,
+                    guard: err.guard || 0,
+                    error: err.error || err.message || ''
+                };
+                self.$message.error(self.xmlRepairResult.message);
+            }).finally(function () {
+                self.xmlRepairing = false;
+                if (self.$refs.xmlRepairInput) {
+                    self.$refs.xmlRepairInput.value = '';
+                }
+            });
+        },
+        xmlRepairResultFromHeaders: function (headers, fallbackName) {
+            var contentDisposition = headers.get('content-disposition') || '';
+            var outputName = this.fileNameFromContentDisposition(contentDisposition) || this.repairedXmlFileName(fallbackName);
+            var actions = (headers.get('x-xml-repair-actions') || '').split(',').filter(Boolean);
+            return {
+                success: headers.get('x-xml-repair-success') === 'true',
+                message: this.decodeHeader(headers.get('x-xml-repair-message')) || 'XML 修复完成',
+                fileName: fallbackName,
+                outputName: outputName,
+                beforeValid: headers.get('x-xml-repair-before-valid') === 'true',
+                afterValid: headers.get('x-xml-repair-after-valid') === 'true',
+                changed: headers.get('x-xml-repair-changed') === 'true',
+                actions: actions,
+                danmu: Number(headers.get('x-xml-repair-danmu') || 0),
+                gift: Number(headers.get('x-xml-repair-gift') || 0),
+                sc: Number(headers.get('x-xml-repair-sc') || 0),
+                guard: Number(headers.get('x-xml-repair-guard') || 0)
+            };
+        },
+        fileNameFromContentDisposition: function (value) {
+            var match = /filename\*=UTF-8''([^;]+)/i.exec(value || '');
+            if (match && match[1]) {
+                return this.decodeHeader(match[1]);
+            }
+            match = /filename="?([^"]+)"?/i.exec(value || '');
+            return match && match[1] ? match[1] : '';
+        },
+        decodeHeader: function (value) {
+            if (!value) {
+                return '';
+            }
+            try {
+                return decodeURIComponent(value);
+            } catch (e) {
+                return value;
+            }
+        },
+        repairedXmlFileName: function (name) {
+            var safeName = (name || 'danmaku.xml').replace(/[\\\/]/g, '_');
+            return /\.xml$/i.test(safeName) ? safeName.replace(/\.xml$/i, '.repaired.xml') : safeName + '.repaired.xml';
+        },
+        downloadBlob: function (blob, fileName) {
+            var url = URL.createObjectURL(blob);
+            var link = document.createElement('a');
+            link.href = url;
+            link.download = fileName || 'danmaku.repaired.xml';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(function () {
+                URL.revokeObjectURL(url);
+            }, 1000);
         },
         startOperationProgress: function (title, message, detail) {
             var self = this;
@@ -913,6 +1081,7 @@ new Vue({
                 if (status.elapsedSeconds !== undefined) extra.push('耗时 ' + this.durationText(status.elapsedSeconds));
                 if (result.updated !== undefined) extra.push('更新 ' + result.updated + ' 场');
                 if (result.deletedTotalStats !== undefined) extra.push('清理统计缓存 ' + result.deletedTotalStats + ' 条');
+                if (result.deletedParseStates !== undefined) extra.push('清空解析标记 ' + result.deletedParseStates + ' 条');
                 if (extra.length) {
                     detail = (detail ? detail + ' · ' : '') + extra.join('，');
                 }
