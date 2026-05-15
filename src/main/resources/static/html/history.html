@@ -647,6 +647,16 @@
                 </div>
             </div>
 
+            <div class="detail-config-notice" v-if="hasUploadConfigMismatch">
+                <div class="config-notice-icon"><i class="el-icon-info"></i></div>
+                <div class="config-notice-body">
+                    <div class="config-notice-title">直播间上传配置已变更</div>
+                    <div class="config-notice-text">
+                        该稿件沿用创建时的上传配置；当前直播间上传开关为{{ currentDetail.roomUpload ? '开启' : '关闭' }}，不会自动回溯影响已创建稿件。
+                    </div>
+                </div>
+            </div>
+
             <!-- 数据统计 -->
             <div class="detail-section-title">数据统计</div>
             <div class="detail-stats-grid">
@@ -1143,6 +1153,11 @@
             },
             isIndeterminate: function() {
                 return this.selectedItems.length > 0 && this.selectedItems.length < this.tableData.length;
+            },
+            hasUploadConfigMismatch: function() {
+                if (!this.currentDetail || !this.currentDetail.id) return false;
+                if (this.currentDetail.roomUpload === null || this.currentDetail.roomUpload === undefined) return false;
+                return Boolean(this.currentDetail.upload) !== Boolean(this.currentDetail.roomUpload);
             },
             isPublishLockedByCode: function() {
                 return this.form.code !== null && this.form.code !== undefined && this.form.code !== '';

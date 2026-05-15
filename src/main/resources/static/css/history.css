@@ -3421,6 +3421,78 @@
 
 /* 状态连接线 */
 
+.detail-config-notice {
+
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 10px;
+
+    margin: -8px 0 20px;
+
+    padding: 12px 14px;
+
+    background: var(--warning-soft-bg-faint);
+
+    border: 1px solid var(--warning-border);
+
+    border-radius: var(--radius-md);
+
+    color: var(--text-primary);
+
+}
+
+.config-notice-icon {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    width: 24px;
+
+    height: 24px;
+
+    flex: 0 0 24px;
+
+    color: var(--warning-color);
+
+    font-size: 16px;
+
+}
+
+.config-notice-body {
+
+    min-width: 0;
+
+}
+
+.config-notice-title {
+
+    font-size: 13px;
+
+    line-height: 20px;
+
+    font-weight: 600;
+
+    color: var(--warning-color);
+
+}
+
+.config-notice-text {
+
+    margin-top: 2px;
+
+    font-size: 12px;
+
+    line-height: 18px;
+
+    color: var(--text-secondary);
+
+}
+
 .status-connector {
 
     width: 28px;

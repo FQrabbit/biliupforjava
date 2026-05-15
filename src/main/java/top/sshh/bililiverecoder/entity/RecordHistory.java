@@ -26,6 +26,12 @@ public class RecordHistory {
     @Transient
     private String roomName;
 
+    /**
+     * 房间当前是否开启上传（仅用于前端展示，不入库）
+     */
+    @Transient
+    private Boolean roomUpload;
+
     private String avId;
 
     private String bvId;
