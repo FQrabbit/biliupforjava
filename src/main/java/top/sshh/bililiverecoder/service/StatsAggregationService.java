@@ -417,6 +417,121 @@ public class StatsAggregationService {
         }
     }
 
+    public Map<String, Object> cleanupStaleRecordingStates() {
+        if (databaseMaintenanceState.isMaintenanceActive()) {
+            return statsBusyResult("cleanupStaleRecordingStates", null);
+        }
+        if (!statsWriteLock.tryLock()) {
+            return statsBusyResult("cleanupStaleRecordingStates", null);
+        }
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime cutoff = now.minusHours(6);
+            int updatedHistories = 0;
+            int updatedParts = 0;
+            List<Map<String, Object>> items = new ArrayList<>();
+            for (RecordHistory history : historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc()) {
+                if (!shouldCleanupStaleRecordingState(history, cutoff)) {
+                    continue;
+                }
+                List<RecordHistoryPart> parts = partRepository.findByHistoryId(history.getId());
+                boolean historyChanged = false;
+                if (history.isRecording()) {
+                    history.setRecording(false);
+                    historyChanged = true;
+                }
+                if (history.isStreaming()) {
+                    history.setStreaming(false);
+                    historyChanged = true;
+                }
+                int partChanges = cleanupStaleRecordingParts(history, parts, now);
+                if (historyChanged) {
+                    history.setUpdateTime(now);
+                    historyRepository.save(history);
+                    updatedHistories++;
+                }
+                if (partChanges > 0 || historyChanged) {
+                    updatedParts += partChanges;
+                    if (items.size() < 50) {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("historyId", history.getId());
+                        item.put("roomId", history.getRoomId());
+                        item.put("title", history.getTitle());
+                        item.put("bvId", history.getBvId());
+                        item.put("historyUpdated", historyChanged);
+                        item.put("partUpdated", partChanges);
+                        item.put("endTime", history.getEndTime());
+                        items.add(item);
+                    }
+                }
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("updatedHistories", updatedHistories);
+            result.put("updatedParts", updatedParts);
+            result.put("items", items);
+            result.put("message", "已清理旧录制状态：稿件 " + updatedHistories + " 条，分P " + updatedParts + " 条");
+            result.put("cleanedAt", now);
+            return result;
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
+    private boolean shouldCleanupStaleRecordingState(RecordHistory history, LocalDateTime cutoff) {
+        if (history == null || history.getId() == null || history.getEndTime() == null) {
+            return false;
+        }
+        if (history.getEndTime().isAfter(cutoff)) {
+            return false;
+        }
+        if (!history.isRecording() && !history.isStreaming()
+                && partRepository.countActuallyRecordingPartsByHistoryId(history.getId()) <= 0) {
+            return false;
+        }
+        return history.isPublish() || StringUtils.isNotBlank(history.getBvId());
+    }
+
+    private int cleanupStaleRecordingParts(RecordHistory history, List<RecordHistoryPart> parts, LocalDateTime now) {
+        if (parts == null || parts.isEmpty()) {
+            return 0;
+        }
+        int updated = 0;
+        for (RecordHistoryPart part : parts) {
+            if (part == null || part.getId() == null) {
+                continue;
+            }
+            boolean changed = false;
+            if (part.isRecording()) {
+                part.setRecording(false);
+                changed = true;
+            }
+            if (part.getEndTime() == null) {
+                part.setEndTime(resolvePartEndTime(history, part));
+                changed = true;
+            }
+            if (changed) {
+                part.setUpdateTime(now);
+                partRepository.save(part);
+                updated++;
+            }
+        }
+        return updated;
+    }
+
+    private LocalDateTime resolvePartEndTime(RecordHistory history, RecordHistoryPart part) {
+        if (part.getStartTime() != null && part.getDuration() > 0) {
+            return part.getStartTime().plusSeconds(Math.max(1L, Math.round(part.getDuration())));
+        }
+        if (history.getEndTime() != null) {
+            return history.getEndTime();
+        }
+        if (part.getStartTime() != null) {
+            return part.getStartTime();
+        }
+        return LocalDateTime.now();
+    }
+
     public void refreshHistoryStats(Long historyId) {
         statsWriteLock.lock();
         try {
@@ -1373,6 +1488,7 @@ public class StatsAggregationService {
                 .collect(Collectors.toMap(RoomLiveSessionStats::getHistoryId, s -> s, (a, b) -> a));
         long stale = 0L;
         long pending = 0L;
+        List<Map<String, Object>> pendingItems = new ArrayList<>();
         for (RecordHistory history : completedHistories) {
             if (history == null || history.getId() == null) {
                 continue;
@@ -1380,9 +1496,11 @@ public class StatsAggregationService {
             RoomLiveSessionStats stats = statsByHistoryId.get(history.getId());
             if (stats == null) {
                 pending++;
+                addPendingCoverageItem(pendingItems, history, "missing", "没有生成统计记录");
             } else if (stats.getStatsVersion() < STATS_VERSION) {
                 stale++;
                 pending++;
+                addPendingCoverageItem(pendingItems, history, "stale", "统计版本较旧，需要重新生成");
             }
         }
         LocalDateTime updatedAt = sessions.stream()
@@ -1390,7 +1508,63 @@ public class StatsAggregationService {
                 .filter(Objects::nonNull)
                 .max(LocalDateTime::compareTo)
                 .orElse(null);
-        return new StatsCoverage(completedHistories.size(), sessions.size(), pending, stale, updatedAt);
+        return new StatsCoverage(completedHistories.size(), sessions.size(), pending, stale, updatedAt, pendingItems);
+    }
+
+    private void addPendingCoverageItem(List<Map<String, Object>> pendingItems,
+                                        RecordHistory history,
+                                        String status,
+                                        String baseReason) {
+        if (pendingItems.size() >= 50 || history == null || history.getId() == null) {
+            return;
+        }
+        List<RecordHistoryPart> parts = partRepository.findByHistoryId(history.getId());
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("historyId", history.getId());
+        item.put("roomId", history.getRoomId());
+        item.put("title", history.getTitle());
+        item.put("bvId", history.getBvId());
+        item.put("startTime", history.getStartTime());
+        item.put("endTime", history.getEndTime());
+        item.put("status", status);
+        item.put("reason", pendingCoverageReason(history, parts, baseReason));
+        item.put("partCount", parts == null ? 0 : parts.size());
+        item.put("activePartCount", countActiveParts(parts));
+        pendingItems.add(item);
+    }
+
+    private String pendingCoverageReason(RecordHistory history, List<RecordHistoryPart> parts, String baseReason) {
+        if (history.getEndTime() == null) {
+            return "稿件没有结束时间，暂不统计";
+        }
+        if (history.isRecording()) {
+            return "稿件仍标记为正在录制，重建会跳过";
+        }
+        if (history.isStreaming()) {
+            return "稿件仍标记为直播中，重建会跳过";
+        }
+        if (parts != null) {
+            long recordingParts = parts.stream()
+                    .filter(Objects::nonNull)
+                    .filter(RecordHistoryPart::isRecording)
+                    .count();
+            if (recordingParts > 0) {
+                return "存在 " + recordingParts + " 个分P仍标记为正在录制，重建会跳过";
+            }
+            long noEndParts = parts.stream()
+                    .filter(Objects::nonNull)
+                    .filter(part -> part.getEndTime() == null)
+                    .count();
+            if (noEndParts > 0) {
+                return "存在 " + noEndParts + " 个分P没有结束时间，重建会跳过";
+            }
+        }
+        LocalDateTime startTime = resolveStartTime(history, parts);
+        LocalDateTime endTime = resolveEndTime(history, parts);
+        if (startTime == null && endTime == null) {
+            return "稿件和分P都缺少可用起止时间，无法归档到统计日期";
+        }
+        return baseReason;
     }
 
     private List<Map<String, Object>> buildPublishStatusDistribution(List<RoomLiveSessionStats> sessions) {
@@ -1622,7 +1796,8 @@ public class StatsAggregationService {
     }
 
     private record StatsCoverage(long totalHistoryCount, long statsSessionCount, long pendingSessionCount,
-                                 long staleSessionCount, LocalDateTime updatedAt) {
+                                 long staleSessionCount, LocalDateTime updatedAt,
+                                 List<Map<String, Object>> pendingItems) {
         private Map<String, Object> toMap() {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("totalHistoryCount", totalHistoryCount);
@@ -1632,6 +1807,7 @@ public class StatsAggregationService {
             map.put("complete", pendingSessionCount == 0);
             map.put("statsVersion", STATS_VERSION);
             map.put("updatedAt", updatedAt);
+            map.put("pendingItems", pendingItems);
             return map;
         }
     }

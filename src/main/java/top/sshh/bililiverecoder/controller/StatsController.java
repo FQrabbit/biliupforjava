@@ -11,6 +11,7 @@ import top.sshh.bililiverecoder.service.DatabaseMaintenanceService;
 import top.sshh.bililiverecoder.service.StatsAggregationService;
 import top.sshh.bililiverecoder.util.XmlRepairTool;
 
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -87,6 +88,11 @@ public class StatsController {
         return statsAggregationService.cleanupEventRawJson();
     }
 
+    @PostMapping("/cleanup-stale-recording-state")
+    public Map<String, Object> cleanupStaleRecordingState() {
+        return statsAggregationService.cleanupStaleRecordingStates();
+    }
+
     @GetMapping("/maintenance/status")
     public Map<String, Object> maintenanceStatus() {
         return databaseMaintenanceService.status();
@@ -106,7 +112,24 @@ public class StatsController {
             ));
         }
         String originalName = file.getOriginalFilename() == null ? "danmaku.xml" : file.getOriginalFilename();
-        String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        return repairXmlContent(originalName, file.getBytes());
+    }
+
+    @PostMapping(value = "/xml/repair", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<?> repairXmlRaw(@RequestBody byte[] fileBytes,
+                                          @RequestHeader(value = "X-File-Name", required = false) String encodedFileName) {
+        if (fileBytes == null || fileBytes.length == 0) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "请选择需要修复的 XML 文件"
+            ));
+        }
+        String originalName = decodeFileName(encodedFileName);
+        return repairXmlContent(originalName, fileBytes);
+    }
+
+    private ResponseEntity<?> repairXmlContent(String originalName, byte[] fileBytes) {
+        String content = new String(fileBytes, StandardCharsets.UTF_8);
         XmlRepairTool.ContentRepairResult repair = XmlRepairTool.repairContent(content);
         Map<String, Object> diagnostic = buildXmlRepairDiagnostic(originalName, repair);
         if (!repair.after().valid()) {
@@ -133,6 +156,17 @@ public class StatsController {
         headers.set("X-Xml-Repair-Message", URLEncoder.encode((String) diagnostic.get("message"), StandardCharsets.UTF_8));
         headers.setContentLength(bytes.length);
         return ResponseEntity.ok().headers(headers).body(bytes);
+    }
+
+    private String decodeFileName(String encodedFileName) {
+        if (encodedFileName == null || encodedFileName.isBlank()) {
+            return "danmaku.xml";
+        }
+        try {
+            return URLDecoder.decode(encodedFileName, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return "danmaku.xml";
+        }
     }
 
     private Map<String, Object> buildXmlRepairDiagnostic(String originalName, XmlRepairTool.ContentRepairResult repair) {

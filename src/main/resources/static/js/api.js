@@ -26,27 +26,38 @@ const ApiUtil = {
             token = localStorage.getItem('biliup_auth');
         } catch (e) {
         }
-        var headers = (options && options.headers) ? options.headers : {};
+        var requestOptions = Object.assign({}, options || {});
+        var headers = requestOptions.headers || {};
         if (token) {
             headers = Object.assign({}, headers, { 'Authorization': token });
         }
+        requestOptions.headers = headers;
         return fetch(url, Object.assign({
             method: 'GET',
-            headers: headers,
             cache: 'no-store'
-        }, options || {})).then(function (res) {
+        }, requestOptions)).then(function (res) {
             if (res.status === 401) {
                 window.location.href = '/html/login.html';
                 throw new Error('unauthorized');
             }
             if (!res.ok) {
+                if (options && typeof options.handleError === 'function') {
+                    return options.handleError(res).then(function (err) {
+                        throw err;
+                    });
+                }
                 throw new Error('bad_response');
             }
             var ct = res.headers && res.headers.get ? res.headers.get('content-type') : '';
-            if (ct && ct.indexOf('image/') !== 0) {
+            if (!(options && options.acceptAnyBlob) && ct && ct.indexOf('image/') !== 0) {
                 throw new Error('non_image');
             }
-            return res.blob();
+            return res.blob().then(function (blob) {
+                if (options && options.acceptAnyBlob) {
+                    return { blob: blob, headers: res.headers };
+                }
+                return blob;
+            });
         });
     },
     get: function(url, callback, errorCallback) {

@@ -76,6 +76,7 @@
                     <div v-if="moreActionsVisible" class="stats-action-menu">
                         <el-button size="small" icon="el-icon-finished" :loading="backfilling" @click="backfillStats">补全未统计</el-button>
                         <el-button size="small" type="warning" plain icon="el-icon-delete" :loading="cleaning" @click="cleanupStats">清理缓存</el-button>
+                        <el-button size="small" type="warning" plain icon="el-icon-brush" :loading="cleaningStaleStates" @click="cleanupStaleRecordingStates">清理旧录制状态</el-button>
                         <el-button size="small" type="danger" plain icon="el-icon-box" :loading="compacting" @click="compactDatabase">压缩数据库</el-button>
                         <el-button size="small" plain icon="el-icon-document-checked" :loading="xmlRepairing" @click="chooseXmlRepairFile">XML 文件简单修复工具</el-button>
                         <el-button size="small" type="primary" icon="el-icon-magic-stick" :loading="rebuilding" @click="rebuildStats">重建统计</el-button>
@@ -110,6 +111,41 @@
             <span>历史 {{ number(coverage.totalHistoryCount) }} 场，已统计 {{ number(coverage.statsSessionCount) }} 场，待补算 {{ number(coverage.pendingSessionCount) }} 场</span>
         </div>
         <span>最后更新 {{ dateTime(coverage.updatedAt) }}</span>
+    </section>
+
+    <section v-if="pendingCoverageItems.length" class="coverage-pending-panel">
+        <div class="coverage-pending-head" @click="pendingCoverageExpanded = !pendingCoverageExpanded">
+            <div>
+                <strong>待统计稿件</strong>
+                <span>共 {{ number(coverage.pendingSessionCount) }} 场，显示前 {{ number(pendingCoverageItems.length) }} 条</span>
+            </div>
+            <button type="button" class="coverage-pending-toggle" :class="{ 'is-open': pendingCoverageExpanded }">
+                <span>{{ pendingCoverageExpanded ? '收起明细' : '展开明细' }}</span>
+                <i class="el-icon-arrow-down"></i>
+            </button>
+        </div>
+        <transition name="coverage-pending">
+            <div v-if="pendingCoverageExpanded" class="coverage-pending-body">
+                <el-table :data="pendingCoverageItems" size="mini" max-height="260">
+                    <el-table-column prop="historyId" label="稿件ID" width="86"></el-table-column>
+                    <el-table-column prop="roomId" label="房间" width="120"></el-table-column>
+                    <el-table-column label="标题" min-width="220">
+                        <template slot-scope="scope">{{ scope.row.title || scope.row.bvId || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="时间" width="180">
+                        <template slot-scope="scope">{{ dateTime(scope.row.startTime) || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="原因" min-width="260">
+                        <template slot-scope="scope">
+                            <el-tag size="mini" :type="scope.row.status === 'stale' ? 'warning' : 'info'">
+                                {{ scope.row.status === 'stale' ? '版本旧' : '未生成' }}
+                            </el-tag>
+                            <span class="coverage-pending-reason">{{ scope.row.reason }}</span>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+        </transition>
     </section>
 
     <section class="stats-grid">
@@ -459,9 +495,9 @@
             </div>
             <p v-if="xmlRepairResult.fileName">文件：{{ xmlRepairResult.fileName }}</p>
             <div class="xml-repair-meta">
-                <span>修复前：{{ xmlRepairResult.beforeValid ? '可解析' : '不可解析' }}</span>
-                <span>修复后：{{ xmlRepairResult.afterValid ? '可解析' : '不可解析' }}</span>
-                <span>是否改动：{{ xmlRepairResult.changed ? '已修复' : '未改动' }}</span>
+                <span :class="xmlRepairResult.beforeValid ? 'is-success' : 'is-danger'">修复前：{{ xmlRepairResult.beforeValid ? '可解析' : '不可解析' }}</span>
+                <span :class="xmlRepairResult.afterValid ? 'is-success' : 'is-danger'">修复后：{{ xmlRepairResult.afterValid ? '可解析' : '不可解析' }}</span>
+                <span :class="xmlRepairResult.changed ? 'is-success' : 'is-muted'">是否改动：{{ xmlRepairResult.changed ? '已修复' : '未改动' }}</span>
             </div>
             <div class="xml-repair-counts">
                 <span>弹幕 {{ number(xmlRepairResult.danmu) }}</span>
@@ -492,6 +528,7 @@ new Vue({
             rebuilding: false,
             backfilling: false,
             cleaning: false,
+            cleaningStaleStates: false,
             compacting: false,
             xmlRepairing: false,
             xmlRepairDialogVisible: false,
@@ -501,6 +538,7 @@ new Vue({
             statsTaskPoller: null,
             activeStatsTaskId: null,
             operationProgressTimer: null,
+            pendingCoverageExpanded: false,
             operationProgress: {
                 visible: false,
                 title: '',
@@ -532,9 +570,13 @@ new Vue({
                 statsSessionCount: 0,
                 pendingSessionCount: 0,
                 staleSessionCount: 0,
+                pendingItems: [],
                 complete: true,
                 updatedAt: null
             };
+        },
+        pendingCoverageItems: function () {
+            return this.coverage.pendingItems || [];
         },
         activeHourBuckets: function () {
             return this.selectedRoomId && this.detail.hourBuckets ? this.detail.hourBuckets : (this.overview.hourBuckets || []);
@@ -744,8 +786,6 @@ new Vue({
         },
         repairXmlFile: function (file) {
             var self = this;
-            var formData = new FormData();
-            formData.append('file', file);
             this.xmlRepairing = true;
             this.xmlRepairResult = {
                 success: true,
@@ -760,23 +800,24 @@ new Vue({
                 sc: 0,
                 guard: 0
             };
-            fetch('/stats/xml/repair', {
+            ApiUtil.fetchBlob('/stats/xml/repair', {
                 method: 'POST',
-                body: formData
-            }).then(function (response) {
-                if (!response.ok) {
-                    return response.json().then(function (data) {
-                        throw data;
-                    }).catch(function (err) {
-                        throw err && err.message ? err : { message: 'XML 修复失败' };
-                    });
+                body: file,
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'X-File-Name': encodeURIComponent(file.name || 'danmaku.xml')
+                },
+                acceptAnyBlob: true,
+                handleError: function (response) {
+                    return self.readXmlRepairError(response);
                 }
-                return response.blob().then(function (blob) {
-                    var result = self.xmlRepairResultFromHeaders(response.headers, file.name);
+            }).then(function (payload) {
+                    var blob = payload.blob || payload;
+                    var headers = payload.headers || new Headers();
+                    var result = self.xmlRepairResultFromHeaders(headers, file.name);
                     self.xmlRepairResult = result;
                     self.downloadBlob(blob, result.outputName || self.repairedXmlFileName(file.name));
                     self.$message.success(result.message || 'XML 修复完成，已开始下载修复版文件');
-                });
             }).catch(function (err) {
                 self.xmlRepairResult = {
                     success: false,
@@ -798,6 +839,29 @@ new Vue({
                 if (self.$refs.xmlRepairInput) {
                     self.$refs.xmlRepairInput.value = '';
                 }
+            });
+        },
+        readXmlRepairError: function (response) {
+            return response.text().then(function (text) {
+                if (text) {
+                    try {
+                        var json = JSON.parse(text);
+                        if (json && typeof json === 'object') {
+                            return json;
+                        }
+                    } catch (e) {
+                        return {
+                            message: text.length > 300 ? text.substring(0, 300) + '...' : text
+                        };
+                    }
+                }
+                return {
+                    message: 'XML 修复请求失败，HTTP ' + response.status + (response.statusText ? '：' + response.statusText : '')
+                };
+            }).catch(function () {
+                return {
+                    message: 'XML 修复请求失败，HTTP ' + response.status + (response.statusText ? '：' + response.statusText : '')
+                };
             });
         },
         xmlRepairResultFromHeaders: function (headers, fallbackName) {
@@ -976,6 +1040,34 @@ new Vue({
                     self.$message.error('缓存清理失败');
                     self.failOperationProgress('缓存清理失败');
                     self.cleaning = false;
+                });
+            }).catch(function () {});
+        },
+        cleanupStaleRecordingStates: function () {
+            var self = this;
+            this.$confirm('将只清理已经投稿或已有 BV、且结束超过 6 小时的旧稿件录制状态残留：把卡住的“正在录制/直播中”和分P缺失结束时间修正。不会处理当前新近录制的稿件。', '清理旧录制状态', {
+                confirmButtonText: '开始清理',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(function () {
+                self.cleaningStaleStates = true;
+                self.startOperationProgress('清理旧录制状态', '正在检查旧稿件状态', '只处理已投稿/已有 BV 且结束超过 6 小时的记录');
+                ApiUtil.post('/stats/cleanup-stale-recording-state', {}, function (result) {
+                    if (result && result.busy) {
+                        self.$message.warning(result.message || '统计任务正在执行中，请稍后再试');
+                        self.failOperationProgress('清理被占用', result.message || '');
+                        self.cleaningStaleStates = false;
+                        return;
+                    }
+                    var detail = '修正稿件 ' + (result.updatedHistories || 0) + ' 条，分P ' + (result.updatedParts || 0) + ' 条';
+                    self.$message.success(result.message || '旧录制状态清理完成');
+                    self.finishOperationProgress(result.message || '旧录制状态清理完成', detail);
+                    self.cleaningStaleStates = false;
+                    self.reload();
+                }, function () {
+                    self.$message.error('旧录制状态清理失败');
+                    self.failOperationProgress('旧录制状态清理失败');
+                    self.cleaningStaleStates = false;
                 });
             }).catch(function () {});
         },

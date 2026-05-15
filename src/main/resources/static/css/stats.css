@@ -177,6 +177,24 @@ body {
     font-size: 12px;
 }
 
+.xml-repair-meta span.is-success {
+    border-color: rgba(32, 168, 107, 0.45);
+    background: rgba(32, 168, 107, 0.12);
+    color: var(--success-color, #20a86b);
+}
+
+.xml-repair-meta span.is-danger {
+    border-color: rgba(245, 108, 108, 0.48);
+    background: rgba(245, 108, 108, 0.12);
+    color: var(--danger-color, #f56c6c);
+}
+
+.xml-repair-meta span.is-muted {
+    border-color: var(--border-color-light, #ebeef5);
+    background: var(--bg-secondary, #f5f7fa);
+    color: var(--text-secondary, #606266);
+}
+
 .xml-repair-error {
     color: #f56c6c !important;
 }
@@ -225,6 +243,79 @@ body {
     border-color: #b3e5c8;
     background: #eefaf3;
     color: #187243;
+}
+
+.coverage-pending-panel {
+    padding: 0;
+    margin: -4px 0 14px;
+    border: 1px solid rgba(230, 162, 60, 0.34);
+    border-radius: 12px;
+    background:
+            linear-gradient(135deg, rgba(230, 162, 60, 0.10), transparent 42%),
+            var(--bg-primary, #ffffff);
+}
+
+.coverage-pending-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    color: var(--text-primary, #303133);
+    cursor: pointer;
+    user-select: none;
+}
+
+.coverage-pending-head > div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.coverage-pending-head span {
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+}
+
+.coverage-pending-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary, #606266);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.coverage-pending-toggle i {
+    transition: transform 180ms ease;
+}
+
+.coverage-pending-toggle.is-open i {
+    transform: rotate(180deg);
+}
+
+.coverage-pending-body {
+    padding: 0 14px 12px;
+}
+
+.coverage-pending-reason {
+    margin-left: 8px;
+    color: var(--text-secondary, #606266);
+}
+
+.coverage-pending-enter-active,
+.coverage-pending-leave-active {
+    transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
+}
+
+.coverage-pending-enter,
+.coverage-pending-leave-to {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translateY(-8px) scale(0.98);
 }
 
 .operation-progress-panel {
