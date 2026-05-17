@@ -133,6 +133,24 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         String roomId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
 
     @Query("""
+        select p from RecordHistoryPart p
+        where p.roomId = :roomId
+          and p.recording = false
+          and p.upload = false
+          and p.uploadRetryCount < 9999
+          and p.endTime between :startTime and :endTime
+          and exists (
+              select 1 from RecordHistory h
+              where h.id = p.historyId
+                and (h.avId is not null and trim(h.avId) <> ''
+                     or h.bvId is not null and trim(h.bvId) <> '')
+          )
+        order by p.endTime asc
+        """)
+    List<RecordHistoryPart> findPendingUploadPartsOfPublishedHistories(
+        String roomId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
+
+    @Query("""
         select count(p) from RecordHistoryPart p
         where p.recording = false
           and p.upload = false

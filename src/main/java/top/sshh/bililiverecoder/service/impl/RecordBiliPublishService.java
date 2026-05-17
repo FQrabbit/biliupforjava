@@ -141,6 +141,10 @@ public class RecordBiliPublishService {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return;
         }
+        if (history != null) {
+            editPublishedHistory(history, "republish");
+            return;
+        }
 
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         String wxuid = room.getWxuid();
@@ -372,6 +376,224 @@ public class RecordBiliPublishService {
 
     }
 
+    public boolean editPublishedHistory(RecordHistory history, String reason) {
+        if (history == null) {
+            return false;
+        }
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        if (room == null) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Edit.RoomMissing")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .addIfNotBlank("reason", reason));
+            return false;
+        }
+        Optional<BiliBiliUser> userOptional = room.getUploadUserId() == null
+                ? Optional.empty()
+                : biliUserRepository.findById(room.getUploadUserId());
+        if (!userOptional.isPresent()) {
+            log.error("[BLR] {}", LogKvs.event("Publish.UploadUserMissing")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("uploadUserId", room.getUploadUserId())
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("reason", reason));
+            return false;
+        }
+        BiliBiliUser biliBiliUser = userOptional.get();
+        if (!biliBiliUser.isLogin()) {
+            log.error("[BLR] {}", LogKvs.event("Publish.LoginInvalid")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("uploadUserId", room.getUploadUserId())
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("reason", reason));
+            return false;
+        }
+        BiliVideoPartInfoResponse videoPartInfo = loadOnlinePartInfo(biliBiliUser, history);
+        Long aid = resolveOnlineAid(history, videoPartInfo);
+        if (aid == null || aid <= 0) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Edit.SkipNoAid")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("aid", history.getAvId())
+                    .addIfNotBlank("reason", reason));
+            return false;
+        }
+
+        Thread existed = TaskUtil.publishTask.putIfAbsent(history.getId(), Thread.currentThread());
+        if (existed != null && existed != Thread.currentThread()) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Task.AlreadyRunning")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .addIfNotBlank("title", history.getTitle())
+                    .add("ownerThread", existed.getName())
+                    .add("currentThread", Thread.currentThread().getName()));
+            return false;
+        }
+
+        long startNs = System.nanoTime();
+        try {
+            log.info("[BLR] {}", LogKvs.event("Publish.Edit.Start")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", history.getId())
+                    .add("aid", aid)
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("reason", reason));
+
+            Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle = buildOnlineVideoTitleMap(videoPartInfo);
+            Map<Integer, BiliVideoPartInfoResponse.Video> onlineByPage = buildOnlineVideoPageMap(videoPartInfo);
+            List<RecordHistoryPart> uploadParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+            boolean editBlocked = false;
+            for (RecordHistoryPart uploadPart : uploadParts) {
+                if (isSkippedPart(uploadPart)) {
+                    continue;
+                }
+                BiliVideoPartInfoResponse.Video onlineVideo = resolveOnlineVideo(uploadPart, onlineByTitle, onlineByPage);
+                boolean onlineFailed = isOnlineVideoFailedForEdit(onlineVideo);
+                boolean onlineUsable = isOnlineVideoUsable(onlineVideo);
+                if (!uploadPart.isUpload() && onlineUsable) {
+                    syncPartFromOnlineVideo(uploadPart, onlineVideo);
+                    continue;
+                }
+                boolean needsUpload = !uploadPart.isUpload() || onlineFailed;
+                if (!needsUpload) {
+                    continue;
+                }
+                boolean timestampError = onlineVideo != null && onlineVideo.getFailCode() == 14 && onlineVideo.getXcodeState() == 1;
+                if (timestampError) {
+                    uploadPart.setUpload(false);
+                    uploadPart.setCid(null);
+                    uploadPart.setFileName(null);
+                    uploadPart.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                    uploadPart.setDeleteFailType("TIMESTAMP_JUMP");
+                    uploadPart.setDeleteFailReason("part transcode failed by timestamp jump, give up reupload");
+                    partRepository.save(uploadPart);
+                    log.info("[BLR] {}", LogKvs.event("Publish.Edit.PartGiveUpTimestampJump")
+                            .add("historyId", history.getId())
+                            .add("partId", uploadPart.getId())
+                            .add("failCode", onlineVideo.getFailCode())
+                            .add("xcodeState", onlineVideo.getXcodeState()));
+                    continue;
+                }
+                if (onlineFailed) {
+                    uploadPart.setUpload(false);
+                    uploadPart.setCid(null);
+                    uploadPart.setFileName(null);
+                    uploadPart = partRepository.save(uploadPart);
+                }
+                String filePath = normalizeFilePath(uploadPart.getFilePath());
+                if (StringUtils.isBlank(filePath)) {
+                    log.warn("[BLR] {}", LogKvs.event("Publish.Edit.PartUpload.SkipNoFilePath")
+                            .add("historyId", history.getId())
+                            .add("partId", uploadPart.getId()));
+                    editBlocked = true;
+                    continue;
+                }
+                uploadPart.setFilePath(filePath);
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    log.warn("[BLR] {}", LogKvs.event("Publish.Edit.PartUpload.SkipFileMissing")
+                            .add("historyId", history.getId())
+                            .add("partId", uploadPart.getId())
+                            .add("filePath", filePath));
+                    editBlocked = true;
+                    continue;
+                }
+                log.info("[BLR] {}", LogKvs.event("Publish.Edit.PartUpload")
+                        .add("historyId", history.getId())
+                        .add("partId", uploadPart.getId())
+                        .addIfNotBlank("reason", reason));
+                uploadPartWithUserSerialBlocking(room, uploadPart);
+            }
+            if (editBlocked) {
+                log.warn("[BLR] {}", LogKvs.event("Publish.Edit.Deferred")
+                        .add("historyId", history.getId())
+                        .add("roomId", history.getRoomId())
+                        .addIfNotBlank("reason", reason)
+                        .addIfNotBlank("err", "part_missing_local_file"));
+                return false;
+            }
+
+            uploadParts = filterPublishableParts(partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()));
+            if (uploadParts.isEmpty()) {
+                log.warn("[BLR] {}", LogKvs.event("Publish.Edit.Parts.Empty")
+                        .add("roomId", room.getRoomId())
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("reason", reason));
+                return false;
+            }
+            videoPartInfo = loadOnlinePartInfo(biliBiliUser, history);
+            onlineByTitle = buildOnlineVideoTitleMap(videoPartInfo);
+            onlineByPage = buildOnlineVideoPageMap(videoPartInfo);
+            EditVideosBuildResult videosBuild = buildEditVideos(history, room, uploadParts, videoPartInfo, onlineByTitle, onlineByPage);
+            if (videosBuild.isBlocked()) {
+                log.warn("[BLR] {}", LogKvs.event("Publish.Edit.Deferred")
+                        .add("historyId", history.getId())
+                        .add("roomId", history.getRoomId())
+                        .add("blockedPartCount", videosBuild.getBlockedPartCount())
+                        .addIfNotBlank("reason", reason)
+                        .addIfNotBlank("err", "unsafe_video_list"));
+                return false;
+            }
+            if (videosBuild.getVideos().isEmpty()) {
+                log.warn("[BLR] {}", LogKvs.event("Publish.Edit.Parts.Empty")
+                        .add("roomId", room.getRoomId())
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("reason", reason));
+                return false;
+            }
+            VideoEditUploadDto videoUploadDto = buildVideoEditUploadDto(history, room, aid, videosBuild.getVideos());
+            String editRes = BiliApi.editPublish(biliBiliUser, videoUploadDto);
+            JSONObject editRoot = parseJsonObject(editRes);
+            Integer code = editRoot == null ? null : editRoot.getInteger("code");
+            String message = editRoot == null ? null : editRoot.getString("message");
+            log.info("[BLR] {}", LogKvs.event("Publish.Edit.Response")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", history.getId())
+                    .add("aid", aid)
+                    .add("code", code)
+                    .addIfNotBlank("message", message)
+                    .add("videoCount", videoUploadDto.getVideos() == null ? 0 : videoUploadDto.getVideos().size())
+                    .add("respLen", editRes == null ? 0 : editRes.length())
+                    .addIfNotBlank("reason", reason)
+                    .addIfNotBlank("respSnippet", abbreviatePublishResponse(editRes, 320))
+                    .addStageCostMs("total", startNs));
+            if (code != null && code == 0) {
+                history.setPublish(true);
+                history.setPublishUserId(biliBiliUser.getId());
+                if (StringUtils.isBlank(history.getAvId())) {
+                    history.setAvId(String.valueOf(aid));
+                }
+                historyRepository.save(history);
+                return true;
+            }
+            return false;
+        } catch (PartUploadWaitTimeoutException e) {
+            log.info("[BLR] {}", LogKvs.event("Publish.Edit.Deferred")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .addIfNotBlank("reason", reason)
+                    .addIfNotBlank("err", e.getMessage())
+                    .addStageCostMs("total", startNs));
+            return false;
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("Publish.Edit.Error")
+                    .add("historyId", history.getId())
+                    .add("roomId", history.getRoomId())
+                    .addIfNotBlank("reason", reason)
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName())
+                    .addStageCostMs("total", startNs), e);
+            return false;
+        } finally {
+            TaskUtil.publishTask.remove(history.getId());
+        }
+    }
+
     public boolean publishRecordHistory(RecordHistory history) {
         if (suspendMap.containsKey(history.getId())) {
             if (suspendMap.get(history.getId()).isAfter(LocalDateTime.now())) {
@@ -384,6 +606,9 @@ public class RecordBiliPublishService {
             } else {
                 suspendMap.remove(history.getId());
             }
+        }
+        if (hasOnlineIdentity(history)) {
+            return editPublishedHistory(history, "publish-entry");
         }
         if (history.isPublish()) {
             log.warn("[BLR] {}", LogKvs.event("Publish.History.AlreadyPublished")
@@ -1310,6 +1535,293 @@ public class RecordBiliPublishService {
             TaskUtil.publishTask.remove(history.getId());
         }
         return true;
+    }
+
+    public static boolean hasOnlineIdentity(RecordHistory history) {
+        return history != null
+                && (StringUtils.isNotBlank(history.getAvId()) || StringUtils.isNotBlank(history.getBvId()));
+    }
+
+    private Long resolveOnlineAid(RecordHistory history, BiliVideoPartInfoResponse videoPartInfo) {
+        if (history != null && StringUtils.isNotBlank(history.getAvId())) {
+            try {
+                return Long.parseLong(history.getAvId().trim());
+            } catch (Exception ignore) {
+            }
+        }
+        if (videoPartInfo != null && videoPartInfo.getData() != null && videoPartInfo.getData().getVideos() != null) {
+            for (BiliVideoPartInfoResponse.Video video : videoPartInfo.getData().getVideos()) {
+                if (video != null && video.getAid() > 0) {
+                    return video.getAid();
+                }
+            }
+        }
+        return null;
+    }
+
+    private BiliVideoPartInfoResponse loadOnlinePartInfo(BiliBiliUser user, RecordHistory history) {
+        if (user == null || history == null || StringUtils.isBlank(history.getBvId())) {
+            return null;
+        }
+        try {
+            BiliVideoPartInfoResponse partInfo = BiliApi.getVideoPartInfo(user, history.getBvId());
+            if (partInfo == null || partInfo.getData() == null || partInfo.getData().getVideos() == null) {
+                log.warn("[BLR] {}", LogKvs.event("Publish.Edit.OnlinePartInfo.Empty")
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("bvid", history.getBvId())
+                        .add("code", partInfo == null ? null : partInfo.getCode())
+                        .addIfNotBlank("message", partInfo == null ? null : partInfo.getMessage()));
+            }
+            return partInfo;
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.Edit.OnlinePartInfo.Failed")
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            return null;
+        }
+    }
+
+    private Map<String, BiliVideoPartInfoResponse.Video> buildOnlineVideoTitleMap(BiliVideoPartInfoResponse partInfo) {
+        Map<String, BiliVideoPartInfoResponse.Video> result = new HashMap<>();
+        if (partInfo == null || partInfo.getData() == null || partInfo.getData().getVideos() == null) {
+            return result;
+        }
+        for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+            if (video == null) {
+                continue;
+            }
+            if (StringUtils.isNotBlank(video.getTitle())) {
+                result.putIfAbsent(video.getTitle(), video);
+            }
+            if (StringUtils.isNotBlank(video.getPart())) {
+                result.putIfAbsent(video.getPart(), video);
+            }
+        }
+        return result;
+    }
+
+    private Map<Integer, BiliVideoPartInfoResponse.Video> buildOnlineVideoPageMap(BiliVideoPartInfoResponse partInfo) {
+        Map<Integer, BiliVideoPartInfoResponse.Video> result = new HashMap<>();
+        if (partInfo == null || partInfo.getData() == null || partInfo.getData().getVideos() == null) {
+            return result;
+        }
+        for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+            if (video != null && video.getPage() > 0) {
+                result.putIfAbsent(video.getPage(), video);
+            }
+        }
+        return result;
+    }
+
+    private BiliVideoPartInfoResponse.Video resolveOnlineVideo(
+            RecordHistoryPart part,
+            Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle,
+            Map<Integer, BiliVideoPartInfoResponse.Video> onlineByPage) {
+        if (part == null) {
+            return null;
+        }
+        BiliVideoPartInfoResponse.Video video = null;
+        if (part.getPage() > 0 && onlineByPage != null) {
+            video = onlineByPage.get(part.getPage());
+        }
+        if (video == null && StringUtils.isNotBlank(part.getTitle()) && onlineByTitle != null) {
+            video = onlineByTitle.get(part.getTitle());
+        }
+        return video;
+    }
+
+    private boolean isOnlineVideoFailedForEdit(BiliVideoPartInfoResponse.Video video) {
+        if (video == null) {
+            return false;
+        }
+        return (video.getFailCode() == 9 && video.getXcodeState() == 3)
+                || (video.getFailCode() == 14 && video.getXcodeState() == 1)
+                || (video.getFailCode() == 0 && video.getXcodeState() == 2);
+    }
+
+    private boolean isOnlineVideoUsable(BiliVideoPartInfoResponse.Video video) {
+        return video != null
+                && !isOnlineVideoFailedForEdit(video)
+                && StringUtils.isNotBlank(video.getFilename());
+    }
+
+    private void syncPartFromOnlineVideo(RecordHistoryPart part, BiliVideoPartInfoResponse.Video onlineVideo) {
+        if (part == null || onlineVideo == null) {
+            return;
+        }
+        boolean changed = false;
+        if (StringUtils.isNotBlank(onlineVideo.getFilename()) && !Objects.equals(part.getFileName(), onlineVideo.getFilename())) {
+            part.setFileName(onlineVideo.getFilename());
+            changed = true;
+        }
+        if (onlineVideo.getCid() > 0 && (part.getCid() == null || part.getCid() <= 0 || !Objects.equals(part.getCid(), onlineVideo.getCid()))) {
+            part.setCid(onlineVideo.getCid());
+            changed = true;
+        }
+        if (!part.isUpload()) {
+            part.setUpload(true);
+            changed = true;
+        }
+        if (changed) {
+            partRepository.save(part);
+        }
+    }
+
+    private EditVideosBuildResult buildEditVideos(
+            RecordHistory history,
+            RecordRoom room,
+            List<RecordHistoryPart> uploadParts,
+            BiliVideoPartInfoResponse videoPartInfo,
+            Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle,
+            Map<Integer, BiliVideoPartInfoResponse.Video> onlineByPage) {
+        Map<String, Object> map = new HashMap<>();
+        LocalDateTime startTime = history.getStartTime();
+        map.put("date", startTime);
+        map.put("${uname}", StringUtils.defaultString(room.getUname()));
+        map.put("${title}", StringUtils.defaultIfBlank(history.getTitle(), "直播录像"));
+        map.put("${roomId}", room.getRoomId());
+        map.put("${areaName}", "");
+
+        List<SingleVideoDto> dtos = new ArrayList<>();
+        Map<String, SingleVideoDto> dtoByOnlineKey = new HashMap<>();
+        if (videoPartInfo != null && videoPartInfo.getData() != null && videoPartInfo.getData().getVideos() != null) {
+            List<BiliVideoPartInfoResponse.Video> onlineVideos = new ArrayList<>(videoPartInfo.getData().getVideos());
+            onlineVideos.sort(Comparator.comparingInt(BiliVideoPartInfoResponse.Video::getPage));
+            for (BiliVideoPartInfoResponse.Video onlineVideo : onlineVideos) {
+                if (!isOnlineVideoUsable(onlineVideo)) {
+                    continue;
+                }
+                SingleVideoDto dto = new SingleVideoDto();
+                dto.setTitle(StringUtils.defaultIfBlank(onlineVideo.getTitle(), onlineVideo.getPart()));
+                dto.setDesc("");
+                dto.setFilename(onlineVideo.getFilename());
+                if (onlineVideo.getCid() > 0) {
+                    dto.setCid(onlineVideo.getCid());
+                }
+                dtos.add(dto);
+                String key = onlineVideoKey(onlineVideo);
+                if (StringUtils.isNotBlank(key)) {
+                    dtoByOnlineKey.put(key, dto);
+                }
+            }
+        }
+        int blockedPartCount = 0;
+        for (int i = 0; i < uploadParts.size(); i++) {
+            RecordHistoryPart uploadPart = uploadParts.get(i);
+            SingleVideoDto dto = null;
+            String title = StringUtils.defaultIfBlank(uploadPart.getLiveTitle(), "直播录像");
+            map.put("${title}", title);
+            map.put("date", uploadPart.getStartTime());
+            map.put("${index}", Integer.valueOf(i + 1));
+            map.put("${areaName}", uploadPart.getAreaName());
+            String filePath = normalizeFilePath(uploadPart.getFilePath());
+            map.put("${fileName}", extractFileNameNoExt(filePath));
+            String partTitle = this.template(room.getPartTitleTemplate(), map).getDesc();
+            uploadPart.setTitle(partTitle);
+            BiliVideoPartInfoResponse.Video onlineVideo = resolveOnlineVideo(uploadPart, onlineByTitle, onlineByPage);
+            if (StringUtils.isBlank(uploadPart.getFileName()) && onlineVideo != null && StringUtils.isNotBlank(onlineVideo.getFilename())) {
+                uploadPart.setFileName(onlineVideo.getFilename());
+            }
+            if ((uploadPart.getCid() == null || uploadPart.getCid() <= 0) && onlineVideo != null && onlineVideo.getCid() > 0) {
+                uploadPart.setCid(onlineVideo.getCid());
+            }
+            uploadPart = partRepository.save(uploadPart);
+            String onlineKey = onlineVideoKey(onlineVideo);
+            if (StringUtils.isNotBlank(onlineKey)) {
+                dto = dtoByOnlineKey.get(onlineKey);
+            }
+            boolean hasUploadedLocalFile = uploadPart.isUpload() && StringUtils.isNotBlank(uploadPart.getFileName());
+            if (dto == null) {
+                if (!hasUploadedLocalFile) {
+                    blockedPartCount++;
+                    log.warn("[BLR] {}", LogKvs.event("Publish.Edit.VideoList.BlockedPart")
+                            .add("historyId", history.getId())
+                            .add("partId", uploadPart.getId())
+                            .add("upload", uploadPart.isUpload())
+                            .addIfNotBlank("fileName", uploadPart.getFileName())
+                            .addIfNotBlank("title", uploadPart.getTitle()));
+                    continue;
+                }
+                dto = new SingleVideoDto();
+                dtos.add(dto);
+            }
+            dto.setDesc("");
+            dto.setTitle(partTitle);
+            if (hasUploadedLocalFile) {
+                dto.setFilename(uploadPart.getFileName());
+            }
+            if (uploadPart.getCid() != null && uploadPart.getCid() > 0) {
+                dto.setCid(uploadPart.getCid());
+            }
+            if (StringUtils.isBlank(dto.getFilename())) {
+                blockedPartCount++;
+                log.warn("[BLR] {}", LogKvs.event("Publish.Edit.VideoList.BlockedPart")
+                        .add("historyId", history.getId())
+                        .add("partId", uploadPart.getId())
+                        .add("reason", "filename_missing_after_merge"));
+            }
+        }
+
+        return new EditVideosBuildResult(dtos, blockedPartCount);
+    }
+
+    private String onlineVideoKey(BiliVideoPartInfoResponse.Video video) {
+        if (video == null) {
+            return null;
+        }
+        if (video.getPage() > 0) {
+            return "page:" + video.getPage();
+        }
+        if (StringUtils.isNotBlank(video.getFilename())) {
+            return "filename:" + video.getFilename();
+        }
+        if (StringUtils.isNotBlank(video.getTitle())) {
+            return "title:" + video.getTitle();
+        }
+        if (StringUtils.isNotBlank(video.getPart())) {
+            return "title:" + video.getPart();
+        }
+        return null;
+    }
+
+    private VideoEditUploadDto buildVideoEditUploadDto(RecordHistory history, RecordRoom room, long aid, List<SingleVideoDto> videos) {
+        Map<String, Object> map = new HashMap<>();
+        LocalDateTime startTime = history.getStartTime();
+        map.put("date", startTime);
+        map.put("${uname}", StringUtils.defaultString(room.getUname()));
+        map.put("${title}", StringUtils.defaultIfBlank(history.getTitle(), "鐩存挱褰曞儚"));
+        map.put("${roomId}", room.getRoomId());
+        map.put("${areaName}", "");
+        VideoEditUploadDto videoUploadDto = new VideoEditUploadDto();
+        videoUploadDto.setTid(room.getTid());
+        videoUploadDto.setCover(history.getCoverUrl());
+        videoUploadDto.setCopyright(room.getCopyright());
+        videoUploadDto.setTitle(this.template(room.getTitleTemplate(), map).getDesc());
+        if (videoUploadDto.getCopyright() == 2) {
+            videoUploadDto.setSource(this.template(videoUploadDto.getSource(), map).getDesc());
+        }
+        videoUploadDto.setDesc(this.template(room.getDescTemplate(), map).getDesc());
+        videoUploadDto.setDesc_v2(this.template(room.getDescTemplate(), map).getDescV2Dtos());
+        videoUploadDto.setDynamic(this.template(room.getDescTemplate(), map).getDesc());
+        videoUploadDto.setDynamic_v2(this.template(room.getDescTemplate(), map).getDescV2Dtos());
+        videoUploadDto.setVideos(videos);
+        videoUploadDto.setTag(this.template(room.getTags(), map).getDesc());
+        videoUploadDto.setIs_only_self(room.getIsOnlySelf());
+        videoUploadDto.setAid(aid);
+        return videoUploadDto;
+    }
+
+    @Data
+    @AllArgsConstructor
+    private static class EditVideosBuildResult {
+        private List<SingleVideoDto> videos;
+        private int blockedPartCount;
+
+        boolean isBlocked() {
+            return blockedPartCount > 0;
+        }
     }
 
     private void uploadPartWithUserSerialBlocking(RecordRoom room, RecordHistoryPart part) {

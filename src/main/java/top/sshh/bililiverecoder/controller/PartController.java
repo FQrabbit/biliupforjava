@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.bili.Cookie;
@@ -62,6 +63,8 @@ public class PartController {
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
     @Autowired
+    private RecordBiliPublishService publishService;
+    @Autowired
     private ShutdownState shutdownState;
 
     @Lazy
@@ -89,6 +92,7 @@ public class PartController {
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(id);
         Optional<RecordHistory> histOpt = historyRepository.findById(id);
         boolean historyPublished = histOpt.isPresent() && histOpt.get().isPublish();
+        boolean historyEditableOnline = histOpt.isPresent() && RecordBiliPublishService.hasOnlineIdentity(histOpt.get());
         boolean historyRejected = histOpt.isPresent() && histOpt.get().isPublish() && histOpt.get().getCode() == -2;
         Map<String, Object> reviewDebug = new LinkedHashMap<>();
         reviewDebug.put("historyRejected", historyRejected);
@@ -215,11 +219,13 @@ public class PartController {
                         || "MANUAL_SKIP".equals(issueCode)
                         || "FILE_MISSING".equals(issueCode)
                         || p.getUploadRetryCount() >= 9999;
-                if (actionable && !historyPublished) {
+                if (actionable && (!historyPublished || historyEditableOnline)) {
                     actions.add("BIND_FILE");
-                    actions.add("MARK_FINISHED");
+                    if (!historyPublished) {
+                        actions.add("MARK_FINISHED");
+                    }
                 }
-            } else if (!historyPublished) {
+            } else if (!historyPublished || historyEditableOnline) {
                 String fp = p.getFilePath();
                 File f = fp == null ? null : new File(fp);
                 boolean fileExists = f != null && f.exists();
@@ -232,7 +238,9 @@ public class PartController {
                         actionable = true;
                         blockingIssue = true;
                         actions.add("RESCAN");
-                        actions.add("MARK_FINISHED");
+                        if (!historyPublished) {
+                            actions.add("MARK_FINISHED");
+                        }
                     }
                 } else if (!fileExists) {
                     issueCode = "FILE_MISSING";
@@ -240,7 +248,9 @@ public class PartController {
                     actionable = true;
                     blockingIssue = true;
                     actions.add("BIND_FILE");
-                    actions.add("MARK_FINISHED");
+                    if (!historyPublished) {
+                        actions.add("MARK_FINISHED");
+                    }
                 }
             }
 
@@ -379,8 +389,7 @@ public class PartController {
         RecordHistoryPart part = partOptional.get();
         // 已投稿稿件不允许修改分P状态
         if (part.getHistoryId() != null) {
-            Optional<RecordHistory> histOpt = historyRepository.findById(part.getHistoryId());
-            if (histOpt.isPresent() && histOpt.get().isPublish()) {
+            if (historyRepository.findById(part.getHistoryId()).map(RecordHistory::isPublish).orElse(false)) {
                 result.put("type", "warning");
                 result.put("msg", "该稿件已投稿，不允许修改分P状态");
                 return result;
@@ -431,12 +440,14 @@ public class PartController {
             return result;
         }
         RecordHistoryPart part = partOptional.get();
+        Optional<RecordHistory> historyOptional = part.getHistoryId() == null ? Optional.empty() : historyRepository.findById(part.getHistoryId());
         // 已投稿稿件不允许补全文件
         if (part.getHistoryId() != null) {
-            Optional<RecordHistory> histOpt = historyRepository.findById(part.getHistoryId());
-            if (histOpt.isPresent() && histOpt.get().isPublish()) {
+            if (historyOptional.isPresent()
+                    && historyOptional.get().isPublish()
+                    && !RecordBiliPublishService.hasOnlineIdentity(historyOptional.get())) {
                 result.put("type", "warning");
-                result.put("msg", "该稿件已投稿，不允许补全文件");
+                result.put("msg", "该稿件已投稿但缺少 avId/bvId，无法补全后编辑稿件");
                 return result;
             }
         }
@@ -477,12 +488,15 @@ public class PartController {
         partRepository.save(part);
 
         boolean triggered = false;
-        Optional<RecordHistory> historyOptional = part.getHistoryId() == null ? Optional.empty() : historyRepository.findById(part.getHistoryId());
         if (triggerUpload && !shutdownState.isShuttingDown() && historyOptional.isPresent() && historyOptional.get().isUpload()) {
             RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
             if (room != null) {
                 try {
-                    uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                    if (RecordBiliPublishService.hasOnlineIdentity(historyOptional.get())) {
+                        publishService.asyncPublishRecordHistory(historyOptional.get());
+                    } else {
+                        uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+                    }
                     triggered = true;
                 } catch (Exception e) {
                     log.error("[BLR] {}", LogKvs.event("PartRepair.BindFile.UploadTriggerFailed")

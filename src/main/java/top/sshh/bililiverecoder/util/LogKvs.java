@@ -191,6 +191,20 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.PartUpload.WaitTimeout", "投稿流程：等待队列中分P上传超时");
         EVENT_ZH.put("Publish.PartUpload.Deferred", "投稿流程：分P仍在上传，本轮投稿延后");
         EVENT_ZH.put("Publish.Republish.Response", "投稿：重新投稿响应");
+        EVENT_ZH.put("Publish.Edit.Start", "投稿编辑：开始编辑已投稿稿件");
+        EVENT_ZH.put("Publish.Edit.Response", "投稿编辑：编辑稿件接口响应");
+        EVENT_ZH.put("Publish.Edit.SkipNoAid", "投稿编辑：缺少 aid，跳过编辑");
+        EVENT_ZH.put("Publish.Edit.PartUpload", "投稿编辑：补上传分P");
+        EVENT_ZH.put("Publish.Edit.Deferred", "投稿编辑：分P仍在上传，延后编辑");
+        EVENT_ZH.put("Publish.Edit.Error", "投稿编辑：编辑流程异常");
+        EVENT_ZH.put("Publish.Edit.RoomMissing", "投稿编辑：房间配置不存在");
+        EVENT_ZH.put("Publish.Edit.Parts.Empty", "投稿编辑：可提交分P为空");
+        EVENT_ZH.put("Publish.Edit.PartGiveUpTimestampJump", "投稿编辑：时间戳跳变分P放弃重传");
+        EVENT_ZH.put("Publish.Edit.PartUpload.SkipNoFilePath", "投稿编辑：分P文件路径为空，跳过上传");
+        EVENT_ZH.put("Publish.Edit.PartUpload.SkipFileMissing", "投稿编辑：分P文件不存在，跳过上传");
+        EVENT_ZH.put("Publish.Edit.OnlinePartInfo.Empty", "投稿编辑：线上分P信息为空");
+        EVENT_ZH.put("Publish.Edit.OnlinePartInfo.Failed", "投稿编辑：获取线上分P信息失败");
+        EVENT_ZH.put("Publish.Edit.VideoList.BlockedPart", "投稿编辑：分P无法安全合并到编辑列表");
         EVENT_ZH.put("Publish.Task.SuspendedSkip", "投稿任务已暂停，跳过本次执行");
         EVENT_ZH.put("Publish.History.AlreadyPublished", "投稿历史已标记为发布，跳过");
         EVENT_ZH.put("Publish.Retry.GiveUp", "投稿重试次数过多，放弃");
@@ -601,6 +615,10 @@ public final class LogKvs {
         EVENT_ZH.put("PublishJob.PartCompensate.OrphanedPartMarked", "分P补偿：孤立分P已标记");
         EVENT_ZH.put("PublishJob.PartCompensate.InitialBackoff", "分P补偿：首次发现异常，等待下一轮确认");
         EVENT_ZH.put("PublishJob.PartCompensate.CompensateExhausted", "分P补偿：补偿次数已耗尽，放弃继续尝试");
+
+        EVENT_ZH.put("PublishJob.PartCompensate.EditPublishedPart", "分P补偿：已投稿稿件转入编辑补分P流程");
+        EVENT_ZH.put("PublishJob.PartCompensate.EditPublishedTriggered", "分P补偿：已触发已投稿稿件编辑流程");
+        EVENT_ZH.put("PublishJob.PartCompensate.EditPublishedTriggerFailed", "分P补偿：触发已投稿稿件编辑流程失败");
 
         // 普通上传 multipart 流程
         EVENT_ZH.put("Upload.Multipart.ConfigReadFailed", "分片上传：读取 multipart 配置失败");

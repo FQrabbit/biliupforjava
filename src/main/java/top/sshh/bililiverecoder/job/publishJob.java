@@ -27,10 +27,13 @@ import java.io.File;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 
 @Slf4j
@@ -379,6 +382,19 @@ public class publishJob {
                 log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.CleanOrphanedParts")
                         .add("count", orphanedParts.size()));
                 for (RecordHistoryPart orphan : orphanedParts) {
+                    if (orphan.getHistoryId() != null) {
+                        Optional<RecordHistory> historyOptional = historyRepository.findById(orphan.getHistoryId());
+                        if (historyOptional.isPresent() && RecordBiliPublishService.hasOnlineIdentity(historyOptional.get())) {
+                            RecordHistory history = historyOptional.get();
+                            uploadFailureMap.remove(orphan.getId());
+                            log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.EditPublishedPart")
+                                    .add("partId", orphan.getId())
+                                    .add("historyId", orphan.getHistoryId())
+                                    .add("roomId", history.getRoomId())
+                                    .add("filePath", orphan.getFilePath()));
+                            continue;
+                        }
+                    }
                     orphan.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
                     orphan.setDeleteFailReason("所属稿件已投稿，不再补偿上传");
                     orphan.setDeleteFailType("HISTORY_ALREADY_PUBLISHED");
@@ -400,9 +416,10 @@ public class publishJob {
         }
 
         List<RecordRoom> roomList = roomRepository.findByUpload(true);
-    roomCount = roomList.size();
+        roomCount = roomList.size();
         LocalDateTime now = LocalDateTime.now();
         Map<Long, Integer> userTriggeredCount = new HashMap<>();
+        Set<Long> editHistoryTriggered = new HashSet<>();
         
         for (RecordRoom room : roomList) {
             if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
@@ -421,9 +438,15 @@ public class publishJob {
             }
             List<RecordHistoryPart> pendingParts = partRepository.findPendingUploadPartsWithHistoryUploadEnabled(
                 room.getRoomId(), now.minusMonths(1L), now.minusMinutes(5L), PageRequest.of(0, roomQuota));
+            List<RecordHistoryPart> publishedPendingParts = partRepository.findPendingUploadPartsOfPublishedHistories(
+                room.getRoomId(), now.minusMonths(1L), now.minusMinutes(5L), PageRequest.of(0, roomQuota));
+            List<RecordHistoryPart> compensateParts = new ArrayList<>(pendingParts.size() + publishedPendingParts.size());
+            compensateParts.addAll(pendingParts);
+            compensateParts.addAll(publishedPendingParts);
+            compensateParts.sort(Comparator.comparing(RecordHistoryPart::getEndTime, Comparator.nullsLast(Comparator.naturalOrder())));
 
             int triggeredCount = 0;
-            for (RecordHistoryPart part : pendingParts) {
+            for (RecordHistoryPart part : compensateParts) {
                 if (roundTriggeredCount >= Math.max(1, compensateMaxTriggerPerRound)) {
                     log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipByRoundQuota")
                             .add("roomId", room.getRoomId())
@@ -442,7 +465,7 @@ public class publishJob {
                             .add("uploadUserId", uploadUserId)
                             .add("userTriggered", userTriggered)
                             .add("userQuota", Math.max(1, compensateMaxTriggerPerUserPerRound))
-                            .add("remainingParts", pendingParts.size() - triggeredCount));
+                            .add("remainingParts", compensateParts.size() - triggeredCount));
                     break;
                 }
                 if (isAsyncPoolBusy()) {
@@ -623,6 +646,31 @@ public class publishJob {
                         .add("partId", part.getId())
                         .add("filePath", filePath));
                 try {
+                    Optional<RecordHistory> historyOptional = part.getHistoryId() == null
+                            ? Optional.empty()
+                            : historyRepository.findById(part.getHistoryId());
+                    if (historyOptional.isPresent() && RecordBiliPublishService.hasOnlineIdentity(historyOptional.get())) {
+                        RecordHistory history = historyOptional.get();
+                        if (!editHistoryTriggered.add(history.getId())) {
+                            log.debug("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.AlreadyQueued")
+                                    .add("roomId", room.getRoomId())
+                                    .add("uname", room.getUname())
+                                    .add("partId", part.getId())
+                                    .add("historyId", part.getHistoryId())
+                                    .add("filePath", filePath));
+                            continue;
+                        }
+                        publishService.asyncPublishRecordHistory(history);
+                        log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.EditPublishedTriggered")
+                                .add("historyId", history.getId())
+                                .add("roomId", history.getRoomId())
+                                .addIfNotBlank("bvid", history.getBvId())
+                                .addIfNotBlank("aid", history.getAvId()));
+                        triggeredCount++;
+                        roundTriggeredCount++;
+                        userTriggeredCount.put(uploadUserId, userTriggered + 1);
+                        continue;
+                    }
                     boolean accepted = uploadServiceFactory.getUploadService(room.getLine()).asyncUploadIfNeeded(part);
                     if (!accepted) {
                         log.debug("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.DuplicateRejected")
@@ -709,7 +757,7 @@ public class publishJob {
                         .add("roomId", room.getRoomId())
                         .add("uname", room.getUname())
                         .add("triggered", triggeredCount)
-                        .add("pending", pendingParts.size()));
+                        .add("pending", compensateParts.size()));
             }
         }
             } finally {

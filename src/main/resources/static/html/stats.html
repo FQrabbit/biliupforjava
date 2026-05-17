@@ -1111,6 +1111,18 @@ new Vue({
                     }
                 });
         },
+        recoverMaintenanceStatus: function () {
+            var self = this;
+            $.getJSON('/stats/maintenance/status')
+                .done(function (status) {
+                    if (!self.shouldShowMaintenanceStatus(status)) {
+                        return;
+                    }
+                    if (self.applyMaintenanceStatus(status, true)) {
+                        self.pollMaintenanceStatus(true);
+                    }
+                });
+        },
         applyStatsTaskStatus: function (status, expectedTask, recovering) {
             if (!status || status.task === 'idle') {
                 return false;
@@ -1214,7 +1226,7 @@ new Vue({
                 });
             }).catch(function () {});
         },
-        pollMaintenanceStatus: function () {
+        pollMaintenanceStatus: function (silentRecovering) {
             var self = this;
             if (this.maintenancePoller) {
                 clearInterval(this.maintenancePoller);
@@ -1222,23 +1234,12 @@ new Vue({
             var check = function () {
                 $.getJSON('/stats/maintenance/status')
                     .done(function (status) {
-                        if (status) {
-                            var detail = '待回放 ' + (status.spoolPendingFiles || 0) + ' 个，已回放 ' + (status.replayed || 0) + ' 个，失败 ' + (status.failed || 0) + ' 个';
-                            self.updateOperationProgress(status.progress || 0, status.phaseLabel || status.message || '数据库维护中', detail);
-                        }
-                        if (!status || (!status.running && !status.maintenance)) {
+                        var keepPolling = self.applyMaintenanceStatus(status, !!silentRecovering);
+                        if (!keepPolling) {
                             clearInterval(self.maintenancePoller);
                             self.maintenancePoller = null;
-                            self.compacting = false;
-                            if (status && status.phase === 'DONE') {
-                                self.$message.success('数据库压缩完成，已回放 webhook：' + (status.replayed || 0) + ' 个');
-                                self.finishOperationProgress('数据库压缩完成', '已回放 webhook：' + (status.replayed || 0) + ' 个，失败 ' + (status.failed || 0) + ' 个');
-                            } else if (status && status.phase === 'FAILED') {
-                                self.$message.error(status.message || '数据库压缩失败');
-                                self.failOperationProgress(status.message || '数据库压缩失败');
-                            }
-                            self.reload();
                         }
+                        silentRecovering = false;
                     })
                     .fail(function () {
                         clearInterval(self.maintenancePoller);
@@ -1250,6 +1251,85 @@ new Vue({
             };
             check();
             this.maintenancePoller = setInterval(check, 2000);
+        },
+        shouldShowMaintenanceStatus: function (status) {
+            if (!status || status.phase === 'IDLE') {
+                return false;
+            }
+            if (status.running || status.maintenance) {
+                return true;
+            }
+            if (status.phase !== 'DONE' && status.phase !== 'FAILED') {
+                return false;
+            }
+            var finishedAt = this.maintenanceTimeMillis(status.finishedAt);
+            return finishedAt > 0 && Date.now() - finishedAt < 10 * 60 * 1000;
+        },
+        applyMaintenanceStatus: function (status, recovering) {
+            if (!status || !this.shouldShowMaintenanceStatus(status)) {
+                this.compacting = false;
+                return false;
+            }
+            this.compacting = !!(status.running || status.maintenance);
+            this.operationProgress.title = '压缩数据库';
+            var detail = this.maintenanceProgressDetail(status);
+            this.updateOperationProgress(status.progress || 0, status.phaseLabel || status.message || '数据库维护中', detail);
+            if (status.running || status.maintenance) {
+                this.operationProgress.status = 'active';
+                return true;
+            }
+            if (status.phase === 'DONE') {
+                var doneMessage = '数据库压缩完成';
+                if (!recovering) {
+                    this.$message.success(doneMessage + '，已回放 webhook：' + (status.replayed || 0) + ' 个');
+                }
+                this.finishOperationProgress(doneMessage, detail, recovering);
+                if (!recovering) {
+                    this.reload();
+                }
+            } else if (status.phase === 'FAILED') {
+                var failedMessage = status.message || '数据库压缩失败';
+                if (!recovering) {
+                    this.$message.error(failedMessage);
+                }
+                this.failOperationProgress(failedMessage, detail);
+                if (!recovering) {
+                    this.reload();
+                }
+            }
+            this.compacting = false;
+            return false;
+        },
+        maintenanceProgressDetail: function (status) {
+            var parts = [];
+            if (status.startedAt) {
+                var startedAt = this.maintenanceTimeMillis(status.startedAt);
+                if (startedAt > 0) {
+                    var elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+                    parts.push('已耗时 ' + this.durationText(elapsed));
+                }
+            }
+            parts.push('待回放 ' + (status.spoolPendingFiles || 0) + ' 个');
+            parts.push('已回放 ' + (status.replayed || 0) + ' 个');
+            parts.push('失败 ' + (status.failed || 0) + ' 个');
+            if (status.backupPath) {
+                parts.push('备份已生成');
+            }
+            return parts.join('，');
+        },
+        maintenanceTimeMillis: function (value) {
+            if (!value) {
+                return 0;
+            }
+            if (Array.isArray(value) && value.length >= 5) {
+                return new Date(value[0], value[1] - 1, value[2], value[3] || 0, value[4] || 0, value[5] || 0).getTime();
+            }
+            var text = String(value);
+            var millis = Date.parse(text);
+            if (isNaN(millis) && text.indexOf('T') > -1) {
+                millis = Date.parse(text.replace('T', ' '));
+            }
+            return isNaN(millis) ? 0 : millis;
         },
         queryString: function () {
             if (!this.dateRange || this.dateRange.length !== 2) {
@@ -1706,6 +1786,7 @@ new Vue({
     mounted: function () {
         var self = this;
         this.recoverStatsTaskStatus();
+        this.recoverMaintenanceStatus();
         window.addEventListener('resize', function () {
             Object.keys(self.charts).forEach(function (key) {
                 if (self.charts[key]) {
