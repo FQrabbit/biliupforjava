@@ -17,6 +17,8 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -231,6 +233,16 @@ public class videoSyncJob {
         }
         BiliVideoInfoResponse.BiliVideoInfo videoInfoResponseData = videoInfoResponse.getData();
         // 更新状态
+        if (shouldKeepPendingReviewAfterRecentEdit(next, videoInfoResponseData.getState())) {
+            log.info("[BLR] {}", LogKvs.event("VideoSync.KeepPendingAfterRecentEdit")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", next.getId())
+                    .addIfNotBlank("bvid", next.getBvId())
+                    .add("apiState", videoInfoResponseData.getState())
+                    .add("localCode", next.getCode()));
+            return;
+        }
         next.setCode(videoInfoResponseData.getState());
         next.setAvId(videoInfoResponseData.getAid());
         next.setBvId(videoInfoResponseData.getBvid());
@@ -404,5 +416,12 @@ public class videoSyncJob {
                 }
             }
         }
+    }
+
+    private boolean shouldKeepPendingReviewAfterRecentEdit(RecordHistory history, int apiState) {
+        if (history == null || history.getCode() != -1 || apiState != -2 || history.getUpdateTime() == null) {
+            return false;
+        }
+        return Duration.between(history.getUpdateTime(), LocalDateTime.now()).toMinutes() < 120;
     }
 }

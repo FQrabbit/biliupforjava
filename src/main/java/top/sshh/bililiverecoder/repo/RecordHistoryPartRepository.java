@@ -121,6 +121,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and p.upload = false
                     and p.uploadRetryCount < 9999
           and p.endTime between :startTime and :endTime
+          and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
@@ -139,6 +140,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and p.upload = false
           and p.uploadRetryCount < 9999
           and p.endTime between :startTime and :endTime
+          and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
@@ -171,6 +173,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         select p from RecordHistoryPart p
         where p.upload = false
           and p.uploadRetryCount < 9999
+          and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
@@ -188,6 +191,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
               where h.id = p.historyId
                 and (h.publish = true or (h.bvId is not null and trim(h.bvId) <> ''))
           )
+          and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
         order by p.endTime asc
         """)
     List<RecordHistoryPart> findOrphanedPartsOfPublishedHistories(Pageable pageable);

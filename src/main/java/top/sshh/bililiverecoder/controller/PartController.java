@@ -82,14 +82,14 @@ public class PartController {
 
     @PostMapping("/list/{id}")
     public List<RecordHistoryPart> list(@PathVariable("id") Long id) {
-        return partRepository.findByHistoryIdOrderByStartTimeAsc(id);
+        return filterVisibleParts(partRepository.findByHistoryIdOrderByStartTimeAsc(id));
     }
 
     @PostMapping("/list2/{id}")
     public Map<String, Object> list2(@PathVariable("id") Long id, @RequestBody(required = false) Map<String, Object> request) {
         Map<String, Object> resp = new LinkedHashMap<>();
         boolean forceRefreshReview = parseBooleanFlag(request == null ? null : request.get("forceRefreshReview"));
-        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(id);
+        List<RecordHistoryPart> parts = filterVisibleParts(partRepository.findByHistoryIdOrderByStartTimeAsc(id));
         Optional<RecordHistory> histOpt = historyRepository.findById(id);
         boolean historyPublished = histOpt.isPresent() && histOpt.get().isPublish();
         boolean historyEditableOnline = histOpt.isPresent() && RecordBiliPublishService.hasOnlineIdentity(histOpt.get());
@@ -293,6 +293,23 @@ public class PartController {
         resp.put("problemDetail", reviewProblemDetails);
         resp.put("reviewDebug", reviewDebug);
         return resp;
+    }
+
+    private List<RecordHistoryPart> filterVisibleParts(List<RecordHistoryPart> parts) {
+        List<RecordHistoryPart> visible = new ArrayList<>();
+        if (parts == null) {
+            return visible;
+        }
+        for (RecordHistoryPart part : parts) {
+            if (part == null) {
+                continue;
+            }
+            if ("EDIT_PART".equals(part.getSourceType())) {
+                continue;
+            }
+            visible.add(part);
+        }
+        return visible;
     }
 
     @PostMapping("/rescan/{id}")
@@ -620,14 +637,29 @@ public class PartController {
                             problemDetails.add(fallback);
                         }
                         if (problemDetails.isEmpty()) {
-                            log.warn("[BLR] {}", LogKvs.event("Part.ReviewInfo.AuditDetail.Unexpected")
-                                    .add("historyId", historyId)
-                                    .add("forceRefresh", forceRefresh)
-                                    .add("bvid", bvId)
-                                    .add("userId", reviewAuthUser.getId())
-                                    .add("respCode", auditDetail == null ? null : auditDetail.getCode())
-                                    .add("respMsg", auditDetail == null ? "null-response" : auditDetail.getMessage())
-                                    .add("hasData", auditDetail != null && auditDetail.getData() != null));
+                            boolean auditDetailLoadedWithoutProblems = auditDetail != null
+                                    && auditDetail.getCode() == 0
+                                    && auditDetail.getData() != null;
+                            if (auditDetailLoadedWithoutProblems) {
+                                log.info("[BLR] {}", LogKvs.event("Part.ReviewInfo.AuditDetail.Empty")
+                                        .add("historyId", historyId)
+                                        .add("forceRefresh", forceRefresh)
+                                        .add("bvid", bvId)
+                                        .add("userId", reviewAuthUser.getId())
+                                        .add("respCode", auditDetail.getCode())
+                                        .add("respMsg", auditDetail.getMessage())
+                                        .add("state", auditDetail.getData().getState())
+                                        .add("hasData", true));
+                            } else {
+                                log.warn("[BLR] {}", LogKvs.event("Part.ReviewInfo.AuditDetail.Unexpected")
+                                        .add("historyId", historyId)
+                                        .add("forceRefresh", forceRefresh)
+                                        .add("bvid", bvId)
+                                        .add("userId", reviewAuthUser.getId())
+                                        .add("respCode", auditDetail == null ? null : auditDetail.getCode())
+                                        .add("respMsg", auditDetail == null ? "null-response" : auditDetail.getMessage())
+                                        .add("hasData", auditDetail != null && auditDetail.getData() != null));
+                            }
                         }
                     } catch (Exception e) {
                         log.debug("[BLR] {}", LogKvs.event("Part.ReviewInfo.AuditDetail.LoadFailed")

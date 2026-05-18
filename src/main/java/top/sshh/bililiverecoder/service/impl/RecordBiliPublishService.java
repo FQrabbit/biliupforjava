@@ -12,10 +12,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
+import top.sshh.bililiverecoder.job.videoSyncJob;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
@@ -31,9 +34,12 @@ import top.sshh.bililiverecoder.util.bili.user.UserMyRootBean;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -42,6 +48,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -56,8 +63,10 @@ public class RecordBiliPublishService {
     private String serverPort;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, LocalDateTime> suspendMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Long, EditPartsTaskStatus> editPartsTaskMap = new ConcurrentHashMap<>();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
+    private static final long EDIT_TEMP_TTL_MS = 24L * 60L * 60L * 1000L;
 
     private static final String WX_MSG_FORMAT = """
             投稿结果: %s
@@ -75,6 +84,7 @@ public class RecordBiliPublishService {
     public void initWorkPath() {
         workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
         workPath = workPath.replace("\\", "/");
+        cleanupExpiredEditPartTempFiles();
     }
 
     @Autowired
@@ -99,6 +109,8 @@ public class RecordBiliPublishService {
     private CaptchaService captchaService;
     @Autowired
     private ShutdownState shutdownState;
+    @Autowired
+    private videoSyncJob videoSyncJob;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -376,6 +388,567 @@ public class RecordBiliPublishService {
 
     }
 
+    public Map<String, Object> buildEditPartsDraft(Long historyId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            result.put("canEdit", false);
+            result.put("message", "稿件不存在");
+            result.put("items", List.of());
+            return result;
+        }
+        RecordHistory history = historyOptional.get();
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        EditAuthContext auth = resolveEditAuth(history, room);
+        result.put("canEdit", auth.canEdit);
+        result.put("message", auth.message);
+        result.put("historyId", history.getId());
+        result.put("avId", history.getAvId());
+        result.put("bvId", history.getBvId());
+        if (!auth.canEdit || auth.user == null) {
+            result.put("items", List.of());
+            return result;
+        }
+        BiliVideoPartInfoResponse partInfo = loadOnlinePartInfo(auth.user, history);
+        List<BiliVideoPartInfoResponse.Video> onlineVideos = new ArrayList<>();
+        if (partInfo != null && partInfo.getData() != null && partInfo.getData().getVideos() != null) {
+            onlineVideos.addAll(partInfo.getData().getVideos());
+        }
+        onlineVideos.sort(Comparator.comparingInt(BiliVideoPartInfoResponse.Video::getPage));
+        List<RecordHistoryPart> localParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        Map<Integer, RecordHistoryPart> localByPage = localParts.stream()
+                .filter(p -> p.getPage() > 0)
+                .collect(Collectors.toMap(RecordHistoryPart::getPage, Function.identity(), (a, b) -> a));
+        Map<String, RecordHistoryPart> localByTitle = new HashMap<>();
+        for (RecordHistoryPart part : localParts) {
+            if (StringUtils.isNotBlank(part.getTitle())) {
+                localByTitle.putIfAbsent(part.getTitle(), part);
+            }
+        }
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (BiliVideoPartInfoResponse.Video video : onlineVideos) {
+            if (video == null) {
+                continue;
+            }
+            RecordHistoryPart local = localByPage.get(video.getPage());
+            if (local == null && StringUtils.isNotBlank(video.getTitle())) {
+                local = localByTitle.get(video.getTitle());
+            }
+            if (local == null && StringUtils.isNotBlank(video.getPart())) {
+                local = localByTitle.get(video.getPart());
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("onlinePage", video.getPage());
+            item.put("page", video.getPage());
+            item.put("title", StringUtils.defaultIfBlank(video.getTitle(), StringUtils.defaultIfBlank(video.getPart(), local == null ? "" : local.getTitle())));
+            item.put("part", video.getPart());
+            item.put("filename", video.getFilename());
+            item.put("cid", video.getCid());
+            item.put("duration", video.getDuration());
+            item.put("aid", video.getAid());
+            item.put("bvid", video.getBvid());
+            item.put("partId", local == null ? null : local.getId());
+            item.put("filePath", local == null ? null : local.getFilePath());
+            item.put("fileSize", local == null ? 0 : local.getFileSize());
+            item.put("source", "online");
+            items.add(item);
+        }
+        result.put("items", items);
+        result.put("onlineCount", items.size());
+        result.put("code", partInfo == null ? null : partInfo.getCode());
+        result.put("apiMessage", partInfo == null ? null : partInfo.getMessage());
+        return result;
+    }
+
+    public Map<String, Object> saveEditPartTempFile(Long historyId, String sessionId, MultipartFile file) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (file == null || file.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "文件为空");
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "稿件不存在");
+            return result;
+        }
+        String safeSession = safePathSegment(StringUtils.defaultIfBlank(sessionId, UUID.randomUUID().toString()));
+        String safeName = safeFileName(StringUtils.defaultIfBlank(file.getOriginalFilename(), "upload.mp4"));
+        Path dir = Paths.get(workPath, "_edit_uploads", String.valueOf(historyId), safeSession).normalize();
+        try {
+            Files.createDirectories(dir);
+            Path target = dir.resolve(System.currentTimeMillis() + "-" + safeName).normalize();
+            if (!target.startsWith(Paths.get(workPath).normalize())) {
+                result.put("success", false);
+                result.put("message", "文件路径非法");
+                return result;
+            }
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+            result.put("success", true);
+            result.put("sessionId", safeSession);
+            result.put("fileRef", target.toString());
+            result.put("filePath", target.toString());
+            result.put("name", safeName);
+            result.put("size", Files.size(target));
+            return result;
+        } catch (IOException e) {
+            log.warn("[BLR] {}", LogKvs.event("Publish.EditParts.TempUploadFailed")
+                    .add("historyId", historyId)
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            result.put("success", false);
+            result.put("message", e.getMessage());
+            return result;
+        }
+    }
+
+    public Map<String, Object> saveEditPartTempFileChunk(Long historyId,
+                                                         String sessionId,
+                                                         String uploadId,
+                                                         String fileName,
+                                                         int chunkIndex,
+                                                         int totalChunks,
+                                                         long totalSize,
+                                                         MultipartFile chunk) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (chunk == null || chunk.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "分片文件为空");
+            return result;
+        }
+        if (chunkIndex < 0 || totalChunks <= 0 || chunkIndex >= totalChunks) {
+            result.put("success", false);
+            result.put("message", "分片序号非法");
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "稿件不存在");
+            return result;
+        }
+        String safeSession = safePathSegment(StringUtils.defaultIfBlank(sessionId, UUID.randomUUID().toString()));
+        String safeUploadId = safePathSegment(StringUtils.defaultIfBlank(uploadId, UUID.randomUUID().toString()));
+        String safeName = safeFileName(StringUtils.defaultIfBlank(fileName, "upload.mp4"));
+        Path workRoot = Paths.get(workPath).normalize();
+        Path dir = Paths.get(workPath, "_edit_uploads", String.valueOf(historyId), safeSession).normalize();
+        try {
+            Files.createDirectories(dir);
+            Path target = dir.resolve(safeUploadId + "-" + safeName).normalize();
+            if (!target.startsWith(workRoot)) {
+                result.put("success", false);
+                result.put("message", "文件路径非法");
+                return result;
+            }
+            if (chunkIndex == 0) {
+                Files.deleteIfExists(target);
+                Files.createFile(target);
+            } else if (!Files.exists(target)) {
+                result.put("success", false);
+                result.put("message", "上传会话已失效，请重新选择文件");
+                return result;
+            }
+            try (var in = chunk.getInputStream();
+                 var out = Files.newOutputStream(target, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+                in.transferTo(out);
+            }
+            long currentSize = Files.size(target);
+            boolean complete = chunkIndex + 1 >= totalChunks;
+            if (complete && totalSize > 0 && currentSize != totalSize) {
+                Files.deleteIfExists(target);
+                result.put("success", false);
+                result.put("message", "上传文件大小校验失败，请重新上传");
+                return result;
+            }
+            result.put("success", true);
+            result.put("complete", complete);
+            result.put("sessionId", safeSession);
+            result.put("uploadId", safeUploadId);
+            result.put("chunkIndex", chunkIndex);
+            result.put("totalChunks", totalChunks);
+            result.put("uploadedSize", currentSize);
+            result.put("name", safeName);
+            result.put("size", complete ? currentSize : totalSize);
+            if (complete) {
+                result.put("fileRef", target.toString());
+                result.put("filePath", target.toString());
+            }
+            return result;
+        } catch (IOException e) {
+            if (e instanceof java.nio.file.NoSuchFileException) {
+                result.put("success", false);
+                result.put("message", "上传已取消");
+                result.put("cancelled", true);
+                return result;
+            }
+            log.warn("[BLR] {}", LogKvs.event("Publish.EditParts.TempUploadFailed")
+                    .add("historyId", historyId)
+                    .add("chunkIndex", chunkIndex)
+                    .add("totalChunks", totalChunks)
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            result.put("success", false);
+            result.put("message", e.getMessage());
+            return result;
+        }
+    }
+
+    public Map<String, Object> cancelEditPartTempUpload(Long historyId, String sessionId, String uploadId, String fileName) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String safeSession = safePathSegment(StringUtils.defaultIfBlank(sessionId, ""));
+        String safeUploadId = safePathSegment(StringUtils.defaultIfBlank(uploadId, ""));
+        String safeName = safeFileName(StringUtils.defaultIfBlank(fileName, "upload.mp4"));
+        if (StringUtils.isBlank(safeSession) || StringUtils.isBlank(safeUploadId)) {
+            result.put("success", false);
+            result.put("message", "上传会话无效");
+            return result;
+        }
+        try {
+            Path workRoot = Paths.get(workPath).normalize();
+            Path target = Paths.get(workPath, "_edit_uploads", String.valueOf(historyId), safeSession, safeUploadId + "-" + safeName).normalize();
+            if (!target.startsWith(workRoot)) {
+                result.put("success", false);
+                result.put("message", "文件路径非法");
+                return result;
+            }
+            boolean deleted = Files.deleteIfExists(target);
+            result.put("success", true);
+            result.put("deleted", deleted);
+            return result;
+        } catch (IOException e) {
+            result.put("success", false);
+            result.put("message", e.getMessage());
+            return result;
+        }
+    }
+
+    public Map<String, Object> submitEditParts(Long historyId, Map<String, Object> request) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        EditPartsTaskStatus running = editPartsTaskMap.get(historyId);
+        if (running != null && ("RUNNING".equals(running.status) || "QUEUED".equals(running.status))) {
+            result.put("accepted", false);
+            result.put("message", "已有分P编辑任务正在执行");
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            result.put("accepted", false);
+            result.put("message", "稿件不存在");
+            return result;
+        }
+        EditPartsTaskStatus status = new EditPartsTaskStatus();
+        status.status = "QUEUED";
+        status.message = "等待处理";
+        status.historyId = historyId;
+        status.startTime = LocalDateTime.now();
+        status.sessionId = request == null ? null : stringValue(request.get("sessionId"));
+        markHistoryWorkingForEdit(historyOptional.get(), status);
+        editPartsTaskMap.put(historyId, status);
+        Thread worker = new Thread(() -> runEditPartsSubmit(historyId, request, status), "edit-parts-" + historyId);
+        worker.setDaemon(true);
+        worker.start();
+        result.put("accepted", true);
+        result.put("status", status.status);
+        result.put("historyCode", -1);
+        return result;
+    }
+
+    public Map<String, Object> getEditPartsTask(Long historyId) {
+        EditPartsTaskStatus status = editPartsTaskMap.get(historyId);
+        if (status == null) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("status", "NONE");
+            return empty;
+        }
+        return status.toMap();
+    }
+
+    public Map<String, Object> cleanupEditPartTempFiles(Long historyId, String sessionId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        EditPartsTaskStatus running = editPartsTaskMap.get(historyId);
+        if (running != null
+                && StringUtils.isNotBlank(sessionId)
+                && sessionId.equals(running.sessionId)
+                && ("RUNNING".equals(running.status) || "QUEUED".equals(running.status))) {
+            result.put("deleted", false);
+            result.put("skipped", true);
+            result.put("message", "edit task is using this temp session");
+            return result;
+        }
+        Path path = StringUtils.isBlank(sessionId)
+                ? Paths.get(workPath, "_edit_uploads", String.valueOf(historyId)).normalize()
+                : Paths.get(workPath, "_edit_uploads", String.valueOf(historyId), safePathSegment(sessionId)).normalize();
+        result.put("deleted", deleteDirectoryQuietly(path));
+        return result;
+    }
+
+    public Map<String, Object> restoreEditPartsOnlineState(Long historyId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        EditPartsTaskStatus running = editPartsTaskMap.get(historyId);
+        if (running != null && ("RUNNING".equals(running.status) || "QUEUED".equals(running.status))) {
+            result.put("success", false);
+            result.put("message", "分P编辑任务仍在执行，请完成后再恢复线上状态");
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "稿件不存在");
+            return result;
+        }
+        RecordHistory history = historyOptional.get();
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        EditAuthContext auth = resolveEditAuth(history, room);
+        if (!auth.canEdit || auth.user == null) {
+            result.put("success", false);
+            result.put("message", auth.message);
+            return result;
+        }
+        BiliVideoPartInfoResponse partInfo = loadOnlinePartInfo(auth.user, history);
+        if (partInfo == null || partInfo.getData() == null || partInfo.getData().getVideos() == null
+                || partInfo.getData().getVideos().isEmpty()) {
+            result.put("success", false);
+            result.put("message", "未读取到线上分P列表");
+            return result;
+        }
+
+        List<BiliVideoPartInfoResponse.Video> onlineVideos = new ArrayList<>(partInfo.getData().getVideos());
+        onlineVideos.sort(Comparator.comparingInt(BiliVideoPartInfoResponse.Video::getPage));
+        List<RecordHistoryPart> localParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        Set<Long> touchedPartIds = new HashSet<>();
+        int restored = 0;
+        int created = 0;
+        int deletedTemp = 0;
+        int deletedPolluted = 0;
+
+        for (BiliVideoPartInfoResponse.Video video : onlineVideos) {
+            if (video == null || StringUtils.isBlank(video.getFilename())) {
+                continue;
+            }
+            RecordHistoryPart part = findLocalPartForOnlineRestore(localParts, video, touchedPartIds);
+            if (part == null) {
+                part = new RecordHistoryPart();
+                part.setHistoryId(history.getId());
+                part.setRoomId(history.getRoomId());
+                part.setStartTime(history.getStartTime());
+                part.setEndTime(history.getEndTime());
+                part.setRecording(false);
+                part.setSourceType("ONLINE_PART");
+                created++;
+            }
+            part.setPage(video.getPage());
+            part.setTitle(StringUtils.defaultIfBlank(video.getTitle(), StringUtils.defaultIfBlank(video.getPart(), part.getTitle())));
+            part.setFileName(video.getFilename());
+            if (video.getCid() > 0) {
+                part.setCid(video.getCid());
+            }
+            part.setUpload(true);
+            part.setUploadRetryCount(0);
+            part.setDeleteFailType(null);
+            part.setDeleteFailReason(null);
+            part.setUploadFlowFallback(false);
+            part.setUploadFlowFallbackReason(null);
+            part.setRecording(false);
+            if (isEditTempPath(part.getFilePath()) && !new File(part.getFilePath()).exists()) {
+                part.setFilePath(null);
+            }
+            part = partRepository.save(part);
+            touchedPartIds.add(part.getId());
+            restored++;
+        }
+
+        for (RecordHistoryPart part : localParts) {
+            if (part == null || part.getId() == null || touchedPartIds.contains(part.getId())) {
+                continue;
+            }
+            if ("EDIT_PART".equals(part.getSourceType())) {
+                partRepository.delete(part);
+                deletedTemp++;
+            } else if ("ONLINE_PART".equals(part.getSourceType()) && part.getPage() > 0
+                    && onlineVideos.stream().anyMatch(v -> v != null && v.getPage() == part.getPage())) {
+                partRepository.delete(part);
+                deletedTemp++;
+            } else if (shouldDeleteUnmatchedLocalPartAfterRestore(part, onlineVideos)) {
+                partRepository.delete(part);
+                deletedPolluted++;
+            }
+        }
+
+        result.put("success", true);
+        result.put("message", "已按线上分P恢复本地状态");
+        result.put("restored", restored);
+        result.put("created", created);
+        result.put("deletedTemp", deletedTemp);
+        result.put("deletedPolluted", deletedPolluted);
+        return result;
+    }
+
+    @Scheduled(fixedDelay = 3600000, initialDelay = 300000)
+    public void cleanupExpiredEditPartTempFiles() {
+        Path root = Paths.get(workPath, "_edit_uploads").normalize();
+        if (!Files.exists(root)) {
+            return;
+        }
+        long cutoff = System.currentTimeMillis() - EDIT_TEMP_TTL_MS;
+        try {
+            List<Path> paths = Files.walk(root)
+                    .sorted(Comparator.reverseOrder())
+                    .collect(Collectors.toList());
+            for (Path path : paths) {
+                try {
+                    if (Files.isRegularFile(path) && Files.getLastModifiedTime(path).toMillis() < cutoff) {
+                        Files.deleteIfExists(path);
+                    } else if (Files.isDirectory(path) && !path.equals(root)) {
+                        Files.deleteIfExists(path);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("Publish.EditParts.TempCleanupFailed")
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+    }
+
+    private void runEditPartsSubmit(Long historyId, Map<String, Object> request, EditPartsTaskStatus status) {
+        status.status = "RUNNING";
+        status.message = "正在提交编辑";
+        RecordHistory history = historyRepository.findById(historyId).orElse(null);
+        if (history == null) {
+            markEditPartsTaskFailed(status, "稿件不存在");
+            return;
+        }
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        EditAuthContext auth = resolveEditAuth(history, room);
+        if (!auth.canEdit || auth.user == null) {
+            markEditPartsTaskFailed(status, auth.message);
+            return;
+        }
+        Thread existed = TaskUtil.publishTask.putIfAbsent(history.getId(), Thread.currentThread());
+        if (existed != null && existed != Thread.currentThread()) {
+            markEditPartsTaskFailed(status, "稿件正在发布或编辑中");
+            return;
+        }
+        try {
+            BiliVideoPartInfoResponse partInfo = loadOnlinePartInfo(auth.user, history);
+            Long aid = resolveOnlineAid(history, partInfo);
+            if (aid == null || aid <= 0) {
+                markEditPartsTaskFailed(status, "缺少 aid，无法编辑稿件");
+                return;
+            }
+            Map<Integer, BiliVideoPartInfoResponse.Video> onlineByPage = buildOnlineVideoPageMap(partInfo);
+            Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle = new HashMap<>();
+            Map<String, BiliVideoPartInfoResponse.Video> onlineByFilename = new HashMap<>();
+            Map<Long, BiliVideoPartInfoResponse.Video> onlineByCid = new HashMap<>();
+            if (partInfo != null && partInfo.getData() != null && partInfo.getData().getVideos() != null) {
+                for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+                    if (video == null) {
+                        continue;
+                    }
+                    if (StringUtils.isNotBlank(video.getFilename())) {
+                        onlineByFilename.putIfAbsent(video.getFilename(), video);
+                    }
+                    if (video.getCid() > 0) {
+                        onlineByCid.putIfAbsent(video.getCid(), video);
+                    }
+                    if (StringUtils.isNotBlank(video.getTitle())) {
+                        onlineByTitle.putIfAbsent(video.getTitle(), video);
+                    }
+                    if (StringUtils.isNotBlank(video.getPart())) {
+                        onlineByTitle.putIfAbsent(video.getPart(), video);
+                    }
+                }
+            }
+            List<EditPartSubmitItem> items = parseEditPartSubmitItems(request == null ? null : request.get("items"));
+            List<SingleVideoDto> videos = new ArrayList<>();
+            int page = 1;
+            for (EditPartSubmitItem item : items) {
+                if (item.deleted) {
+                    continue;
+                }
+                SingleVideoDto dto = new SingleVideoDto();
+                dto.setDesc("");
+                dto.setTitle(StringUtils.defaultIfBlank(item.title, "P" + page));
+                boolean hasReplacementFile = StringUtils.isNotBlank(item.filePath) || StringUtils.isNotBlank(item.fileRef);
+                boolean expectsLocalFile = "local".equalsIgnoreCase(item.source) || "workdir".equalsIgnoreCase(item.source);
+                if (!hasReplacementFile && expectsLocalFile) {
+                    markEditPartsTaskFailed(status, "本地分P文件尚未上传完成: P" + page);
+                    return;
+                }
+                if (hasReplacementFile) {
+                    RecordHistoryPart part = prepareEditUploadPart(history, room, item, page);
+                    uploadPartWithUserSerialBlocking(room, part);
+                    part = partRepository.findById(part.getId()).orElse(part);
+                    if (!part.isUpload() || StringUtils.isBlank(part.getFileName())) {
+                        markEditPartsTaskFailed(status, "分P上传未完成: P" + page);
+                        return;
+                    }
+                    dto.setFilename(part.getFileName());
+                    if (part.getCid() != null && part.getCid() > 0) {
+                        dto.setCid(part.getCid());
+                    }
+                    String persistedFilePath = "local".equalsIgnoreCase(item.source) ? null : item.filePath;
+                    syncEditUploadResult(history, item, part, page, dto.getTitle(), persistedFilePath, dto.getFilename(), dto.getCid());
+                } else {
+                    BiliVideoPartInfoResponse.Video online = findOnlineVideoForSubmitItem(item, onlineByPage, onlineByTitle, onlineByFilename, onlineByCid);
+                    if (online == null) {
+                        markEditPartsTaskFailed(status, "分P缺少线上页码或本地文件: P" + page);
+                        return;
+                    }
+                    if (StringUtils.isBlank(online.getFilename())) {
+                        markEditPartsTaskFailed(status, "线上分P不存在或缺少 filename: P" + (online.getPage() > 0 ? online.getPage() : page));
+                        return;
+                    }
+                    dto.setFilename(online.getFilename());
+                    if (online.getCid() > 0) {
+                        dto.setCid(online.getCid());
+                    }
+                    syncExistingOnlinePart(history, item, page, dto);
+                }
+                videos.add(dto);
+                page++;
+            }
+            if (videos.isEmpty()) {
+                markEditPartsTaskFailed(status, "至少需要保留一个分P");
+                return;
+            }
+            VideoEditUploadDto dto = buildVideoEditUploadDto(history, room, aid, videos);
+            String editRes = BiliApi.editPublish(auth.user, dto);
+            JSONObject root = parseJsonObject(editRes);
+            Integer code = root == null ? null : root.getInteger("code");
+            String message = root == null ? null : root.getString("message");
+            status.code = code;
+            status.responseMessage = message;
+            status.responseSnippet = abbreviatePublishResponse(editRes, 320);
+            if (code != null && code == 0) {
+                history.setPublish(true);
+                if (StringUtils.isBlank(history.getAvId())) {
+                    history.setAvId(String.valueOf(aid));
+                }
+                markHistoryPendingReviewAfterEdit(history);
+                historyRepository.save(history);
+                syncEditHistoryStatusImmediately(history.getId());
+                cleanupEditPartTempFiles(historyId, status.sessionId);
+                status.historyCode = history.getCode();
+                status.status = "SUCCESS";
+                status.message = "编辑成功";
+                status.endTime = LocalDateTime.now();
+            } else {
+                markEditPartsTaskFailed(status, StringUtils.defaultIfBlank(message, "编辑接口失败"));
+            }
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("Publish.EditParts.SubmitFailed")
+                    .add("historyId", historyId)
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            markEditPartsTaskFailed(status, e.getMessage());
+        } finally {
+            TaskUtil.publishTask.remove(history.getId());
+        }
+    }
+
     public boolean editPublishedHistory(RecordHistory history, String reason) {
         if (history == null) {
             return false;
@@ -568,7 +1141,9 @@ public class RecordBiliPublishService {
                 if (StringUtils.isBlank(history.getAvId())) {
                     history.setAvId(String.valueOf(aid));
                 }
+                markHistoryPendingReviewAfterEdit(history);
                 historyRepository.save(history);
+                syncEditHistoryStatusImmediately(history.getId());
                 return true;
             }
             return false;
@@ -1615,6 +2190,136 @@ public class RecordBiliPublishService {
         return result;
     }
 
+    private RecordHistoryPart findLocalPartForOnlineRestore(List<RecordHistoryPart> localParts,
+                                                            BiliVideoPartInfoResponse.Video video,
+                                                            Set<Long> usedPartIds) {
+        if (localParts == null || video == null) {
+            return null;
+        }
+        RecordHistoryPart fallbackOnlinePart = null;
+        for (RecordHistoryPart part : localParts) {
+            if (!canUseLocalPartForRestore(part, usedPartIds)) {
+                continue;
+            }
+            if (part.getPage() == video.getPage() && !"ONLINE_PART".equals(part.getSourceType())) {
+                return part;
+            }
+            if (part.getPage() == video.getPage() && fallbackOnlinePart == null) {
+                fallbackOnlinePart = part;
+            }
+        }
+        for (RecordHistoryPart part : localParts) {
+            if (!canUseLocalPartForRestore(part, usedPartIds)) {
+                continue;
+            }
+            if (video.getCid() > 0 && part.getCid() != null && part.getCid() == video.getCid()) {
+                return part;
+            }
+            if (StringUtils.isNotBlank(video.getFilename()) && video.getFilename().equals(part.getFileName())) {
+                return part;
+            }
+        }
+        for (RecordHistoryPart part : localParts) {
+            if (!canUseLocalPartForRestore(part, usedPartIds)) {
+                continue;
+            }
+            if (StringUtils.isNotBlank(video.getTitle()) && video.getTitle().equals(part.getTitle())) {
+                return part;
+            }
+            if (StringUtils.isNotBlank(video.getPart()) && video.getPart().equals(part.getTitle())) {
+                return part;
+            }
+        }
+        return fallbackOnlinePart;
+    }
+
+    private boolean canUseLocalPartForRestore(RecordHistoryPart part, Set<Long> usedPartIds) {
+        return part != null
+                && part.getId() != null
+                && !usedPartIds.contains(part.getId())
+                && !"EDIT_PART".equals(part.getSourceType());
+    }
+
+    private boolean isEditTempPath(String filePath) {
+        if (StringUtils.isBlank(filePath)) {
+            return false;
+        }
+        String normalized = filePath.replace('\\', '/');
+        return normalized.contains("/_edit_uploads/");
+    }
+
+    private boolean shouldDeleteUnmatchedLocalPartAfterRestore(RecordHistoryPart part,
+                                                               List<BiliVideoPartInfoResponse.Video> onlineVideos) {
+        if (part == null || part.isRecording()) {
+            return false;
+        }
+        boolean onlineHasSamePage = onlineVideos != null && part.getPage() > 0
+                && onlineVideos.stream().anyMatch(v -> v != null && v.getPage() == part.getPage());
+        boolean missingOnlineIdentity = StringUtils.isBlank(part.getFileName())
+                && (part.getCid() == null || part.getCid() <= 0);
+        boolean abnormal = !part.isUpload()
+                && (part.getUploadRetryCount() >= UPLOAD_RETRY_GIVE_UP
+                || StringUtils.isNotBlank(part.getDeleteFailType())
+                || StringUtils.isBlank(part.getFilePath())
+                || isEditTempPath(part.getFilePath()));
+        return onlineHasSamePage || missingOnlineIdentity || abnormal;
+    }
+
+    private void markHistoryPendingReviewAfterEdit(RecordHistory history) {
+        if (history == null) {
+            return;
+        }
+        history.setCode(-1);
+        history.setUpdateTime(LocalDateTime.now());
+    }
+
+    private void markHistoryWorkingForEdit(RecordHistory history, EditPartsTaskStatus status) {
+        if (history == null || status == null) {
+            return;
+        }
+        status.previousCode = history.getCode();
+        status.previousForceArchived = history.isForceArchived();
+        status.historyMarkedWorking = true;
+        status.historyCode = -1;
+        history.setForceArchived(false);
+        markHistoryPendingReviewAfterEdit(history);
+        historyRepository.save(history);
+    }
+
+    private void restoreHistoryStateAfterEditFailure(EditPartsTaskStatus status) {
+        if (status == null || !status.historyMarkedWorking || status.historyId == null || status.previousCode == null) {
+            return;
+        }
+        RecordHistory history = historyRepository.findById(status.historyId).orElse(null);
+        if (history == null || history.getCode() != -1) {
+            return;
+        }
+        history.setCode(status.previousCode);
+        history.setForceArchived(Boolean.TRUE.equals(status.previousForceArchived));
+        history.setUpdateTime(LocalDateTime.now());
+        historyRepository.save(history);
+        status.historyCode = history.getCode();
+    }
+
+    private void syncEditHistoryStatusImmediately(Long historyId) {
+        if (historyId == null) {
+            return;
+        }
+        RecordHistory latest = historyRepository.findById(historyId).orElse(null);
+        if (latest == null || StringUtils.isBlank(latest.getBvId())) {
+            return;
+        }
+        try {
+            videoSyncJob.syncStatusOnly(latest);
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("Publish.EditParts.SyncStatusFailed")
+                    .add("historyId", historyId)
+                    .addIfNotBlank("bvid", latest.getBvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+    }
+
     private BiliVideoPartInfoResponse.Video resolveOnlineVideo(
             RecordHistoryPart part,
             Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle,
@@ -1813,6 +2518,295 @@ public class RecordBiliPublishService {
         return videoUploadDto;
     }
 
+    private EditAuthContext resolveEditAuth(RecordHistory history, RecordRoom room) {
+        EditAuthContext ctx = new EditAuthContext();
+        if (history == null) {
+            ctx.message = "稿件不存在";
+            return ctx;
+        }
+        if (!history.isPublish() || !hasOnlineIdentity(history)) {
+            ctx.message = "稿件未投稿或缺少 avId/bvId";
+            return ctx;
+        }
+        if (!(history.getCode() == 0 || history.getCode() == -50 || history.getCode() == -2)) {
+            ctx.message = "仅审核通过或被退回的稿件支持编辑分P";
+            return ctx;
+        }
+        if (room == null || room.getUploadUserId() == null) {
+            ctx.message = "投稿账号不存在";
+            return ctx;
+        }
+        Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
+        if (userOptional.isEmpty() || !userOptional.get().isLogin()) {
+            ctx.message = "投稿账号未登录";
+            return ctx;
+        }
+        ctx.canEdit = true;
+        ctx.message = "ok";
+        ctx.user = userOptional.get();
+        return ctx;
+    }
+
+    private List<EditPartSubmitItem> parseEditPartSubmitItems(Object raw) {
+        List<EditPartSubmitItem> result = new ArrayList<>();
+        if (!(raw instanceof List<?> list)) {
+            return result;
+        }
+        for (Object obj : list) {
+            if (!(obj instanceof Map<?, ?> map)) {
+                continue;
+            }
+            EditPartSubmitItem item = new EditPartSubmitItem();
+            item.partId = longValue(map.get("partId"));
+            item.onlinePage = intValue(map.get("onlinePage"));
+            item.originalOnlinePage = intValue(map.get("originalOnlinePage"));
+            item.title = stringValue(map.get("title"));
+            item.originalTitle = stringValue(map.get("originalTitle"));
+            item.filename = stringValue(map.get("filename"));
+            item.originalFilename = stringValue(map.get("originalFilename"));
+            item.cid = longPrimitiveValue(map.get("cid"));
+            item.originalCid = longPrimitiveValue(map.get("originalCid"));
+            item.deleted = booleanValue(map.get("deleted"));
+            item.fileRef = stringValue(map.get("fileRef"));
+            item.filePath = StringUtils.defaultIfBlank(stringValue(map.get("filePath")), item.fileRef);
+            item.source = stringValue(map.get("source"));
+            result.add(item);
+        }
+        return result;
+    }
+
+    private BiliVideoPartInfoResponse.Video findOnlineVideoForSubmitItem(EditPartSubmitItem item,
+                                                                          Map<Integer, BiliVideoPartInfoResponse.Video> onlineByPage,
+                                                                          Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle,
+                                                                          Map<String, BiliVideoPartInfoResponse.Video> onlineByFilename,
+                                                                          Map<Long, BiliVideoPartInfoResponse.Video> onlineByCid) {
+        if (item == null) {
+            return null;
+        }
+        BiliVideoPartInfoResponse.Video video = onlineByPage.get(item.onlinePage);
+        if (video != null) {
+            return video;
+        }
+        video = onlineByPage.get(item.originalOnlinePage);
+        if (video != null) {
+            return video;
+        }
+        if (StringUtils.isNotBlank(item.originalFilename)) {
+            video = onlineByFilename.get(item.originalFilename);
+            if (video != null) {
+                return video;
+            }
+        }
+        if (StringUtils.isNotBlank(item.filename)) {
+            video = onlineByFilename.get(item.filename);
+            if (video != null) {
+                return video;
+            }
+        }
+        if (item.originalCid > 0) {
+            video = onlineByCid.get(item.originalCid);
+            if (video != null) {
+                return video;
+            }
+        }
+        if (item.cid > 0) {
+            video = onlineByCid.get(item.cid);
+            if (video != null) {
+                return video;
+            }
+        }
+        if (StringUtils.isNotBlank(item.originalTitle)) {
+            video = onlineByTitle.get(item.originalTitle);
+            if (video != null) {
+                return video;
+            }
+        }
+        if (StringUtils.isNotBlank(item.title)) {
+            return onlineByTitle.get(item.title);
+        }
+        return null;
+    }
+
+    private RecordHistoryPart prepareEditUploadPart(RecordHistory history, RecordRoom room, EditPartSubmitItem item, int page) {
+        RecordHistoryPart part = new RecordHistoryPart();
+        part.setHistoryId(history.getId());
+        part.setRoomId(history.getRoomId());
+        part.setStartTime(history.getStartTime());
+        part.setEndTime(history.getEndTime());
+        part.setRecording(false);
+        part.setSourceType("EDIT_PART");
+        String path = normalizeFilePath(StringUtils.defaultIfBlank(item.filePath, item.fileRef));
+        File file = new File(path);
+        part.setRoomId(history.getRoomId());
+        part.setHistoryId(history.getId());
+        part.setPage(page);
+        part.setTitle(StringUtils.defaultIfBlank(item.title, "P" + page));
+        part.setLiveTitle(StringUtils.defaultIfBlank(history.getTitle(), part.getTitle()));
+        part.setFilePath(path);
+        part.setFileSize(file.exists() ? file.length() : part.getFileSize());
+        part.setUpload(false);
+        part.setFileName(null);
+        part.setCid(null);
+        part.setUploadRetryCount(0);
+        part.setDeleteFailType(null);
+        part.setDeleteFailReason(null);
+        part.setRecording(false);
+        return partRepository.save(part);
+    }
+
+    private void syncEditUploadResult(RecordHistory history, EditPartSubmitItem item, RecordHistoryPart uploadPart,
+                                      int page, String title, String filePath, String fileName, Long cid) {
+        RecordHistoryPart target = null;
+        if (item.partId != null) {
+            target = partRepository.findById(item.partId).orElse(null);
+            if (target != null && "EDIT_PART".equals(target.getSourceType())) {
+                target = null;
+            }
+        }
+        if (target == null) {
+            target = uploadPart;
+            target.setSourceType(null);
+        }
+        if (StringUtils.isBlank(filePath) && uploadPart != null && uploadPart.getId() != null && uploadPart.getId().equals(target.getId())) {
+            target.setFilePath(null);
+        }
+        syncEditPartLocalState(target, page, title, filePath, fileName, cid);
+        if (uploadPart != null && uploadPart.getId() != null && !uploadPart.getId().equals(target.getId())) {
+            try {
+                partRepository.delete(uploadPart);
+            } catch (Exception e) {
+                log.debug("[BLR] {}", LogKvs.event("Publish.EditParts.TempPartDeleteFailed")
+                        .add("historyId", history.getId())
+                        .add("partId", uploadPart.getId())
+                        .addIfNotBlank("err", e.getMessage()));
+            }
+        }
+    }
+
+    private void syncEditPartLocalState(RecordHistoryPart part, int page, String title, String filePath, String fileName, Long cid) {
+        part.setPage(page);
+        part.setTitle(title);
+        if (StringUtils.isNotBlank(filePath)) {
+            part.setFilePath(filePath);
+            File file = new File(filePath);
+            if (file.exists() && file.isFile()) {
+                part.setFileSize(file.length());
+            }
+        }
+        part.setFileName(fileName);
+        if (cid != null && cid > 0) {
+            part.setCid(cid);
+        }
+        part.setUpload(true);
+        part.setUploadRetryCount(0);
+        part.setDeleteFailType(null);
+        part.setDeleteFailReason(null);
+        partRepository.save(part);
+    }
+
+    private void syncExistingOnlinePart(RecordHistory history, EditPartSubmitItem item, int page, SingleVideoDto dto) {
+        RecordHistoryPart part = item.partId == null ? null : partRepository.findById(item.partId).orElse(null);
+        if (part == null && item.onlinePage > 0) {
+            List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+            for (RecordHistoryPart candidate : parts) {
+                if (candidate.getPage() == item.onlinePage) {
+                    part = candidate;
+                    break;
+                }
+            }
+        }
+        if (part == null) {
+            part = new RecordHistoryPart();
+            part.setHistoryId(history.getId());
+            part.setRoomId(history.getRoomId());
+            part.setStartTime(history.getStartTime());
+            part.setEndTime(history.getEndTime());
+            part.setRecording(false);
+            part.setSourceType("ONLINE_PART");
+        }
+        syncEditPartLocalState(part, page, dto.getTitle(), part.getFilePath(), dto.getFilename(), dto.getCid());
+    }
+
+    private void markEditPartsTaskFailed(EditPartsTaskStatus status, String message) {
+        restoreHistoryStateAfterEditFailure(status);
+        status.status = "FAILED";
+        status.message = StringUtils.defaultIfBlank(message, "编辑失败");
+        status.endTime = LocalDateTime.now();
+    }
+
+    private boolean deleteDirectoryQuietly(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return false;
+        }
+        try {
+            Path workRoot = Paths.get(workPath).normalize();
+            if (!path.normalize().startsWith(workRoot)) {
+                return false;
+            }
+            List<Path> paths = Files.walk(path)
+                    .sorted(Comparator.reverseOrder())
+                    .collect(Collectors.toList());
+            for (Path p : paths) {
+                Files.deleteIfExists(p);
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String safePathSegment(String raw) {
+        return StringUtils.defaultIfBlank(raw, "default").replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private String safeFileName(String raw) {
+        String name = StringUtils.defaultIfBlank(raw, "upload.mp4").replace("\\", "/");
+        int idx = name.lastIndexOf('/');
+        if (idx >= 0) {
+            name = name.substring(idx + 1);
+        }
+        name = name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        return StringUtils.defaultIfBlank(name, "upload.mp4");
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value).trim();
+    }
+
+    private Long longValue(Object value) {
+        if (value == null || StringUtils.isBlank(String.valueOf(value))) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private long longPrimitiveValue(Object value) {
+        Long parsed = longValue(value);
+        return parsed == null ? 0L : parsed;
+    }
+
+    private int intValue(Object value) {
+        if (value == null || StringUtils.isBlank(String.valueOf(value))) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
+    }
+
     @Data
     @AllArgsConstructor
     private static class EditVideosBuildResult {
@@ -1821,6 +2815,59 @@ public class RecordBiliPublishService {
 
         boolean isBlocked() {
             return blockedPartCount > 0;
+        }
+    }
+
+    private static class EditAuthContext {
+        private boolean canEdit;
+        private String message;
+        private BiliBiliUser user;
+    }
+
+    private static class EditPartSubmitItem {
+        private Long partId;
+        private int onlinePage;
+        private int originalOnlinePage;
+        private String title;
+        private String originalTitle;
+        private String filename;
+        private String originalFilename;
+        private long cid;
+        private long originalCid;
+        private boolean deleted;
+        private String fileRef;
+        private String filePath;
+        private String source;
+    }
+
+    private static class EditPartsTaskStatus {
+        private Long historyId;
+        private String status;
+        private String message;
+        private String sessionId;
+        private Integer code;
+        private String responseMessage;
+        private String responseSnippet;
+        private Integer historyCode;
+        private Integer previousCode;
+        private Boolean previousForceArchived;
+        private boolean historyMarkedWorking;
+        private LocalDateTime startTime;
+        private LocalDateTime endTime;
+
+        private Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("historyId", historyId);
+            map.put("status", status);
+            map.put("message", message);
+            map.put("sessionId", sessionId);
+            map.put("code", code);
+            map.put("responseMessage", responseMessage);
+            map.put("responseSnippet", responseSnippet);
+            map.put("historyCode", historyCode);
+            map.put("startTime", startTime);
+            map.put("endTime", endTime);
+            return map;
         }
     }
 
@@ -1857,7 +2904,7 @@ public class RecordBiliPublishService {
             return;
         }
         try {
-            long timeoutMinutes = 5;
+            long timeoutMinutes = 30;
             long startTime = System.currentTimeMillis();
             long timeoutMs = timeoutMinutes * 60 * 1000;
             

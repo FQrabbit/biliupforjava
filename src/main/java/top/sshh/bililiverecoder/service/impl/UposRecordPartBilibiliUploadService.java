@@ -684,6 +684,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     partPage,
                                     (int) effectiveChunkNum,
                                     effectiveChunkSize,
+                                    fileSize,
                                     useMultipartFlow ? "MULTIPART" : "LEGACY"
                             );
                             java.util.concurrent.atomic.AtomicReference<String> gatewayError = new java.util.concurrent.atomic.AtomicReference<>(null);

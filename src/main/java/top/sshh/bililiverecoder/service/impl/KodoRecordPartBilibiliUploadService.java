@@ -412,7 +412,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
                             final Integer partPage = resolveProgressPage(part);
-                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum, chunkSize, "KODO");
+                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum, chunkSize, fileSize, "KODO");
                             List<KodoPart> parts = new CopyOnWriteArrayList<>();
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {

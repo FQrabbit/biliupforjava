@@ -953,6 +953,7 @@
             scrollStateTimer: null,
             isScrollingToTop: false,  // 标记正在回顶的状态，此期间禁用冷却时间
             scrollToTopTimer: null,   // 回顶动画完成后清除标志
+            iframeWorkspaceMode: false,
             // 已组件化的页面列表（不走 iframe）
             componentPages: ['user', 'log'],
             // iframe 子页面批量操作状态
@@ -1053,6 +1054,7 @@
         mounted: function() {
             var self = this;
             this.applyTheme(this.theme);
+            this.checkCacheVersion();
             this.checkAlerts();
             this.fetchWorkspaceUsageStatus();
             this.loadSystemConfig();
@@ -1061,7 +1063,6 @@
                 self.fetchWorkspaceUsageStatus();
             }, 60000);
             this.checkUpdate();
-            this.checkCacheVersion();
             // 初始化导航指示器
             this.$nextTick(function() {
                 self.updateNavIndicator();
@@ -1083,11 +1084,23 @@
                     self.iframeOperating = event.data.operating || false;
                     self.iframeOperatingMessage = event.data.message || '批量操作';
                 }
+
+                if (event.data && event.data.type === 'iframeWorkspaceMode') {
+                    self.iframeWorkspaceMode = !!event.data.active;
+                    if (self.iframeWorkspaceMode) {
+                        self.headerCompact = true;
+                        self.showBackToTop = false;
+                        self.upScrollDistance = 0;
+                        self.downScrollDistance = 0;
+                        self.lastHeaderToggleAt = Date.now();
+                    }
+                }
             });
         },
         watch: {
             activeName: function() {
                 var self = this;
+                this.iframeWorkspaceMode = false;
                 this.headerCompact = false;
                 this.showBackToTop = false;
                 this.lastScrollTop = 0;
@@ -1181,6 +1194,11 @@
                 }
 
                 this.scrollStateTimer = setInterval(function() {
+                    if (self.iframeWorkspaceMode) {
+                        self.headerCompact = true;
+                        self.showBackToTop = false;
+                        return;
+                    }
                     var top = self.getCurrentScrollTop();
                     // 当滚动位置接近顶部时，强制恢复导航栏显示
                     if (top <= 4) {
@@ -1390,7 +1408,16 @@
                 var STORED_BUILD_KEY = 'biliup_frontend_build_id';
                 var STORED_VERSION_KEY = 'biliup_frontend_version';
 
-                ApiUtil.get('/api/version', function(data) {
+                fetch('/api/version', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store'
+                }).then(function(response) {
+                    if (!response.ok) {
+                        throw response;
+                    }
+                    return response.json();
+                }).then(function(data) {
                     var version = data.version || data;
                     var buildId = data.buildId || version;
                     if (!version || version === 'unknown' || version === 'error') {
@@ -1401,13 +1428,6 @@
                     }
                     var currentBuildId = self.frontendBuildId || '';
                     var storedBuildId = localStorage.getItem(STORED_BUILD_KEY);
-
-                    if (!storedBuildId) {
-                        localStorage.setItem(STORED_BUILD_KEY, buildId);
-                        localStorage.setItem(STORED_VERSION_KEY, version);
-                        self.frontendBuildId = currentBuildId || buildId;
-                        return;
-                    }
 
                     var pageBuildIsOld = currentBuildId ? currentBuildId !== buildId : storedBuildId !== buildId;
                     localStorage.setItem(STORED_BUILD_KEY, buildId);
@@ -1426,8 +1446,8 @@
                     setTimeout(function() {
                         self.reloadWithFrontendBuildId(buildId);
                     }, 1500);
-                }, function(xhr) {
-                    console.warn('[CacheVersion] 获取版本失败:', xhr.status);
+                }).catch(function(error) {
+                    console.warn('[CacheVersion] 获取版本失败:', error && error.status ? error.status : error);
                 });
             },
             withFrontendBuildId: function(url, buildId) {
@@ -1845,6 +1865,14 @@
                 }
             },
             handleContentScroll: function(top) {
+                if (this.iframeWorkspaceMode) {
+                    this.headerCompact = true;
+                    this.showBackToTop = false;
+                    this.lastScrollTop = top || 0;
+                    this.upScrollDistance = 0;
+                    this.downScrollDistance = 0;
+                    return;
+                }
                 if (this.activeName === 'log') {
                     this.headerCompact = false;
                     this.showBackToTop = false;

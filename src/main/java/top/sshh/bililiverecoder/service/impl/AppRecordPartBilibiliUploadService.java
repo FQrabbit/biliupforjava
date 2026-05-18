@@ -298,7 +298,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             final Long partId = part.getId();
                             final Long historyId = part.getHistoryId();
                             final Integer partPage = resolveProgressPage(part);
-                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum, chunkSize, "APP");
+                            uploadProgressTracker.start(partId, historyId, partPage, (int) chunkNum, chunkSize, fileSize, "APP");
                             List<Runnable> runnableList = new ArrayList<>();
                             for (int i = 0; i < chunkNum; i++) {
                                 int finalI = i;

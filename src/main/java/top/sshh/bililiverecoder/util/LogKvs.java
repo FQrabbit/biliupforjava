@@ -205,6 +205,11 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.Edit.OnlinePartInfo.Empty", "投稿编辑：线上分P信息为空");
         EVENT_ZH.put("Publish.Edit.OnlinePartInfo.Failed", "投稿编辑：获取线上分P信息失败");
         EVENT_ZH.put("Publish.Edit.VideoList.BlockedPart", "投稿编辑：分P无法安全合并到编辑列表");
+        EVENT_ZH.put("Publish.EditParts.TempUploadFailed", "分P编辑：临时文件上传失败");
+        EVENT_ZH.put("Publish.EditParts.TempCleanupFailed", "分P编辑：临时文件清理失败");
+        EVENT_ZH.put("Publish.EditParts.SubmitFailed", "分P编辑：提交编辑失败");
+        EVENT_ZH.put("Publish.EditParts.TempPartDeleteFailed", "分P编辑：临时分P删除失败");
+        EVENT_ZH.put("Publish.EditParts.SyncStatusFailed", "分P编辑：编辑后刷新稿件状态失败");
         EVENT_ZH.put("Publish.Task.SuspendedSkip", "投稿任务已暂停，跳过本次执行");
         EVENT_ZH.put("Publish.History.AlreadyPublished", "投稿历史已标记为发布，跳过");
         EVENT_ZH.put("Publish.Retry.GiveUp", "投稿重试次数过多，放弃");
@@ -388,6 +393,7 @@ public final class LogKvs {
         EVENT_ZH.put("VideoSync.Confirm.Failed", "视频状态同步：二次确认稿件状态失败");
         EVENT_ZH.put("VideoSync.StateFallback.OnlySelfByRoomConfig", "视频状态同步：无法确认状态，按房间配置仅自己可见处理");
         EVENT_ZH.put("VideoSync.StateFallback.KeepOld", "视频状态同步：无法确认状态，保持原状态");
+        EVENT_ZH.put("VideoSync.KeepPendingAfterRecentEdit", "视频状态同步：编辑后短时间内保持审核中状态");
         EVENT_ZH.put("VideoSync.MemberApi.Unexpected", "视频状态同步：Member API 返回异常 code");
         EVENT_ZH.put("VideoSync.Confirm.SkipNoUser", "视频状态同步：未配置上传用户，跳过二次确认");
         EVENT_ZH.put("VideoSync.PartSynced", "视频状态同步：同步分P信息成功");
@@ -424,6 +430,7 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsgSendSync.Part.SkipMissingCid", "分P缺失CID，跳过弹幕发送");
         EVENT_ZH.put("LiveMsgSendSync.UploadUser.InvalidState", "弹幕/评论发送：上传账号不可用(未登录或未启用)");
         EVENT_ZH.put("LiveMsgSendSync.AllDmDisabled.Archive", "弹幕/评论发送：房间普通弹幕/SC全关闭，直接归档");
+        EVENT_ZH.put("LiveMsgSendSync.PendingPart.Empty", "弹幕/评论发送：没有待处理分P");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.Start", "高级弹幕发送开始");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.SkipByManual", "手动跳过高级弹幕发送");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.Send.Failed", "高级弹幕发送失败");
@@ -534,6 +541,7 @@ public final class LogKvs {
         EVENT_ZH.put("Blrec.DanmakuCompleted.Skip", "blrec 事件: 弹幕文件完成-跳过(房间不存在或未在录制)");
         EVENT_ZH.put("Blrec.DanmakuCompleted.PartNotFound", "blrec 事件: 弹幕文件完成-未找到对应的视频分P");
         EVENT_ZH.put("Blrec.DanmakuCompleted.Processed", "blrec 事件: 弹幕文件完成，已触发解析");
+        EVENT_ZH.put("Blrec.DanmakuCompleted.LiveMsgSkip", "blrec 事件: 弹幕文件完成-跳过弹幕解析");
 
         // 直播事件解析/统计缓存
         EVENT_ZH.put("RoomLiveEvent.Parse.Saved", "直播事件解析：已保存统计缓存");
@@ -541,6 +549,7 @@ public final class LogKvs {
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipActive", "直播事件解析：跳过仍在写入的分P");
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipFailedCached", "直播事件解析：跳过已确认失败且未变化的 XML");
         EVENT_ZH.put("RoomLiveEvent.Parse.DisableSecureFailed", "直播事件解析：关闭 XML 安全处理失败");
+        EVENT_ZH.put("RoomLiveEvent.Backfill.Done", "直播事件解析：历史统计回填完成");
         
         // 系统配置
         EVENT_ZH.put("RoomConfig.Import.SystemConfigs.Success", "导入系统配置成功");
@@ -560,6 +569,12 @@ public final class LogKvs {
         EVENT_ZH.put("Database.Backup.Failed", "数据库备份：备份失败");
         EVENT_ZH.put("Database.Backup.Cleanup.Success", "数据库备份：清理旧备份成功");
         EVENT_ZH.put("Database.Backup.Cleanup.Failed", "数据库备份：清理旧备份失败");
+        EVENT_ZH.put("Database.Compact.Success", "数据库维护：压缩完成");
+        EVENT_ZH.put("Database.Compact.Failed", "数据库维护：压缩失败");
+        EVENT_ZH.put("Database.Compact.WebhookStillBusy", "数据库维护：仍在维护中，Webhook 暂存");
+        EVENT_ZH.put("Database.Compact.WebhookSpooled", "数据库维护：Webhook 已暂存等待重放");
+        EVENT_ZH.put("Database.Compact.WebhookSpoolFailed", "数据库维护：Webhook 暂存失败");
+        EVENT_ZH.put("Database.Compact.WebhookReplayFailed", "数据库维护：暂存 Webhook 重放失败");
 
         // 接口/系统维护
         EVENT_ZH.put("BiliApi.WebCookie.BuvidAppendFailed", "B站 Web Cookie：补充 buvid 参数失败");
@@ -585,8 +600,12 @@ public final class LogKvs {
         EVENT_ZH.put("History.UploadFlowFallback.QueryFailed", "历史记录：查询上传流程回退数量失败");
         EVENT_ZH.put("History.Visibility.Switch.Failed", "历史记录：切换可见性失败");
         EVENT_ZH.put("History.Delete.LocalFileNotDeleted", "历史记录：本地文件未能删除");
+        EVENT_ZH.put("History.CandidateFiles.SkipRootDir", "历史记录：候选文件扫描跳过根目录");
+        EVENT_ZH.put("History.CandidateFiles.SkipUnreadablePath", "历史记录：候选文件扫描跳过不可读路径");
+        EVENT_ZH.put("History.CandidateFiles.ScanFailed", "历史记录：候选文件扫描失败");
         EVENT_ZH.put("Part.List2.ReviewInfo.FetchFailed", "分P列表：获取审核信息失败");
         EVENT_ZH.put("Part.ReviewInfo.AuditDetail.Unexpected", "分P审核信息：审核详情返回异常");
+        EVENT_ZH.put("Part.ReviewInfo.AuditDetail.Empty", "分P审核信息：审核详情为空");
         EVENT_ZH.put("Part.ReviewInfo.AuditDetail.LoadFailed", "分P审核信息：加载审核详情失败");
         EVENT_ZH.put("Part.ReviewInfo.Vupre.Unexpected", "分P审核信息：vupre 接口返回异常");
         EVENT_ZH.put("Part.ReviewInfo.LoadFailed", "分P审核信息：加载失败");
@@ -600,6 +619,13 @@ public final class LogKvs {
         EVENT_ZH.put("Blrec.RecordStarted.ParseMergeIntervalFailed", "blrec 事件：解析合并间隔配置失败");
         EVENT_ZH.put("RecordStarted.ParseMergeIntervalFailed", "录制开始：解析合并间隔配置失败");
         EVENT_ZH.put("RoomStatusSyncJob.GetMasterInfoFailed", "直播状态同步：获取主播信息失败");
+
+        // 统计缓存/历史刷新
+        EVENT_ZH.put("Stats.RefreshHistory.SkipMaintenance", "统计缓存：维护模式中，跳过历史刷新");
+        EVENT_ZH.put("Stats.RefreshHistory.SkipBusy", "统计缓存：刷新任务繁忙，跳过本次历史刷新");
+        EVENT_ZH.put("Stats.Backfill.Failed", "统计缓存：历史回填失败");
+        EVENT_ZH.put("Stats.Rebuild.Failed", "统计缓存：重建失败");
+        EVENT_ZH.put("Stats.Cleanup.Failed", "统计缓存：清理失败");
 
         // 投稿 WebPublish/合集流程
         EVENT_ZH.put("Publish.WebPublish.MissingData", "投稿：Web 投稿响应缺少 data 字段");

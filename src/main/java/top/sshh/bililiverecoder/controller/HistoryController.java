@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
@@ -224,6 +225,64 @@ public class HistoryController {
 
         result.put("items", items);
         return result;
+    }
+
+    @GetMapping("/{id}/edit-parts/draft")
+    public Map<String, Object> editPartsDraft(@PathVariable("id") Long id) {
+        return publishService.buildEditPartsDraft(id);
+    }
+
+    @PostMapping("/{id}/edit-parts/local-upload")
+    public Map<String, Object> uploadEditPartLocalFile(@PathVariable("id") Long id,
+                                                       @RequestParam("sessionId") String sessionId,
+                                                       @RequestParam("file") MultipartFile file) {
+        return publishService.saveEditPartTempFile(id, sessionId, file);
+    }
+
+    @PostMapping("/{id}/edit-parts/local-upload-chunk")
+    public Map<String, Object> uploadEditPartLocalFileChunk(@PathVariable("id") Long id,
+                                                            @RequestParam("sessionId") String sessionId,
+                                                            @RequestParam("uploadId") String uploadId,
+                                                            @RequestParam("fileName") String fileName,
+                                                            @RequestParam("chunkIndex") int chunkIndex,
+                                                            @RequestParam("totalChunks") int totalChunks,
+                                                            @RequestParam("totalSize") long totalSize,
+                                                            @RequestParam("chunk") MultipartFile chunk) {
+        return publishService.saveEditPartTempFileChunk(id, sessionId, uploadId, fileName, chunkIndex, totalChunks, totalSize, chunk);
+    }
+
+    @PostMapping("/{id}/edit-parts/local-upload/cancel")
+    public Map<String, Object> cancelEditPartLocalUpload(@PathVariable("id") Long id,
+                                                         @RequestBody Map<String, Object> request) {
+        return publishService.cancelEditPartTempUpload(
+                id,
+                String.valueOf(request.getOrDefault("sessionId", "")),
+                String.valueOf(request.getOrDefault("uploadId", "")),
+                String.valueOf(request.getOrDefault("fileName", ""))
+        );
+    }
+
+    @PostMapping("/{id}/edit-parts/submit")
+    public Map<String, Object> submitEditParts(@PathVariable("id") Long id,
+                                               @RequestBody Map<String, Object> request) {
+        return publishService.submitEditParts(id, request);
+    }
+
+    @GetMapping("/{id}/edit-parts/task")
+    public Map<String, Object> editPartsTask(@PathVariable("id") Long id) {
+        return publishService.getEditPartsTask(id);
+    }
+
+    @PostMapping("/{id}/edit-parts/cleanup")
+    public Map<String, Object> cleanupEditParts(@PathVariable("id") Long id,
+                                                @RequestBody(required = false) Map<String, Object> request) {
+        String sessionId = request == null ? null : String.valueOf(request.getOrDefault("sessionId", ""));
+        return publishService.cleanupEditPartTempFiles(id, sessionId);
+    }
+
+    @PostMapping("/{id}/edit-parts/restore-online-state")
+    public Map<String, Object> restoreEditPartsOnlineState(@PathVariable("id") Long id) {
+        return publishService.restoreEditPartsOnlineState(id);
     }
 
     private LinkedHashSet<String> resolveCandidateFileSearchRoots(RecordHistory history) {
