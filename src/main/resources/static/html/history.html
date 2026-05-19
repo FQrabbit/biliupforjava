@@ -868,6 +868,9 @@
                             <el-progress :percentage="p.state === 'SKIPPED' ? 0 : (p.percent || 0)" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
                         </div>
                         <div class="progress-percent-text" :class="p.state === 'SKIPPED' ? 'skipped-text' : ''">{{ p.state === 'SKIPPED' ? '-' : ((p.percent || 0) + '%') }}</div>
+                        <div v-if="canPreviewPart(p)" class="progress-filepath-mini part-preview-actions">
+                            <el-button class="part-action-btn part-action-btn--preview" size="mini" type="primary" plain icon="el-icon-video-play" @click.stop="openPartPreview(p)">预览</el-button>
+                        </div>
                         <div v-if="(p.stateMsg || p.issueMessage) && p.state !== 'SKIPPED'" class="progress-msg-mini">{{ p.stateMsg || p.issueMessage }}</div>
                         <div v-if="shouldShowPartFilePath(p)" class="progress-filepath-mini">
                             <el-tooltip v-if="!privacyMode" effect="dark" :content="maskTooltip(getPartFilePath(p))" placement="top">
@@ -1078,6 +1081,40 @@
         </div>
     </el-dialog>
 
+    <el-dialog title="预览视频" :visible.sync="previewDialogVisible" width="860px" append-to-body custom-class="part-preview-dialog" @closed="closePartPreview">
+        <div class="part-preview-panel">
+            <div class="part-preview-header">
+                <div>
+                    <span class="part-badge" v-if="previewPart">P{{ previewPart.page }}</span>
+                    <span class="part-preview-title">{{ previewMeta && previewMeta.fileName ? maskText(previewMeta.fileName) : '分P视频' }}</span>
+                </div>
+                <div class="part-preview-mode">
+                    {{ previewMode === 'mp4' ? 'MP4 可拖动预览' : 'FLV 快速预览' }}
+                </div>
+            </div>
+            <div class="part-preview-video-wrap">
+                <video ref="partPreviewVideo" class="part-preview-video" controls playsinline></video>
+            </div>
+            <div v-if="previewMeta && previewMeta.recording" class="part-preview-tip is-warning">
+                文件仍在写入，直接预览可能可用，但生成 MP4 预览可能不完整。
+            </div>
+            <div v-else-if="previewMode === 'flv'" class="part-preview-tip">
+                FLV 快速预览适合确认内容，拖动进度可能不稳定。生成 MP4 后可获得更好的拖动体验。
+            </div>
+            <div v-if="previewTask && (previewTask.status === 'RUNNING' || previewTask.status === 'PENDING')" class="part-preview-progress">
+                <el-progress :percentage="Number(previewTask.percent) || 0" :stroke-width="8"></el-progress>
+                <span>{{ previewTask.message || '正在生成可拖动预览' }}</span>
+            </div>
+            <div v-if="previewError" class="part-preview-tip is-error">{{ previewError }}</div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button size="small" @click="switchPreviewSource('flv')" :disabled="previewMode === 'flv'">回退 FLV</el-button>
+            <el-button size="small" type="warning" plain @click="cancelPreviewPrepare" :disabled="!previewTask || (previewTask.status !== 'RUNNING' && previewTask.status !== 'PENDING')">取消封装</el-button>
+            <el-button size="small" type="primary" @click="preparePartPreview" :loading="previewPreparing" :disabled="!previewPart || (previewTask && (previewTask.status === 'RUNNING' || previewTask.status === 'PENDING'))">生成可拖动预览</el-button>
+            <el-button size="small" @click="previewDialogVisible = false">关闭</el-button>
+        </div>
+    </el-dialog>
+
     <el-dialog :title="editPartFileDialogMode === 'add' ? '从工作目录添加分P' : '从工作目录替换分P'" :visible.sync="editPartFileDialogVisible" width="640px" append-to-body>
         <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
             <el-input v-model="editCandidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）" style="flex: 1;"></el-input>
@@ -1194,6 +1231,16 @@
             candidateKeyword: '',
             selectedCandidateFile: '',
             bindTriggerUpload: true,
+            previewDialogVisible: false,
+            previewPart: null,
+            previewMeta: null,
+            previewTask: null,
+            previewMode: 'flv',
+            previewPreparing: false,
+            previewTaskTimer: null,
+            previewError: '',
+            previewFlvPlayer: null,
+            previewMpegtsLoader: null,
             editPartsEditing: false,
             editPartsLoading: false,
             editPartsSaving: false,
@@ -1411,6 +1458,9 @@
                             // 但为了进度条计算，可能需要保留逻辑一致性，或者在模板中区分处理
                             
                             match.speed = active.speed;
+                            match.speedSampleCount = active.speedSampleCount || 0;
+                            match.etaSeconds = active.etaSeconds || 0;
+                            match.remainingBytes = active.remainingBytes || 0;
                             match.updateAtMs = active.updateAtMs;
                             if (active.stateMsg) match.stateMsg = active.stateMsg;
                         }
@@ -2800,6 +2850,7 @@
                 this.showAllParts = false;
                 this.showMoreActions = false;
                 this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
+                this.closePartPreview();
                 this.auditRejectRetryGuard = { historyId: null, tried: false };
                 this.auditRejectManualRefreshing = false;
                 this.auditRejectReviewDebug = null;
@@ -3717,6 +3768,203 @@
                 tick();
                 _this.editPartsTaskTimer = setInterval(tick, 2000);
             },
+            canPreviewPart: function(p) {
+                return !!(p && p.partId && this.getPartFilePath(p));
+            },
+            openPartPreview: function(p) {
+                if (!this.canPreviewPart(p)) return;
+                this.closePartPreview();
+                this.previewPart = p;
+                this.previewDialogVisible = true;
+                this.previewMode = 'flv';
+                this.previewError = '';
+                this.loadPartPreviewMeta(true);
+            },
+            loadPartPreviewMeta: function(autoPlay) {
+                var _this = this;
+                if (!_this.previewPart || !_this.previewPart.partId) return;
+                ApiUtil.get('/part/preview/' + _this.previewPart.partId + '/meta', function(resp) {
+                    _this.previewMeta = resp || {};
+                    _this.previewTask = (resp && resp.task) ? resp.task : null;
+                    if (!resp || resp.available === false) {
+                        _this.previewError = (resp && resp.message) ? resp.message : '预览不可用';
+                        return;
+                    }
+                    if (resp.cacheReady && resp.cacheUrl) {
+                        _this.switchPreviewSource('mp4');
+                    } else if (autoPlay) {
+                        _this.switchPreviewSource('flv');
+                    }
+                }, function() {
+                    _this.previewError = '读取预览信息失败';
+                });
+            },
+            switchPreviewSource: function(mode) {
+                var _this = this;
+                if (!_this.previewPart || !_this.previewPart.partId) return;
+                var video = _this.$refs.partPreviewVideo;
+                if (!video) {
+                    _this.$nextTick(function() { _this.switchPreviewSource(mode); });
+                    return;
+                }
+                _this.destroyPreviewFlvPlayer();
+                _this.previewMode = mode === 'mp4' ? 'mp4' : 'flv';
+                var base = '/part/preview/' + _this.previewPart.partId;
+                var src = _this.withPreviewAuth(_this.previewMode === 'mp4' ? (base + '/cache') : (base + '/source'));
+                try {
+                    video.pause();
+                    video.removeAttribute('src');
+                    video.load();
+                    if (_this.previewMode === 'flv') {
+                        _this.loadMpegts(function() {
+                            if (!_this.previewDialogVisible || _this.previewMode !== 'flv') return;
+                            if (!window.mpegts || !window.mpegts.isSupported || !window.mpegts.isSupported()) {
+                                _this.previewError = '当前浏览器不支持 FLV 快速预览，请生成可拖动预览';
+                                return;
+                            }
+                            try {
+                                _this.destroyPreviewFlvPlayer();
+                                _this.previewFlvPlayer = window.mpegts.createPlayer({ type: 'flv', isLive: false, url: src });
+                                _this.previewFlvPlayer.attachMediaElement(video);
+                                _this.previewFlvPlayer.load();
+                            } catch (e) {
+                                _this.previewError = '播放器初始化失败';
+                            }
+                        }, function() {
+                            _this.previewError = 'FLV 播放组件加载失败，请生成可拖动预览';
+                        });
+                    } else {
+                        video.src = src;
+                        video.load();
+                    }
+                } catch (e) {
+                    _this.previewError = '播放器初始化失败';
+                }
+            },
+            loadMpegts: function(done, fail) {
+                if (window.mpegts) {
+                    done && done();
+                    return;
+                }
+                if (!this.previewMpegtsLoader) {
+                    this.previewMpegtsLoader = new Promise(function(resolve, reject) {
+                        var script = document.createElement('script');
+                        script.src = '../js/mpegts.min.js';
+                        script.async = true;
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
+                this.previewMpegtsLoader.then(function() {
+                    done && done();
+                }).catch(function() {
+                    fail && fail();
+                });
+            },
+            withPreviewAuth: function(url) {
+                var token = '';
+                try {
+                    token = localStorage.getItem('biliup_auth') || '';
+                } catch (e) {}
+                if (!token) return url;
+                return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'auth=' + encodeURIComponent(token);
+            },
+            preparePartPreview: function() {
+                var _this = this;
+                if (!_this.previewPart || !_this.previewPart.partId) return;
+                _this.previewPreparing = true;
+                _this.previewError = '';
+                ApiUtil.post('/part/preview/' + _this.previewPart.partId + '/prepare', {}, function(resp) {
+                    _this.previewPreparing = false;
+                    _this.previewTask = (resp && resp.task) ? resp.task : null;
+                    if (resp && resp.cacheReady) {
+                        _this.switchPreviewSource('mp4');
+                        return;
+                    }
+                    if (resp && resp.accepted === false) {
+                        _this.previewError = resp.message || '无法生成可拖动预览';
+                        return;
+                    }
+                    _this.startPreviewTaskPolling();
+                }, function() {
+                    _this.previewPreparing = false;
+                    _this.previewError = '启动封装任务失败';
+                });
+            },
+            startPreviewTaskPolling: function() {
+                var _this = this;
+                if (_this.previewTaskTimer) clearInterval(_this.previewTaskTimer);
+                var tick = function() {
+                    if (!_this.previewPart || !_this.previewPart.partId) {
+                        _this.stopPreviewTaskPolling();
+                        return;
+                    }
+                    ApiUtil.get('/part/preview/' + _this.previewPart.partId + '/task', function(resp) {
+                        _this.previewTask = (resp && resp.task) ? resp.task : null;
+                        var status = _this.previewTask && _this.previewTask.status;
+                        if (status === 'SUCCESS' && resp && resp.cacheReady) {
+                            _this.stopPreviewTaskPolling();
+                            _this.switchPreviewSource('mp4');
+                        } else if (status === 'FAILED' || status === 'CANCELLED') {
+                            _this.stopPreviewTaskPolling();
+                            _this.previewError = (_this.previewTask && _this.previewTask.message) ? _this.previewTask.message : '封装已结束';
+                            _this.switchPreviewSource('flv');
+                        }
+                    }, function() {
+                        _this.stopPreviewTaskPolling();
+                        _this.previewError = '获取封装进度失败';
+                    });
+                };
+                tick();
+                _this.previewTaskTimer = setInterval(tick, 1000);
+            },
+            stopPreviewTaskPolling: function() {
+                if (this.previewTaskTimer) {
+                    clearInterval(this.previewTaskTimer);
+                    this.previewTaskTimer = null;
+                }
+            },
+            cancelPreviewPrepare: function() {
+                var _this = this;
+                if (!_this.previewPart || !_this.previewPart.partId) return;
+                ApiUtil.post('/part/preview/' + _this.previewPart.partId + '/cancel', {}, function(resp) {
+                    _this.previewTask = (resp && resp.task) ? resp.task : null;
+                    _this.stopPreviewTaskPolling();
+                    _this.switchPreviewSource('flv');
+                }, function() {
+                    _this.$message({ message: '取消封装失败', type: 'warning' });
+                });
+            },
+            closePartPreview: function() {
+                this.stopPreviewTaskPolling();
+                this.destroyPreviewFlvPlayer();
+                var video = this.$refs ? this.$refs.partPreviewVideo : null;
+                if (video) {
+                    try {
+                        video.pause();
+                        video.removeAttribute('src');
+                        video.load();
+                    } catch (e) {}
+                }
+                this.previewDialogVisible = false;
+                this.previewPart = null;
+                this.previewMeta = null;
+                this.previewTask = null;
+                this.previewMode = 'flv';
+                this.previewPreparing = false;
+                this.previewError = '';
+            },
+            destroyPreviewFlvPlayer: function() {
+                if (this.previewFlvPlayer) {
+                    try {
+                        this.previewFlvPlayer.unload();
+                        this.previewFlvPlayer.detachMediaElement();
+                        this.previewFlvPlayer.destroy();
+                    } catch (e) {}
+                    this.previewFlvPlayer = null;
+                }
+            },
             openBindFileDialog: function(p) {
                 this.bindTargetPart = p;
                 this.selectedCandidateFile = '';
@@ -3882,7 +4130,8 @@
 
                 const backendSpeed = Number(p.speed) || 0;
                 const etaSeconds = Number(p.etaSeconds) || 0;
-                if (backendSpeed > 0) {
+                const backendSpeedSampleCount = Number(p.speedSampleCount) || 0;
+                if (backendSpeed > 0 && backendSpeedSampleCount >= 2) {
                     let seconds = etaSeconds;
                     if (!isFinite(seconds) || seconds <= 0) {
                         let remainingBytes = Number(p.remainingBytes) || 0;
@@ -4652,6 +4901,7 @@
             this.clearPartsAutoScrollTimer();
             this.stopPolling();
             this.stopProgressPolling();
+            this.closePartPreview();
             if (this.$el) {
                 this.$el.removeEventListener('touchstart', this.handleTouchStart);
                 this.$el.removeEventListener('touchend', this.handleTouchEnd);

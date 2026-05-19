@@ -504,6 +504,12 @@ public final class LogKvs {
         EVENT_ZH.put("HighEnergyCut.Upload.Complete.Retry", "高能剪辑：通知合并失败，重试中");
         EVENT_ZH.put("HighEnergyCut.Upload.Complete.Success", "高能剪辑：上传合并完成");
 
+        // 视频预览
+        EVENT_ZH.put("PartPreview.FFmpeg.NotFound", "视频预览：系统缺少 ffmpeg，生成可拖动 MP4 预览等部分功能可能无法正常使用");
+        EVENT_ZH.put("PartPreview.FFmpeg.Resolved", "视频预览：已找到 ffmpeg");
+        EVENT_ZH.put("PartPreview.PrepareFailed", "视频预览：生成可拖动 MP4 预览失败");
+        EVENT_ZH.put("PartPreview.CacheCleanupFailed", "视频预览：清理预览缓存失败");
+
         // 登录/上传
         EVENT_ZH.put("Login.WebQr.PollFailed", "网页登录：轮询二维码登录状态失败");
         EVENT_ZH.put("Upload.RateLimit.WaitInterrupted", "上传：限流等待被中断");

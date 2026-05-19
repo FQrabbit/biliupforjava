@@ -7143,3 +7143,110 @@
 
 
 
+/* ========== 分P视频预览 ========== */
+.part-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
+}
+
+.part-action-btn--preview {
+    padding: 5px 9px;
+}
+
+.part-preview-dialog .el-dialog__body {
+    padding: 16px 20px 8px;
+}
+
+.part-preview-dialog .el-dialog__footer .el-button.is-disabled,
+.part-preview-dialog .el-dialog__footer .el-button.is-disabled:focus,
+.part-preview-dialog .el-dialog__footer .el-button.is-disabled:hover {
+    opacity: 1;
+    color: #a8abb2;
+    background: #f4f4f5;
+    border-color: #dcdfe6;
+}
+
+.part-preview-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.part-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text-primary, #303133);
+}
+
+.part-preview-title {
+    margin-left: 8px;
+    font-weight: 600;
+}
+
+.part-preview-mode {
+    color: var(--text-secondary, #909399);
+    font-size: 12px;
+}
+
+.part-preview-video-wrap {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #050505;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.part-preview-video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #050505;
+}
+
+.part-preview-tip {
+    padding: 9px 12px;
+    border-radius: 6px;
+    background: rgba(64, 158, 255, 0.1);
+    color: #409eff;
+    font-size: 13px;
+}
+
+.part-preview-tip.is-warning {
+    background: rgba(230, 162, 60, 0.12);
+    color: #e6a23c;
+}
+
+.part-preview-tip.is-error {
+    background: rgba(245, 108, 108, 0.12);
+    color: #f56c6c;
+}
+
+.part-preview-progress {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-secondary, #909399);
+    font-size: 13px;
+}
+
+[data-theme="dark"] .part-preview-header {
+    color: #e5e7eb;
+}
+
+[data-theme="dark"] .part-preview-video-wrap,
+[data-theme="dark"] .part-preview-video {
+    background: #000;
+}
+
+[data-theme="dark"] .part-preview-dialog .el-dialog__footer .el-button.is-disabled,
+[data-theme="dark"] .part-preview-dialog .el-dialog__footer .el-button.is-disabled:focus,
+[data-theme="dark"] .part-preview-dialog .el-dialog__footer .el-button.is-disabled:hover {
+    color: #8f98a8;
+    background: #30333a;
+    border-color: #525866;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}

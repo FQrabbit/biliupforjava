@@ -217,6 +217,36 @@
     border-color: var(--success-color) !important;
 }
 
+/* Disabled buttons must override themed primary/warning colors in dark mode. */
+[data-theme="dark"] .el-button.is-disabled,
+[data-theme="dark"] .el-button.is-disabled:focus,
+[data-theme="dark"] .el-button.is-disabled:hover,
+[data-theme="dark"] .el-button.is-disabled:active,
+[data-theme="dark"] .modern-btn.is-disabled,
+[data-theme="dark"] .modern-btn.is-disabled:focus,
+[data-theme="dark"] .modern-btn.is-disabled:hover,
+[data-theme="dark"] .modern-btn.is-disabled:active {
+    color: color-mix(in srgb, var(--text-disabled) 82%, var(--bg-primary)) !important;
+    background: color-mix(in srgb, var(--bg-primary) 74%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--border-color) 58%, var(--bg-primary)) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg-primary) 78%, transparent) !important;
+    opacity: 1 !important;
+    transform: none !important;
+    cursor: not-allowed !important;
+}
+
+[data-theme="dark"] .el-button.is-disabled.is-plain,
+[data-theme="dark"] .el-button.is-disabled.is-plain:focus,
+[data-theme="dark"] .el-button.is-disabled.is-plain:hover,
+[data-theme="dark"] .modern-btn.is-disabled.is-plain,
+[data-theme="dark"] .modern-btn.is-disabled.is-plain:focus,
+[data-theme="dark"] .modern-btn.is-disabled.is-plain:hover {
+    color: color-mix(in srgb, var(--text-disabled) 78%, var(--bg-primary)) !important;
+    background: color-mix(in srgb, var(--bg-primary) 82%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--border-color) 50%, var(--bg-primary)) !important;
+    box-shadow: none !important;
+}
+
 /* ========== 深色模式下的文本按钮 ========== */
 [data-theme="dark"] .el-button--text {
     color: var(--primary-color);

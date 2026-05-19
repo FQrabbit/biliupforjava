@@ -1453,34 +1453,11 @@
                 }
                 var STORED_BUILD_KEY = 'biliup_frontend_build_id';
                 var STORED_VERSION_KEY = 'biliup_frontend_version';
-                var DEBUG_VERSION_KEY = 'biliup_debug_frontend_version';
-                var debugVersion = localStorage.getItem(DEBUG_VERSION_KEY) === 'true';
-                var debug = function(stage, payload) {
-                    if (!debugVersion || !window.console || !console.info) {
-                        return;
-                    }
-                    console.info('[CacheVersion]', stage, payload || '');
-                };
-
-                debug('start', {
-                    origin: window.location.origin,
-                    href: window.location.href,
-                    pageBuildId: self.frontendBuildId || window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '',
-                    windowBuildId: window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '',
-                    storedBuildId: localStorage.getItem(STORED_BUILD_KEY),
-                    storedVersion: localStorage.getItem(STORED_VERSION_KEY)
-                });
-
                 fetch('/api/version', {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     cache: 'no-store'
                 }).then(function(response) {
-                    debug('response', {
-                        status: response.status,
-                        ok: response.ok,
-                        cacheControl: response.headers ? response.headers.get('Cache-Control') : ''
-                    });
                     if (!response.ok) {
                         throw response;
                     }
@@ -1498,13 +1475,6 @@
                     var storedBuildId = localStorage.getItem(STORED_BUILD_KEY);
 
                     var pageBuildIsOld = currentBuildId ? currentBuildId !== buildId : storedBuildId !== buildId;
-                    debug('decision', {
-                        version: version,
-                        apiBuildId: buildId,
-                        currentBuildId: currentBuildId,
-                        storedBuildId: storedBuildId,
-                        pageBuildIsOld: pageBuildIsOld
-                    });
                     localStorage.setItem(STORED_BUILD_KEY, buildId);
                     localStorage.setItem(STORED_VERSION_KEY, version);
                     if (!pageBuildIsOld) {
@@ -1522,8 +1492,7 @@
                         self.reloadWithFrontendBuildId(buildId);
                     }, 1500);
                 }).catch(function(error) {
-                    debug('error', error);
-                    console.warn('[CacheVersion] 获取版本失败:', error && error.status ? error.status : error);
+                    console.warn('获取前端版本失败:', error && error.status ? error.status : error);
                 });
             },
             withFrontendBuildId: function(url, buildId) {

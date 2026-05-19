@@ -3,7 +3,6 @@
 
     var STORED_BUILD_KEY = 'biliup_frontend_build_id';
     var STORED_VERSION_KEY = 'biliup_frontend_version';
-    var DEBUG_VERSION_KEY = 'biliup_debug_frontend_version';
     var DEFAULT_INTERVAL_MS = 30000;
 
     var state = {
@@ -13,21 +12,6 @@
         options: {},
         listenersBound: false
     };
-
-    function isDebugEnabled() {
-        try {
-            return window.localStorage && window.localStorage.getItem(DEBUG_VERSION_KEY) === 'true';
-        } catch (e) {
-            return false;
-        }
-    }
-
-    function debug(stage, payload) {
-        if (!isDebugEnabled() || !window.console || !console.info) {
-            return;
-        }
-        console.info('[CacheVersion]', stage, payload || '');
-    }
 
     function getStoredValue(key) {
         try {
@@ -109,11 +93,6 @@
             cache: 'no-store',
             credentials: 'same-origin'
         }).then(function(response) {
-            debug('response', {
-                status: response.status,
-                ok: response.ok,
-                cacheControl: response.headers ? response.headers.get('Cache-Control') : ''
-            });
             if (!response.ok) {
                 throw response;
             }
@@ -141,14 +120,6 @@
         var pageBuildId = getPageBuildId();
         var storedBuildId = getStoredValue(STORED_BUILD_KEY);
         var refreshNeeded = shouldRefresh(buildId);
-
-        debug('decision', {
-            version: version,
-            apiBuildId: buildId,
-            currentBuildId: pageBuildId,
-            storedBuildId: storedBuildId,
-            pageBuildIsOld: refreshNeeded
-        });
 
         setStoredValue(STORED_BUILD_KEY, buildId);
         setStoredValue(STORED_VERSION_KEY, version);
@@ -185,22 +156,13 @@
             return state.inFlight;
         }
 
-        debug('start', {
-            origin: window.location.origin,
-            href: window.location.href,
-            pageBuildId: getPageBuildId(),
-            storedBuildId: getStoredValue(STORED_BUILD_KEY),
-            storedVersion: getStoredValue(STORED_VERSION_KEY)
-        });
-
         state.inFlight = fetchVersion()
                 .then(function(data) {
                     return applyVersionData(data, opts);
                 })
                 .catch(function(error) {
-                    debug('error', error);
                     if (window.console && console.warn) {
-                        console.warn('[CacheVersion] 鑾峰彇鐗堟湰澶辫触:', error && error.status ? error.status : error);
+                        console.warn('获取前端版本失败:', error && error.status ? error.status : error);
                     }
                     return false;
                 })

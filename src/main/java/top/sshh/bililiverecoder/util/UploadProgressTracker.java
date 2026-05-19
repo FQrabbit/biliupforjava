@@ -14,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class UploadProgressTracker {
 
+    private static final long MIN_SPEED_SAMPLE_INTERVAL_MS = 1500L;
+
     public enum State {
         UPLOADING,
         RETRY_WAIT,
@@ -37,6 +39,8 @@ public class UploadProgressTracker {
         private int percent;
         private long speed;
         private int speedSampleCount;
+        private long speedUploadedBytes;
+        private long speedSampleAtMs;
         private State state;
         private String stateMsg;
         private Integer retryCount;
@@ -70,13 +74,15 @@ public class UploadProgressTracker {
             p.setChunkTotal(Math.max(chunkTotal, 0));
             p.setChunkSizeBytes(Math.max(chunkSizeBytes, 0L));
             p.setFileSizeBytes(Math.max(fileSizeBytes, 0L));
+            p.setChunkDone(0);
             updateByteProgress(p);
             p.setUploadFlow(uploadFlow);
-            if (p.getChunkDone() < 0) p.setChunkDone(0);
             p.setPercent(calcPercent(p.getChunkDone(), p.getChunkTotal()));
             p.setSpeed(0L);
             p.setEtaSeconds(0L);
             p.setSpeedSampleCount(0);
+            p.setSpeedUploadedBytes(p.getUploadedBytes());
+            p.setSpeedSampleAtMs(now);
             p.setState(State.UPLOADING);
             p.setStateMsg(null);
             p.setRetryCount(null);
@@ -91,9 +97,8 @@ public class UploadProgressTracker {
         long now = System.currentTimeMillis();
         byPartId.compute(partId, (k, old) -> {
             Progress p = (old != null) ? old : new Progress();
-            int oldChunkDone = old == null ? 0 : old.getChunkDone();
-            long oldUploadedBytes = old == null ? 0L : old.getUploadedBytes();
-            long oldUpdateAtMs = old == null ? 0L : old.getUpdateAtMs();
+            long oldSpeedUploadedBytes = old == null ? 0L : old.getSpeedUploadedBytes();
+            long oldSpeedSampleAtMs = old == null ? 0L : old.getSpeedSampleAtMs();
             p.setPartId(partId);
             p.setHistoryId(historyId);
             p.setPage(page);
@@ -101,13 +106,31 @@ public class UploadProgressTracker {
             p.setChunkTotal(Math.max(chunkTotal, 0));
             p.setPercent(calcPercent(p.getChunkDone(), p.getChunkTotal()));
             updateByteProgress(p);
-            if (old != null && oldChunkDone > 0 && oldUpdateAtMs > 0 && now > oldUpdateAtMs) {
-                long deltaBytes = Math.max(0L, p.getUploadedBytes() - oldUploadedBytes);
+            if (old != null) {
+                if (oldSpeedSampleAtMs <= 0) {
+                    oldSpeedSampleAtMs = old.getUpdateAtMs();
+                    oldSpeedUploadedBytes = old.getUploadedBytes();
+                }
+                p.setSpeed(Math.max(0L, old.getSpeed()));
+                p.setSpeedSampleCount(Math.max(0, old.getSpeedSampleCount()));
+                p.setSpeedUploadedBytes(oldSpeedUploadedBytes);
+                p.setSpeedSampleAtMs(oldSpeedSampleAtMs);
+            }
+            if (old != null && oldSpeedSampleAtMs > 0 && now > oldSpeedSampleAtMs) {
+                long elapsedMs = now - oldSpeedSampleAtMs;
+                long deltaBytes = Math.max(0L, p.getUploadedBytes() - oldSpeedUploadedBytes);
                 if (deltaBytes > 0) {
-                    long instantSpeed = Math.max(0L, Math.round(deltaBytes * 1000.0 / Math.max(1L, now - oldUpdateAtMs)));
-                    long previousSpeed = Math.max(0L, old.getSpeed());
-                    p.setSpeed(previousSpeed > 0 ? Math.round(previousSpeed * 0.65 + instantSpeed * 0.35) : instantSpeed);
-                    p.setSpeedSampleCount(Math.min(Integer.MAX_VALUE, Math.max(0, old.getSpeedSampleCount()) + 1));
+                    if (elapsedMs >= MIN_SPEED_SAMPLE_INTERVAL_MS) {
+                        long instantSpeed = Math.max(0L, Math.round(deltaBytes * 1000.0 / elapsedMs));
+                        long previousSpeed = Math.max(0L, old.getSpeed());
+                        p.setSpeed(previousSpeed > 0 ? Math.round(previousSpeed * 0.65 + instantSpeed * 0.35) : instantSpeed);
+                        p.setSpeedSampleCount(Math.min(Integer.MAX_VALUE, Math.max(0, old.getSpeedSampleCount()) + 1));
+                        p.setSpeedUploadedBytes(p.getUploadedBytes());
+                        p.setSpeedSampleAtMs(now);
+                    }
+                } else {
+                    p.setSpeedUploadedBytes(p.getUploadedBytes());
+                    p.setSpeedSampleAtMs(now);
                 }
             }
             if (p.getSpeed() > 0 && p.getSpeedSampleCount() >= 2) {
@@ -233,6 +256,8 @@ public class UploadProgressTracker {
         p.setPercent(src.getPercent());
         p.setSpeed(src.getSpeed());
         p.setSpeedSampleCount(src.getSpeedSampleCount());
+        p.setSpeedUploadedBytes(src.getSpeedUploadedBytes());
+        p.setSpeedSampleAtMs(src.getSpeedSampleAtMs());
         p.setState(src.getState());
         p.setStateMsg(src.getStateMsg());
         p.setRetryCount(src.getRetryCount());
