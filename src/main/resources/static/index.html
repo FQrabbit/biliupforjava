@@ -961,6 +961,7 @@
             iframeOperatingMessage: '',
             workspaceStatusLoading: false,
             workspaceUsageTimer: null,
+            cacheVersionTimer: null,
             workspaceStatus: {
                 valid: true,
                 usedPercent: 0,
@@ -1062,6 +1063,9 @@
             this.workspaceUsageTimer = setInterval(function() {
                 self.fetchWorkspaceUsageStatus();
             }, 60000);
+            this.cacheVersionTimer = setInterval(function() {
+                self.checkCacheVersion();
+            }, 30000);
             this.checkUpdate();
             // 初始化导航指示器
             this.$nextTick(function() {
@@ -1117,6 +1121,10 @@
             if (this.workspaceUsageTimer) {
                 clearInterval(this.workspaceUsageTimer);
                 this.workspaceUsageTimer = null;
+            }
+            if (this.cacheVersionTimer) {
+                clearInterval(this.cacheVersionTimer);
+                this.cacheVersionTimer = null;
             }
         },
         methods: {
@@ -1405,14 +1413,39 @@
             },
             checkCacheVersion: function() {
                 var self = this;
+                if (this.needCacheRefresh) {
+                    return;
+                }
                 var STORED_BUILD_KEY = 'biliup_frontend_build_id';
                 var STORED_VERSION_KEY = 'biliup_frontend_version';
+                var DEBUG_VERSION_KEY = 'biliup_debug_frontend_version';
+                var debugVersion = localStorage.getItem(DEBUG_VERSION_KEY) === 'true';
+                var debug = function(stage, payload) {
+                    if (!debugVersion || !window.console || !console.info) {
+                        return;
+                    }
+                    console.info('[CacheVersion]', stage, payload || '');
+                };
+
+                debug('start', {
+                    origin: window.location.origin,
+                    href: window.location.href,
+                    pageBuildId: self.frontendBuildId || window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '',
+                    windowBuildId: window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '',
+                    storedBuildId: localStorage.getItem(STORED_BUILD_KEY),
+                    storedVersion: localStorage.getItem(STORED_VERSION_KEY)
+                });
 
                 fetch('/api/version', {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     cache: 'no-store'
                 }).then(function(response) {
+                    debug('response', {
+                        status: response.status,
+                        ok: response.ok,
+                        cacheControl: response.headers ? response.headers.get('Cache-Control') : ''
+                    });
                     if (!response.ok) {
                         throw response;
                     }
@@ -1430,6 +1463,13 @@
                     var storedBuildId = localStorage.getItem(STORED_BUILD_KEY);
 
                     var pageBuildIsOld = currentBuildId ? currentBuildId !== buildId : storedBuildId !== buildId;
+                    debug('decision', {
+                        version: version,
+                        apiBuildId: buildId,
+                        currentBuildId: currentBuildId,
+                        storedBuildId: storedBuildId,
+                        pageBuildIsOld: pageBuildIsOld
+                    });
                     localStorage.setItem(STORED_BUILD_KEY, buildId);
                     localStorage.setItem(STORED_VERSION_KEY, version);
                     if (!pageBuildIsOld) {
@@ -1447,6 +1487,7 @@
                         self.reloadWithFrontendBuildId(buildId);
                     }, 1500);
                 }).catch(function(error) {
+                    debug('error', error);
                     console.warn('[CacheVersion] 获取版本失败:', error && error.status ? error.status : error);
                 });
             },
@@ -1577,6 +1618,7 @@
                     this.connectionError = false;
                     this.pageLoading = false;
                     this.showLoadingAfterDelay = false;
+                    this.checkCacheVersion();
                     this.stopRetryCountdown();
                     if (this.loadingTimer) {
                         clearTimeout(this.loadingTimer);
@@ -1670,7 +1712,7 @@
                     var iframe = document.querySelector('.tab-frame');
                     if (iframe) {
                         var currentSrc = iframe.src.split('?')[0];
-                        iframe.src = currentSrc + '?t=' + Date.now();
+                        iframe.src = self.withFrontendBuildId(currentSrc + '?t=' + Date.now());
                     }
                 });
             },

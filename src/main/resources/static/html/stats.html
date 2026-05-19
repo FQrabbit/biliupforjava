@@ -36,14 +36,19 @@
 <body>
 <div id="statsApp" class="stats-container" v-loading="loading">
     <header class="stats-header">
-        <div>
+        <div class="stats-header-main">
             <h1 class="stats-title">
                 <i class="el-icon-data-analysis"></i>
                 <span>统计中心</span>
             </h1>
             <p class="stats-subtitle">直播场次、时段偏好、投稿状态与弹幕热度</p>
+            <div class="stats-scope-line">
+                <span>{{ selectedRoomId ? currentRoomTitle : '全部房间' }}</span>
+                <em>历史 {{ number(coverage.totalHistoryCount) }} 场</em>
+                <em>已统计 {{ number(coverage.statsSessionCount) }} 场</em>
+            </div>
         </div>
-        <div class="stats-toolbar">
+        <div class="stats-toolbar" role="group" aria-label="统计筛选和维护操作">
             <el-select v-model="selectedRoomId" size="small" clearable filterable placeholder="全部房间" @change="loadRoomDetail">
                 <el-option v-for="room in rooms" :key="room.roomId" :label="roomLabel(room)" :value="room.roomId"></el-option>
             </el-select>
@@ -69,9 +74,9 @@
                         @change="handleDateRangeChange">
                 </el-date-picker>
             </div>
-            <el-button size="small" icon="el-icon-refresh" @click="reload">刷新</el-button>
+            <el-button class="stats-refresh-btn" size="small" icon="el-icon-refresh" @click="reload">刷新</el-button>
             <div class="stats-more">
-                <el-button size="small" icon="el-icon-more" @click="toggleMoreActions">更多操作</el-button>
+                <el-button class="stats-more-btn" size="small" icon="el-icon-more" @click="toggleMoreActions">更多操作</el-button>
                 <transition name="stats-action-menu">
                     <div v-if="moreActionsVisible" class="stats-action-menu">
                         <el-button size="small" icon="el-icon-finished" :loading="backfilling" @click="backfillStats">补全未统计</el-button>
@@ -87,75 +92,77 @@
         </div>
     </header>
 
-    <transition name="stats-progress">
-        <section v-if="operationProgress.visible" class="operation-progress-panel" :class="'is-' + operationProgress.status">
-            <div class="operation-progress-head">
-                <div>
-                    <strong>{{ operationProgress.title }}</strong>
-                    <span>{{ operationProgress.message }}</span>
+    <section class="stats-ops-stack">
+        <transition name="stats-progress">
+            <section v-if="operationProgress.visible" class="operation-progress-panel" :class="'is-' + operationProgress.status">
+                <div class="operation-progress-head">
+                    <div>
+                        <strong>{{ operationProgress.title }}</strong>
+                        <span>{{ operationProgress.message }}</span>
+                    </div>
+                    <em>{{ operationProgress.percent }}%</em>
                 </div>
-                <em>{{ operationProgress.percent }}%</em>
-            </div>
-            <el-progress
-                    :percentage="operationProgress.percent"
-                    :status="operationProgress.status === 'error' ? 'exception' : (operationProgress.percent >= 100 ? 'success' : undefined)"
-                    :stroke-width="8">
-            </el-progress>
-            <div v-if="operationProgress.detail" class="operation-progress-detail">{{ operationProgress.detail }}</div>
-        </section>
-    </transition>
-
-    <section class="coverage-strip" :class="{ 'is-complete': coverage.complete }">
-        <div>
-            <strong>{{ coverage.complete ? '统计已覆盖全部历史' : '统计仍有缺口' }}</strong>
-            <span>历史 {{ number(coverage.totalHistoryCount) }} 场，已统计 {{ number(coverage.statsSessionCount) }} 场，待补算 {{ number(coverage.pendingSessionCount) }} 场</span>
-        </div>
-        <span>最后更新 {{ dateTime(coverage.updatedAt) }}</span>
-    </section>
-
-    <section v-if="pendingCoverageItems.length" class="coverage-pending-panel">
-        <div class="coverage-pending-head" @click="pendingCoverageExpanded = !pendingCoverageExpanded">
-            <div>
-                <strong>待统计稿件</strong>
-                <span>共 {{ number(coverage.pendingSessionCount) }} 场，显示前 {{ number(pendingCoverageItems.length) }} 条</span>
-            </div>
-            <button type="button" class="coverage-pending-toggle" :class="{ 'is-open': pendingCoverageExpanded }">
-                <span>{{ pendingCoverageExpanded ? '收起明细' : '展开明细' }}</span>
-                <i class="el-icon-arrow-down"></i>
-            </button>
-        </div>
-        <transition name="coverage-pending">
-            <div v-if="pendingCoverageExpanded" class="coverage-pending-body">
-                <el-table :data="pendingCoverageItems" size="mini" max-height="260">
-                    <el-table-column prop="historyId" label="稿件ID" width="86"></el-table-column>
-                    <el-table-column prop="roomId" label="房间" width="120"></el-table-column>
-                    <el-table-column label="标题" min-width="220">
-                        <template slot-scope="scope">{{ scope.row.title || scope.row.bvId || '-' }}</template>
-                    </el-table-column>
-                    <el-table-column label="时间" width="180">
-                        <template slot-scope="scope">{{ dateTime(scope.row.startTime) || '-' }}</template>
-                    </el-table-column>
-                    <el-table-column label="原因" min-width="260">
-                        <template slot-scope="scope">
-                            <el-tag size="mini" :type="scope.row.status === 'stale' ? 'warning' : 'info'">
-                                {{ scope.row.status === 'stale' ? '版本旧' : '未生成' }}
-                            </el-tag>
-                            <span class="coverage-pending-reason">{{ scope.row.reason }}</span>
-                        </template>
-                    </el-table-column>
-                </el-table>
-            </div>
+                <el-progress
+                        :percentage="operationProgress.percent"
+                        :status="operationProgress.status === 'error' ? 'exception' : (operationProgress.percent >= 100 ? 'success' : undefined)"
+                        :stroke-width="8">
+                </el-progress>
+                <div v-if="operationProgress.detail" class="operation-progress-detail">{{ operationProgress.detail }}</div>
+            </section>
         </transition>
+
+        <section class="coverage-strip" :class="{ 'is-complete': coverage.complete }">
+            <div>
+                <strong>{{ coverage.complete ? '统计已覆盖全部历史' : '统计仍有缺口' }}</strong>
+                <span>历史 {{ number(coverage.totalHistoryCount) }} 场，已统计 {{ number(coverage.statsSessionCount) }} 场，待补算 {{ number(coverage.pendingSessionCount) }} 场</span>
+            </div>
+            <span>最后更新 {{ dateTime(coverage.updatedAt) }}</span>
+        </section>
+
+        <section v-if="pendingCoverageItems.length" class="coverage-pending-panel">
+            <div class="coverage-pending-head" @click="pendingCoverageExpanded = !pendingCoverageExpanded">
+                <div>
+                    <strong>待统计稿件</strong>
+                    <span>共 {{ number(coverage.pendingSessionCount) }} 场，显示前 {{ number(pendingCoverageItems.length) }} 条</span>
+                </div>
+                <button type="button" class="coverage-pending-toggle" :class="{ 'is-open': pendingCoverageExpanded }">
+                    <span>{{ pendingCoverageExpanded ? '收起明细' : '展开明细' }}</span>
+                    <i class="el-icon-arrow-down"></i>
+                </button>
+            </div>
+            <transition name="coverage-pending">
+                <div v-if="pendingCoverageExpanded" class="coverage-pending-body">
+                    <el-table :data="pendingCoverageItems" size="mini" max-height="260">
+                        <el-table-column prop="historyId" label="稿件ID" width="86"></el-table-column>
+                        <el-table-column prop="roomId" label="房间" width="120"></el-table-column>
+                        <el-table-column label="标题" min-width="220">
+                            <template slot-scope="scope">{{ scope.row.title || scope.row.bvId || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column label="时间" width="180">
+                            <template slot-scope="scope">{{ dateTime(scope.row.startTime) || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column label="原因" min-width="260">
+                            <template slot-scope="scope">
+                                <el-tag size="mini" :type="scope.row.status === 'stale' ? 'warning' : 'info'">
+                                    {{ scope.row.status === 'stale' ? '版本旧' : '未生成' }}
+                                </el-tag>
+                                <span class="coverage-pending-reason">{{ scope.row.reason }}</span>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+            </transition>
+        </section>
     </section>
 
     <section class="stats-grid">
-        <div class="metric-card">
+        <div class="metric-card metric-card-primary">
             <div class="metric-label">{{ selectedRoomId ? '房间场次' : (coverage.complete ? '总场次' : '已统计场次') }}</div>
             <el-tooltip :content="exactNumber(metricSource.totalSessions || metricSource.liveCount, '场')" placement="top">
                 <div class="metric-value is-blue">{{ compactNumber(metricSource.totalSessions || metricSource.liveCount, '场') }}</div>
             </el-tooltip>
         </div>
-        <div class="metric-card">
+        <div class="metric-card metric-card-primary">
             <div class="metric-label">总时长</div>
             <el-tooltip :content="exactDuration(metricSource.totalDurationSeconds)" placement="top">
                 <div class="metric-value">{{ compactDuration(metricSource.totalDurationSeconds) }}</div>
@@ -186,7 +193,7 @@
     </section>
 
     <main class="stats-dashboard">
-        <section class="stats-panel chart-panel chart-panel-large">
+        <section class="stats-panel chart-panel chart-panel-large stats-panel-main">
             <div class="panel-head">
                 <div>
                     <h2 class="panel-title">{{ mainChartMode === 'hour' ? '开播时段热力图' : '开播趋势' }}</h2>
@@ -200,7 +207,7 @@
             <div id="mainChart" class="chart-box chart-box-large"></div>
         </section>
 
-        <section v-if="!selectedRoomId" class="stats-panel chart-panel">
+        <section v-if="!selectedRoomId" class="stats-panel chart-panel stats-panel-side">
             <div class="panel-head">
                 <div>
                     <h2 class="panel-title">投稿结果</h2>
@@ -215,7 +222,7 @@
             </div>
         </section>
 
-        <section v-if="!selectedRoomId" class="stats-panel chart-panel">
+        <section v-if="!selectedRoomId" class="stats-panel chart-panel stats-panel-side">
             <div class="panel-head">
                 <div>
                     <h2 class="panel-title">时长分布</h2>
@@ -225,7 +232,7 @@
             <div id="durationChart" class="chart-box"></div>
         </section>
 
-        <section v-if="!selectedRoomId" class="stats-panel chart-panel chart-panel-wide">
+        <section v-if="!selectedRoomId" class="stats-panel chart-panel chart-panel-wide stats-panel-wide">
             <div class="panel-head">
                 <div>
                     <h2 class="panel-title">房间对比</h2>
@@ -250,11 +257,14 @@
                 <span class="panel-meta">{{ rooms.length }} 个房间</span>
             </div>
             <el-table
+                    class="stats-sortable-table"
+                    :class="{ 'is-sorting': isTableSorting('roomRanking') }"
                     :data="rooms"
                     size="small"
                     row-key="roomId"
                     :default-sort="{ prop: 'liveCount', order: 'descending' }"
                     highlight-current-row
+                    @sort-change="animateTableSort('roomRanking')"
                     @row-click="selectRoom">
                 <el-table-column label="房间" min-width="190" sortable sort-by="uname">
                     <template slot-scope="scope">
@@ -337,7 +347,15 @@
                 </div>
                 <div class="session-list-card">
                     <div class="subchart-title">最近场次</div>
-                    <el-table :data="sessionOptions" size="mini" height="220" highlight-current-row @row-click="selectSessionRow">
+                    <el-table
+                            class="stats-sortable-table"
+                            :class="{ 'is-sorting': isTableSorting('sessionList') }"
+                            :data="sessionOptions"
+                            size="mini"
+                            height="220"
+                            highlight-current-row
+                            @sort-change="animateTableSort('sessionList')"
+                            @row-click="selectSessionRow">
                         <el-table-column label="开播" min-width="132">
                             <template slot-scope="scope">{{ dateTime(scope.row.startTime) }}</template>
                         </el-table-column>
@@ -452,7 +470,13 @@
             <div v-if="selectedSessionSummary.historyId" class="interaction-detail-grid">
                 <div>
                     <h3 class="subchart-title">弹幕用户 Top 10</h3>
-                    <el-table :data="selectedSessionDetail.topDanmuUsers || []" size="mini" height="260">
+                    <el-table
+                            class="stats-sortable-table"
+                            :class="{ 'is-sorting': isTableSorting('danmuUsers') }"
+                            :data="selectedSessionDetail.topDanmuUsers || []"
+                            size="mini"
+                            height="260"
+                            @sort-change="animateTableSort('danmuUsers')">
                         <el-table-column label="用户" min-width="130">
                             <template slot-scope="scope">{{ scope.row.uname || scope.row.uid || '未知用户' }}</template>
                         </el-table-column>
@@ -462,12 +486,18 @@
                 <div>
                     <div class="subchart-title table-title-with-action">
                         <span>送礼用户 Top 10</span>
-                        <el-radio-group v-model="giftTopMode" size="mini">
+                        <el-radio-group v-model="giftTopMode" size="mini" @change="animateTableSort('giftUsers')">
                             <el-radio-button label="amount">金额</el-radio-button>
                             <el-radio-button label="count">数量</el-radio-button>
                         </el-radio-group>
                     </div>
-                    <el-table :data="activeGiftUsers" size="mini" height="260">
+                    <el-table
+                            class="stats-sortable-table"
+                            :class="{ 'is-sorting': isTableSorting('giftUsers') }"
+                            :data="activeGiftUsers"
+                            size="mini"
+                            height="260"
+                            @sort-change="animateTableSort('giftUsers')">
                         <el-table-column label="用户" min-width="130">
                             <template slot-scope="scope">{{ scope.row.uname || scope.row.uid || '未知用户' }}</template>
                         </el-table-column>
@@ -560,7 +590,9 @@ new Vue({
             mainChartMode: 'hour',
             comparisonMetric: 'liveCount',
             giftTopMode: 'amount',
-            charts: {}
+            charts: {},
+            sortingTables: {},
+            sortAnimationTimers: {}
         };
     },
     computed: {
@@ -672,6 +704,26 @@ new Vue({
         }
     },
     methods: {
+        isTableSorting: function (name) {
+            return !!this.sortingTables[name];
+        },
+        animateTableSort: function (name) {
+            var self = this;
+            if (!name) {
+                return;
+            }
+            if (this.sortAnimationTimers[name]) {
+                clearTimeout(this.sortAnimationTimers[name]);
+            }
+            this.$set(this.sortingTables, name, false);
+            this.$nextTick(function () {
+                self.$set(self.sortingTables, name, true);
+                self.sortAnimationTimers[name] = setTimeout(function () {
+                    self.$set(self.sortingTables, name, false);
+                    self.sortAnimationTimers[name] = null;
+                }, self.prefersReducedMotion() ? 1 : 420);
+            });
+        },
         reload: function () {
             var self = this;
             this.loading = true;
@@ -1370,6 +1422,95 @@ new Vue({
             }
             return this.charts[id];
         },
+        prefersReducedMotion: function () {
+            return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        },
+        chartMotionOption: function () {
+            if (this.prefersReducedMotion()) {
+                return {
+                    animation: false,
+                    animationDuration: 0,
+                    animationDurationUpdate: 0
+                };
+            }
+            return {
+                animation: true,
+                animationDuration: 650,
+                animationDurationUpdate: 320,
+                animationEasing: 'cubicOut',
+                animationEasingUpdate: 'cubicOut',
+                animationDelay: function (idx) {
+                    return Math.min(idx * 14, 220);
+                },
+                animationDelayUpdate: function (idx) {
+                    return Math.min(idx * 8, 120);
+                }
+            };
+        },
+        chartTooltip: function (extra) {
+            extra = extra || {};
+            var axisPointer = Object.assign({
+                lineStyle: { color: this.chartPrimaryColor(), width: 1, opacity: 0.68 },
+                shadowStyle: { color: this.isDarkTheme() ? 'rgba(123,143,255,0.14)' : 'rgba(64,158,255,0.10)' },
+                crossStyle: { color: this.chartPrimaryColor(), opacity: 0.68 }
+            }, extra.axisPointer || {});
+            return Object.assign({
+                confine: true,
+                appendToBody: true,
+                backgroundColor: this.isDarkTheme() ? 'rgba(24,24,27,0.92)' : 'rgba(255,255,255,0.94)',
+                borderColor: this.chartPrimaryColor(),
+                borderWidth: 1,
+                padding: [10, 12],
+                textStyle: { color: this.cssVar('--text-primary', this.isDarkTheme() ? '#f5f5f5' : '#303133') },
+                extraCssText: 'border-radius:12px;box-shadow:0 18px 42px rgba(0,0,0,.18);backdrop-filter:blur(12px);',
+                axisPointer: axisPointer
+            }, extra, { axisPointer: axisPointer });
+        },
+        chartShadowColor: function () {
+            return this.isDarkTheme() ? 'rgba(123,143,255,0.34)' : 'rgba(64,158,255,0.28)';
+        },
+        enhanceChartSeries: function (series) {
+            var self = this;
+            return (series || []).map(function (item) {
+                var next = Object.assign({}, item);
+                var emphasis = Object.assign({}, next.emphasis || {});
+                if (next.type === 'bar') {
+                    emphasis.focus = emphasis.focus || 'series';
+                    emphasis.itemStyle = Object.assign({
+                        shadowBlur: 16,
+                        shadowColor: self.chartShadowColor(),
+                        shadowOffsetY: 4
+                    }, emphasis.itemStyle || {});
+                } else if (next.type === 'line') {
+                    emphasis.focus = emphasis.focus || 'series';
+                    emphasis.scale = emphasis.scale !== false;
+                    emphasis.lineStyle = Object.assign({
+                        width: ((next.lineStyle && next.lineStyle.width) || 2) + 1
+                    }, emphasis.lineStyle || {});
+                    next.symbol = next.symbol || 'circle';
+                } else if (next.type === 'pie') {
+                    emphasis.focus = emphasis.focus || 'self';
+                    emphasis.scale = emphasis.scale !== false;
+                    emphasis.scaleSize = emphasis.scaleSize || 6;
+                    emphasis.itemStyle = Object.assign({
+                        shadowBlur: 18,
+                        shadowColor: self.chartShadowColor()
+                    }, emphasis.itemStyle || {});
+                }
+                next.emphasis = emphasis;
+                return next;
+            });
+        },
+        applyChartOption: function (chart, option) {
+            var next = Object.assign({}, this.chartMotionOption(), option || {});
+            if (next.tooltip) {
+                next.tooltip = this.chartTooltip(next.tooltip);
+            }
+            if (Array.isArray(next.series)) {
+                next.series = this.enhanceChartSeries(next.series);
+            }
+            chart.setOption(next, true);
+        },
         renderMainChart: function () {
             var chart = this.chart('mainChart');
             if (!chart) return;
@@ -1378,20 +1519,20 @@ new Vue({
                 return;
             }
             var buckets = this.activeHourBuckets || [];
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: '{b}:00<br/>开播 {c} 场' },
                 grid: { left: 42, right: 16, top: 24, bottom: 32 },
                 xAxis: this.categoryAxis(this.rangeLabels(24), { axisTick: { show: false } }),
                 yAxis: this.valueAxis({ minInterval: 1 }),
-                visualMap: { show: false, min: 0, max: Math.max.apply(null, buckets.concat([1])), inRange: { color: ['#d8ecff', '#409eff', '#20b26b'] } },
+                visualMap: { show: false, min: 0, max: Math.max.apply(null, buckets.concat([1])), inRange: { color: [this.chartSoftColor(), this.chartPrimaryColor(), this.chartSuccessColor()] } },
                 series: [{ type: 'bar', data: buckets, barMaxWidth: 26, itemStyle: { borderRadius: [4, 4, 0, 0] } }]
-            }, true);
+            });
         },
         renderPublishChart: function () {
             var chart = this.chart('publishChart');
             if (!chart) return;
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'item', formatter: '{b}<br/>{c} 场 · {d}%' },
                 legend: this.legend({ bottom: 0, type: 'scroll' }),
@@ -1402,20 +1543,20 @@ new Vue({
                     data: this.overview.publishStatusDistribution || [],
                     label: this.pieLabel('{b}\n{c}')
                 }]
-            }, true);
+            });
         },
         renderDurationChart: function () {
             var chart = this.chart('durationChart');
             if (!chart) return;
             var data = this.overview.durationDistribution || [];
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: '{b}<br/>{c} 场' },
                 grid: { left: 36, right: 12, top: 20, bottom: 30 },
                 xAxis: this.categoryAxis(data.map(function (item) { return item.name; }), { axisTick: { show: false } }),
                 yAxis: this.valueAxis({ minInterval: 1 }),
-                series: [{ type: 'bar', data: data.map(function (item) { return item.value; }), barMaxWidth: 34, itemStyle: { borderRadius: [4, 4, 0, 0], color: '#7c8cff' } }]
-            }, true);
+                series: [{ type: 'bar', data: data.map(function (item) { return item.value; }), barMaxWidth: 34, itemStyle: { borderRadius: [4, 4, 0, 0], color: this.chartPrimaryColor() } }]
+            });
         },
         renderRoomCompareChart: function () {
             var chart = this.chart('roomCompareChart');
@@ -1423,7 +1564,7 @@ new Vue({
             var self = this;
             var metric = this.comparisonMetric;
             var data = this.rooms.slice().sort(function (a, b) { return Number(b[metric] || 0) - Number(a[metric] || 0); }).slice(0, 10).reverse();
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: function (items) {
                     if (!items || !items.length) return '';
@@ -1436,10 +1577,10 @@ new Vue({
                 series: [{
                     type: 'bar',
                     data: data.map(function (item) { return Number(item[metric] || 0); }),
-                    itemStyle: { borderRadius: [0, 4, 4, 0], color: '#409eff' },
+                    itemStyle: { borderRadius: [0, 4, 4, 0], color: this.chartPrimaryColor() },
                     label: Object.assign({ show: true, position: 'right', formatter: this.compareLabel }, this.chartLabelStyle())
                 }]
-            }, true);
+            });
         },
         renderRoomTrendChart: function () {
             var chart = this.chart('roomTrendChart');
@@ -1456,7 +1597,7 @@ new Vue({
             var useDualAxis = !!showDualAxis || splitMsgAxis;
             var durationAxisIndex = splitMsgAxis ? 0 : (useDualAxis ? 1 : 0);
             var msgAxisIndex = useDualAxis ? 1 : 0;
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: function (items) {
                     if (!items || !items.length) return '';
@@ -1482,11 +1623,11 @@ new Vue({
                     this.valueAxis({ name: splitMsgAxis ? '弹幕' : '', minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } })
                 ] : this.valueAxis({ minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } }),
                 series: [
-                    { name: '场次', type: 'bar', yAxisIndex: 0, data: rows.map(function (item) { return item.liveCount || 0; }), barMaxWidth: 24 },
-                    { name: '总时长(h)', type: 'line', smooth: true, yAxisIndex: durationAxisIndex, symbolSize: splitMsgAxis ? 8 : 4, lineStyle: { width: splitMsgAxis ? 3 : 2 }, z: 4, data: rows.map(function (item) { return Math.round((Number(item.totalDurationSeconds || 0) / 3600) * 10) / 10; }) },
-                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: msgAxisIndex, data: rows.map(function (item) { return item.totalMsgCount || 0; }) }
+                    { name: '场次', type: 'bar', yAxisIndex: 0, data: rows.map(function (item) { return item.liveCount || 0; }), barMaxWidth: 24, itemStyle: { color: this.chartPrimaryColor() } },
+                    { name: '总时长(h)', type: 'line', smooth: true, yAxisIndex: durationAxisIndex, symbolSize: splitMsgAxis ? 8 : 4, lineStyle: { width: splitMsgAxis ? 3 : 2, color: this.chartSuccessColor() }, itemStyle: { color: this.chartSuccessColor() }, z: 4, data: rows.map(function (item) { return Math.round((Number(item.totalDurationSeconds || 0) / 3600) * 10) / 10; }) },
+                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: msgAxisIndex, lineStyle: { color: this.chartWarningColor() }, itemStyle: { color: this.chartWarningColor() }, data: rows.map(function (item) { return item.totalMsgCount || 0; }) }
                 ]
-            }, true);
+            });
         },
         renderBucketChart: function () {
             var chart = this.chart('bucketChart');
@@ -1508,7 +1649,7 @@ new Vue({
                 var item = bucketByIndex[index];
                 return item ? (item[field] || 0) : 0;
             };
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: function (items) {
                     if (!items || !items.length) return '';
@@ -1526,19 +1667,19 @@ new Vue({
                     this.valueAxis({ name: '礼物 / SC / 舰长', minInterval: 1 })
                 ],
                 series: [
-                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: 0, areaStyle: { opacity: 0.22 }, z: 2, data: timeline.map(function (_, index) { return bucketValue(index, 'msgCount'); }), itemStyle: { color: '#27b36a' } },
-                    { name: '礼物', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'giftEventCount'); }), itemStyle: { color: '#e6a23c' } },
-                    { name: 'SC', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'scCount'); }), itemStyle: { color: '#f56c6c' } },
-                    { name: '舰长', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'guardCount'); }), itemStyle: { color: '#7c8cff' } }
+                    { name: '弹幕', type: 'line', smooth: true, yAxisIndex: 0, areaStyle: { opacity: 0.22 }, z: 2, data: timeline.map(function (_, index) { return bucketValue(index, 'msgCount'); }), itemStyle: { color: this.chartSuccessColor() }, lineStyle: { color: this.chartSuccessColor() } },
+                    { name: '礼物', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'giftEventCount'); }), itemStyle: { color: this.chartWarningColor() } },
+                    { name: 'SC', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'scCount'); }), itemStyle: { color: this.chartDangerColor() } },
+                    { name: '舰长', type: 'bar', yAxisIndex: 1, stack: 'event', barMaxWidth: 18, z: 4, data: timeline.map(function (_, index) { return bucketValue(index, 'guardCount'); }), itemStyle: { color: this.chartPrimaryColor() } }
                 ]
-            }, true);
+            });
         },
         renderGiftChart: function () {
             var chart = this.chart('giftChart');
             if (!chart) return;
             var self = this;
             var rows = (this.selectedSessionDetail && this.selectedSessionDetail.giftDistribution) || this.detail.giftDistribution || [];
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'item', formatter: '{b}<br/>{c} 个 · {d}%' },
                 legend: this.legend({ bottom: 0, type: 'scroll' }),
@@ -1549,14 +1690,14 @@ new Vue({
                     data: rows,
                     label: this.pieLabel(function (item) { return item.name + '\n' + self.compactNumber(item.value, '个'); })
                 }]
-            }, true);
+            });
         },
         renderDanmuUserChart: function () {
             var chart = this.chart('danmuUserChart');
             if (!chart) return;
             var self = this;
             var rows = (this.selectedSessionDetail && this.selectedSessionDetail.topDanmuUsers) || [];
-            chart.setOption({
+            this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'item', formatter: '{b}<br/>{c} 条 · {d}%' },
                 legend: this.legend({ bottom: 0, type: 'scroll' }),
@@ -1569,16 +1710,35 @@ new Vue({
                     }),
                     label: this.pieLabel(function (item) { return item.name + '\n' + self.compactNumber(item.value, '条'); })
                 }]
-            }, true);
+            });
         },
         isDarkTheme: function () {
             return document.documentElement.getAttribute('data-theme') === 'dark';
         },
+        cssVar: function (name, fallback) {
+            var value = getComputedStyle(document.documentElement).getPropertyValue(name);
+            return value ? value.trim() : fallback;
+        },
+        chartPrimaryColor: function () {
+            return this.cssVar('--primary-color', '#409eff');
+        },
+        chartSuccessColor: function () {
+            return this.cssVar('--success-color', '#27b36a');
+        },
+        chartWarningColor: function () {
+            return this.cssVar('--warning-color', '#e6a23c');
+        },
+        chartDangerColor: function () {
+            return this.cssVar('--danger-color', '#f56c6c');
+        },
+        chartSoftColor: function () {
+            return this.isDarkTheme() ? 'rgba(123, 143, 255, 0.22)' : 'rgba(64, 158, 255, 0.16)';
+        },
         chartTextColor: function () {
-            return this.isDarkTheme() ? '#e5e7eb' : '#606266';
+            return this.cssVar('--text-secondary', this.isDarkTheme() ? '#e5e7eb' : '#606266');
         },
         chartLineColor: function () {
-            return this.isDarkTheme() ? 'rgba(255,255,255,0.16)' : '#e4e7ed';
+            return this.isDarkTheme() ? 'rgba(255,255,255,0.16)' : this.cssVar('--border-light', '#e4e7ed');
         },
         chartTextStyle: function () {
             return { color: this.chartTextColor() };

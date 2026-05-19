@@ -3857,6 +3857,7 @@
             },
             calculateRemainingTime: function(p) {
                 if (!p) return null;
+                const partId = p.partId || p.page;
 
                 let chunkDone = 0;
                 let chunkTotal = 0;
@@ -3875,21 +3876,47 @@
 
                 const backendSpeed = Number(p.speed) || 0;
                 const etaSeconds = Number(p.etaSeconds) || 0;
-                const speedSampleCount = Number(p.speedSampleCount) || 0;
-                if (backendSpeed <= 0 || speedSampleCount < 2) {
+                if (backendSpeed > 0) {
+                    let seconds = etaSeconds;
+                    if (!isFinite(seconds) || seconds <= 0) {
+                        let remainingBytes = Number(p.remainingBytes) || 0;
+                        if (remainingBytes <= 0 && p.activeChunkTotal > 0) {
+                            const chunkSizeBytes = this.resolveUploadChunkSizeBytes(p);
+                            remainingBytes = chunkSizeBytes > 0 ? Math.max(0, chunkTotal - chunkDone) * chunkSizeBytes : 0;
+                        }
+                        if (remainingBytes > 0) {
+                            seconds = Math.ceil(remainingBytes / backendSpeed);
+                        }
+                    }
+                    if (isFinite(seconds) && seconds > 0) {
+                        return this.formatRemainingTime(seconds, (backendSpeed / 1024 / 1024).toFixed(1));
+                    }
+                }
+
+                const track = this.progressSpeedTracking[partId];
+                if (!track || !track.samples || track.samples.length < 2) {
                     return '计算中...';
                 }
 
-                let seconds = etaSeconds;
-                if (!isFinite(seconds) || seconds <= 0) {
-                    const remainingBytes = Number(p.remainingBytes) || 0;
-                    if (remainingBytes > 0) {
-                        seconds = Math.ceil(remainingBytes / backendSpeed);
-                    }
-                }
-                if (!isFinite(seconds) || seconds <= 0) return null;
+                const now = Date.now();
+                const recentSamples = track.samples.filter(s => (now - s.time) < 30000);
 
-                return this.formatRemainingTime(seconds, (backendSpeed / 1024 / 1024).toFixed(1));
+                if (recentSamples.length < 2) return '计算中...';
+
+                const weights = recentSamples.map((s, i) => i + 1);
+                const totalWeight = weights.reduce((a, b) => a + b, 0);
+                const avgSpeed = recentSamples.reduce((sum, s, i) => sum + s.speed * weights[i], 0) / totalWeight;
+
+                if (avgSpeed <= 0) return '计算中...';
+
+                const remainingChunks = chunkTotal - chunkDone;
+                const remainingSeconds = remainingChunks / avgSpeed;
+
+                const chunkSizeBytes = this.resolveUploadChunkSizeBytes(p) || Number(track.chunkSizeBytes) || 0;
+                const speedMBpsVal = chunkSizeBytes > 0 ? (avgSpeed * chunkSizeBytes / 1024 / 1024) : 0;
+                const speedMBps = speedMBpsVal > 0 ? speedMBpsVal.toFixed(1) : null;
+
+                return this.formatRemainingTime(remainingSeconds, speedMBps);
             },
             toggleParts: function() {
                 this.showAllParts = !this.showAllParts;
