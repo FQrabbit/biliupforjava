@@ -177,7 +177,13 @@
 
 <script src="../js/vue.min.js"></script>
 <script src="../js/element-ui.js"></script>
+<script src="../js/frontend-cache-refresh.js"></script>
 <script src="../js/theme-tokens.js"></script>
+<script>
+    if (window.FrontendCacheRefresh) {
+        window.FrontendCacheRefresh.start();
+    }
+</script>
 <script>
     new Vue({
         el: '#app',

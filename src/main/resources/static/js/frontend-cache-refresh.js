@@ -1,0 +1,258 @@
+(function(window) {
+    'use strict';
+
+    var STORED_BUILD_KEY = 'biliup_frontend_build_id';
+    var STORED_VERSION_KEY = 'biliup_frontend_version';
+    var DEBUG_VERSION_KEY = 'biliup_debug_frontend_version';
+    var DEFAULT_INTERVAL_MS = 30000;
+
+    var state = {
+        timerId: null,
+        inFlight: null,
+        needRefresh: false,
+        options: {},
+        listenersBound: false
+    };
+
+    function isDebugEnabled() {
+        try {
+            return window.localStorage && window.localStorage.getItem(DEBUG_VERSION_KEY) === 'true';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function debug(stage, payload) {
+        if (!isDebugEnabled() || !window.console || !console.info) {
+            return;
+        }
+        console.info('[CacheVersion]', stage, payload || '');
+    }
+
+    function getStoredValue(key) {
+        try {
+            return window.localStorage ? window.localStorage.getItem(key) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setStoredValue(key, value) {
+        try {
+            if (window.localStorage) {
+                window.localStorage.setItem(key, value);
+            }
+        } catch (e) {
+        }
+    }
+
+    function getPageBuildId() {
+        return window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '';
+    }
+
+    function withBuildId(url, buildId) {
+        var id = buildId || getPageBuildId() || getStoredValue(STORED_BUILD_KEY) || '';
+        if (!id || !url || /^(https?:)?\/\//i.test(url) || /^data:/i.test(url) || /^blob:/i.test(url)) {
+            return url;
+        }
+        var hash = '';
+        var hashIndex = url.indexOf('#');
+        if (hashIndex >= 0) {
+            hash = url.substring(hashIndex);
+            url = url.substring(0, hashIndex);
+        }
+        var parts = url.split('?');
+        var path = parts[0];
+        var query = parts.length > 1 ? parts.slice(1).join('?') : '';
+        var params = new URLSearchParams(query);
+        params.set('v', id);
+        return path + '?' + params.toString() + hash;
+    }
+
+    function getReloadTarget(buildId, locationLike) {
+        var currentLocation = locationLike || window.location;
+        return withBuildId(currentLocation.pathname + currentLocation.search + currentLocation.hash, buildId);
+    }
+
+    function canDelegateToParent() {
+        if (window.parent === window) {
+            return false;
+        }
+        try {
+            return !!(window.parent
+                    && window.parent.FrontendCacheRefresh
+                    && typeof window.parent.FrontendCacheRefresh.reload === 'function'
+                    && window.parent.location
+                    && window.parent.location.origin === window.location.origin);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function reload(buildId, options) {
+        var opts = options || {};
+        if (opts.delegateToParent !== false && canDelegateToParent()) {
+            window.parent.FrontendCacheRefresh.reload(buildId, {
+                delegateToParent: false
+            });
+            return;
+        }
+        window.location.replace(getReloadTarget(buildId));
+    }
+
+    function fetchVersion() {
+        return window.fetch('/api/version', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            },
+            cache: 'no-store',
+            credentials: 'same-origin'
+        }).then(function(response) {
+            debug('response', {
+                status: response.status,
+                ok: response.ok,
+                cacheControl: response.headers ? response.headers.get('Cache-Control') : ''
+            });
+            if (!response.ok) {
+                throw response;
+            }
+            return response.json();
+        });
+    }
+
+    function shouldRefresh(buildId) {
+        var pageBuildId = getPageBuildId();
+        var storedBuildId = getStoredValue(STORED_BUILD_KEY);
+        return pageBuildId ? pageBuildId !== buildId : storedBuildId !== buildId;
+    }
+
+    function applyVersionData(data, options) {
+        var opts = options || {};
+        var version = data && data.version ? data.version : data;
+        var buildId = data && data.buildId ? data.buildId : version;
+        if (!version || version === 'unknown' || version === 'error') {
+            return false;
+        }
+        if (!buildId || buildId === 'unknown' || buildId === 'error') {
+            return false;
+        }
+
+        var pageBuildId = getPageBuildId();
+        var storedBuildId = getStoredValue(STORED_BUILD_KEY);
+        var refreshNeeded = shouldRefresh(buildId);
+
+        debug('decision', {
+            version: version,
+            apiBuildId: buildId,
+            currentBuildId: pageBuildId,
+            storedBuildId: storedBuildId,
+            pageBuildIsOld: refreshNeeded
+        });
+
+        setStoredValue(STORED_BUILD_KEY, buildId);
+        setStoredValue(STORED_VERSION_KEY, version);
+
+        if (!refreshNeeded) {
+            return false;
+        }
+
+        state.needRefresh = true;
+        if (typeof opts.onRefreshNeeded === 'function') {
+            opts.onRefreshNeeded({
+                version: version,
+                buildId: buildId,
+                pageBuildId: pageBuildId,
+                storedBuildId: storedBuildId
+            });
+        } else {
+            reload(buildId, opts);
+        }
+        return true;
+    }
+
+    function mergeOptions(options) {
+        state.options = Object.assign({}, state.options, options || {});
+        return state.options;
+    }
+
+    function check(options) {
+        var opts = mergeOptions(options);
+        if (state.needRefresh) {
+            return Promise.resolve(true);
+        }
+        if (state.inFlight) {
+            return state.inFlight;
+        }
+
+        debug('start', {
+            origin: window.location.origin,
+            href: window.location.href,
+            pageBuildId: getPageBuildId(),
+            storedBuildId: getStoredValue(STORED_BUILD_KEY),
+            storedVersion: getStoredValue(STORED_VERSION_KEY)
+        });
+
+        state.inFlight = fetchVersion()
+                .then(function(data) {
+                    return applyVersionData(data, opts);
+                })
+                .catch(function(error) {
+                    debug('error', error);
+                    if (window.console && console.warn) {
+                        console.warn('[CacheVersion] 鑾峰彇鐗堟湰澶辫触:', error && error.status ? error.status : error);
+                    }
+                    return false;
+                })
+                .finally(function() {
+                    state.inFlight = null;
+                });
+
+        return state.inFlight;
+    }
+
+    function bindVisibilityChecks() {
+        if (state.listenersBound) {
+            return;
+        }
+        state.listenersBound = true;
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                check();
+            }
+        });
+        window.addEventListener('focus', function() {
+            check();
+        });
+    }
+
+    function start(options) {
+        var opts = mergeOptions(options);
+        var intervalMs = opts.intervalMs || DEFAULT_INTERVAL_MS;
+        if (state.timerId) {
+            clearInterval(state.timerId);
+        }
+        bindVisibilityChecks();
+        check(opts);
+        state.timerId = window.setInterval(function() {
+            check(opts);
+        }, intervalMs);
+    }
+
+    function stop() {
+        if (state.timerId) {
+            clearInterval(state.timerId);
+            state.timerId = null;
+        }
+    }
+
+    window.FrontendCacheRefresh = {
+        check: check,
+        start: start,
+        stop: stop,
+        reload: reload,
+        withBuildId: withBuildId,
+        getReloadTarget: getReloadTarget,
+        getPageBuildId: getPageBuildId
+    };
+})(window);

@@ -6,7 +6,13 @@
     <script src="../js/vue.min.js"></script>
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/element-ui.js"></script>
+    <script src="../js/frontend-cache-refresh.js"></script>
     <link rel="stylesheet" href="../css/element-ui.css">
+    <script>
+        if (window.FrontendCacheRefresh) {
+            window.FrontendCacheRefresh.start();
+        }
+    </script>
     <script src="https://static.geetest.com/v4/gt4.js"></script>
 </head>
 <body>
