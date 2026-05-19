@@ -946,8 +946,11 @@
             lastScrollTop: 0,
             upScrollDistance: 0,
             downScrollDistance: 0,
+            lastHeaderRevealTop: 0,
             lastHeaderToggleAt: 0,
             headerToggleCooldownMs: 260,
+            headerHideResumeDistance: 72,
+            headerBottomRevealGuardDistance: 96,
             scrollObserver: [],
             scrollBindRetryTimer: null,
             scrollBindRetryCount: 0,
@@ -1073,6 +1076,7 @@
                 self.updateNavIndicator();
                 self.bindScrollObserver();
                 self.startScrollStateMonitor();
+                self.installScrollDebugTools();
             });
             window.addEventListener('resize', function() {
                 self.updateNavIndicator();
@@ -1111,6 +1115,7 @@
                 this.lastScrollTop = 0;
                 this.upScrollDistance = 0;
                 this.downScrollDistance = 0;
+                this.lastHeaderRevealTop = 0;
                 this.lastHeaderToggleAt = 0;
                 this.$nextTick(function() {
                     self.bindScrollObserver();
@@ -1191,6 +1196,47 @@
 
                 return 0;
             },
+            getCurrentScrollMaxTop: function() {
+                if (this.activeName === 'log') {
+                    return 0;
+                }
+
+                if (this.activeName === 'home') {
+                    var homeContainer = this.$el.querySelector('.changelog-container');
+                    return homeContainer ? Math.max(0, (homeContainer.scrollHeight || 0) - (homeContainer.clientHeight || 0)) : 0;
+                }
+
+                if (this.activeName === 'user') {
+                    var userContainer = this.$el.querySelector('.user-container');
+                    return userContainer ? Math.max(0, (userContainer.scrollHeight || 0) - (userContainer.clientHeight || 0)) : 0;
+                }
+
+                if (this.activeName === 'room' || this.activeName === 'history' || this.activeName === 'stats') {
+                    var iframe = this.$el.querySelector('.tab-frame');
+                    if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+                        return 0;
+                    }
+                    var doc = iframe.contentDocument;
+                    var target = null;
+                    if (this.activeName === 'room') {
+                        target = doc.querySelector('.room-container');
+                    } else if (this.activeName === 'stats') {
+                        target = doc.querySelector('.stats-container');
+                    } else {
+                        target = doc.querySelector('.history-main') || doc.querySelector('.history-container');
+                    }
+                    if (target) {
+                        return Math.max(0, (target.scrollHeight || 0) - (target.clientHeight || 0));
+                    }
+                    return Math.max(
+                        0,
+                        Math.max(doc.documentElement.scrollHeight || 0, doc.body.scrollHeight || 0)
+                        - (iframe.contentWindow.innerHeight || doc.documentElement.clientHeight || 0)
+                    );
+                }
+
+                return 0;
+            },
             startScrollStateMonitor: function() {
                 var self = this;
                 if (this.scrollStateTimer) {
@@ -1215,26 +1261,14 @@
                         self.showBackToTop = false;
                         self.upScrollDistance = 0;
                         self.downScrollDistance = 0;
+                        self.lastHeaderRevealTop = 0;
                         self.lastHeaderToggleAt = 0;
                     } else {
-                        // 正常情况下，根据滚动距离显示回顶按钮
-                        self.showBackToTop = top > 6;
-                        
-                        // 额外补充判断：如果用户已实际滚动到120px以下但导航栏还是显示，主动隐藏
-                        // 这是对scroll事件处理的补充，防止偶发状态不同步
-                        if (top > 120 && !self.headerCompact && !self.isScrollingToTop) {
-                            self.headerCompact = true;
-                            self.downScrollDistance = 0;
-                            self.upScrollDistance = 0;
-                            self.lastHeaderToggleAt = Date.now();
-                        }
-                        
-                        // 反向补充判断：如果用户滚动回较近顶部（60px以内）但导航栏还是隐藏，恢复显示
-                        if (top <= 60 && self.headerCompact && !self.isScrollingToTop) {
-                            self.headerCompact = false;
-                            self.upScrollDistance = 0;
-                            self.downScrollDistance = 0;
-                            self.lastHeaderToggleAt = Date.now();
+                        // Polling is a fallback for iframe pages whose inner scroller was not bound yet.
+                        if (Math.abs(top - self.lastScrollTop) >= 1.5) {
+                            self.handleContentScroll(top);
+                        } else {
+                            self.showBackToTop = top > 120;
                         }
                     }
                 }, 180);
@@ -1814,13 +1848,137 @@
                     self.bindScrollObserver();
                 }, 120);
             },
+            getScrollPreferredSelectors: function() {
+                if (this.activeName === 'room') {
+                    return ['.room-container', 'main', '.app-container'];
+                }
+                if (this.activeName === 'stats') {
+                    return ['.stats-container', 'main', '.app-container'];
+                }
+                if (this.activeName === 'history') {
+                    return ['.history-main', '.history-container', 'main', '.app-container'];
+                }
+                return [];
+            },
+            describeScrollTarget: function(target, label) {
+                if (!target) {
+                    return { label: label || '', found: false };
+                }
+                if (target === window || target.window === target) {
+                    var targetDocument = target.document || document;
+                    return {
+                        label: label || 'window',
+                        found: true,
+                        type: 'window',
+                        scrollTop: target.pageYOffset || targetDocument.documentElement.scrollTop || targetDocument.body.scrollTop || 0,
+                        scrollHeight: Math.max(targetDocument.documentElement.scrollHeight || 0, targetDocument.body.scrollHeight || 0),
+                        clientHeight: target.innerHeight || targetDocument.documentElement.clientHeight || 0
+                    };
+                }
+                var view = target.ownerDocument && target.ownerDocument.defaultView;
+                var style = view && view.getComputedStyle ? view.getComputedStyle(target) : null;
+                return {
+                    label: label || '',
+                    found: true,
+                    type: 'element',
+                    tag: target.tagName ? target.tagName.toLowerCase() : '',
+                    id: target.id || '',
+                    className: typeof target.className === 'string' ? target.className : '',
+                    scrollTop: target.scrollTop || 0,
+                    scrollHeight: target.scrollHeight || 0,
+                    clientHeight: target.clientHeight || 0,
+                    overflowY: style ? style.overflowY : '',
+                    canScroll: !!(target.scrollHeight && target.clientHeight && target.scrollHeight > target.clientHeight + 4)
+                };
+            },
+            collectScrollDebugSnapshot: function() {
+                var snapshot = {
+                    activeName: this.activeName,
+                    tabSrc: this.tabSrc,
+                    headerCompact: this.headerCompact,
+                    showBackToTop: this.showBackToTop,
+                    lastScrollTop: this.lastScrollTop,
+                    currentTop: this.getCurrentScrollTop(),
+                    maxTop: this.getCurrentScrollMaxTop(),
+                    observerCount: this.scrollObserver.length,
+                    scrollBindRetryCount: this.scrollBindRetryCount,
+                    iframeWorkspaceMode: this.iframeWorkspaceMode,
+                    candidates: [],
+                    observers: []
+                };
+
+                for (var i = 0; i < this.scrollObserver.length; i++) {
+                    snapshot.observers.push(this.describeScrollTarget(this.scrollObserver[i].target, 'observer[' + i + ']'));
+                }
+
+                if (this.activeName === 'home') {
+                    snapshot.candidates.push(this.describeScrollTarget(this.$el.querySelector('.changelog-container'), '.changelog-container'));
+                    return snapshot;
+                }
+                if (this.activeName === 'user') {
+                    snapshot.candidates.push(this.describeScrollTarget(this.$el.querySelector('.user-container'), '.user-container'));
+                    return snapshot;
+                }
+                if (this.activeName !== 'room' && this.activeName !== 'history' && this.activeName !== 'stats') {
+                    return snapshot;
+                }
+
+                var iframe = this.$el.querySelector('.tab-frame');
+                snapshot.iframe = {
+                    found: !!iframe,
+                    readyClass: !!(iframe && iframe.classList && iframe.classList.contains('is-ready')),
+                    src: iframe ? iframe.src : ''
+                };
+                if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+                    snapshot.iframe.accessible = false;
+                    return snapshot;
+                }
+
+                snapshot.iframe.accessible = true;
+                var doc = iframe.contentDocument;
+                var preferredSelectors = this.getScrollPreferredSelectors();
+                for (var j = 0; j < preferredSelectors.length; j++) {
+                    snapshot.candidates.push(this.describeScrollTarget(doc.querySelector(preferredSelectors[j]), preferredSelectors[j]));
+                }
+                var detected = this.detectScrollableContainer(doc, preferredSelectors);
+                snapshot.detected = this.describeScrollTarget(detected, 'detected');
+                snapshot.iframeWindow = {
+                    pageYOffset: iframe.contentWindow.pageYOffset || 0,
+                    documentElementTop: doc.documentElement ? (doc.documentElement.scrollTop || 0) : 0,
+                    bodyTop: doc.body ? (doc.body.scrollTop || 0) : 0
+                };
+                return snapshot;
+            },
+            installScrollDebugTools: function() {
+                var self = this;
+                window.__biliScrollDebug = function() {
+                    var snapshot = self.collectScrollDebugSnapshot();
+                    console.log('[biliup scroll debug]', snapshot);
+                    if (snapshot.candidates && console.table) {
+                        console.table(snapshot.candidates);
+                    }
+                    if (snapshot.observers && console.table) {
+                        console.table(snapshot.observers);
+                    }
+                    return snapshot;
+                };
+            },
             detectScrollableContainer: function(doc, preferredSelectors) {
                 if (!doc) {
                     return null;
                 }
+                var view = doc.defaultView || window;
+                var isScrollableOverflow = function(el) {
+                    var style = view.getComputedStyle ? view.getComputedStyle(el) : null;
+                    var overflowY = style ? style.overflowY : '';
+                    return overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+                };
                 for (var i = 0; i < preferredSelectors.length; i++) {
                     var preferred = doc.querySelector(preferredSelectors[i]);
                     if (preferred && preferred.scrollHeight > preferred.clientHeight + 4) {
+                        return preferred;
+                    }
+                    if (preferred && isScrollableOverflow(preferred)) {
                         return preferred;
                     }
                 }
@@ -1834,9 +1992,7 @@
                     if (el.scrollHeight <= el.clientHeight + 12) {
                         continue;
                     }
-                    var style = window.getComputedStyle(el);
-                    var overflowY = style ? style.overflowY : '';
-                    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
+                    if (isScrollableOverflow(el)) {
                         return el;
                     }
                 }
@@ -1888,11 +2044,7 @@
                         return;
                     }
                     var doc = iframe.contentDocument;
-                    var preferredSelectors = (this.activeName === 'room')
-                        ? ['.room-container', 'main', '.app-container']
-                        : (this.activeName === 'stats'
-                            ? ['.stats-container', 'main', '.app-container']
-                            : ['.history-main', '.history-container', 'main', '.app-container']);
+                    var preferredSelectors = this.getScrollPreferredSelectors();
                     var iframeScrollable = this.detectScrollableContainer(doc, preferredSelectors);
                     if (bindElementScroll(iframeScrollable)) {
                         return;
@@ -1914,6 +2066,7 @@
                     this.lastScrollTop = top || 0;
                     this.upScrollDistance = 0;
                     this.downScrollDistance = 0;
+                    this.lastHeaderRevealTop = top || 0;
                     return;
                 }
                 if (this.activeName === 'log') {
@@ -1922,6 +2075,7 @@
                     this.lastScrollTop = 0;
                     this.upScrollDistance = 0;
                     this.downScrollDistance = 0;
+                    this.lastHeaderRevealTop = 0;
                     this.lastHeaderToggleAt = 0;
                     return;
                 }
@@ -1932,6 +2086,7 @@
                     this.lastScrollTop = 0;
                     this.upScrollDistance = 0;
                     this.downScrollDistance = 0;
+                    this.lastHeaderRevealTop = 0;
                     this.lastHeaderToggleAt = 0;
                     return;
                 }
@@ -1949,17 +2104,27 @@
                 if (delta > 0) {
                     this.downScrollDistance = this.downScrollDistance + delta;
                     this.upScrollDistance = 0;
-                    if (!inCooldown && !this.headerCompact && top > 60 && this.downScrollDistance >= 18) {
+                    var canCompactAfterReveal = !this.lastHeaderRevealTop || top >= (this.lastHeaderRevealTop + this.headerHideResumeDistance);
+                    if (!inCooldown && !this.headerCompact && top > 60 && this.downScrollDistance >= 18 && canCompactAfterReveal) {
                         this.headerCompact = true;
                         this.downScrollDistance = 0;
                         this.lastHeaderToggleAt = now;
                     }
                 } else if (delta < 0) {
+                    var maxTop = this.getCurrentScrollMaxTop();
+                    var nearBottom = maxTop > 0 && top >= (maxTop - this.headerBottomRevealGuardDistance);
+                    if (nearBottom) {
+                        this.upScrollDistance = 0;
+                        this.downScrollDistance = 0;
+                        this.lastScrollTop = top;
+                        return;
+                    }
                     this.upScrollDistance = this.upScrollDistance + Math.abs(delta);
                     this.downScrollDistance = 0;
                     if (!inCooldown && this.headerCompact && this.upScrollDistance >= 54) {
                         this.headerCompact = false;
                         this.upScrollDistance = 0;
+                        this.lastHeaderRevealTop = top;
                         this.lastHeaderToggleAt = now;
                     }
                 }
@@ -2006,6 +2171,7 @@
                 this.lastScrollTop = 0;
                 this.upScrollDistance = 0;
                 this.downScrollDistance = 0;
+                this.lastHeaderRevealTop = 0;
                 this.lastHeaderToggleAt = 0;
                 this.bindScrollObserver();
                 this.startScrollStateMonitor();
