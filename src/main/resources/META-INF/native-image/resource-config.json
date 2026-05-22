@@ -65,6 +65,9 @@
       "pattern":"\\Qcom/alibaba/fastjson/TypeReference.class\\E"
     }, 
     {
+      "pattern":"\\Qcom/alibaba/fastjson/parser/deserializer/ObjectDeserializer.class\\E"
+    }, 
+    {
       "pattern":"\\Qcom/sun/net/httpserver/HttpHandler.class\\E"
     }, 
     {
@@ -92,13 +95,7 @@
       "pattern":"\\Qlogback-spring.xml\\E"
     }, 
     {
-      "pattern":"\\Qmozilla/public-suffix-list.txt\\E"
-    }, 
-    {
       "pattern":"\\Qokhttp3/RequestBody.class\\E"
-    }, 
-    {
-      "pattern":"\\Qorg/apache/http/client/version.properties\\E"
     }, 
     {
       "pattern":"\\Qorg/apache/http/conn/ssl/TrustStrategy.class\\E"
@@ -653,6 +650,9 @@
       "pattern":"\\Qorg/springframework/context/ApplicationContextAware.class\\E"
     }, 
     {
+      "pattern":"\\Qorg/springframework/context/ApplicationContextInitializer.class\\E"
+    }, 
+    {
       "pattern":"\\Qorg/springframework/context/ApplicationListener.class\\E"
     }, 
     {
@@ -764,6 +764,9 @@
       "pattern":"\\Qorg/springframework/transaction/annotation/Transactional.class\\E"
     }, 
     {
+      "pattern":"\\Qorg/springframework/web/bind/annotation/ControllerAdvice.class\\E"
+    }, 
+    {
       "pattern":"\\Qorg/springframework/web/bind/annotation/Mapping.class\\E"
     }, 
     {
@@ -774,6 +777,9 @@
     }, 
     {
       "pattern":"\\Qorg/springframework/web/bind/annotation/RestController.class\\E"
+    }, 
+    {
+      "pattern":"\\Qorg/springframework/web/bind/annotation/RestControllerAdvice.class\\E"
     }, 
     {
       "pattern":"\\Qorg/springframework/web/context/ServletContextAware.class\\E"
@@ -821,6 +827,9 @@
       "pattern":"\\Qorg/springframework/web/socket/handler/TextWebSocketHandler.class\\E"
     }, 
     {
+      "pattern":"\\Qorg/xml/sax/ErrorHandler.class\\E"
+    }, 
+    {
       "pattern":"\\Qorg/xnio/Version.properties\\E"
     }, 
     {
@@ -860,6 +869,9 @@
       "pattern":"\\Qstatic/css/log.css\\E"
     }, 
     {
+      "pattern":"\\Qstatic/css/login.css\\E"
+    }, 
+    {
       "pattern":"\\Qstatic/css/pages/home.css\\E"
     }, 
     {
@@ -873,6 +885,9 @@
     }, 
     {
       "pattern":"\\Qstatic/html/history.html\\E"
+    }, 
+    {
+      "pattern":"\\Qstatic/html/login.html\\E"
     }, 
     {
       "pattern":"\\Qstatic/html/room.html\\E"
@@ -890,16 +905,22 @@
       "pattern":"\\Qstatic/js/api.js\\E"
     }, 
     {
+      "pattern":"\\Qstatic/js/echarts.min.js\\E"
+    }, 
+    {
       "pattern":"\\Qstatic/js/element-ui.js\\E"
     }, 
     {
-      "pattern":"\\Qstatic/js/echarts.min.js\\E"
+      "pattern":"\\Qstatic/js/frontend-cache-refresh.js\\E"
     }, 
     {
       "pattern":"\\Qstatic/js/jquery-3.3.1.min.js\\E"
     }, 
     {
       "pattern":"\\Qstatic/js/mixins.js\\E"
+    }, 
+    {
+      "pattern":"\\Qstatic/js/mpegts.min.js\\E"
     }, 
     {
       "pattern":"\\Qstatic/js/pages/user.js\\E"
@@ -924,6 +945,9 @@
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/config/LogWebSocketHandler.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/config/MultipartDebugConfigBridge.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/config/MvcConfig.class\\E"
@@ -962,7 +986,16 @@
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/CaptchaController.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/HistoryController$MsgListStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/HistoryController$PartListStats.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/HistoryController.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/HtmlPageController.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/IndexController.class\\E"
@@ -980,6 +1013,15 @@
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/PartController.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/PartPreviewController$Range.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/PartPreviewController.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/PartPreviewExceptionHandler.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/ProgressController$HistoryProgressResponse.class\\E"
     }, 
     {
@@ -995,10 +1037,16 @@
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/RoomController$CachedImage.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/RoomController$ConfigTaskStatus.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/RoomController$SeasonSectionFixResult.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/RoomController.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/StatsController.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/controller/SystemConfigController.class\\E"
@@ -1025,6 +1073,27 @@
       "pattern":"\\Qtop/sshh/bililiverecoder/entity/RecordRoom.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/RoomLiveDailyStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/RoomLiveDanmuUserStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/RoomLiveEvent.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/RoomLiveEventParseState.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/RoomLiveGiftCatalog.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/RoomLiveMsgBucketStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/RoomLiveSessionStats.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/entity/SystemConfig.class\\E"
     }, 
     {
@@ -1038,6 +1107,9 @@
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/job/RoomStatusSyncJob.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/job/StatsAggregationJob.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/job/publishJob$FileProbe.class\\E"
@@ -1070,13 +1142,64 @@
       "pattern":"\\Qtop/sshh/bililiverecoder/repo/RecordRoomRepository.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/RoomLiveDailyStatsRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/RoomLiveDanmuUserStatsRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/RoomLiveEventParseStateRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/RoomLiveEventRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/RoomLiveGiftCatalogRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/RoomLiveMsgBucketStatsRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/RoomLiveSessionStatsRepository.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/repo/SystemConfigRepository.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/service/CaptchaService.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/DatabaseMaintenanceService$MaintenanceSnapshot.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/DatabaseMaintenanceService$ReplayResult.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/DatabaseMaintenanceService$UUID_SEED.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/DatabaseMaintenanceService.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/DatabaseMaintenanceState.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/FrontendVersionService.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/service/LogAnalyzeService.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/PartPreviewService$PreviewFile.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/PartPreviewService$PreviewTaskStatus.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/PartPreviewService$SourceSnapshot.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/PartPreviewService.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/service/RateLimiterService.class\\E"
@@ -1088,7 +1211,67 @@
       "pattern":"\\Qtop/sshh/bililiverecoder/service/RecordEventService.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RecordHistoryMergeService.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/service/RecordPartUploadService.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RoomLiveEventParseService$DanmuUserKey.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RoomLiveEventParseService$EventCounter.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RoomLiveEventParseService$ParseResult.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RoomLiveEventParseService.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RoomLiveGiftCatalogService$FailureState.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RoomLiveGiftCatalogService$GiftCatalogSyncResult.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/RoomLiveGiftCatalogService.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$BucketPeak.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$DailyAggregate.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$EventStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$GiftCatalogLookup.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$GiftCoinResolution.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$GiftUserStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$GiftValueStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$StatsCleanupResult.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$StatsCoverage.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$StatsTaskStatus.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService$XmlFileStatus.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/StatsAggregationService.class\\E"
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/service/SystemConfigService.class\\E"
@@ -1169,6 +1352,21 @@
       "pattern":"\\Qtop/sshh/bililiverecoder/service/impl/RecordBiliPublishService$DescDto.class\\E"
     }, 
     {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/impl/RecordBiliPublishService$EditAuthContext.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/impl/RecordBiliPublishService$EditPartSubmitItem.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/impl/RecordBiliPublishService$EditPartsTaskStatus.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/impl/RecordBiliPublishService$EditVideosBuildResult.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/impl/RecordBiliPublishService$PartUploadWaitTimeoutException.class\\E"
+    }, 
+    {
       "pattern":"\\Qtop/sshh/bililiverecoder/service/impl/RecordBiliPublishService.class\\E"
     }, 
     {
@@ -1215,13 +1413,6 @@
     }
   ]},
   "bundles":[
-    {
-      "name":"com.sun.org.apache.xerces.internal.impl.msg.SAXMessages",
-      "locales":[
-        "", 
-        "zh-CN"
-      ]
-    }, 
     {
       "name":"jakarta.servlet.LocalStrings",
       "locales":[""]

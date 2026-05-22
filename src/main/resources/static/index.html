@@ -937,7 +937,7 @@
             showThemePanel: false,
             themePanelStyle: {},
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-            themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'classic',
+            themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'ocean',
             hasAlerts: false,
             versions: window.BILIUPFORJAVA_CHANGELOG || [],
             navIndicatorStyle: { left: '0px', width: '0px', opacity: 0 },
@@ -992,7 +992,7 @@
                 if (window.ThemeTokens && typeof window.ThemeTokens.getThemeOptions === 'function') {
                     return window.ThemeTokens.getThemeOptions();
                 }
-                return [{ value: 'classic', label: 'classic' }];
+                return [{ value: 'ocean', label: '海洋蓝' }];
             },
             tabSrc: function () {
                 var baseUrl = '';

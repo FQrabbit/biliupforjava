@@ -57,6 +57,9 @@
   "name":"[Ljava.lang.constant.ConstantDesc;"
 },
 {
+  "name":"[Ljava.math.BigDecimal;"
+},
+{
   "name":"[Ljava.sql.Statement;"
 },
 {
@@ -164,12 +167,12 @@
   "queryAllDeclaredMethods":true
 },
 {
-  "name":"ch.qos.logback.classic.LoggerContext"
-},
-{
   "name":"ch.qos.logback.classic.AsyncAppender",
   "queryAllPublicMethods":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"ch.qos.logback.classic.LoggerContext"
 },
 {
   "name":"ch.qos.logback.classic.encoder.PatternLayoutEncoder",
@@ -201,6 +204,14 @@
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
+  "name":"ch.qos.logback.core.AsyncAppenderBase",
+  "methods":[
+    {"name":"setDiscardingThreshold","parameterTypes":["int"] }, 
+    {"name":"setNeverBlock","parameterTypes":["boolean"] }, 
+    {"name":"setQueueSize","parameterTypes":["int"] }
+  ]
+},
+{
   "name":"ch.qos.logback.core.ConsoleAppender",
   "queryAllPublicMethods":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
@@ -208,15 +219,6 @@
 {
   "name":"ch.qos.logback.core.OutputStreamAppender",
   "methods":[{"name":"setEncoder","parameterTypes":["ch.qos.logback.core.encoder.Encoder"] }]
-},
-{
-  "name":"ch.qos.logback.core.AsyncAppenderBase",
-  "methods":[
-    {"name":"addAppender","parameterTypes":["ch.qos.logback.core.Appender"] }, 
-    {"name":"setDiscardingThreshold","parameterTypes":["int"] }, 
-    {"name":"setNeverBlock","parameterTypes":["boolean"] }, 
-    {"name":"setQueueSize","parameterTypes":["int"] }
-  ]
 },
 {
   "name":"ch.qos.logback.core.encoder.LayoutWrappingEncoder",
@@ -302,6 +304,7 @@
   "queryAllDeclaredMethods":true,
   "methods":[
     {"name":"getJsonFactory","parameterTypes":[] }, 
+    {"name":"readValues","parameterTypes":["com.fasterxml.jackson.core.JsonParser","com.fasterxml.jackson.core.type.ResolvedType"] }, 
     {"name":"readValues","parameterTypes":["com.fasterxml.jackson.core.JsonParser","com.fasterxml.jackson.core.type.TypeReference"] }, 
     {"name":"readValues","parameterTypes":["com.fasterxml.jackson.core.JsonParser","java.lang.Class"] }
   ]
@@ -404,13 +407,6 @@
 },
 {
   "name":"com.google.common.base.Optional"
-},
-{
-  "name":"com.google.common.hash.Striped64",
-  "fields":[
-    {"name":"base"}, 
-    {"name":"busy"}
-  ]
 },
 {
   "name":"com.google.gson.Gson",
@@ -637,27 +633,7 @@
   "queryAllDeclaredMethods":true
 },
 {
-  "name":"io.netty.buffer.AbstractByteBufAllocator",
-  "queryAllDeclaredMethods":true
-},
-{
-  "name":"io.netty.buffer.AbstractReferenceCountedByteBuf",
-  "fields":[{"name":"refCnt"}]
-},
-{
   "name":"io.netty.buffer.PooledByteBufAllocator"
-},
-{
-  "name":"io.netty.channel.ChannelDuplexHandler",
-  "methods":[
-    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }
-  ]
 },
 {
   "name":"io.netty.channel.ChannelHandler$Sharable",
@@ -668,163 +644,7 @@
   "queryAllDeclaredMethods":true
 },
 {
-  "name":"io.netty.channel.ChannelInboundHandlerAdapter",
-  "methods":[
-    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
-    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }
-  ]
-},
-{
-  "name":"io.netty.channel.ChannelInitializer",
-  "methods":[
-    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }
-  ]
-},
-{
-  "name":"io.netty.channel.CombinedChannelDuplexHandler",
-  "methods":[
-    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
-    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
-  ]
-},
-{
-  "name":"io.netty.channel.DefaultChannelPipeline$HeadContext",
-  "methods":[
-    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
-    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
-  ]
-},
-{
-  "name":"io.netty.channel.DefaultChannelPipeline$TailContext",
-  "methods":[
-    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
-    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }
-  ]
-},
-{
-  "name":"io.netty.channel.SimpleChannelInboundHandler",
-  "methods":[{"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }]
-},
-{
-  "name":"io.netty.channel.socket.nio.NioSocketChannel",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"io.netty.handler.codec.ByteToMessageDecoder",
-  "methods":[
-    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }
-  ]
-},
-{
-  "name":"io.netty.handler.codec.MessageAggregator",
-  "methods":[
-    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }
-  ]
-},
-{
-  "name":"io.netty.handler.codec.MessageToMessageDecoder",
-  "methods":[{"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }]
-},
-{
-  "name":"io.netty.handler.codec.http.HttpClientCodec"
-},
-{
-  "name":"io.netty.handler.codec.http.HttpObjectAggregator"
-},
-{
-  "name":"io.netty.handler.ssl.SslHandler",
-  "methods":[
-    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
-    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
-    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
-    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
-  ]
-},
-{
-  "name":"io.netty.handler.stream.ChunkedWriteHandler",
-  "methods":[
-    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
-  ]
-},
-{
-  "name":"io.netty.handler.traffic.AbstractTrafficShapingHandler",
-  "methods":[
-    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
-    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
-    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
-  ]
-},
-{
-  "name":"io.netty.handler.traffic.ChannelTrafficShapingHandler"
-},
-{
-  "name":"io.netty.handler.traffic.GlobalTrafficShapingHandler"
-},
-{
   "name":"io.netty.util.NettyRuntime"
-},
-{
-  "name":"io.netty.util.ReferenceCountUtil",
-  "queryAllDeclaredMethods":true
 },
 {
   "name":"io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueColdProducerFields",
@@ -839,28 +659,12 @@
   "fields":[{"name":"producerIndex"}]
 },
 {
-  "name":"io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField",
-  "fields":[{"name":"consumerIndex"}]
-},
-{
-  "name":"io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField",
-  "fields":[{"name":"producerIndex"}]
-},
-{
-  "name":"io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField",
-  "fields":[{"name":"producerLimit"}]
-},
-{
   "name":"io.undertow.Undertow",
   "allDeclaredFields":true
 },
 {
   "name":"io.undertow.UndertowLogger_$logger",
   "methods":[{"name":"<init>","parameterTypes":["org.jboss.logging.Logger"] }]
-},
-{
-  "name":"io.undertow.UndertowMessages_$bundle",
-  "fields":[{"name":"INSTANCE"}]
 },
 {
   "name":"io.undertow.UndertowOptions",
@@ -1366,13 +1170,6 @@
   ]
 },
 {
-  "name":"java.lang.ProcessHandle",
-  "methods":[
-    {"name":"current","parameterTypes":[] }, 
-    {"name":"pid","parameterTypes":[] }
-  ]
-},
-{
   "name":"java.lang.Runtime",
   "methods":[{"name":"version","parameterTypes":[] }]
 },
@@ -1568,6 +1365,7 @@
   "name":"java.lang.reflect.ParameterizedType",
   "methods":[
     {"name":"getActualTypeArguments","parameterTypes":[] }, 
+    {"name":"getOwnerType","parameterTypes":[] }, 
     {"name":"getRawType","parameterTypes":[] }
   ]
 },
@@ -1595,7 +1393,10 @@
   ]
 },
 {
-  "name":"java.math.BigDecimal"
+  "name":"java.math.BigDecimal",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true
 },
 {
   "name":"java.math.BigInteger"
@@ -1629,13 +1430,6 @@
 {
   "name":"java.nio.DirectByteBuffer",
   "methods":[{"name":"<init>","parameterTypes":["long","int"] }]
-},
-{
-  "name":"java.nio.channels.spi.SelectorProvider",
-  "methods":[{"name":"openSocketChannel","parameterTypes":["java.net.ProtocolFamily"] }]
-},
-{
-  "name":"java.nio.file.Path"
 },
 {
   "name":"java.security.AccessController",
@@ -1689,6 +1483,9 @@
   "queryAllPublicMethods":true
 },
 {
+  "name":"java.time.LocalDate"
+},
+{
   "name":"java.time.LocalDateTime"
 },
 {
@@ -1712,10 +1509,6 @@
 {
   "name":"java.util.PropertyPermission",
   "methods":[{"name":"<init>","parameterTypes":["java.lang.String","java.lang.String"] }]
-},
-{
-  "name":"java.util.ServiceLoader",
-  "methods":[{"name":"load","parameterTypes":["java.lang.Class","java.lang.ClassLoader"] }]
 },
 {
   "name":"java.util.concurrent.Callable",
@@ -2025,37 +1818,13 @@
   "queryAllPublicMethods":true
 },
 {
-  "name":"org.apache.logging.log4j.message.DefaultFlowMessageFactory",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"org.apache.logging.log4j.message.ParameterizedMessageFactory",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
   "name":"org.apache.logging.log4j.spi.ExtendedLogger"
-},
-{
-  "name":"org.apache.logging.slf4j.SLF4JLoggerContextFactory",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"org.apache.logging.slf4j.SLF4JProvider"
 },
 {
   "name":"org.aspectj.weaver.Advice"
-},
-{
-  "name":"org.dom4j.DocumentFactory",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"org.dom4j.tree.QNameCache",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"org.dom4j.util.SimpleSingleton",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"org.h2.Driver",
@@ -4038,7 +3807,8 @@
 {
   "name":"org.springframework.boot.autoconfigure.web.servlet.error.BasicErrorController",
   "allDeclaredFields":true,
-  "queryAllDeclaredMethods":true
+  "queryAllDeclaredMethods":true,
+  "methods":[{"name":"error","parameterTypes":["jakarta.servlet.http.HttpServletRequest"] }]
 },
 {
   "name":"org.springframework.boot.autoconfigure.web.servlet.error.DefaultErrorViewResolver",
@@ -4766,17 +4536,8 @@
   "name":"org.springframework.cache.interceptor.CacheAspectSupport"
 },
 {
-  "name":"org.springframework.cglib.proxy.Dispatcher"
-},
-{
   "name":"org.springframework.cglib.proxy.Factory",
   "queryAllDeclaredMethods":true
-},
-{
-  "name":"org.springframework.cglib.proxy.MethodInterceptor"
-},
-{
-  "name":"org.springframework.cglib.proxy.NoOp"
 },
 {
   "name":"org.springframework.context.ApplicationContextAware",
@@ -5310,7 +5071,7 @@
   "queryAllDeclaredMethods":true,
   "queryAllPublicMethods":true,
   "methods":[
-    {"name":"getPersistentEntity","parameterTypes":["java.lang.Class"] }, 
+    {"name":"getPersistentEntity","parameterTypes":["org.springframework.data.mapping.PersistentProperty"] }, 
     {"name":"getPersistentEntity","parameterTypes":["org.springframework.data.util.TypeInformation"] }, 
     {"name":"getRequiredPersistentEntity","parameterTypes":["java.lang.Class"] }, 
     {"name":"getRequiredPersistentEntity","parameterTypes":["org.springframework.data.mapping.PersistentProperty"] }, 
@@ -5676,6 +5437,10 @@
   "name":"org.springframework.format.FormatterRegistry",
   "queryAllDeclaredMethods":true,
   "queryAllPublicMethods":true
+},
+{
+  "name":"org.springframework.format.annotation.DateTimeFormat",
+  "queryAllDeclaredMethods":true
 },
 {
   "name":"org.springframework.format.support.DefaultFormattingConversionService",
@@ -6497,6 +6262,10 @@
   "queryAllPublicMethods":true
 },
 {
+  "name":"org.springframework.web.bind.annotation.ControllerAdvice",
+  "queryAllDeclaredMethods":true
+},
+{
   "name":"org.springframework.web.bind.annotation.DeleteMapping",
   "queryAllDeclaredMethods":true
 },
@@ -6525,6 +6294,10 @@
   "queryAllDeclaredMethods":true
 },
 {
+  "name":"org.springframework.web.bind.annotation.RequestHeader",
+  "queryAllDeclaredMethods":true
+},
+{
   "name":"org.springframework.web.bind.annotation.RequestMapping",
   "queryAllDeclaredMethods":true
 },
@@ -6538,6 +6311,10 @@
 },
 {
   "name":"org.springframework.web.bind.annotation.RestController",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.springframework.web.bind.annotation.RestControllerAdvice",
   "queryAllDeclaredMethods":true
 },
 {
@@ -6612,6 +6389,10 @@
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
   "methods":[{"name":"setThreadContextInheritable","parameterTypes":["boolean"] }]
+},
+{
+  "name":"org.springframework.web.method.annotation.ExceptionHandlerMethodResolver",
+  "methods":[{"name":"noMatchingExceptionHandler","parameterTypes":[] }]
 },
 {
   "name":"org.springframework.web.method.support.CompositeUriComponentsContributor",
@@ -7341,7 +7122,7 @@
 },
 {
   "name":"sun.misc.Unsafe",
-  "allDeclaredFields":true,
+  "fields":[{"name":"theUnsafe"}],
   "methods":[
     {"name":"copyMemory","parameterTypes":["java.lang.Object","long","java.lang.Object","long","long"] }, 
     {"name":"getAndAddLong","parameterTypes":["java.lang.Object","long","long"] }, 
@@ -7525,7 +7306,6 @@
   "name":"top.sshh.bililiverecoder.config.BiliConfig",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"init","parameterTypes":[] }
@@ -7555,13 +7335,23 @@
   ]
 },
 {
-  "name":"top.sshh.bililiverecoder.config.MvcConfig",
+  "name":"top.sshh.bililiverecoder.config.MultipartDebugConfigBridge",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
   "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"addInterceptors","parameterTypes":["org.springframework.web.servlet.config.annotation.InterceptorRegistry"] }
+    {"name":"<init>","parameterTypes":["org.springframework.core.env.Environment"] }, 
+    {"name":"applyFromSpringConfig","parameterTypes":[] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.config.MvcConfig",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":["org.springframework.core.task.AsyncTaskExecutor"] }, 
+    {"name":"addInterceptors","parameterTypes":["org.springframework.web.servlet.config.annotation.InterceptorRegistry"] }, 
+    {"name":"configureAsyncSupport","parameterTypes":["org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer"] }
   ]
 },
 {
@@ -7571,7 +7361,7 @@
   "queryAllDeclaredConstructors":true,
   "fields":[{"name":"CGLIB$FACTORY_DATA"}],
   "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"<init>","parameterTypes":["org.springframework.core.task.AsyncTaskExecutor"] }, 
     {"name":"CGLIB$SET_STATIC_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }, 
     {"name":"CGLIB$SET_THREAD_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }
   ]
@@ -7580,7 +7370,6 @@
   "name":"top.sshh.bililiverecoder.config.ScheduleConfig",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"configureTasks","parameterTypes":["org.springframework.scheduling.config.ScheduledTaskRegistrar"] }
@@ -7602,7 +7391,6 @@
   "name":"top.sshh.bililiverecoder.config.ThreadPoolConfig",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"asyncThreadPool","parameterTypes":["int","int","int","int"] }, 
@@ -7637,7 +7425,6 @@
   "name":"top.sshh.bililiverecoder.config.UndertowConfig",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"undertowWebSocketCustomizer","parameterTypes":[] }
@@ -7668,7 +7455,6 @@
   "name":"top.sshh.bililiverecoder.config.WebSocketConfig",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"registerWebSocketHandlers","parameterTypes":["org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry"] }
@@ -7727,7 +7513,9 @@
   "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
-    {"name":"listBillUser","parameterTypes":[] }
+    {"name":"listBillUser","parameterTypes":[] }, 
+    {"name":"loginCancel","parameterTypes":["java.lang.String"] }, 
+    {"name":"loginUser","parameterTypes":[] }
   ]
 },
 {
@@ -7751,12 +7539,18 @@
   "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
-    {"name":"candidateFiles","parameterTypes":["java.lang.Long","java.lang.String","int"] }, 
-    {"name":"delete","parameterTypes":["java.lang.Long","boolean","boolean","boolean"] }, 
-    {"name":"forceArchive","parameterTypes":["java.lang.Long"] }, 
     {"name":"initWorkPath","parameterTypes":[] }, 
-    {"name":"list","parameterTypes":["top.sshh.bililiverecoder.entity.RecordHistoryDTO"] }, 
-    {"name":"updateVisibility","parameterTypes":["java.lang.Long","java.util.Map"] }
+    {"name":"list","parameterTypes":["top.sshh.bililiverecoder.entity.RecordHistoryDTO"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.controller.HtmlPageController",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":["top.sshh.bililiverecoder.service.FrontendVersionService"] }, 
+    {"name":"getHtmlPage","parameterTypes":["java.lang.String","jakarta.servlet.http.HttpServletResponse"] }
   ]
 },
 {
@@ -7765,7 +7559,8 @@
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
   "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"<init>","parameterTypes":["top.sshh.bililiverecoder.service.FrontendVersionService"] }, 
+    {"name":"getIndex","parameterTypes":["jakarta.servlet.http.HttpServletRequest","jakarta.servlet.http.HttpServletResponse"] }, 
     {"name":"getRoot","parameterTypes":["jakarta.servlet.http.HttpServletRequest","jakarta.servlet.http.HttpServletResponse"] }
   ]
 },
@@ -7776,9 +7571,7 @@
   "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
-    {"name":"clearAlerts","parameterTypes":[] }, 
     {"name":"getAlerts","parameterTypes":[] }, 
-    {"name":"getContextLogs","parameterTypes":["java.lang.String","int"] }, 
     {"name":"getHistoryLogs","parameterTypes":["int"] }
   ]
 },
@@ -7792,6 +7585,24 @@
     {"name":"initWorkPath","parameterTypes":[] }, 
     {"name":"list2","parameterTypes":["java.lang.Long","java.util.Map"] }
   ]
+},
+{
+  "name":"top.sshh.bililiverecoder.controller.PartPreviewController",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"meta","parameterTypes":["java.lang.Long"] }, 
+    {"name":"source","parameterTypes":["java.lang.Long","java.lang.String"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.controller.PartPreviewExceptionHandler",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"top.sshh.bililiverecoder.controller.ProgressController",
@@ -7820,10 +7631,7 @@
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"processing","parameterTypes":["top.sshh.bililiverecoder.entity.RecordEventDTO"] }
-  ]
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"top.sshh.bililiverecoder.controller.RoomController",
@@ -7835,7 +7643,22 @@
     {"name":"imageProxy","parameterTypes":["java.lang.String"] }, 
     {"name":"lines","parameterTypes":[] }, 
     {"name":"list","parameterTypes":[] }, 
-    {"name":"seasons","parameterTypes":["java.lang.Long"] }
+    {"name":"seasons","parameterTypes":["java.lang.Long"] }, 
+    {"name":"sort","parameterTypes":["java.util.List"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.controller.StatsController",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"maintenanceStatus","parameterTypes":[] }, 
+    {"name":"overview","parameterTypes":["java.time.LocalDate","java.time.LocalDate"] }, 
+    {"name":"room","parameterTypes":["java.lang.String","java.time.LocalDate","java.time.LocalDate"] }, 
+    {"name":"rooms","parameterTypes":["java.time.LocalDate","java.time.LocalDate"] }, 
+    {"name":"taskStatus","parameterTypes":[] }
   ]
 },
 {
@@ -7845,8 +7668,7 @@
   "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
-    {"name":"list","parameterTypes":[] }, 
-    {"name":"update","parameterTypes":["java.util.Map"] }
+    {"name":"list","parameterTypes":[] }
   ]
 },
 {
@@ -7865,7 +7687,7 @@
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
   "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"<init>","parameterTypes":["top.sshh.bililiverecoder.service.FrontendVersionService"] }, 
     {"name":"getVersion","parameterTypes":[] }
   ]
 },
@@ -7893,24 +7715,6 @@
   ]
 },
 {
-  "name":"top.sshh.bililiverecoder.entity.BlrecData",
-  "allDeclaredFields":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.BlrecRoomInfo",
-  "allDeclaredFields":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.BlrecUserInfo",
-  "allDeclaredFields":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true
-},
-{
   "name":"top.sshh.bililiverecoder.entity.LiveMsg",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
@@ -7919,98 +7723,8 @@
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"equals","parameterTypes":["java.lang.Object"] }, 
-    {"name":"getBvid","parameterTypes":[] }, 
-    {"name":"getCid","parameterTypes":[] }, 
-    {"name":"getCode","parameterTypes":[] }, 
-    {"name":"getColor","parameterTypes":[] }, 
-    {"name":"getContext","parameterTypes":[] }, 
-    {"name":"getFontsize","parameterTypes":[] }, 
     {"name":"getId","parameterTypes":[] }, 
-    {"name":"getMode","parameterTypes":[] }, 
-    {"name":"getPartId","parameterTypes":[] }, 
-    {"name":"getPool","parameterTypes":[] }, 
-    {"name":"getSendTime","parameterTypes":[] }, 
     {"name":"setId","parameterTypes":["java.lang.Long"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.LogAlert",
-  "allDeclaredFields":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"getCount","parameterTypes":[] }, 
-    {"name":"getFirstTime","parameterTypes":[] }, 
-    {"name":"getLastTime","parameterTypes":[] }, 
-    {"name":"getLevel","parameterTypes":[] }, 
-    {"name":"getMessage","parameterTypes":[] }, 
-    {"name":"getTimestamp","parameterTypes":[] }, 
-    {"name":"getType","parameterTypes":[] }, 
-    {"name":"isRead","parameterTypes":[] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.RecordEventDTO",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"getData","parameterTypes":[] }, 
-    {"name":"getDate","parameterTypes":[] }, 
-    {"name":"getEventData","parameterTypes":[] }, 
-    {"name":"getEventId","parameterTypes":[] }, 
-    {"name":"getEventTimestamp","parameterTypes":[] }, 
-    {"name":"getEventType","parameterTypes":[] }, 
-    {"name":"getId","parameterTypes":[] }, 
-    {"name":"getType","parameterTypes":[] }, 
-    {"name":"setEventData","parameterTypes":["top.sshh.bililiverecoder.entity.RecordEventData"] }, 
-    {"name":"setEventId","parameterTypes":["java.lang.String"] }, 
-    {"name":"setEventTimestamp","parameterTypes":["java.util.Date"] }, 
-    {"name":"setEventType","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.RecordEventData",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"getAreaNameChild","parameterTypes":[] }, 
-    {"name":"getAreaNameParent","parameterTypes":[] }, 
-    {"name":"getDuration","parameterTypes":[] }, 
-    {"name":"getFileCloseTime","parameterTypes":[] }, 
-    {"name":"getFileOpenTime","parameterTypes":[] }, 
-    {"name":"getFileSize","parameterTypes":[] }, 
-    {"name":"getName","parameterTypes":[] }, 
-    {"name":"getRelativePath","parameterTypes":[] }, 
-    {"name":"getRoomId","parameterTypes":[] }, 
-    {"name":"getSessionId","parameterTypes":[] }, 
-    {"name":"getShortId","parameterTypes":[] }, 
-    {"name":"getTitle","parameterTypes":[] }, 
-    {"name":"isDanmakuConnected","parameterTypes":[] }, 
-    {"name":"isRecording","parameterTypes":[] }, 
-    {"name":"isStreaming","parameterTypes":[] }, 
-    {"name":"setAreaNameChild","parameterTypes":["java.lang.String"] }, 
-    {"name":"setAreaNameParent","parameterTypes":["java.lang.String"] }, 
-    {"name":"setDanmakuConnected","parameterTypes":["boolean"] }, 
-    {"name":"setDuration","parameterTypes":["float"] }, 
-    {"name":"setFileCloseTime","parameterTypes":["java.util.Date"] }, 
-    {"name":"setFileOpenTime","parameterTypes":["java.util.Date"] }, 
-    {"name":"setFileSize","parameterTypes":["long"] }, 
-    {"name":"setName","parameterTypes":["java.lang.String"] }, 
-    {"name":"setRecording","parameterTypes":["boolean"] }, 
-    {"name":"setRelativePath","parameterTypes":["java.lang.String"] }, 
-    {"name":"setRoomId","parameterTypes":["java.lang.String"] }, 
-    {"name":"setSessionId","parameterTypes":["java.lang.String"] }, 
-    {"name":"setShortId","parameterTypes":["long"] }, 
-    {"name":"setStreaming","parameterTypes":["boolean"] }, 
-    {"name":"setTitle","parameterTypes":["java.lang.String"] }
   ]
 },
 {
@@ -8050,6 +7764,7 @@
     {"name":"getRoomName","parameterTypes":[] }, 
     {"name":"getRoomSendDm","parameterTypes":[] }, 
     {"name":"getRoomSendSc","parameterTypes":[] }, 
+    {"name":"getRoomUpload","parameterTypes":[] }, 
     {"name":"getScMsgCount","parameterTypes":[] }, 
     {"name":"getSessionId","parameterTypes":[] }, 
     {"name":"getStartTime","parameterTypes":[] }, 
@@ -8058,6 +7773,8 @@
     {"name":"getTitle","parameterTypes":[] }, 
     {"name":"getTo","parameterTypes":[] }, 
     {"name":"getUpdateTime","parameterTypes":[] }, 
+    {"name":"getUploadFlowFallbackCount","parameterTypes":[] }, 
+    {"name":"getUploadFlowFallbackReasons","parameterTypes":[] }, 
     {"name":"getUploadPartCount","parameterTypes":[] }, 
     {"name":"getUploadRetryCount","parameterTypes":[] }, 
     {"name":"isForceArchived","parameterTypes":[] }, 
@@ -8127,6 +7844,7 @@
     {"name":"getDynamicTemplate","parameterTypes":[] }, 
     {"name":"getFileSizeLimit","parameterTypes":[] }, 
     {"name":"getGender","parameterTypes":[] }, 
+    {"name":"getGiftReplyMinPriceCny","parameterTypes":[] }, 
     {"name":"getHistoryId","parameterTypes":[] }, 
     {"name":"getId","parameterTypes":[] }, 
     {"name":"getIsOnlySelf","parameterTypes":[] }, 
@@ -8141,10 +7859,12 @@
     {"name":"getSeasonId","parameterTypes":[] }, 
     {"name":"getSectionId","parameterTypes":[] }, 
     {"name":"getSendDm","parameterTypes":[] }, 
+    {"name":"getSendGiftReply","parameterTypes":[] }, 
     {"name":"getSendSc","parameterTypes":[] }, 
     {"name":"getServerChanChannel","parameterTypes":[] }, 
     {"name":"getServerChanSendKey","parameterTypes":[] }, 
     {"name":"getSessionId","parameterTypes":[] }, 
+    {"name":"getSortOrder","parameterTypes":[] }, 
     {"name":"getTags","parameterTypes":[] }, 
     {"name":"getTid","parameterTypes":[] }, 
     {"name":"getTitle","parameterTypes":[] }, 
@@ -8158,6 +7878,141 @@
     {"name":"isRecording","parameterTypes":[] }, 
     {"name":"isStreaming","parameterTypes":[] }, 
     {"name":"isUpload","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.RoomLiveDailyStats",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.RoomLiveDanmuUserStats",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.RoomLiveEvent",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.RoomLiveEventParseState",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.RoomLiveGiftCatalog",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.RoomLiveMsgBucketStats",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getAdvancedMsgCount","parameterTypes":[] }, 
+    {"name":"getBucketIndex","parameterTypes":[] }, 
+    {"name":"getBucketStartMs","parameterTypes":[] }, 
+    {"name":"getGiftEventCount","parameterTypes":[] }, 
+    {"name":"getGuardCount","parameterTypes":[] }, 
+    {"name":"getHistoryId","parameterTypes":[] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"getMsgCount","parameterTypes":[] }, 
+    {"name":"getNormalMsgCount","parameterTypes":[] }, 
+    {"name":"getRoomId","parameterTypes":[] }, 
+    {"name":"getScCount","parameterTypes":[] }, 
+    {"name":"getStatsUpdatedAt","parameterTypes":[] }, 
+    {"name":"getStatsVersion","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.RoomLiveSessionStats",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getActiveUserCount","parameterTypes":[] }, 
+    {"name":"getAdvancedMsgCount","parameterTypes":[] }, 
+    {"name":"getBvId","parameterTypes":[] }, 
+    {"name":"getDurationSeconds","parameterTypes":[] }, 
+    {"name":"getEndTime","parameterTypes":[] }, 
+    {"name":"getFileSize","parameterTypes":[] }, 
+    {"name":"getGiftAmountCny","parameterTypes":[] }, 
+    {"name":"getGiftEventCount","parameterTypes":[] }, 
+    {"name":"getGiftTotalCoin","parameterTypes":[] }, 
+    {"name":"getGiftTotalCount","parameterTypes":[] }, 
+    {"name":"getGiftTypeCount","parameterTypes":[] }, 
+    {"name":"getGuardCount","parameterTypes":[] }, 
+    {"name":"getHistoryId","parameterTypes":[] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"getLiveDate","parameterTypes":[] }, 
+    {"name":"getMsgCount","parameterTypes":[] }, 
+    {"name":"getNormalMsgCount","parameterTypes":[] }, 
+    {"name":"getPartCount","parameterTypes":[] }, 
+    {"name":"getPeakMinuteIndex","parameterTypes":[] }, 
+    {"name":"getPeakMinuteMsgCount","parameterTypes":[] }, 
+    {"name":"getPublishCode","parameterTypes":[] }, 
+    {"name":"getRoomId","parameterTypes":[] }, 
+    {"name":"getScAmount","parameterTypes":[] }, 
+    {"name":"getScCount","parameterTypes":[] }, 
+    {"name":"getStartHour","parameterTypes":[] }, 
+    {"name":"getStartTime","parameterTypes":[] }, 
+    {"name":"getStatsUpdatedAt","parameterTypes":[] }, 
+    {"name":"getStatsVersion","parameterTypes":[] }, 
+    {"name":"getTitle","parameterTypes":[] }, 
+    {"name":"getUname","parameterTypes":[] }, 
+    {"name":"isPublished","parameterTypes":[] }, 
+    {"name":"isSendReply","parameterTypes":[] }, 
+    {"name":"isUploadEnabled","parameterTypes":[] }, 
     {"name":"setId","parameterTypes":["java.lang.Long"] }
   ]
 },
@@ -8208,119 +8063,6 @@
   ]
 },
 {
-  "name":"top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setCode","parameterTypes":["int"] }, 
-    {"name":"setData","parameterTypes":["top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse$AuditData"] }, 
-    {"name":"setMessage","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse$Appeal",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setReject","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse$AuditData",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setAid","parameterTypes":["long"] }, 
-    {"name":"setAppeal","parameterTypes":["top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse$Appeal"] }, 
-    {"name":"setProblem_detail","parameterTypes":["java.util.List"] }, 
-    {"name":"setState","parameterTypes":["int"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse$ProblemDetail",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"getIndex","parameterTypes":[] }, 
-    {"name":"getModify_advise","parameterTypes":[] }, 
-    {"name":"getProblem_description","parameterTypes":[] }, 
-    {"name":"getProblem_description_title","parameterTypes":[] }, 
-    {"name":"getReject_reason","parameterTypes":[] }, 
-    {"name":"getReject_reason_id","parameterTypes":[] }, 
-    {"name":"getReject_reason_url","parameterTypes":[] }, 
-    {"name":"getType","parameterTypes":[] }, 
-    {"name":"getViolation_position","parameterTypes":[] }, 
-    {"name":"getViolation_time","parameterTypes":[] }, 
-    {"name":"setIndex","parameterTypes":["java.lang.Integer"] }, 
-    {"name":"setModify_advise","parameterTypes":["java.lang.String"] }, 
-    {"name":"setProblem_description","parameterTypes":["java.lang.String"] }, 
-    {"name":"setProblem_description_title","parameterTypes":["java.lang.String"] }, 
-    {"name":"setReject_reason","parameterTypes":["java.lang.String"] }, 
-    {"name":"setReject_reason_id","parameterTypes":["java.lang.Long"] }, 
-    {"name":"setReject_reason_url","parameterTypes":["java.lang.String"] }, 
-    {"name":"setType","parameterTypes":["java.lang.String"] }, 
-    {"name":"setViolation_position","parameterTypes":["java.lang.String"] }, 
-    {"name":"setViolation_time","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setCode","parameterTypes":["int"] }, 
-    {"name":"setData","parameterTypes":["top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse$BiliVideoInfo"] }, 
-    {"name":"setMessage","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse$BiliVideoInfo",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setVideos","parameterTypes":["java.util.List"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse$Video",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setAid","parameterTypes":["long"] }, 
-    {"name":"setBvid","parameterTypes":["java.lang.String"] }, 
-    {"name":"setCid","parameterTypes":["long"] }, 
-    {"name":"setCtime","parameterTypes":["long"] }, 
-    {"name":"setDuration","parameterTypes":["int"] }, 
-    {"name":"setFailCode","parameterTypes":["int"] }, 
-    {"name":"setFailDesc","parameterTypes":["java.lang.String"] }, 
-    {"name":"setFilename","parameterTypes":["java.lang.String"] }, 
-    {"name":"setTitle","parameterTypes":["java.lang.String"] }, 
-    {"name":"setXcodeState","parameterTypes":["int"] }
-  ]
-},
-{
   "name":"top.sshh.bililiverecoder.entity.data.BillBuvId",
   "allDeclaredFields":true,
   "allPublicFields":true,
@@ -8330,70 +8072,6 @@
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"setB3","parameterTypes":["java.lang.String"] }, 
     {"name":"setB4","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.DescV2Dto",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "methods":[
-    {"name":"getBiz_id","parameterTypes":[] }, 
-    {"name":"getRaw_text","parameterTypes":[] }, 
-    {"name":"getType","parameterTypes":[] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.SingleVideoDto",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "methods":[
-    {"name":"getCid","parameterTypes":[] }, 
-    {"name":"getDesc","parameterTypes":[] }, 
-    {"name":"getFilename","parameterTypes":[] }, 
-    {"name":"getTitle","parameterTypes":[] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.entity.data.VideoUploadDto",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "methods":[
-    {"name":"getAct_reserve_create","parameterTypes":[] }, 
-    {"name":"getAid","parameterTypes":[] }, 
-    {"name":"getBuild","parameterTypes":[] }, 
-    {"name":"getCopyright","parameterTypes":[] }, 
-    {"name":"getCover","parameterTypes":[] }, 
-    {"name":"getCover43","parameterTypes":[] }, 
-    {"name":"getCsrf","parameterTypes":[] }, 
-    {"name":"getDesc","parameterTypes":[] }, 
-    {"name":"getDesc_format_id","parameterTypes":[] }, 
-    {"name":"getDesc_v2","parameterTypes":[] }, 
-    {"name":"getDolby","parameterTypes":[] }, 
-    {"name":"getDynamic","parameterTypes":[] }, 
-    {"name":"getDynamic_v2","parameterTypes":[] }, 
-    {"name":"getHuman_type2","parameterTypes":[] }, 
-    {"name":"getInteractive","parameterTypes":[] }, 
-    {"name":"getIs_360","parameterTypes":[] }, 
-    {"name":"getIs_only_self","parameterTypes":[] }, 
-    {"name":"getLossless_music","parameterTypes":[] }, 
-    {"name":"getNo_disturbance","parameterTypes":[] }, 
-    {"name":"getNo_reprint","parameterTypes":[] }, 
-    {"name":"getOpen_elec","parameterTypes":[] }, 
-    {"name":"getRecreate","parameterTypes":[] }, 
-    {"name":"getSource","parameterTypes":[] }, 
-    {"name":"getTag","parameterTypes":[] }, 
-    {"name":"getTid","parameterTypes":[] }, 
-    {"name":"getTitle","parameterTypes":[] }, 
-    {"name":"getTopic_grey","parameterTypes":[] }, 
-    {"name":"getVideos","parameterTypes":[] }, 
-    {"name":"getWeb_os","parameterTypes":[] }, 
-    {"name":"isHandle_staff","parameterTypes":[] }, 
-    {"name":"isUp_close_danmu","parameterTypes":[] }, 
-    {"name":"isUp_close_reply","parameterTypes":[] }, 
-    {"name":"isUp_selection_reply","parameterTypes":[] }
   ]
 },
 {
@@ -8435,6 +8113,16 @@
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"syncRoomStatus","parameterTypes":[] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.job.StatsAggregationJob",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"refreshRecentStats","parameterTypes":[] }
   ]
 },
 {
@@ -8503,12 +8191,68 @@
   "queryAllPublicMethods":true
 },
 {
+  "name":"top.sshh.bililiverecoder.repo.RoomLiveDailyStatsRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.RoomLiveDanmuUserStatsRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.RoomLiveEventParseStateRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.RoomLiveEventRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.RoomLiveGiftCatalogRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.RoomLiveMsgBucketStatsRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.RoomLiveSessionStatsRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
   "name":"top.sshh.bililiverecoder.repo.SystemConfigRepository",
   "queryAllDeclaredMethods":true,
   "queryAllPublicMethods":true
 },
 {
   "name":"top.sshh.bililiverecoder.service.CaptchaService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.DatabaseMaintenanceService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":["javax.sql.DataSource","org.springframework.jdbc.core.JdbcTemplate","top.sshh.bililiverecoder.service.WebhookEventDispatcher","top.sshh.bililiverecoder.service.RecordEventFactory","org.springframework.context.ApplicationContext","top.sshh.bililiverecoder.service.DatabaseMaintenanceState","org.springframework.core.task.TaskExecutor"] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.DatabaseMaintenanceState",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.FrontendVersionService",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
@@ -8522,6 +8266,17 @@
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"init","parameterTypes":[] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.PartPreviewService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"init","parameterTypes":[] }, 
+    {"name":"shutdown","parameterTypes":[] }
   ]
 },
 {
@@ -8547,13 +8302,71 @@
   "queryAllPublicMethods":true
 },
 {
+  "name":"top.sshh.bililiverecoder.service.RecordHistoryMergeService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
   "name":"top.sshh.bililiverecoder.service.RecordPartUploadService",
   "queryAllDeclaredMethods":true,
-  "queryAllPublicMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.service.RoomLiveEventParseService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
   "methods":[
-    {"name":"asyncUpload","parameterTypes":["top.sshh.bililiverecoder.entity.RecordHistoryPart"] }, 
-    {"name":"asyncUploadIfNeeded","parameterTypes":["top.sshh.bililiverecoder.entity.RecordHistoryPart"] }
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"parsePart","parameterTypes":["top.sshh.bililiverecoder.entity.RecordHistoryPart","boolean"] }
   ]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.RoomLiveEventParseService$$SpringCGLIB$$0",
+  "fields":[
+    {"name":"CGLIB$CALLBACK_FILTER"}, 
+    {"name":"CGLIB$FACTORY_DATA"}
+  ],
+  "methods":[{"name":"CGLIB$SET_THREAD_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.RoomLiveGiftCatalogService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.StatsAggregationService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"getOverview","parameterTypes":["java.time.LocalDate","java.time.LocalDate"] }, 
+    {"name":"getRoomDetail","parameterTypes":["java.lang.String","java.time.LocalDate","java.time.LocalDate"] }, 
+    {"name":"getRoomSummaries","parameterTypes":["java.time.LocalDate","java.time.LocalDate"] }, 
+    {"name":"getStatsTaskStatus","parameterTypes":[] }, 
+    {"name":"refreshRecentCompletedHistoriesAsync","parameterTypes":["int"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.StatsAggregationService$$SpringCGLIB$$0",
+  "fields":[
+    {"name":"CGLIB$CALLBACK_FILTER"}, 
+    {"name":"CGLIB$FACTORY_DATA"}
+  ],
+  "methods":[{"name":"CGLIB$SET_THREAD_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.StatsAggregationService$$SpringCGLIB$$1",
+  "fields":[
+    {"name":"CGLIB$CALLBACK_FILTER"}, 
+    {"name":"CGLIB$FACTORY_DATA"}
+  ],
+  "methods":[{"name":"CGLIB$SET_THREAD_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }]
 },
 {
   "name":"top.sshh.bililiverecoder.service.SystemConfigService",
@@ -8590,10 +8403,7 @@
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"getUploadService","parameterTypes":["java.lang.String"] }
-  ]
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"top.sshh.bililiverecoder.service.UploadServiceFactory$$SpringCGLIB$$0",
@@ -8626,7 +8436,7 @@
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
   "methods":[
-    {"name":"<init>","parameterTypes":["top.sshh.bililiverecoder.service.UploadUserSerialScheduler"] }, 
+    {"name":"<init>","parameterTypes":["top.sshh.bililiverecoder.service.UploadUserSerialScheduler","top.sshh.bililiverecoder.repo.RecordHistoryPartRepository"] }, 
     {"name":"init","parameterTypes":[] }, 
     {"name":"refreshScheduled","parameterTypes":[] }
   ]
@@ -8770,10 +8580,7 @@
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"processing","parameterTypes":["top.sshh.bililiverecoder.entity.RecordHistoryPart"] }
-  ]
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"top.sshh.bililiverecoder.service.impl.LiveMsgService$$SpringCGLIB$$0",
@@ -8790,8 +8597,7 @@
   "queryAllDeclaredConstructors":true,
   "methods":[
     {"name":"<init>","parameterTypes":[] }, 
-    {"name":"initWorkPath","parameterTypes":[] }, 
-    {"name":"publishRecordHistory","parameterTypes":["top.sshh.bililiverecoder.entity.RecordHistory"] }
+    {"name":"initWorkPath","parameterTypes":[] }
   ]
 },
 {
@@ -8922,11 +8728,16 @@
   ]
 },
 {
-  "name":"top.sshh.bililiverecoder.util.NettyUploadClient$1"
-},
-{
-  "name":"top.sshh.bililiverecoder.util.NettyUploadClient$1$1",
-  "methods":[{"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }]
+  "name":"top.sshh.bililiverecoder.util.BiliApi$GenerateQRDto",
+  "allDeclaredFields":true,
+  "allPublicFields":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"setAuth_code","parameterTypes":["java.lang.String"] }, 
+    {"name":"setUrl","parameterTypes":["java.lang.String"] }
+  ]
 },
 {
   "name":"top.sshh.bililiverecoder.util.UploadEnums",
@@ -8940,6 +8751,194 @@
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"io.netty.buffer.AbstractByteBufAllocator",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"io.netty.buffer.AbstractReferenceCountedByteBuf",
+  "fields":[{"name":"refCnt"}]
+},
+{
+  "name":"io.netty.channel.ChannelDuplexHandler",
+  "methods":[
+    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }
+  ]
+},
+{
+  "name":"io.netty.channel.ChannelInboundHandlerAdapter",
+  "methods":[
+    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
+    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }
+  ]
+},
+{
+  "name":"io.netty.channel.ChannelInitializer",
+  "methods":[
+    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }
+  ]
+},
+{
+  "name":"io.netty.channel.CombinedChannelDuplexHandler",
+  "methods":[
+    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
+    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
+  ]
+},
+{
+  "name":"io.netty.channel.DefaultChannelPipeline$HeadContext",
+  "methods":[
+    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
+    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
+  ]
+},
+{
+  "name":"io.netty.channel.DefaultChannelPipeline$TailContext",
+  "methods":[
+    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelUnregistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
+    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }
+  ]
+},
+{
+  "name":"io.netty.channel.SimpleChannelInboundHandler",
+  "methods":[{"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }]
+},
+{
+  "name":"io.netty.channel.socket.nio.NioSocketChannel",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"io.netty.handler.codec.ByteToMessageDecoder",
+  "methods":[
+    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"userEventTriggered","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }
+  ]
+},
+{
+  "name":"io.netty.handler.codec.MessageAggregator",
+  "methods":[
+    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }
+  ]
+},
+{
+  "name":"io.netty.handler.codec.MessageToMessageDecoder",
+  "methods":[{"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }]
+},
+{
+  "name":"io.netty.handler.codec.http.HttpClientCodec"
+},
+{
+  "name":"io.netty.handler.codec.http.HttpObjectAggregator"
+},
+{
+  "name":"io.netty.handler.ssl.SslHandler",
+  "methods":[
+    {"name":"bind","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"channelActive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelReadComplete","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"close","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"connect","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.net.SocketAddress","java.net.SocketAddress","io.netty.channel.ChannelPromise"] }, 
+    {"name":"deregister","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"disconnect","parameterTypes":["io.netty.channel.ChannelHandlerContext","io.netty.channel.ChannelPromise"] }, 
+    {"name":"exceptionCaught","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Throwable"] }, 
+    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
+  ]
+},
+{
+  "name":"io.netty.handler.stream.ChunkedWriteHandler",
+  "methods":[
+    {"name":"channelInactive","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"channelWritabilityChanged","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"flush","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
+  ]
+},
+{
+  "name":"io.netty.handler.traffic.AbstractTrafficShapingHandler",
+  "methods":[
+    {"name":"channelRead","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object"] }, 
+    {"name":"channelRegistered","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"read","parameterTypes":["io.netty.channel.ChannelHandlerContext"] }, 
+    {"name":"write","parameterTypes":["io.netty.channel.ChannelHandlerContext","java.lang.Object","io.netty.channel.ChannelPromise"] }
+  ]
+},
+{
+  "name":"io.netty.handler.traffic.ChannelTrafficShapingHandler"
+},
+{
+  "name":"io.netty.handler.traffic.GlobalTrafficShapingHandler"
+},
+{
+  "name":"io.netty.util.ReferenceCountUtil",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField",
+  "fields":[{"name":"consumerIndex"}]
+},
+{
+  "name":"io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField",
+  "fields":[{"name":"producerIndex"}]
+},
+{
+  "name":"io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField",
+  "fields":[{"name":"producerLimit"}]
 },
 {
   "name":"top.sshh.bililiverecoder.util.UploadProgressTracker$Progress",
@@ -8965,230 +8964,5 @@
   "name":"top.sshh.bililiverecoder.util.UploadProgressTracker$State",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.upload.pojo.CompleteUploadBean",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setBucket","parameterTypes":["java.lang.String"] }, 
-    {"name":"setKey","parameterTypes":["java.lang.String"] }, 
-    {"name":"setLocation","parameterTypes":["java.lang.String"] }, 
-    {"name":"setOK","parameterTypes":["java.lang.Integer"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.upload.pojo.LineUploadBean",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setBucket","parameterTypes":["java.lang.String"] }, 
-    {"name":"setKey","parameterTypes":["java.lang.String"] }, 
-    {"name":"setOK","parameterTypes":["int"] }, 
-    {"name":"setUpload_id","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setAuth","parameterTypes":["java.lang.String"] }, 
-    {"name":"setBiz_id","parameterTypes":["long"] }, 
-    {"name":"setChunk_retry","parameterTypes":["int"] }, 
-    {"name":"setChunk_retry_delay","parameterTypes":["int"] }, 
-    {"name":"setChunk_size","parameterTypes":["long"] }, 
-    {"name":"setEndpoint","parameterTypes":["java.lang.String"] }, 
-    {"name":"setEndpoints","parameterTypes":["java.lang.String[]"] }, 
-    {"name":"setExpose_params","parameterTypes":["java.lang.String"] }, 
-    {"name":"setOK","parameterTypes":["int"] }, 
-    {"name":"setPut_query","parameterTypes":["java.lang.String"] }, 
-    {"name":"setThreads","parameterTypes":["java.lang.String"] }, 
-    {"name":"setTimeout","parameterTypes":["java.lang.String"] }, 
-    {"name":"setUip","parameterTypes":["java.lang.String"] }, 
-    {"name":"setUpos_uri","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.Label",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setBg_color","parameterTypes":["java.lang.String"] }, 
-    {"name":"setBg_style","parameterTypes":["int"] }, 
-    {"name":"setBorder_color","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImg_label_uri_hans","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImg_label_uri_hans_static","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImg_label_uri_hant","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImg_label_uri_hant_static","parameterTypes":["java.lang.String"] }, 
-    {"name":"setLabel_theme","parameterTypes":["java.lang.String"] }, 
-    {"name":"setPath","parameterTypes":["java.lang.String"] }, 
-    {"name":"setText","parameterTypes":["java.lang.String"] }, 
-    {"name":"setText_color","parameterTypes":["java.lang.String"] }, 
-    {"name":"setUse_img_label","parameterTypes":["boolean"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.Level_exp",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setCurrent_exp","parameterTypes":["int"] }, 
-    {"name":"setCurrent_level","parameterTypes":["int"] }, 
-    {"name":"setCurrent_min","parameterTypes":["int"] }, 
-    {"name":"setNext_exp","parameterTypes":["int"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.Nameplate",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setCondition","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImage","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImage_small","parameterTypes":["java.lang.String"] }, 
-    {"name":"setLevel","parameterTypes":["java.lang.String"] }, 
-    {"name":"setName","parameterTypes":["java.lang.String"] }, 
-    {"name":"setNid","parameterTypes":["int"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.Official",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setDesc","parameterTypes":["java.lang.String"] }, 
-    {"name":"setRole","parameterTypes":["int"] }, 
-    {"name":"setTitle","parameterTypes":["java.lang.String"] }, 
-    {"name":"setType","parameterTypes":["int"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.Pendant",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setExpire","parameterTypes":["int"] }, 
-    {"name":"setImage","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImage_enhance","parameterTypes":["java.lang.String"] }, 
-    {"name":"setImage_enhance_frame","parameterTypes":["java.lang.String"] }, 
-    {"name":"setName","parameterTypes":["java.lang.String"] }, 
-    {"name":"setPid","parameterTypes":["int"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.Profession",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setDepartment","parameterTypes":["java.lang.String"] }, 
-    {"name":"setIs_show","parameterTypes":["int"] }, 
-    {"name":"setName","parameterTypes":["java.lang.String"] }, 
-    {"name":"setTitle","parameterTypes":["java.lang.String"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.UserMyRootBean",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setCode","parameterTypes":["int"] }, 
-    {"name":"setData","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.UserMyRootBean$Data"] }, 
-    {"name":"setMessage","parameterTypes":["java.lang.String"] }, 
-    {"name":"setTtl","parameterTypes":["int"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.UserMyRootBean$Data",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setBirthday","parameterTypes":["java.util.Date"] }, 
-    {"name":"setCoins","parameterTypes":["int"] }, 
-    {"name":"setEmail_status","parameterTypes":["int"] }, 
-    {"name":"setFace","parameterTypes":["java.lang.String"] }, 
-    {"name":"setFace_nft","parameterTypes":["int"] }, 
-    {"name":"setFollower","parameterTypes":["int"] }, 
-    {"name":"setFollowing","parameterTypes":["int"] }, 
-    {"name":"setIdentification","parameterTypes":["int"] }, 
-    {"name":"setIn_reg_audit","parameterTypes":["int"] }, 
-    {"name":"setIs_deleted","parameterTypes":["int"] }, 
-    {"name":"setIs_fake_account","parameterTypes":["int"] }, 
-    {"name":"setIs_senior_member","parameterTypes":["int"] }, 
-    {"name":"setIs_tourist","parameterTypes":["int"] }, 
-    {"name":"setJointime","parameterTypes":["int"] }, 
-    {"name":"setLevel","parameterTypes":["int"] }, 
-    {"name":"setLevel_exp","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.Level_exp"] }, 
-    {"name":"setMid","parameterTypes":["long"] }, 
-    {"name":"setMoral","parameterTypes":["int"] }, 
-    {"name":"setName","parameterTypes":["java.lang.String"] }, 
-    {"name":"setNameplate","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.Nameplate"] }, 
-    {"name":"setOfficial","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.Official"] }, 
-    {"name":"setPendant","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.Pendant"] }, 
-    {"name":"setPin_prompting","parameterTypes":["int"] }, 
-    {"name":"setProfession","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.Profession"] }, 
-    {"name":"setRank","parameterTypes":["int"] }, 
-    {"name":"setSex","parameterTypes":["java.lang.String"] }, 
-    {"name":"setSign","parameterTypes":["java.lang.String"] }, 
-    {"name":"setSilence","parameterTypes":["int"] }, 
-    {"name":"setTel_status","parameterTypes":["int"] }, 
-    {"name":"setVip","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.Vip"] }, 
-    {"name":"set_rip_user","parameterTypes":["boolean"] }
-  ]
-},
-{
-  "name":"top.sshh.bililiverecoder.util.bili.user.Vip",
-  "allDeclaredFields":true,
-  "allPublicFields":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[
-    {"name":"<init>","parameterTypes":[] }, 
-    {"name":"setAvatar_subscript","parameterTypes":["int"] }, 
-    {"name":"setAvatar_subscript_url","parameterTypes":["java.lang.String"] }, 
-    {"name":"setDue_date","parameterTypes":["long"] }, 
-    {"name":"setLabel","parameterTypes":["top.sshh.bililiverecoder.util.bili.user.Label"] }, 
-    {"name":"setNickname_color","parameterTypes":["java.lang.String"] }, 
-    {"name":"setRole","parameterTypes":["int"] }, 
-    {"name":"setStatus","parameterTypes":["int"] }, 
-    {"name":"setTheme_type","parameterTypes":["int"] }, 
-    {"name":"setTv_vip_pay_type","parameterTypes":["int"] }, 
-    {"name":"setTv_vip_status","parameterTypes":["int"] }, 
-    {"name":"setType","parameterTypes":["int"] }, 
-    {"name":"setVip_pay_type","parameterTypes":["int"] }
-  ]
 }
 ]
