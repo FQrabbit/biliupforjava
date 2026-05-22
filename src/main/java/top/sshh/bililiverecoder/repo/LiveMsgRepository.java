@@ -64,6 +64,17 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
             """)
     List<Object[]> aggregateListStatsByBvids(List<String> bvids, String scLike, String guardLike);
 
+    @Query("""
+            select m.bvid,
+                   sum(case when m.code = 0 then 1 else 0 end),
+                   sum(case when m.pool = 0 and m.code = -1 then 1 else 0 end),
+                   sum(case when m.pool = 1 and m.code = -1 then 1 else 0 end)
+            from LiveMsg m
+            where m.bvid in ?1
+            group by m.bvid
+            """)
+    List<Object[]> aggregateSendStatsByBvids(List<String> bvids);
+
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("delete from LiveMsg where partId = ?1")

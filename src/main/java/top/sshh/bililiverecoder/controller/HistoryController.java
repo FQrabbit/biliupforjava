@@ -1531,6 +1531,7 @@ public class HistoryController {
     private Map<String, MsgListStats> buildPageMsgStats(List<RecordHistory> histories,
                                                         Map<Long, RoomLiveSessionStats> sessionStatsMap) {
         Map<String, MsgListStats> result = new HashMap<>();
+        Map<String, SendListStats> sendStatsMap = buildPageSendStats(histories);
         for (RecordHistory history : histories) {
             if (history == null || StringUtils.isBlank(history.getBvId())) {
                 continue;
@@ -1539,16 +1540,16 @@ public class HistoryController {
             if (stats == null) {
                 continue;
             }
+            SendListStats sendStats = sendStatsMap.getOrDefault(history.getBvId(), SendListStats.EMPTY);
             int msgCount = safeLongToInt(stats.getMsgCount());
-            int successMsgCount = history.isSendReply() && history.getCode() == 0 ? msgCount : 0;
             result.put(history.getBvId(), new MsgListStats(
                     msgCount,
-                    successMsgCount,
+                    sendStats.successMsgCount(),
                     safeLongToInt(stats.getNormalMsgCount()),
                     safeLongToInt(stats.getScCount()),
                     safeLongToInt(stats.getGuardCount()),
-                    0,
-                    0
+                    sendStats.pendingNormalMsgCount(),
+                    sendStats.pendingHighMsgCount()
             ));
         }
         List<String> bvids = histories.stream()
@@ -1563,14 +1564,38 @@ public class HistoryController {
         for (Object[] row : msgRepository.aggregateListStatsByBvids(bvids, "SC [%", "⚓%")) {
             String bvid = row[0] == null ? null : row[0].toString();
             if (StringUtils.isNotBlank(bvid)) {
+                SendListStats sendStats = sendStatsMap.getOrDefault(bvid, SendListStats.EMPTY);
                 result.put(bvid, new MsgListStats(
                         toInt(row[1]),
-                        toInt(row[2]),
+                        sendStats.successMsgCount(),
                         toInt(row[3]),
                         toInt(row[4]),
                         toInt(row[5]),
-                        toInt(row[6]),
-                        toInt(row[7])
+                        sendStats.pendingNormalMsgCount(),
+                        sendStats.pendingHighMsgCount()
+                ));
+            }
+        }
+        return result;
+    }
+
+    private Map<String, SendListStats> buildPageSendStats(List<RecordHistory> histories) {
+        List<String> bvids = histories.stream()
+                .map(RecordHistory::getBvId)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        if (bvids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, SendListStats> result = new HashMap<>();
+        for (Object[] row : msgRepository.aggregateSendStatsByBvids(bvids)) {
+            String bvid = row[0] == null ? null : row[0].toString();
+            if (StringUtils.isNotBlank(bvid)) {
+                result.put(bvid, new SendListStats(
+                        toInt(row[1]),
+                        toInt(row[2]),
+                        toInt(row[3])
                 ));
             }
         }
@@ -1636,5 +1661,11 @@ public class HistoryController {
                                 int guardMsgCount,
                                 int pendingNormalMsgCount,
                                 int pendingHighMsgCount) {
+    }
+
+    private record SendListStats(int successMsgCount,
+                                 int pendingNormalMsgCount,
+                                 int pendingHighMsgCount) {
+        private static final SendListStats EMPTY = new SendListStats(0, 0, 0);
     }
 }
