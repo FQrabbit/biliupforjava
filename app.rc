@@ -5,8 +5,8 @@
 
 // Version Info
 1 VERSIONINFO
-FILEVERSION     1,4,1,73
-PRODUCTVERSION  1,4,1,73
+FILEVERSION     1,4,1,74
+PRODUCTVERSION  1,4,1,74
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
 FILEFLAGS       0
 FILEOS          VOS_NT_WINDOWS32
@@ -18,12 +18,12 @@ BEGIN
         BLOCK "080404b0" // Simplified Chinese, Unicode
         BEGIN
             VALUE "CompanyName",      "biliupforjava"
-            VALUE "FileDescription",  "biliupforjava (1.4.1-beta7.3)"
-            VALUE "FileVersion",      "1.4.1.73"
+            VALUE "FileDescription",  "biliupforjava (1.4.1-beta7.4)"
+            VALUE "FileVersion",      "1.4.1.74"
             VALUE "InternalName",     "biliupforjava"
             VALUE "OriginalFilename", "biliupforjava.exe"
             VALUE "ProductName",      "biliupforjava"
-            VALUE "ProductVersion",   "1.4.1.73"
+            VALUE "ProductVersion",   "1.4.1.74"
         END
     END
     BLOCK "VarFileInfo"
