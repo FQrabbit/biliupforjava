@@ -1081,7 +1081,7 @@
         </div>
     </el-dialog>
 
-    <el-dialog title="预览视频" :visible.sync="previewDialogVisible" width="860px" append-to-body custom-class="part-preview-dialog" @closed="closePartPreview">
+    <el-dialog title="预览视频" :visible.sync="previewDialogVisible" width="860px" append-to-body custom-class="part-preview-dialog" :before-close="beforeClosePartPreviewDialog" @closed="onPartPreviewDialogClosed">
         <div class="part-preview-panel">
             <div class="part-preview-header">
                 <div>
@@ -1111,9 +1111,34 @@
             <el-button v-if="showPreviewFallbackButton" size="small" @click="switchPreviewSource('flv')">回退 FLV</el-button>
             <el-button v-if="showPreviewCancelButton" size="small" type="warning" plain @click="cancelPreviewPrepare">取消封装</el-button>
             <el-button size="small" type="primary" @click="preparePartPreview" :loading="previewPreparing" :disabled="previewPrepareDisabled">{{ previewPrepareButtonText }}</el-button>
-            <el-button size="small" @click="previewDialogVisible = false">关闭</el-button>
+            <el-button v-if="canDetachPartPreview" size="small" type="success" plain icon="el-icon-headset" @click="detachPartPreview">后台播放</el-button>
+            <el-button size="small" @click="requestClosePartPreview">关闭</el-button>
         </div>
     </el-dialog>
+
+    <transition name="part-preview-mini">
+        <div v-if="previewDetached && previewPart" class="part-preview-mini" :class="{ 'is-collapsed': previewMiniCollapsed }">
+            <div class="part-preview-mini-video" ref="partPreviewMiniPlayer"></div>
+            <div class="part-preview-mini-bar">
+                <div class="part-preview-mini-meta">
+                    <span class="part-badge">P{{ previewPart.page }}</span>
+                    <span class="part-preview-mini-title">{{ previewMeta && previewMeta.fileName ? maskText(previewMeta.fileName) : '分P视频' }}</span>
+                    <span class="part-preview-mini-mode">{{ previewMode === 'mp4' ? 'MP4' : 'FLV' }}</span>
+                </div>
+                <div class="part-preview-mini-actions">
+                    <button type="button" class="part-preview-mini-btn" :title="previewMiniCollapsed ? '展开小窗' : '折叠音频条'" @click="togglePreviewMiniCollapsed">
+                        <i :class="previewMiniCollapsed ? 'el-icon-video-play' : 'el-icon-minus'"></i>
+                    </button>
+                    <button type="button" class="part-preview-mini-btn" title="返回大窗" @click="restorePartPreviewDialog">
+                        <i class="el-icon-full-screen"></i>
+                    </button>
+                    <button type="button" class="part-preview-mini-btn is-danger" title="停止播放" @click="stopPartPreview">
+                        <i class="el-icon-close"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
 
     <el-dialog :title="editPartFileDialogMode === 'add' ? '从工作目录添加分P' : '从工作目录替换分P'" :visible.sync="editPartFileDialogVisible" width="640px" append-to-body>
         <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
@@ -1244,6 +1269,9 @@
             previewDanmukuLoader: null,
             previewFlvPlayer: null,
             previewMpegtsLoader: null,
+            previewDetached: false,
+            previewMiniCollapsed: false,
+            previewCloseIntent: 'stop',
             editPartsEditing: false,
             editPartsLoading: false,
             editPartsSaving: false,
@@ -1390,6 +1418,16 @@
             },
             previewPrepareButtonText: function() {
                 return this.isPreviewCacheReady ? '重新生成可拖动预览' : '生成可拖动预览';
+            },
+            canDetachPartPreview: function() {
+                return !!(this.previewPart && this.previewArtPlayer);
+            },
+            isPartPreviewPlaying: function() {
+                try {
+                    return !!(this.previewArtPlayer && this.previewArtPlayer.video && !this.previewArtPlayer.video.paused);
+                } catch (e) {
+                    return false;
+                }
             },
             activeFilterCount: function() {
                 let count = 0;
@@ -2872,7 +2910,11 @@
                 this.showAllParts = false;
                 this.showMoreActions = false;
                 this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
-                this.closePartPreview();
+                if (this.previewArtPlayer && this.isPartPreviewPlaying) {
+                    this.detachPartPreview();
+                } else if (!this.previewDetached) {
+                    this.stopPartPreview();
+                }
                 this.auditRejectRetryGuard = { historyId: null, tried: false };
                 this.auditRejectManualRefreshing = false;
                 this.auditRejectReviewDebug = null;
@@ -3795,9 +3837,12 @@
             },
             openPartPreview: function(p) {
                 if (!this.canPreviewPart(p)) return;
-                this.closePartPreview();
+                this.stopPartPreview();
                 this.previewPart = p;
                 this.previewDialogVisible = true;
+                this.previewDetached = false;
+                this.previewMiniCollapsed = false;
+                this.previewCloseIntent = 'stop';
                 this.previewMode = 'flv';
                 this.previewError = '';
                 this.loadPartPreviewMeta(true);
@@ -3824,7 +3869,7 @@
             switchPreviewSource: function(mode) {
                 var _this = this;
                 if (!_this.previewPart || !_this.previewPart.partId) return;
-                var container = _this.$refs.partPreviewPlayer;
+                var container = _this.getPreviewPlayerContainer();
                 if (!container) {
                     _this.$nextTick(function() { _this.switchPreviewSource(mode); });
                     return;
@@ -3848,7 +3893,7 @@
                 }
 
                 Promise.all(loaders).then(function() {
-                    if (!_this.previewDialogVisible || !_this.previewPart || !_this.previewPart.partId) return;
+                    if ((!_this.previewDialogVisible && !_this.previewDetached) || !_this.previewPart || !_this.previewPart.partId) return;
                     if (!window.Artplayer) {
                         _this.previewError = '播放器组件加载失败';
                         return;
@@ -3911,6 +3956,49 @@
                 }).catch(function() {
                     _this.previewError = '播放器组件加载失败';
                 });
+            },
+            getPreviewPlayerContainer: function() {
+                if (this.previewDetached && this.$refs.partPreviewMiniPlayer) {
+                    return this.$refs.partPreviewMiniPlayer;
+                }
+                return this.$refs.partPreviewPlayer || null;
+            },
+            movePreviewPlayerTo: function(container) {
+                if (!container || !this.previewArtPlayer || !this.previewArtPlayer.template || !this.previewArtPlayer.template.$player) return false;
+                try {
+                    container.appendChild(this.previewArtPlayer.template.$player);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            },
+            detachPartPreview: function() {
+                if (!this.previewPart) return;
+                this.previewDetached = true;
+                this.previewMiniCollapsed = false;
+                this.previewCloseIntent = 'detach';
+                this.previewDialogVisible = false;
+                var _this = this;
+                this.$nextTick(function() {
+                    if (!_this.movePreviewPlayerTo(_this.$refs.partPreviewMiniPlayer)) {
+                        _this.switchPreviewSource(_this.previewMode);
+                    }
+                });
+            },
+            restorePartPreviewDialog: function() {
+                if (!this.previewPart) return;
+                this.previewDetached = false;
+                this.previewCloseIntent = 'detach';
+                this.previewDialogVisible = true;
+                var _this = this;
+                this.$nextTick(function() {
+                    if (!_this.movePreviewPlayerTo(_this.$refs.partPreviewPlayer)) {
+                        _this.switchPreviewSource(_this.previewMode);
+                    }
+                });
+            },
+            togglePreviewMiniCollapsed: function() {
+                this.previewMiniCollapsed = !this.previewMiniCollapsed;
             },
             loadArtPlayer: function() {
                 if (window.Artplayer) {
@@ -4072,7 +4160,56 @@
                     _this.$message({ message: '取消封装失败', type: 'warning' });
                 });
             },
-            closePartPreview: function() {
+            beforeClosePartPreviewDialog: function(done) {
+                if (this.previewCloseIntent === 'detach' || !this.isPartPreviewPlaying) {
+                    this.previewCloseIntent = this.previewCloseIntent === 'detach' ? 'detach' : 'stop';
+                    done();
+                    return;
+                }
+                this.confirmClosePartPreview(done);
+            },
+            requestClosePartPreview: function() {
+                var _this = this;
+                if (!_this.isPartPreviewPlaying) {
+                    _this.previewCloseIntent = 'stop';
+                    _this.previewDialogVisible = false;
+                    return;
+                }
+                _this.confirmClosePartPreview(function() {
+                    _this.previewDialogVisible = false;
+                });
+            },
+            confirmClosePartPreview: function(done) {
+                var _this = this;
+                _this.$msgbox({
+                    title: '关闭预览',
+                    message: '视频正在播放，要放到右下角后台继续播放吗？',
+                    showCancelButton: true,
+                    distinguishCancelAndClose: true,
+                    confirmButtonText: '后台播放',
+                    cancelButtonText: '停止播放',
+                    type: 'warning'
+                }).then(function() {
+                    _this.previewCloseIntent = 'detach';
+                    done && done();
+                    _this.$nextTick(function() {
+                        _this.detachPartPreview();
+                    });
+                }).catch(function(action) {
+                    if (action === 'cancel') {
+                        _this.previewCloseIntent = 'stop';
+                        done && done();
+                    }
+                });
+            },
+            onPartPreviewDialogClosed: function() {
+                if (this.previewCloseIntent === 'detach' || this.previewDetached) {
+                    this.previewCloseIntent = 'stop';
+                    return;
+                }
+                this.stopPartPreview();
+            },
+            stopPartPreview: function() {
                 this.stopPreviewTaskPolling();
                 this.destroyPreviewArtPlayer();
                 this.previewDialogVisible = false;
@@ -4082,6 +4219,12 @@
                 this.previewMode = 'flv';
                 this.previewPreparing = false;
                 this.previewError = '';
+                this.previewDetached = false;
+                this.previewMiniCollapsed = false;
+                this.previewCloseIntent = 'stop';
+            },
+            closePartPreview: function() {
+                this.stopPartPreview();
             },
             destroyPreviewArtPlayer: function() {
                 if (this.previewArtPlayer) {
