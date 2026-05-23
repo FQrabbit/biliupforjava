@@ -17,6 +17,7 @@ public class UploadProgressTracker {
     private static final long MIN_SPEED_SAMPLE_INTERVAL_MS = 1500L;
 
     public enum State {
+        WAITING,
         UPLOADING,
         RETRY_WAIT,
         PAUSED,

@@ -27,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 
 @Slf4j
 public class NettyUploadClient {
@@ -73,7 +74,11 @@ public class NettyUploadClient {
      * @return 响应内容
      */
     public static String put(String url, Map<String, String> headers, Map<String, String> params, RandomAccessFile file, long start, long end, long timeoutMs, long writeLimit) {
-        UploadResponse response = putForResponse(url, headers, params, file, start, end, timeoutMs, writeLimit);
+        return put(url, headers, params, file, start, end, timeoutMs, writeLimit, null);
+    }
+
+    public static String put(String url, Map<String, String> headers, Map<String, String> params, RandomAccessFile file, long start, long end, long timeoutMs, long writeLimit, BooleanSupplier cancelledSupplier) {
+        UploadResponse response = putForResponse(url, headers, params, file, start, end, timeoutMs, writeLimit, cancelledSupplier);
         if (response.getStatusCode() == 200) {
             return response.getContent();
         }
@@ -81,6 +86,10 @@ public class NettyUploadClient {
     }
 
     public static UploadResponse putForResponse(String url, Map<String, String> headers, Map<String, String> params, RandomAccessFile file, long start, long end, long timeoutMs, long writeLimit) {
+        return putForResponse(url, headers, params, file, start, end, timeoutMs, writeLimit, null);
+    }
+
+    public static UploadResponse putForResponse(String url, Map<String, String> headers, Map<String, String> params, RandomAccessFile file, long start, long end, long timeoutMs, long writeLimit, BooleanSupplier cancelledSupplier) {
         long effectiveWriteLimit = Math.max(writeLimit, 0L);
         // 更新全局写限速值
         trafficHandler.setWriteLimit(effectiveWriteLimit);
@@ -173,6 +182,9 @@ public class NettyUploadClient {
                     });
 
             ch = b.connect(host, finalPort).sync().channel();
+            if (cancelledSupplier != null) {
+                scheduleCancelCheck(ch, future, cancelledSupplier);
+            }
 
             // 构造 HTTP 请求
             String requestUri = uri.getRawPath();
@@ -298,6 +310,20 @@ public class NettyUploadClient {
             }
             scheduleLowSpeedCheck(ch, channelTrafficHandler, lowSpeedStartMs, transferStartMs, slowSpeedJudge, writeLimit, future);
         }, intervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private static void scheduleCancelCheck(Channel ch, CompletableFuture<?> future, BooleanSupplier cancelledSupplier) {
+        ch.eventLoop().schedule(() -> {
+            if (future.isDone() || !ch.isActive()) {
+                return;
+            }
+            if (Thread.currentThread().isInterrupted() || cancelledSupplier.getAsBoolean()) {
+                future.completeExceptionally(new RuntimeException("Upload chunk cancelled"));
+                ch.close();
+                return;
+            }
+            scheduleCancelCheck(ch, future, cancelledSupplier);
+        }, 250, TimeUnit.MILLISECONDS);
     }
 
     public static class UploadResponse {

@@ -837,7 +837,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                                 randomAccessFile,
                                                                 startSize,
                                                                 endSize,
-                                                                timeoutSeconds
+                                                                timeoutSeconds,
+                                                                () -> shouldPauseUpload(historyId, partId)
                                                         );
                                                         finalMultipartEtags.put(partNumber, etag);
                                                         if (finalMultipartSession != null) {
@@ -881,7 +882,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         chunkParams.put("start", String.valueOf(startSize));
                                                         chunkParams.put("end", String.valueOf(endSize));
                                                         chunkParams.put("total", String.valueOf(fileSize));
-                                                        ChunkUploadRequest chunkUploadRequest = new ChunkUploadRequest(finalPreUploadBean, chunkParams, randomAccessFile);
+                                                        ChunkUploadRequest chunkUploadRequest = new ChunkUploadRequest(
+                                                                finalPreUploadBean,
+                                                                chunkParams,
+                                                                randomAccessFile,
+                                                                () -> shouldPauseUpload(historyId, partId)
+                                                        );
                                                         chunkUploadRequest.getPage();
                                                     }
                                                 } catch (FileNotFoundException fileNotFoundException) {
@@ -908,6 +914,11 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("thread", Thread.currentThread().getName()));
                                                 break;
                                             } catch (Exception e) {
+                                                if (shouldPauseUpload(historyId, partId) || isUploadChunkCancelled(e)) {
+                                                    globalFuseReason.compareAndSet(null, "UPLOAD_PAUSED");
+                                                    globalFuseOpen.set(true);
+                                                    break;
+                                                }
                                                 if (finalUseMultipartFlow && finalMultipartSession != null && isMultipartSessionInvalid(e)) {
                                                     String invalidReason = StringUtils.defaultIfBlank(e.getMessage(), "multipart session invalid");
                                                     multipartUploadSessionService.markExpired(finalMultipartSession, invalidReason);
@@ -1573,6 +1584,20 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     private boolean shouldPauseUpload(Long historyId, Long partId) {
         return uploadPauseService.isUploadPaused(historyId, partId);
+    }
+
+    private boolean isUploadChunkCancelled(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (StringUtils.containsIgnoreCase(message, "Upload chunk cancelled")
+                    || current instanceof java.io.InterruptedIOException
+                    || current instanceof InterruptedException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String pauseUpload(Long historyId, Long partId, MultipartUploadSession session) {

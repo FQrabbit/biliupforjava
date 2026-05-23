@@ -752,8 +752,8 @@
             <div class="detail-section-title detail-section-title--actions" style="margin-top: 20px;">
                 <span>上传进度</span>
                 <span class="detail-title-actions" v-if="currentDetail && currentDetail.id">
-                    <el-button v-if="canShowHistoryPauseButton" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="uploadPauseLoading" @click="pauseHistoryUpload">暂停上传</el-button>
-                    <el-button v-if="canShowHistoryResumeButton" size="mini" type="success" plain icon="el-icon-video-play" :loading="uploadPauseLoading" @click="resumeHistoryUpload">继续上传</el-button>
+                    <el-button v-if="canShowHistoryPauseButton" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="uploadPauseLoading" :disabled="isHistoryUploadPauseSettling()" @click="pauseHistoryUpload">暂停上传</el-button>
+                    <el-button v-if="canShowHistoryResumeButton" size="mini" type="success" plain icon="el-icon-video-play" :loading="uploadPauseLoading" :disabled="isHistoryUploadPauseSettling()" @click="resumeHistoryUpload">继续上传</el-button>
                     <template v-if="canEditPublishedParts()">
                     <el-button v-if="!editPartsEditing" size="mini" type="primary" plain icon="el-icon-edit" @click="startEditParts">编辑分P</el-button>
                     <template v-else>
@@ -861,8 +861,12 @@
                             <span class="part-meta">
                                  <span v-if="p.state === 'SUCCESS' || p.percent >= 100">{{ formatSize(p.fileSize) }}</span>
                                  <span v-else-if="p.state === 'SKIPPED'">{{ formatSize(p.fileSize) }}</span>
-                                 <span v-else>
+                                 <span v-else-if="p.activeChunkTotal > 0">
                                     {{ p.activeChunkDone }}/{{ p.activeChunkTotal }} 分片
+                                    <span v-if="p.fileSize > 0" style="margin-left: 5px; opacity: 0.8;">({{ formatSize(p.fileSize) }})</span>
+                                 </span>
+                                 <span v-else>
+                                    {{ p.state === 'WAITING' ? '准备上传' : '等待进度' }}
                                     <span v-if="p.fileSize > 0" style="margin-left: 5px; opacity: 0.8;">({{ formatSize(p.fileSize) }})</span>
                                  </span>
                             </span>
@@ -883,8 +887,8 @@
                             <span v-else class="filepath-text">***</span>
                         </div>
                         <div v-if="p.actions && p.actions.length > 0" class="progress-filepath-mini part-actions">
-                            <el-button v-if="p.actions.indexOf('PAUSE_UPLOAD') !== -1" class="part-action-btn part-action-btn--pause" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="!!uploadPartPauseLoading[p.partId]" @click.stop="pausePartUpload(p)">暂停</el-button>
-                            <el-button v-if="p.actions.indexOf('RESUME_UPLOAD') !== -1" class="part-action-btn part-action-btn--resume" size="mini" type="success" plain icon="el-icon-video-play" :loading="!!uploadPartPauseLoading[p.partId]" @click.stop="resumePartUpload(p)">继续</el-button>
+                            <el-button v-if="p.actions.indexOf('PAUSE_UPLOAD') !== -1" class="part-action-btn part-action-btn--pause" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="pausePartUpload(p)">暂停</el-button>
+                            <el-button v-if="p.actions.indexOf('RESUME_UPLOAD') !== -1" class="part-action-btn part-action-btn--resume" size="mini" type="success" plain icon="el-icon-video-play" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="resumePartUpload(p)">继续</el-button>
                             <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
                             <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">标记结束</el-button>
                             <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
@@ -1240,6 +1244,9 @@
             pollingTimer: null,
             uploadPauseLoading: false,
             uploadPartPauseLoading: {},
+            uploadPauseSettlingUntil: 0,
+            uploadPartPauseSettlingUntil: {},
+            uploadResumeWarmupUntil: 0,
             showMoreActions: false,
             progressSpeedTracking: {},
             auditRejectRetryGuard: {
@@ -1644,7 +1651,10 @@
                 if (this.getEffectiveDoneParts() >= this.getEffectiveTotalParts() && this.getEffectiveTotalParts() > 0) return false;
                 
                 // 如果当前有活跃上传任务，则不是等待中
-                if (this.historyUploadProgress && this.historyUploadProgress.activeCount > 0) return false;
+                const active = Number(this.historyUploadProgress && this.historyUploadProgress.activeCount) || 0;
+                const queued = Number(this.historyUploadProgress && this.historyUploadProgress.queuedCount) || 0;
+                if (active > 0) return false;
+                if (queued <= 0) return false;
 
                 // 如果有分P未完成且不是 FAILED 状态，且没有活跃任务 -> 等待中
                 // 简单的判断：只要不是全部完成，且没有活跃任务，且不是全部失败
@@ -3024,7 +3034,7 @@
                 _this.fetchHistoryProgressOnce(historyId, true, function (resp) {
                     _this.historyUploadProgress = resp;
                     _this.updateSpeedTracking(resp);
-                    if (resp && resp.activeCount && resp.activeCount > 0) {
+                    if (_this.shouldKeepUploadProgressPolling(resp)) {
                         _this.progressTimer = setInterval(function () {
                             // 页面不可见时暂停轮询
                             if (document.hidden) return;
@@ -3081,7 +3091,7 @@
                                     }
                                 }
 
-                                if (!nextResp || !nextResp.activeCount || nextResp.activeCount <= 0) {
+                                if (!_this.shouldKeepUploadProgressPolling(nextResp)) {
                                     _this.stopProgressPolling();
                                     // 最后再刷一次确保状态最终一致
                                     _this.initTable(true);
@@ -3101,6 +3111,12 @@
                 }
                 this.progressSpeedTracking = {};
             },
+            shouldKeepUploadProgressPolling: function(resp) {
+                if (resp && Number(resp.activeCount) > 0) return true;
+                if (resp && Number(resp.queuedCount) > 0) return true;
+                if (Date.now() < (Number(this.uploadResumeWarmupUntil) || 0)) return true;
+                return false;
+            },
             fetchHistoryProgressOnce: function(historyId, silent, callback) {
                 const _this = this;
                 ApiUtil.get('/progress/history/' + historyId, function (data) {
@@ -3114,11 +3130,12 @@
                 });
             },
             normalizeHistoryProgress: function(data) {
-                if (!data) return { historyId: null, activeCount: 0, overallPercent: 0, items: [] };
+                if (!data) return { historyId: null, activeCount: 0, queuedCount: 0, overallPercent: 0, items: [] };
                 const items = Array.isArray(data.items) ? data.items : [];
                 return {
                     historyId: data.historyId || null,
                     activeCount: Number(data.activeCount) || 0,
+                    queuedCount: Number(data.queuedCount) || 0,
                     overallPercent: Number(data.overallPercent) || 0,
                     items: items
                 };
@@ -4407,14 +4424,49 @@
                     this.previewFlvPlayer = null;
                 }
             },
+            setHistoryUploadPauseSettling: function(ms) {
+                var _this = this;
+                var until = Date.now() + (ms || 2500);
+                _this.uploadPauseSettlingUntil = until;
+                setTimeout(function() {
+                    if (_this.uploadPauseSettlingUntil === until) {
+                        _this.uploadPauseSettlingUntil = 0;
+                    }
+                }, (ms || 2500) + 80);
+            },
+            setPartUploadPauseSettling: function(partId, ms) {
+                if (!partId) return;
+                var _this = this;
+                var until = Date.now() + (ms || 2500);
+                _this.$set(_this.uploadPartPauseSettlingUntil, partId, until);
+                setTimeout(function() {
+                    if (_this.uploadPartPauseSettlingUntil[partId] === until) {
+                        _this.$delete(_this.uploadPartPauseSettlingUntil, partId);
+                    }
+                }, (ms || 2500) + 80);
+            },
+            isHistoryUploadPauseSettling: function() {
+                return Date.now() < (Number(this.uploadPauseSettlingUntil) || 0);
+            },
+            isPartUploadPauseSettling: function(partId) {
+                if (this.isHistoryUploadPauseSettling()) return true;
+                if (!partId) return false;
+                return Date.now() < (Number(this.uploadPartPauseSettlingUntil[partId]) || 0);
+            },
             pauseHistoryUpload: function() {
                 var _this = this;
-                if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading) return;
+                if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading || _this.isHistoryUploadPauseSettling()) return;
                 _this.uploadPauseLoading = true;
                 ApiUtil.post('/history/' + _this.currentDetail.id + '/upload/pause', {}, function(resp) {
                     _this.uploadPauseLoading = false;
                     _this.$message({ message: (resp && resp.msg) ? resp.msg : '已暂停上传', type: (resp && resp.type) ? resp.type : 'success' });
                     _this.currentDetail.uploadPaused = true;
+                    _this.setHistoryUploadPauseSettling(3000);
+                    (_this.mergedParts || []).forEach(function(part) {
+                        if (part && part.partId && part.state !== 'SUCCESS') {
+                            _this.setPartUploadPauseSettling(part.partId, 3000);
+                        }
+                    });
                     _this.fetchPartList(_this.currentDetail.id, function () {});
                     _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.historyUploadProgress = nextResp; });
                 }, function() {
@@ -4424,12 +4476,13 @@
             },
             resumeHistoryUpload: function() {
                 var _this = this;
-                if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading) return;
+                if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading || _this.isHistoryUploadPauseSettling()) return;
                 _this.uploadPauseLoading = true;
                 ApiUtil.post('/history/' + _this.currentDetail.id + '/upload/resume', {}, function(resp) {
                     _this.uploadPauseLoading = false;
                     _this.$message({ message: (resp && resp.msg) ? resp.msg : '已继续上传', type: (resp && resp.type) ? resp.type : 'success' });
                     _this.currentDetail.uploadPaused = false;
+                    _this.uploadResumeWarmupUntil = Date.now() + 30000;
                     _this.fetchPartList(_this.currentDetail.id, function () {});
                     _this.startProgressPolling(_this.currentDetail.id);
                 }, function() {
@@ -4439,11 +4492,12 @@
             },
             pausePartUpload: function(p) {
                 var _this = this;
-                if (!p || !p.partId) return;
+                if (!p || !p.partId || _this.isPartUploadPauseSettling(p.partId)) return;
                 _this.$set(_this.uploadPartPauseLoading, p.partId, true);
                 ApiUtil.post('/part/' + p.partId + '/upload/pause', {}, function(resp) {
                     _this.$set(_this.uploadPartPauseLoading, p.partId, false);
                     _this.$message({ message: (resp && resp.msg) ? resp.msg : '已暂停分P上传', type: (resp && resp.type) ? resp.type : 'success' });
+                    _this.setPartUploadPauseSettling(p.partId, 3000);
                     _this.fetchPartList(_this.currentDetail.id, function () {});
                     if (_this.currentDetail && _this.currentDetail.id) {
                         _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.historyUploadProgress = nextResp; });
@@ -4455,13 +4509,14 @@
             },
             resumePartUpload: function(p) {
                 var _this = this;
-                if (!p || !p.partId) return;
+                if (!p || !p.partId || _this.isPartUploadPauseSettling(p.partId)) return;
                 _this.$set(_this.uploadPartPauseLoading, p.partId, true);
                 ApiUtil.post('/part/' + p.partId + '/upload/resume', {}, function(resp) {
                     _this.$set(_this.uploadPartPauseLoading, p.partId, false);
                     _this.$message({ message: (resp && resp.msg) ? resp.msg : '已继续分P上传', type: (resp && resp.type) ? resp.type : 'success' });
                     _this.fetchPartList(_this.currentDetail.id, function () {});
                     if (_this.currentDetail && _this.currentDetail.id) {
+                        _this.uploadResumeWarmupUntil = Date.now() + 30000;
                         _this.startProgressPolling(_this.currentDetail.id);
                     }
                 }, function() {
@@ -5405,7 +5460,13 @@
             this.clearPartsAutoScrollTimer();
             this.stopPolling();
             this.stopProgressPolling();
-            this.closePartPreview();
+            if (this.previewPart && this.previewArtPlayer) {
+                if (!this.transferPartPreviewToGlobal(this.previewMiniCollapsed || this.previewDetached)) {
+                    this.closePartPreview();
+                }
+            } else {
+                this.closePartPreview();
+            }
             if (this.$el) {
                 this.$el.removeEventListener('touchstart', this.handleTouchStart);
                 this.$el.removeEventListener('touchend', this.handleTouchEnd);

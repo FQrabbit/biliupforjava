@@ -42,6 +42,7 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");
         EVENT_ZH.put("Upload.Part.AlreadyUploading", "分P正在上传中，跳过重复触发");
         EVENT_ZH.put("Upload.Part.AlreadyQueued", "分P已在串行队列中，跳过重复入队");
+        EVENT_ZH.put("Upload.Part.SkipPaused", "分P上传已暂停，跳过本次触发");
         EVENT_ZH.put("Upload.Part.SkipAlreadyUploaded", "分P已上传完成，跳过重复上传");
         EVENT_ZH.put("Upload.Part.MissingHistory", "找不到录制历史(history)，取消上传");
         EVENT_ZH.put("Upload.Part.FileMissing", "待上传文件不存在，取消上传/可能会触发重试");
@@ -656,6 +657,13 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.Multipart.ConfigReadFailed", "分片上传：读取 multipart 配置失败");
         EVENT_ZH.put("Upload.Multipart.FlowDecision", "分片上传：已决定使用的上传流程");
         EVENT_ZH.put("Upload.Multipart.SessionLocked", "分片上传：复用已锁定的上传会话");
+        EVENT_ZH.put("Upload.Multipart.ResumeSession", "分片上传：复用已保存的断点会话");
+        EVENT_ZH.put("Upload.Multipart.SessionReuseMiss", "分片上传：未找到可复用的断点会话");
+        EVENT_ZH.put("Upload.Multipart.SessionReuseHit", "分片上传：找到可复用的断点会话");
+        EVENT_ZH.put("Upload.Multipart.SessionCreated", "分片上传：已创建新的断点会话");
+        EVENT_ZH.put("Upload.Multipart.SessionPaused", "分片上传：会话已在分片边界暂停");
+        EVENT_ZH.put("Upload.Multipart.SessionExpired", "分片上传：断点会话已失效，将重新开始该分P");
+        EVENT_ZH.put("Upload.Multipart.Part.SkipDone", "分片上传：跳过已完成的分片");
         EVENT_ZH.put("Upload.Multipart.InitFallback", "分片上传：初始化失败，尝试回退方案");
         EVENT_ZH.put("Upload.Multipart.PrepareFallback", "分片上传：准备阶段异常，尝试回退方案");
         EVENT_ZH.put("Upload.Multipart.Part.DiagnosticUploadIdMismatch", "分片上传：诊断到 uploadId 不一致");
@@ -667,6 +675,10 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.MultipartComplete.WillRetry", "分片上传完成：本次失败，将安排后续重试");
         EVENT_ZH.put("Upload.Part.RetryEnqueueAttempt", "上传重试：尝试重新加入上传队列");
         EVENT_ZH.put("Upload.Part.RetryEnqueueError", "上传重试：重新加入上传队列失败");
+        EVENT_ZH.put("Upload.Resume.RetryScheduled", "恢复上传：已安排延迟重试入队");
+        EVENT_ZH.put("Upload.Resume.RetryAttempt", "恢复上传：正在重试加入上传队列");
+        EVENT_ZH.put("Upload.Resume.RetryStop", "恢复上传：停止延迟重试");
+        EVENT_ZH.put("Upload.Resume.RetryFailed", "恢复上传：延迟重试执行异常");
 
         // multipart 调试日志
         EVENT_ZH.put("Upload.MultipartDebug.Complete.Request", "分片上传调试：complete 请求");

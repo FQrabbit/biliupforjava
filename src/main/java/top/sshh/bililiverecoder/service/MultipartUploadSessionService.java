@@ -4,11 +4,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 import top.sshh.bililiverecoder.entity.MultipartUploadPart;
 import top.sshh.bililiverecoder.entity.MultipartUploadSession;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.repo.MultipartUploadPartRepository;
 import top.sshh.bililiverecoder.repo.MultipartUploadSessionRepository;
+import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.bili.upload.MultipartInitRequest;
 
 import java.time.LocalDateTime;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
+@Slf4j
 public class MultipartUploadSessionService {
 
     public static final String STATUS_ACTIVE = "ACTIVE";
@@ -35,13 +38,34 @@ public class MultipartUploadSessionService {
                 List.of(STATUS_ACTIVE, STATUS_PAUSED)
         );
         if (opt.isEmpty()) {
+            log.debug("[BLR] {}", LogKvs.event("Upload.Multipart.SessionReuseMiss")
+                    .add("partId", partId)
+                    .add("fileSize", fileSize)
+                    .add("reason", "NO_REUSABLE_SESSION"));
             return Optional.empty();
         }
         MultipartUploadSession session = opt.get();
-        if (session.getFileSize() == null || session.getFileSize() != fileSize || StringUtils.isAnyBlank(session.getUploadId(), session.getUri(), session.getUploadToken())) {
+        if (session.getFileSize() == null || session.getFileSize() != fileSize || StringUtils.isAnyBlank(session.getUri(), session.getUploadToken())) {
+            log.debug("[BLR] {}", LogKvs.event("Upload.Multipart.SessionReuseMiss")
+                    .add("partId", partId)
+                    .add("sessionId", session.getId())
+                    .add("sessionStatus", session.getStatus())
+                    .add("sessionFileSize", session.getFileSize())
+                    .add("currentFileSize", fileSize)
+                    .add("hasUploadId", StringUtils.isNotBlank(session.getUploadId()))
+                    .add("hasUri", StringUtils.isNotBlank(session.getUri()))
+                    .add("hasUploadToken", StringUtils.isNotBlank(session.getUploadToken()))
+                    .add("reason", "SESSION_CONTEXT_CHANGED"));
             markExpired(session, "multipart session context changed");
             return Optional.empty();
         }
+        log.debug("[BLR] {}", LogKvs.event("Upload.Multipart.SessionReuseHit")
+                .add("partId", partId)
+                .add("sessionId", session.getId())
+                .add("sessionStatus", session.getStatus())
+                .add("chunkTotal", session.getChunkTotal())
+                .add("chunkSize", session.getChunkSize())
+                .add("fileSize", session.getFileSize()));
         return opt;
     }
 
@@ -66,7 +90,17 @@ public class MultipartUploadSessionService {
         LocalDateTime now = LocalDateTime.now();
         session.setCreatedAt(now);
         session.setUpdatedAt(now);
-        return sessionRepository.save(session);
+        MultipartUploadSession saved = sessionRepository.save(session);
+        log.info("[BLR] {}", LogKvs.event("Upload.Multipart.SessionCreated")
+                .add("partId", part.getId())
+                .add("historyId", part.getHistoryId())
+                .add("sessionId", saved.getId())
+                .add("bizId", saved.getBizId())
+                .addIfNotBlank("profile", saved.getProfile())
+                .add("chunkSize", saved.getChunkSize())
+                .add("chunkTotal", saved.getChunkTotal())
+                .add("fileSize", saved.getFileSize()));
+        return saved;
     }
 
     @Transactional
@@ -86,6 +120,13 @@ public class MultipartUploadSessionService {
         session.setLastError(reason);
         session.setUpdatedAt(LocalDateTime.now());
         sessionRepository.save(session);
+        log.info("[BLR] {}", LogKvs.event("Upload.Multipart.SessionPaused")
+                .add("partId", session.getPartId())
+                .add("historyId", session.getHistoryId())
+                .add("sessionId", session.getId())
+                .add("doneParts", countCompletedParts(session))
+                .add("chunkTotal", session.getChunkTotal())
+                .addIfNotBlank("reason", reason));
     }
 
     @Transactional

@@ -18,6 +18,7 @@ import top.sshh.bililiverecoder.util.bili.HttpClientUtils;
 
 import java.io.RandomAccessFile;
 import java.util.HashMap;
+import java.util.function.BooleanSupplier;
 
 public class SignedUrlChunkUploadRequest {
 
@@ -28,6 +29,15 @@ public class SignedUrlChunkUploadRequest {
                          long start,
                          long end,
         int timeoutSeconds) throws Exception {
+        return upload(signedUrl, file, start, end, timeoutSeconds, null);
+    }
+
+    public String upload(String signedUrl,
+                         RandomAccessFile file,
+                         long start,
+                         long end,
+                         int timeoutSeconds,
+                         BooleanSupplier cancelledSupplier) throws Exception {
         HashMap<String, String> headers = new HashMap<>();
         headers.put("Accept", "*/*");
         headers.put("Origin", "https://member.bilibili.com");
@@ -60,12 +70,12 @@ public class SignedUrlChunkUploadRequest {
             if (speedLimit > 0) {
                 bandwidthLimited = true;
                 NettyUploadClient.UploadResponse response = NettyUploadClient.putForResponse(
-                        signedUrl, headers, null, file, start, end, timeoutMs, speedLimit);
+                        signedUrl, headers, null, file, start, end, timeoutMs, speedLimit, cancelledSupplier);
                 code = response.getStatusCode();
                 content = response.getContent();
                 etagHeader = StringUtils.defaultIfBlank(response.getHeader("ETag"), response.getHeader("etag"));
             } else {
-                ShardingInputStream inputStream = new ShardingInputStream(file, start, end);
+                ShardingInputStream inputStream = new ShardingInputStream(file, start, end, cancelledSupplier);
                 InputStreamEntity body = new InputStreamEntity(inputStream, size);
                 HttpClientResult result = HttpClientUtils.doPut(signedUrl, headers, null, body, timeoutMs);
                 code = result.getCode();

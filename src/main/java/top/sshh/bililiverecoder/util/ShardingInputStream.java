@@ -3,7 +3,9 @@ package top.sshh.bililiverecoder.util;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.RandomAccessFile;
+import java.util.function.BooleanSupplier;
 
 /**
  * 分片文件流
@@ -13,10 +15,16 @@ public class ShardingInputStream extends InputStream {
     private final RandomAccessFile in;
     private final long start;
     private final long length;
+    private final BooleanSupplier cancelledSupplier;
     private long hasLength;
 
     public ShardingInputStream(RandomAccessFile in, long start, long length) throws IOException {
+        this(in, start, length, null);
+    }
+
+    public ShardingInputStream(RandomAccessFile in, long start, long length, BooleanSupplier cancelledSupplier) throws IOException {
         this.in = in;
+        this.cancelledSupplier = cancelledSupplier;
         long allLength = in.length();
         if(start+length>allLength){
             length = allLength-start;
@@ -35,6 +43,7 @@ public class ShardingInputStream extends InputStream {
 
     @Override
     public int read() throws IOException {
+        checkCancelled();
         if (this.hasLength <= 0) {
             return -1;
         }
@@ -55,6 +64,7 @@ public class ShardingInputStream extends InputStream {
 
     @Override
     public int read(byte b[], int off, int len) throws IOException {
+        checkCancelled();
         if (b == null) {
             throw new NullPointerException();
         } else if (off < 0 || len < 0 || len > b.length - off) {
@@ -71,6 +81,17 @@ public class ShardingInputStream extends InputStream {
         int c = in.read(b, off, len);
         this.hasLength -= c;
         return c;
+    }
+
+    private void checkCancelled() throws InterruptedIOException {
+        if (Thread.currentThread().isInterrupted()) {
+            InterruptedIOException ex = new InterruptedIOException("Upload chunk cancelled");
+            Thread.currentThread().interrupt();
+            throw ex;
+        }
+        if (cancelledSupplier != null && cancelledSupplier.getAsBoolean()) {
+            throw new InterruptedIOException("Upload chunk cancelled");
+        }
     }
 
     @Override

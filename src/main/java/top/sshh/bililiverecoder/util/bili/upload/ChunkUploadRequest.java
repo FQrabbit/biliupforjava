@@ -14,6 +14,7 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 public class ChunkUploadRequest {
 
@@ -22,9 +23,14 @@ public class ChunkUploadRequest {
     private PreUploadBean preUploadBean;
     private Map<String, String> params;
     private RandomAccessFile file;
+    private BooleanSupplier cancelledSupplier;
 
 
     public ChunkUploadRequest(PreUploadBean preUploadBean, Map<String, String> params, RandomAccessFile file) {
+        this(preUploadBean, params, file, null);
+    }
+
+    public ChunkUploadRequest(PreUploadBean preUploadBean, Map<String, String> params, RandomAccessFile file, BooleanSupplier cancelledSupplier) {
         this.URL = "https:" + preUploadBean.getEndpoint() + preUploadBean.getUpUrl();
         headers.clear();
         headers.put("X-Upos-Auth", preUploadBean.getAuth());
@@ -32,6 +38,7 @@ public class ChunkUploadRequest {
         this.preUploadBean = preUploadBean;
         this.params = params;
         this.file = file;
+        this.cancelledSupplier = cancelledSupplier;
     }
 
     /**
@@ -95,7 +102,7 @@ public class ChunkUploadRequest {
                 long end = Long.parseLong(params.get("end"));
                 // 调用 Netty 客户端
                 return top.sshh.bililiverecoder.util.NettyUploadClient.put(
-                    URL, headers, params, file, start, end, timeoutMs, speedLimit
+                    URL, headers, params, file, start, end, timeoutMs, speedLimit, cancelledSupplier
                 );
             } catch (Exception e) {
                 throw new RuntimeException("Netty upload failed", e);
@@ -107,7 +114,7 @@ public class ChunkUploadRequest {
     }
 
     private String doApachePut() throws IOException, NoSuchAlgorithmException, KeyStoreException, URISyntaxException, KeyManagementException {
-        ShardingInputStream inputStream = new ShardingInputStream(file, Long.parseLong(params.get("start")), Long.parseLong(params.get("end")));
+        ShardingInputStream inputStream = new ShardingInputStream(file, Long.parseLong(params.get("start")), Long.parseLong(params.get("end")), cancelledSupplier);
         java.io.InputStream finalStream = inputStream;
         
         // 默认超时时间 (毫秒)
