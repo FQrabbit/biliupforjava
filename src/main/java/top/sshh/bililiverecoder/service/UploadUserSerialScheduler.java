@@ -2,6 +2,7 @@ package top.sshh.bililiverecoder.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.util.LogKvs;
 
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class UploadUserSerialScheduler {
 
     private final Executor asyncExecutor;
+    private final ObjectProvider<UploadPauseService> uploadPauseServiceProvider;
     private final ConcurrentHashMap<Long, CompletableFuture<Void>> tails = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, AtomicInteger> pendingCounts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, AtomicInteger> pendingPartCounts = new ConcurrentHashMap<>();
@@ -32,8 +34,10 @@ public class UploadUserSerialScheduler {
     private static final int MAX_REQUEUE_ATTEMPTS = 60;
     private static final long REQUEUE_DELAY_MS = 1000L;
 
-    public UploadUserSerialScheduler(@Qualifier("myAsyncPool") Executor asyncExecutor) {
+    public UploadUserSerialScheduler(@Qualifier("myAsyncPool") Executor asyncExecutor,
+                                     ObjectProvider<UploadPauseService> uploadPauseServiceProvider) {
         this.asyncExecutor = asyncExecutor;
+        this.uploadPauseServiceProvider = uploadPauseServiceProvider;
     }
 
     public void submit(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task) {
@@ -62,6 +66,16 @@ public class UploadUserSerialScheduler {
     }
 
     private boolean submitInternal(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task, int requeueAttempt, boolean countAsNew, boolean dedupeByPart) {
+        if (partId != null && isUploadPaused(historyId, partId)) {
+            log.info("[BLR] {}", LogKvs.event("Upload.SerialScheduler.SkipPaused")
+                    .add("os", os)
+                    .add("uploadUserId", uploadUserId)
+                    .add("roomId", roomId)
+                    .add("historyId", historyId)
+                    .add("partId", partId)
+                    .add("requeueAttempt", requeueAttempt));
+            return false;
+        }
         if (uploadUserId == null) {
             try {
                 CompletableFuture.runAsync(task, asyncExecutor);
@@ -194,6 +208,11 @@ public class UploadUserSerialScheduler {
             }
         });
         return true;
+    }
+
+    private boolean isUploadPaused(Long historyId, Long partId) {
+        UploadPauseService uploadPauseService = uploadPauseServiceProvider.getIfAvailable();
+        return uploadPauseService != null && uploadPauseService.isUploadPaused(historyId, partId);
     }
 
     private void scheduleRequeue(Long uploadUserId, String roomId, Long historyId, Long partId, String os, Runnable task, int requeueAttempt, String rejectStage, Throwable ex, boolean dedupeByPart) {

@@ -751,11 +751,15 @@
             <!-- 上传进度 -->
             <div class="detail-section-title detail-section-title--actions" style="margin-top: 20px;">
                 <span>上传进度</span>
-                <span class="detail-title-actions" v-if="currentDetail && currentDetail.id && canEditPublishedParts()">
+                <span class="detail-title-actions" v-if="currentDetail && currentDetail.id">
+                    <el-button v-if="canShowHistoryPauseButton" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="uploadPauseLoading" @click="pauseHistoryUpload">暂停上传</el-button>
+                    <el-button v-if="canShowHistoryResumeButton" size="mini" type="success" plain icon="el-icon-video-play" :loading="uploadPauseLoading" @click="resumeHistoryUpload">继续上传</el-button>
+                    <template v-if="canEditPublishedParts()">
                     <el-button v-if="!editPartsEditing" size="mini" type="primary" plain icon="el-icon-edit" @click="startEditParts">编辑分P</el-button>
                     <template v-else>
                         <el-button size="mini" type="success" plain icon="el-icon-check" :loading="editPartsSaving" @click="confirmSaveEditParts">保存</el-button>
                         <el-button size="mini" plain icon="el-icon-close" :disabled="editPartsSaving" @click="cancelEditParts">取消</el-button>
+                    </template>
                     </template>
                 </span>
             </div>
@@ -879,6 +883,8 @@
                             <span v-else class="filepath-text">***</span>
                         </div>
                         <div v-if="p.actions && p.actions.length > 0" class="progress-filepath-mini part-actions">
+                            <el-button v-if="p.actions.indexOf('PAUSE_UPLOAD') !== -1" class="part-action-btn part-action-btn--pause" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="!!uploadPartPauseLoading[p.partId]" @click.stop="pausePartUpload(p)">暂停</el-button>
+                            <el-button v-if="p.actions.indexOf('RESUME_UPLOAD') !== -1" class="part-action-btn part-action-btn--resume" size="mini" type="success" plain icon="el-icon-video-play" :loading="!!uploadPartPauseLoading[p.partId]" @click.stop="resumePartUpload(p)">继续</el-button>
                             <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
                             <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">标记结束</el-button>
                             <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
@@ -1117,7 +1123,7 @@
     </el-dialog>
 
     <transition name="part-preview-mini">
-        <div v-if="previewDetached && previewPart" class="part-preview-mini" :class="{ 'is-collapsed': previewMiniCollapsed }">
+        <div v-if="previewDetached && previewPart" class="part-preview-mini" :class="{ 'is-collapsed': previewMiniCollapsed }" :style="{ '--part-preview-mini-progress': previewMiniProgress + '%' }">
             <div class="part-preview-mini-video" ref="partPreviewMiniPlayer"></div>
             <div class="part-preview-mini-bar">
                 <div class="part-preview-mini-meta">
@@ -1232,6 +1238,8 @@
             historyUploadProgress: null,
             progressTimer: null,
             pollingTimer: null,
+            uploadPauseLoading: false,
+            uploadPartPauseLoading: {},
             showMoreActions: false,
             progressSpeedTracking: {},
             auditRejectRetryGuard: {
@@ -1271,6 +1279,8 @@
             previewMpegtsLoader: null,
             previewDetached: false,
             previewMiniCollapsed: false,
+            previewMiniProgress: 0,
+            previewProgressHandler: null,
             previewCloseIntent: 'stop',
             editPartsEditing: false,
             editPartsLoading: false,
@@ -1461,6 +1471,9 @@
                             percent = 0;
                         }
                     }
+                    if (p.uploadPaused && !p.upload) {
+                        state = 'PAUSED';
+                    }
                     return {
                         partId: p.id,
                         // 如果 page 无效 (<=0)，则使用 index + 1 作为备选
@@ -1468,6 +1481,8 @@
                         title: p.title,
                         fileName: p.fileName,
                         upload: p.upload,
+                        uploadPaused: !!p.uploadPaused,
+                        uploadPauseReason: p.uploadPauseReason || null,
                         fileSize: p.fileSize,
                         filePath: p.filePath,
                         // 默认状态：如果 upload=true 则 SUCCESS，否则 WAITING
@@ -1621,6 +1636,7 @@
             isWaitingForUpload: function() {
                 // 如果没有详情或已完成，则不显示
                 if (!this.currentDetail || !this.currentDetail.id) return false;
+                if (this.currentDetail.uploadPaused) return false;
                 // 如果不需要上传，则不显示
                 if (!this.currentDetail.upload) return false;
                 // 如果整体进度已完成，不显示
@@ -1640,6 +1656,16 @@
                 return false;
             },
             // 判断是否有删除选项被选中，用于禁用批量可见性按钮
+            canShowHistoryPauseButton: function() {
+                if (!this.currentDetail || !this.currentDetail.id || this.currentDetail.uploadPaused) return false;
+                if (!this.currentDetail.upload || this.currentDetail.publish) return false;
+                return this.mergedParts.some(function(p) {
+                    return p && p.state !== 'SUCCESS' && p.state !== 'SKIPPED' && p.state !== 'ISSUE';
+                });
+            },
+            canShowHistoryResumeButton: function() {
+                return !!(this.currentDetail && this.currentDetail.id && this.currentDetail.uploadPaused && this.currentDetail.upload && !this.currentDetail.publish);
+            },
             isDeleteOptionSelected: function() {
                 return this.batchDeleteOptions.deleteVideo || this.batchDeleteOptions.deleteDanmaku || this.batchDeleteOptions.deleteCover;
             },
@@ -3157,6 +3183,7 @@
                 return '已上传：' + uploaded + '/' + total + '，当前无上传中的分P';
             },
             progressTagType: function(state) {
+                if (state === 'PAUSED') return 'warning';
                 if (state === 'FAILED') return 'danger';
                 if (state === 'SUCCESS') return 'success';
                 if (state === 'RETRY_WAIT') return 'warning';
@@ -3166,6 +3193,7 @@
                 if (state === 'UPLOADING') return '分片上传中';
                 if (state === 'WAITING') return '等待中';
                 if (state === 'RETRY_WAIT') return '等待重试';
+                if (state === 'PAUSED') return '已暂停';
                 if (state === 'FAILED') return '失败';
                 if (state === 'SUCCESS') return '成功';
                 if (state === 'ISSUE') return '异常';
@@ -3176,6 +3204,7 @@
                 if (state === 'FAILED') return 'exception';
                 if (state === 'SUCCESS') return 'success';
                 if (state === 'RETRY_WAIT') return 'warning';
+                if (state === 'PAUSED') return 'warning';
                 if (state === 'ISSUE') return 'exception';
                 if (state === 'SKIPPED') return null;
 
@@ -3943,11 +3972,14 @@
                                 }
                             }
                         });
+                        _this.bindPartPreviewProgressEvents(_this.previewArtPlayer);
+                        _this.syncPartPreviewMiniProgress();
                         if (previousTime > 0) {
                             _this.previewArtPlayer.once('ready', function() {
                                 try {
                                     _this.previewArtPlayer.seek = previousTime;
                                 } catch (e) {}
+                                _this.syncPartPreviewMiniProgress();
                             });
                         }
                     } catch (e) {
@@ -3999,6 +4031,45 @@
             },
             togglePreviewMiniCollapsed: function() {
                 this.previewMiniCollapsed = !this.previewMiniCollapsed;
+            },
+            syncPartPreviewMiniProgress: function() {
+                var video = null;
+                try {
+                    video = this.previewArtPlayer && this.previewArtPlayer.video;
+                } catch (e) {}
+                if (!video || !isFinite(video.duration) || video.duration <= 0) {
+                    this.previewMiniProgress = 0;
+                    return;
+                }
+                var percent = (video.currentTime / video.duration) * 100;
+                if (!isFinite(percent) || percent < 0) percent = 0;
+                if (percent > 100) percent = 100;
+                this.previewMiniProgress = Number(percent.toFixed(2));
+            },
+            bindPartPreviewProgressEvents: function(player) {
+                this.unbindPartPreviewProgressEvents();
+                if (!player) return;
+                var _this = this;
+                var handler = function() {
+                    _this.syncPartPreviewMiniProgress();
+                };
+                this.previewProgressHandler = handler;
+                ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:ended'].forEach(function(eventName) {
+                    try {
+                        player.on(eventName, handler);
+                    } catch (e) {}
+                });
+            },
+            unbindPartPreviewProgressEvents: function() {
+                if (!this.previewProgressHandler || !this.previewArtPlayer) return;
+                var player = this.previewArtPlayer;
+                var handler = this.previewProgressHandler;
+                ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:ended'].forEach(function(eventName) {
+                    try {
+                        player.off(eventName, handler);
+                    } catch (e) {}
+                });
+                this.previewProgressHandler = null;
             },
             loadArtPlayer: function() {
                 if (window.Artplayer) {
@@ -4221,6 +4292,7 @@
                 this.previewError = '';
                 this.previewDetached = false;
                 this.previewMiniCollapsed = false;
+                this.previewMiniProgress = 0;
                 this.previewCloseIntent = 'stop';
             },
             closePartPreview: function() {
@@ -4228,6 +4300,7 @@
             },
             destroyPreviewArtPlayer: function() {
                 if (this.previewArtPlayer) {
+                    this.unbindPartPreviewProgressEvents();
                     try {
                         this.previewArtPlayer.destroy(true);
                     } catch (e) {}
@@ -4244,6 +4317,68 @@
                     } catch (e) {}
                     this.previewFlvPlayer = null;
                 }
+            },
+            pauseHistoryUpload: function() {
+                var _this = this;
+                if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading) return;
+                _this.uploadPauseLoading = true;
+                ApiUtil.post('/history/' + _this.currentDetail.id + '/upload/pause', {}, function(resp) {
+                    _this.uploadPauseLoading = false;
+                    _this.$message({ message: (resp && resp.msg) ? resp.msg : '已暂停上传', type: (resp && resp.type) ? resp.type : 'success' });
+                    _this.currentDetail.uploadPaused = true;
+                    _this.fetchPartList(_this.currentDetail.id, function () {});
+                    _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.historyUploadProgress = nextResp; });
+                }, function() {
+                    _this.uploadPauseLoading = false;
+                    _this.$message({ message: '暂停上传失败', type: 'warning' });
+                });
+            },
+            resumeHistoryUpload: function() {
+                var _this = this;
+                if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading) return;
+                _this.uploadPauseLoading = true;
+                ApiUtil.post('/history/' + _this.currentDetail.id + '/upload/resume', {}, function(resp) {
+                    _this.uploadPauseLoading = false;
+                    _this.$message({ message: (resp && resp.msg) ? resp.msg : '已继续上传', type: (resp && resp.type) ? resp.type : 'success' });
+                    _this.currentDetail.uploadPaused = false;
+                    _this.fetchPartList(_this.currentDetail.id, function () {});
+                    _this.startProgressPolling(_this.currentDetail.id);
+                }, function() {
+                    _this.uploadPauseLoading = false;
+                    _this.$message({ message: '继续上传失败', type: 'warning' });
+                });
+            },
+            pausePartUpload: function(p) {
+                var _this = this;
+                if (!p || !p.partId) return;
+                _this.$set(_this.uploadPartPauseLoading, p.partId, true);
+                ApiUtil.post('/part/' + p.partId + '/upload/pause', {}, function(resp) {
+                    _this.$set(_this.uploadPartPauseLoading, p.partId, false);
+                    _this.$message({ message: (resp && resp.msg) ? resp.msg : '已暂停分P上传', type: (resp && resp.type) ? resp.type : 'success' });
+                    _this.fetchPartList(_this.currentDetail.id, function () {});
+                    if (_this.currentDetail && _this.currentDetail.id) {
+                        _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.historyUploadProgress = nextResp; });
+                    }
+                }, function() {
+                    _this.$set(_this.uploadPartPauseLoading, p.partId, false);
+                    _this.$message({ message: '暂停分P失败', type: 'warning' });
+                });
+            },
+            resumePartUpload: function(p) {
+                var _this = this;
+                if (!p || !p.partId) return;
+                _this.$set(_this.uploadPartPauseLoading, p.partId, true);
+                ApiUtil.post('/part/' + p.partId + '/upload/resume', {}, function(resp) {
+                    _this.$set(_this.uploadPartPauseLoading, p.partId, false);
+                    _this.$message({ message: (resp && resp.msg) ? resp.msg : '已继续分P上传', type: (resp && resp.type) ? resp.type : 'success' });
+                    _this.fetchPartList(_this.currentDetail.id, function () {});
+                    if (_this.currentDetail && _this.currentDetail.id) {
+                        _this.startProgressPolling(_this.currentDetail.id);
+                    }
+                }, function() {
+                    _this.$set(_this.uploadPartPauseLoading, p.partId, false);
+                    _this.$message({ message: '继续分P失败', type: 'warning' });
+                });
             },
             openBindFileDialog: function(p) {
                 this.bindTargetPart = p;

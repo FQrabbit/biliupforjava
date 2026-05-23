@@ -3905,6 +3905,7 @@
 
 .detail-title-actions .el-button {
     margin-left: 0;
+    min-height: 32px;
 }
 
 .edit-parts-panel {
@@ -4759,6 +4760,8 @@
 
     min-width: 76px;
 
+    min-height: 32px;
+
     padding: 5px 10px;
 
     border-radius: 14px;
@@ -4788,6 +4791,18 @@
 .part-action-btn--finish {
 
     border-color: var(--warning-border-strong);
+
+}
+
+.part-action-btn--pause {
+
+    border-color: var(--warning-border-strong);
+
+}
+
+.part-action-btn--resume {
+
+    border-color: var(--success-border-strong, var(--success-color));
 
 }
 
@@ -6350,6 +6365,38 @@
 
 }
 
+[data-theme='dark'] .part-action-btn--pause {
+
+    border-color: var(--warning-border-strong);
+
+    color: var(--warning-color);
+
+    background: var(--warning-soft-bg-faint);
+
+}
+
+[data-theme='dark'] .part-action-btn--pause:hover {
+
+    background: var(--warning-soft-bg);
+
+}
+
+[data-theme='dark'] .part-action-btn--resume {
+
+    border-color: var(--success-border-strong, var(--success-color));
+
+    color: var(--success-color);
+
+    background: var(--success-soft-bg, var(--bg-tertiary));
+
+}
+
+[data-theme='dark'] .part-action-btn--resume:hover {
+
+    background: var(--success-soft-bg, var(--bg-primary));
+
+}
+
 [data-theme='dark'] .part-action-btn--rescan {
 
     border-color: var(--border-color);
@@ -7265,6 +7312,9 @@
     width: 360px;
     max-width: calc(100vw - 32px);
     overflow: hidden;
+    --part-preview-mini-progress: 0%;
+    --part-preview-mini-progress-color: var(--primary-color, #409eff);
+    --part-preview-mini-progress-soft: rgba(64, 158, 255, 0.14);
     border: 1px solid var(--batch-progress-float-border);
     border-radius: 12px;
     background: var(--batch-progress-float-bg);
@@ -7273,7 +7323,62 @@
     -webkit-backdrop-filter: blur(20px) saturate(160%);
 }
 
+.part-preview-mini::before,
+.part-preview-mini::after {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    content: "";
+}
+
+.part-preview-mini::before {
+    z-index: 0;
+    background:
+        linear-gradient(90deg,
+            var(--part-preview-mini-progress-soft) 0%,
+            color-mix(in srgb, var(--part-preview-mini-progress-color) 22%, transparent) var(--part-preview-mini-progress),
+            transparent var(--part-preview-mini-progress));
+}
+
+.part-preview-mini::after {
+    z-index: 1;
+    opacity: 0;
+    background:
+        radial-gradient(circle at 15% 50%, color-mix(in srgb, var(--part-preview-mini-progress-color) 70%, white) 0 2px, transparent 3px),
+        radial-gradient(circle at 48% 28%, color-mix(in srgb, var(--part-preview-mini-progress-color) 60%, white) 0 1.5px, transparent 2.5px),
+        radial-gradient(circle at 78% 66%, color-mix(in srgb, var(--part-preview-mini-progress-color) 65%, white) 0 1.5px, transparent 2.5px);
+    background-position:
+        calc(var(--part-preview-mini-progress) - 22px) 50%,
+        calc(var(--part-preview-mini-progress) - 8px) 42%,
+        calc(var(--part-preview-mini-progress) + 10px) 58%;
+    background-repeat: no-repeat;
+    background-size: 52px 100%, 42px 100%, 46px 100%;
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--part-preview-mini-progress-color) 45%, transparent));
+    transition: opacity var(--duration-fast) var(--ease-apple);
+}
+
+.part-preview-mini.is-collapsed::before {
+    background:
+        linear-gradient(90deg,
+            color-mix(in srgb, var(--part-preview-mini-progress-color) 18%, transparent) 0%,
+            color-mix(in srgb, var(--part-preview-mini-progress-color) 12%, transparent) var(--part-preview-mini-progress),
+            transparent var(--part-preview-mini-progress)),
+        linear-gradient(90deg,
+            var(--part-preview-mini-progress-color) 0 var(--part-preview-mini-progress),
+            transparent var(--part-preview-mini-progress));
+    background-size: 100% 100%, 100% 3px;
+    background-position: 0 0, 0 100%;
+    background-repeat: no-repeat;
+}
+
+.part-preview-mini.is-collapsed::after {
+    opacity: 0.95;
+    animation: partPreviewMiniParticles 1.8s linear infinite;
+}
+
 .part-preview-mini-video {
+    position: relative;
+    z-index: 2;
     width: 100%;
     aspect-ratio: 16 / 9;
     overflow: hidden;
@@ -7308,6 +7413,8 @@
 }
 
 .part-preview-mini-bar {
+    position: relative;
+    z-index: 2;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -7398,7 +7505,23 @@
 }
 
 [data-theme="dark"] .part-preview-mini {
+    --part-preview-mini-progress-soft: rgba(64, 158, 255, 0.18);
     border-color: var(--batch-progress-float-border);
+}
+
+@keyframes partPreviewMiniParticles {
+    0% {
+        transform: translateX(-8px);
+    }
+    100% {
+        transform: translateX(12px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .part-preview-mini.is-collapsed::after {
+        animation: none;
+    }
 }
 
 @media (max-width: 768px) {

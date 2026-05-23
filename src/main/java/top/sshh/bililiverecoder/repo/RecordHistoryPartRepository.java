@@ -101,12 +101,14 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         where p.roomId = :roomId
           and p.recording = false
           and p.upload = false
-                    and p.uploadRetryCount < 9999
+          and (p.uploadPaused is null or p.uploadPaused = false)
+          and p.uploadRetryCount < 9999
           and p.endTime between :startTime and :endTime
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
                 and h.upload = true
+                and (h.uploadPaused is null or h.uploadPaused = false)
                 and h.publish = false
           )
         order by p.endTime asc
@@ -119,13 +121,15 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         where p.roomId = :roomId
           and p.recording = false
           and p.upload = false
-                    and p.uploadRetryCount < 9999
+          and (p.uploadPaused is null or p.uploadPaused = false)
+          and p.uploadRetryCount < 9999
           and p.endTime between :startTime and :endTime
           and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
                 and h.upload = true
+                and (h.uploadPaused is null or h.uploadPaused = false)
                 and h.publish = false
           )
         order by p.endTime asc
@@ -138,6 +142,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         where p.roomId = :roomId
           and p.recording = false
           and p.upload = false
+          and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
           and p.endTime between :startTime and :endTime
           and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
@@ -156,12 +161,14 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
         select count(p) from RecordHistoryPart p
         where p.recording = false
           and p.upload = false
+          and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
           and p.endTime is not null
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
                 and h.upload = true
+                and (h.uploadPaused is null or h.uploadPaused = false)
                 and h.publish = false
                 and h.forceArchived = false
           )
@@ -172,6 +179,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     @Query("""
         select p from RecordHistoryPart p
         where p.upload = false
+          and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
           and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
@@ -185,6 +193,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     @Query("""
         select p from RecordHistoryPart p
         where p.upload = false
+          and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
           and exists (
               select 1 from RecordHistory h

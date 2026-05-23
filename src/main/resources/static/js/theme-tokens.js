@@ -597,6 +597,35 @@
         return merged;
     }
 
+    function getTokenNames() {
+        var tokenNames = {};
+        var paletteName;
+        var modeName;
+        var tokens;
+        var key;
+
+        for (paletteName in THEMES) {
+            if (!Object.prototype.hasOwnProperty.call(THEMES, paletteName)) {
+                continue;
+            }
+            for (modeName in THEMES[paletteName]) {
+                if (!Object.prototype.hasOwnProperty.call(THEMES[paletteName], modeName)) {
+                    continue;
+                }
+                tokens = THEMES[paletteName][modeName] || {};
+                for (key in tokens) {
+                    if (Object.prototype.hasOwnProperty.call(tokens, key)) {
+                        tokenNames[key] = true;
+                    }
+                }
+            }
+        }
+
+        return Object.keys(tokenNames);
+    }
+
+    var TOKEN_NAMES = getTokenNames();
+
     function applyToDocument(doc, mode, palette) {
         if (!doc || !doc.documentElement) {
             return;
@@ -609,6 +638,10 @@
 
         root.setAttribute('data-theme', modeName);
         root.setAttribute('data-theme-palette', paletteName);
+
+        for (var i = 0; i < TOKEN_NAMES.length; i++) {
+            root.style.removeProperty(TOKEN_NAMES[i]);
+        }
 
         for (var cssVar in tokens) {
             if (Object.prototype.hasOwnProperty.call(tokens, cssVar)) {
@@ -645,4 +678,3 @@
         }
     };
 })(window);
-

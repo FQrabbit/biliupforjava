@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
+import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -66,6 +67,8 @@ public class PartController {
     private RecordBiliPublishService publishService;
     @Autowired
     private ShutdownState shutdownState;
+    @Autowired
+    private UploadPauseService uploadPauseService;
 
     @Lazy
     @Autowired
@@ -83,6 +86,17 @@ public class PartController {
     @PostMapping("/list/{id}")
     public List<RecordHistoryPart> list(@PathVariable("id") Long id) {
         return filterVisibleParts(partRepository.findByHistoryIdOrderByStartTimeAsc(id));
+    }
+
+    @PostMapping("/{id}/upload/pause")
+    public Map<String, Object> pauseUpload(@PathVariable("id") Long id, @RequestBody(required = false) Map<String, Object> request) {
+        String reason = request == null ? null : String.valueOf(request.getOrDefault("reason", ""));
+        return uploadPauseService.pausePart(id, reason);
+    }
+
+    @PostMapping("/{id}/upload/resume")
+    public Map<String, Object> resumeUpload(@PathVariable("id") Long id) {
+        return uploadPauseService.resumePart(id);
     }
 
     @PostMapping("/list2/{id}")
@@ -183,6 +197,10 @@ public class PartController {
             m.put("uploadRetryCount", p.getUploadRetryCount());
             m.put("deleteFailType", p.getDeleteFailType());
             m.put("deleteFailReason", p.getDeleteFailReason());
+            m.put("uploadFlow", p.getUploadFlow());
+            m.put("uploadPaused", Boolean.TRUE.equals(p.getUploadPaused()));
+            m.put("uploadPausedAt", p.getUploadPausedAt());
+            m.put("uploadPauseReason", p.getUploadPauseReason());
 
             String issueCode = null;
             String issueMessage = null;
@@ -268,6 +286,15 @@ public class PartController {
 
             if (blockingIssue) {
                 blocking++;
+            }
+
+            boolean canControlUpload = !p.isUpload() && !p.isRecording() && p.getEndTime() != null && (!historyPublished || historyEditableOnline);
+            if (canControlUpload) {
+                if (Boolean.TRUE.equals(p.getUploadPaused())) {
+                    actions.add("RESUME_UPLOAD");
+                } else if (isBlank(issueCode) || "MISSING_CLOSE".equals(issueCode)) {
+                    actions.add("PAUSE_UPLOAD");
+                }
             }
 
             m.put("issueCode", issueCode);

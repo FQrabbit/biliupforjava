@@ -33,6 +33,7 @@ import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.service.SystemConfigService;
+import top.sshh.bililiverecoder.service.UploadPauseService;
 
 import java.io.File;
 import java.io.IOException;
@@ -76,6 +77,8 @@ public class HistoryController {
     private SystemConfigService systemConfigService;
     @Autowired
     private UploadProgressTracker uploadProgressTracker;
+    @Autowired
+    private UploadPauseService uploadPauseService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -225,6 +228,17 @@ public class HistoryController {
 
         result.put("items", items);
         return result;
+    }
+
+    @PostMapping("/{id}/upload/pause")
+    public Map<String, Object> pauseUpload(@PathVariable("id") Long id, @RequestBody(required = false) Map<String, Object> request) {
+        String reason = request == null ? null : String.valueOf(request.getOrDefault("reason", ""));
+        return uploadPauseService.pauseHistory(id, reason);
+    }
+
+    @PostMapping("/{id}/upload/resume")
+    public Map<String, Object> resumeUpload(@PathVariable("id") Long id) {
+        return uploadPauseService.resumeHistory(id);
     }
 
     @GetMapping("/{id}/edit-parts/draft")

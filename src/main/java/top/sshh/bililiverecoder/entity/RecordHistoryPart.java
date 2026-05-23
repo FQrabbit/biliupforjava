@@ -81,6 +81,15 @@ public class RecordHistoryPart {
     @Column(name = "upload_flow_fallback_reason", length = 256)
     private String uploadFlowFallbackReason;
 
+    @Column(name = "upload_paused", columnDefinition = "bit default 0")
+    private Boolean uploadPaused;
+
+    @Column(name = "upload_paused_at")
+    private LocalDateTime uploadPausedAt;
+
+    @Column(name = "upload_pause_reason", length = 256)
+    private String uploadPauseReason;
+
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 

@@ -19,6 +19,7 @@ public class UploadProgressTracker {
     public enum State {
         UPLOADING,
         RETRY_WAIT,
+        PAUSED,
         SUCCESS,
         FAILED
     }
@@ -172,6 +173,21 @@ public class UploadProgressTracker {
             p.setStateMsg(msg);
             p.setRetryCount(null);
             p.setBackoffMs(null);
+            p.setUpdateAtMs(now);
+            return p;
+        });
+        cleanupExpired(now);
+    }
+
+    public void markPaused(long partId, String msg) {
+        long now = System.currentTimeMillis();
+        byPartId.computeIfPresent(partId, (k, p) -> {
+            p.setState(State.PAUSED);
+            p.setStateMsg(msg);
+            p.setRetryCount(null);
+            p.setBackoffMs(null);
+            p.setSpeed(0L);
+            p.setEtaSeconds(0L);
             p.setUpdateAtMs(now);
             return p;
         });

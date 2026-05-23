@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
+import top.sshh.bililiverecoder.entity.MultipartUploadPart;
+import top.sshh.bililiverecoder.entity.MultipartUploadSession;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
@@ -19,8 +21,10 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
+import top.sshh.bililiverecoder.service.MultipartUploadSessionService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
+import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -133,6 +137,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Autowired
     private UploadUserSerialScheduler uploadUserSerialScheduler;
 
+    @Autowired
+    private UploadPauseService uploadPauseService;
+
+    @Autowired
+    private MultipartUploadSessionService multipartUploadSessionService;
+
     private final UploadRetryBackoffPolicy uploadRetryBackoffPolicy = new UploadRetryBackoffPolicy();
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
@@ -161,6 +171,13 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
         @Override
         public boolean asyncUploadIfNeeded(RecordHistoryPart part) {
         RecordHistoryPart loadedPart = partRepository.findById(part.getId()).get();
+        if (uploadPauseService.isUploadPaused(loadedPart.getHistoryId(), loadedPart.getId())) {
+            log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipPaused")
+                    .add("partId", loadedPart.getId())
+                    .add("historyId", loadedPart.getHistoryId())
+                    .add("roomId", loadedPart.getRoomId()));
+            return false;
+        }
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
                 .add("partId", loadedPart.getId())
                 .add("historyId", loadedPart.getHistoryId())
@@ -196,6 +213,15 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
         if (part.isUpload()) {
             log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
                     .add("os", OS)
+                    .add("partId", part.getId())
+                    .add("historyId", part.getHistoryId())
+                    .add("roomId", part.getRoomId()));
+            return;
+        }
+        RecordHistory pauseHistory = part.getHistoryId() == null ? null : historyRepository.findById(part.getHistoryId()).orElse(null);
+        if (uploadPauseService.isUploadPaused(pauseHistory, part)) {
+            uploadProgressTracker.markPaused(part.getId(), uploadPauseService.pauseMessage(pauseHistory, part));
+            log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipPaused")
                     .add("partId", part.getId())
                     .add("historyId", part.getHistoryId())
                     .add("roomId", part.getRoomId()));
@@ -367,6 +393,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             String multipartProfile = BROWSER_MULTIPART_PROFILE;
                             String multipartMetaUposUri = null;
                             String multipartSessionDigest = null;
+                            MultipartUploadSession multipartSession = null;
                             Map<Integer, String> multipartEtags = new ConcurrentHashMap<>();
                             Map<Integer, String> multipartSignedUploadIds = new ConcurrentHashMap<>();
                             Map<Integer, Integer> multipartSignedPartNumbers = new ConcurrentHashMap<>();
@@ -514,6 +541,44 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         if (useMultipartFlow) {
                                             multipartUploadId = null;
                                             multipartUri = preUploadBean.getUpos_uri();
+                                            Optional<MultipartUploadSession> reusableSession =
+                                                    multipartUploadSessionService.findReusableSession(part.getId(), fileSize);
+                                            if (reusableSession.isPresent()) {
+                                                multipartSession = multipartUploadSessionService.activate(reusableSession.get());
+                                                multipartUploadId = multipartSession.getUploadId();
+                                                multipartToken = multipartSession.getUploadToken();
+                                                multipartUri = multipartSession.getUri();
+                                                multipartProfile = multipartSession.getProfile();
+                                                multipartBizId = multipartSession.getBizId() == null ? preUploadBean.getBiz_id() : multipartSession.getBizId();
+                                                preUploadBean.setBiz_id(multipartBizId);
+                                                if (multipartSession.getChunkSize() != null && multipartSession.getChunkSize() > 0) {
+                                                    chunkSize = multipartSession.getChunkSize();
+                                                    preUploadBean.setChunk_size(chunkSize);
+                                                }
+                                                chunkNum = multipartSession.getChunkTotal() == null || multipartSession.getChunkTotal() <= 0
+                                                        ? (long) Math.ceil((double) fileSize / chunkSize)
+                                                        : multipartSession.getChunkTotal();
+                                                multipartSessionDigest = buildMultipartSessionDigest(
+                                                        multipartUploadId,
+                                                        multipartUri,
+                                                        multipartToken,
+                                                        multipartBizId,
+                                                        multipartProfile
+                                                );
+                                                for (MultipartUploadPart savedPart : multipartUploadSessionService.listCompletedParts(multipartSession)) {
+                                                    if (savedPart.getPartNumber() != null && StringUtils.isNotBlank(savedPart.getEtag())) {
+                                                        multipartEtags.put(savedPart.getPartNumber(), savedPart.getEtag());
+                                                    }
+                                                }
+                                                log.info("[BLR] {}", LogKvs.event("Upload.Multipart.ResumeSession")
+                                                        .add("roomId", room.getRoomId())
+                                                        .add("uname", room.getUname())
+                                                        .add("partId", part.getId())
+                                                        .add("historyId", part.getHistoryId())
+                                                        .add("doneParts", multipartEtags.size())
+                                                        .add("chunkNum", chunkNum)
+                                                        .addIfNotBlank("sessionDigest", multipartSessionDigest));
+                                            } else {
                                             try {
                                                 MultipartInitRequest multipartInitRequest = new MultipartInitRequest(webCookie);
                                                 MultipartInitRequest.MultipartInitInfo initInfo = multipartInitRequest.init(
@@ -590,6 +655,13 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     if (initInfo.getTimeout() > 0) {
                                                         preUploadBean.setTimeout(String.valueOf(initInfo.getTimeout()));
                                                     }
+                                                    multipartSession = multipartUploadSessionService.createSession(
+                                                            part,
+                                                            initInfo,
+                                                            chunkSize,
+                                                            (int) chunkNum,
+                                                            fileSize
+                                                    );
                                                 }
                                             } catch (Exception initEx) {
                                                 uploadFlowFallbackReason = "multipart init failed";
@@ -623,6 +695,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("preHasUptoken", StringUtils.isNotBlank(preUploadBean.getRawUptoken()))
                                                         .add("preHasUposUri", StringUtils.isNotBlank(preUploadBean.getUpos_uri()));
                                                 log.warn("[BLR] {}", kvs);
+                                            }
                                             }
                                             if (StringUtils.isBlank(multipartUri) || StringUtils.isBlank(multipartToken)) {
                                                 uploadFlowFallbackReason = "multipart missing uri or upload_token";
@@ -687,6 +760,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     fileSize,
                                     useMultipartFlow ? "MULTIPART" : "LEGACY"
                             );
+                            if (useMultipartFlow && multipartEtags.size() > 0) {
+                                upCount.set(multipartEtags.size());
+                                uploadProgressTracker.updateChunkDone(partId, historyId, partPage, upCount.get(), (int) effectiveChunkNum);
+                            }
                             java.util.concurrent.atomic.AtomicReference<String> gatewayError = new java.util.concurrent.atomic.AtomicReference<>(null);
                             java.util.concurrent.atomic.AtomicReference<String> globalFuseReason = new java.util.concurrent.atomic.AtomicReference<>(null);
                             List<Runnable> runnableList = new ArrayList<>();
@@ -699,13 +776,32 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 String finalMultipartUri = multipartUri;
                                 String finalMultipartToken = multipartToken;
                                 String finalMultipartSessionDigest = multipartSessionDigest;
+                                MultipartUploadSession finalMultipartSession = multipartSession;
                                 Map<Integer, String> finalMultipartEtags = multipartEtags;
                                 Map<Integer, String> finalMultipartSignedUploadIds = multipartSignedUploadIds;
                                 Map<Integer, Integer> finalMultipartSignedPartNumbers = multipartSignedPartNumbers;
                                 Runnable runnable = () -> {
                                     try {
+                                        int partNumber = (int) (finalI + 1);
+                                        if (finalUseMultipartFlow && finalMultipartEtags.containsKey(partNumber)) {
+                                            log.debug("[BLR] {}", LogKvs.event("Upload.Multipart.Part.SkipDone")
+                                                    .add("partId", partId)
+                                                    .add("historyId", historyId)
+                                                    .add("partNumber", partNumber));
+                                            return;
+                                        }
+                                        if (shouldPauseUpload(historyId, partId)) {
+                                            globalFuseReason.compareAndSet(null, "UPLOAD_PAUSED");
+                                            globalFuseOpen.set(true);
+                                            return;
+                                        }
                                         int chunkRetryCount = 0;
                                         while (!globalFuseOpen.get() && chunkRetryCount < CHUNK_MAX_RETRY) {
+                                            if (shouldPauseUpload(historyId, partId)) {
+                                                globalFuseReason.compareAndSet(null, "UPLOAD_PAUSED");
+                                                globalFuseOpen.set(true);
+                                                break;
+                                            }
                                             if (gatewayError.get() != null) {
                                                 globalFuseReason.compareAndSet(null, "UPLOAD_GATEWAY_ERROR");
                                                 globalFuseOpen.set(true);
@@ -743,8 +839,16 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                                 endSize,
                                                                 timeoutSeconds
                                                         );
-                                                        int partNumber = (int) (finalI + 1);
                                                         finalMultipartEtags.put(partNumber, etag);
+                                                        if (finalMultipartSession != null) {
+                                                            multipartUploadSessionService.saveCompletedPart(
+                                                                    finalMultipartSession,
+                                                                    partNumber,
+                                                                    etag,
+                                                                    startSize,
+                                                                    endSize
+                                                            );
+                                                        }
                                                         String signedUploadId = MultipartDebugSupport.uploadIdFromUrl(signedReq.getUrl());
                                                         Integer signedPartNumber = MultipartDebugSupport.partNumberFromUrl(signedReq.getUrl());
                                                         finalMultipartSignedUploadIds.put(partNumber, signedUploadId);
@@ -804,6 +908,22 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("thread", Thread.currentThread().getName()));
                                                 break;
                                             } catch (Exception e) {
+                                                if (finalUseMultipartFlow && finalMultipartSession != null && isMultipartSessionInvalid(e)) {
+                                                    String invalidReason = StringUtils.defaultIfBlank(e.getMessage(), "multipart session invalid");
+                                                    multipartUploadSessionService.markExpired(finalMultipartSession, invalidReason);
+                                                    globalFuseReason.compareAndSet(null, "MULTIPART_SESSION_EXPIRED");
+                                                    globalFuseOpen.set(true);
+                                                    log.warn("[BLR] {}", LogKvs.event("Upload.Multipart.SessionExpired")
+                                                            .add("roomId", room.getRoomId())
+                                                            .add("uname", room.getUname())
+                                                            .add("partId", partId)
+                                                            .add("historyId", historyId)
+                                                            .add("chunkIndex", finalI)
+                                                            .add("partNumber", partNumber)
+                                                            .addIfNotBlank("reason", invalidReason)
+                                                            .addIfNotBlank("sessionDigest", finalMultipartSessionDigest));
+                                                    break;
+                                                }
                                                 chunkRetryCount++;
                                                 int globalRetryCount = globalFailCount.incrementAndGet();
                                                 UploadRetryBackoffPolicy.BackoffDecision backoffDecision =
@@ -979,6 +1099,11 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 throw new RuntimeException("UPLOAD_GATEWAY_ERROR:" + gatewayError.get());
                             }
 
+                            if ("UPLOAD_PAUSED".equals(globalFuseReason.get()) || shouldPauseUpload(historyId, partId)) {
+                                pauseUpload(historyId, partId, multipartSession);
+                                return;
+                            }
+
                             if (globalFuseOpen.get() || upCount.get() < effectiveChunkNum) {
                                 part = partRepository.findById(part.getId()).get();
                                 part.setUpload(false);
@@ -1030,6 +1155,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             }
                             //通知服务器上传完成
                             try {
+                                if (shouldPauseUpload(historyId, partId)) {
+                                    pauseUpload(historyId, partId, multipartSession);
+                                    return;
+                                }
                                 boolean completeSuccess = false;
                                 String completeResponse = null;
                                 String serverFileName = resolveServerFileName(preUploadBean, uploadBean, uploadFile.getName());
@@ -1307,6 +1436,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         part = partRepository.save(part);
                                     }
                                     TaskUtil.partUploadTask.remove(part.getId());
+                                    if (useMultipartFlow && multipartSession != null) {
+                                        multipartUploadSessionService.markCompletedAndClear(multipartSession);
+                                    }
                                     uploadProgressTracker.markSuccessAndRemove(part.getId());
                                         log.info("[BLR] {}", LogKvs.event("Upload.Part.Success")
                                             .add("roomId", room.getRoomId())
@@ -1329,6 +1461,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     }
                                 } else {
                                     // 合并失败，检查是否可以重试
+                                    if (useMultipartFlow && multipartSession != null) {
+                                        multipartUploadSessionService.markExpired(multipartSession,
+                                                StringUtils.defaultIfBlank(completeResponse, "multipart complete failed"));
+                                    }
                                     int currentRetry = part.getUploadRetryCount();
                                     int nextRetryCount = currentRetry + 1;
                                     boolean nextAttemptMultipart = nextRetryCount < MULTIPART_RETRY_LIMIT;
@@ -1434,6 +1570,40 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     }
 
 
+
+    private boolean shouldPauseUpload(Long historyId, Long partId) {
+        return uploadPauseService.isUploadPaused(historyId, partId);
+    }
+
+    private String pauseUpload(Long historyId, Long partId, MultipartUploadSession session) {
+        RecordHistoryPart currentPart = partId == null ? null : partRepository.findById(partId).orElse(null);
+        RecordHistory currentHistory = historyId == null ? null : historyRepository.findById(historyId).orElse(null);
+        String msg = uploadPauseService.pauseMessage(currentHistory, currentPart);
+        if (partId != null) {
+            uploadProgressTracker.markPaused(partId, msg);
+        }
+        multipartUploadSessionService.markPaused(session, msg);
+        TaskUtil.partUploadTask.remove(partId);
+        log.info("[BLR] {}", LogKvs.event("Upload.Part.Paused")
+                .add("partId", partId)
+                .add("historyId", historyId)
+                .addIfNotBlank("reason", msg));
+        return msg;
+    }
+
+    private boolean isMultipartSessionInvalid(Exception e) {
+        String msg = e == null ? "" : StringUtils.defaultString(e.getMessage()).toLowerCase(Locale.ROOT);
+        return msg.contains("multipart part request failed")
+                || msg.contains("multipart part response missing")
+                || msg.contains("multipart part response invalid")
+                || msg.contains("uploadid")
+                || msg.contains("upload id")
+                || msg.contains("upload_token")
+                || msg.contains("upload token")
+                || msg.contains("session")
+                || msg.contains("expired")
+                || msg.contains("invalid");
+    }
 
     private Integer resolveProgressPage(RecordHistoryPart part) {
         if (part == null) return null;
