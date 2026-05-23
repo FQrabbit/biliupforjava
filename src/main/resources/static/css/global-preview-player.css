@@ -1,0 +1,237 @@
+.global-part-preview-mini {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 4200;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    overflow: hidden;
+    --global-part-preview-progress: 0%;
+    --global-part-preview-progress-color: var(--primary-color, #409eff);
+    --global-part-preview-progress-soft: rgba(64, 158, 255, 0.14);
+    border: 1px solid var(--batch-progress-float-border, var(--border-light));
+    border-radius: 12px;
+    background: var(--batch-progress-float-bg, var(--card-bg));
+    box-shadow: var(--batch-progress-float-shadow, 0 18px 48px rgba(15, 23, 42, 0.18));
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+.global-part-preview-mini::before,
+.global-part-preview-mini::after {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    content: "";
+}
+
+.global-part-preview-mini::before {
+    z-index: 0;
+    background:
+        linear-gradient(90deg,
+            var(--global-part-preview-progress-soft) 0%,
+            color-mix(in srgb, var(--global-part-preview-progress-color) 22%, transparent) var(--global-part-preview-progress),
+            transparent var(--global-part-preview-progress));
+}
+
+.global-part-preview-mini::after {
+    z-index: 1;
+    opacity: 0;
+    background:
+        radial-gradient(circle at 15% 50%, color-mix(in srgb, var(--global-part-preview-progress-color) 70%, white) 0 2px, transparent 3px),
+        radial-gradient(circle at 48% 28%, color-mix(in srgb, var(--global-part-preview-progress-color) 60%, white) 0 1.5px, transparent 2.5px),
+        radial-gradient(circle at 78% 66%, color-mix(in srgb, var(--global-part-preview-progress-color) 65%, white) 0 1.5px, transparent 2.5px);
+    background-position:
+        calc(var(--global-part-preview-progress) - 22px) 50%,
+        calc(var(--global-part-preview-progress) - 8px) 42%,
+        calc(var(--global-part-preview-progress) + 10px) 58%;
+    background-repeat: no-repeat;
+    background-size: 52px 100%, 42px 100%, 46px 100%;
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--global-part-preview-progress-color) 45%, transparent));
+    transition: opacity var(--duration-fast, 120ms) var(--ease-apple, ease);
+}
+
+.global-part-preview-mini-video {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #050505;
+}
+
+.global-part-preview-mini-video .artplayer-app,
+.global-part-preview-mini-video .art-video-player {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    --art-control-height: 40px;
+    --art-control-icon-size: 30px;
+    --art-control-icon-scale: 0.9;
+    --art-bottom-gap: 8px;
+    --art-padding: 8px;
+}
+
+.global-part-preview-mini-video .apd-emitter,
+.global-part-preview-mini-video .apd-style,
+.global-part-preview-mini-video .art-controls-center {
+    display: none !important;
+}
+
+.global-part-preview-mini-video .art-controls-left,
+.global-part-preview-mini-video .art-controls-right {
+    min-width: 0;
+}
+
+.global-part-preview-mini-video .art-controls-right {
+    flex-shrink: 1;
+}
+
+.global-part-preview-mini-bar {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    color: var(--text-primary);
+}
+
+.global-part-preview-mini-meta {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+}
+
+.global-part-preview-mini-badge {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.4;
+}
+
+.global-part-preview-mini-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.global-part-preview-mini-mode {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.global-part-preview-mini-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.global-part-preview-mini-btn {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--duration-fast, 120ms) var(--ease-apple, ease),
+                border-color var(--duration-fast, 120ms) var(--ease-apple, ease),
+                background var(--duration-fast, 120ms) var(--ease-apple, ease);
+}
+
+.global-part-preview-mini-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.global-part-preview-mini-btn.is-danger:hover {
+    border-color: var(--danger-color, #f56c6c);
+    color: var(--danger-color, #f56c6c);
+}
+
+.global-part-preview-mini.is-collapsed {
+    width: 420px;
+}
+
+.global-part-preview-mini.is-collapsed::before {
+    background:
+        linear-gradient(90deg,
+            color-mix(in srgb, var(--global-part-preview-progress-color) 18%, transparent) 0%,
+            color-mix(in srgb, var(--global-part-preview-progress-color) 12%, transparent) var(--global-part-preview-progress),
+            transparent var(--global-part-preview-progress)),
+        linear-gradient(90deg,
+            var(--global-part-preview-progress-color) 0 var(--global-part-preview-progress),
+            transparent var(--global-part-preview-progress));
+    background-size: 100% 100%, 100% 3px;
+    background-position: 0 0, 0 100%;
+    background-repeat: no-repeat;
+}
+
+.global-part-preview-mini.is-collapsed::after {
+    opacity: 0.95;
+    animation: globalPartPreviewParticles 1.8s linear infinite;
+}
+
+.global-part-preview-mini.is-collapsed .global-part-preview-mini-video {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+[data-theme="dark"] .global-part-preview-mini {
+    --global-part-preview-progress-soft: rgba(64, 158, 255, 0.18);
+    border-color: var(--batch-progress-float-border, var(--border-light));
+}
+
+@keyframes globalPartPreviewParticles {
+    0% {
+        transform: translateX(-8px);
+    }
+    100% {
+        transform: translateX(12px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .global-part-preview-mini.is-collapsed::after {
+        animation: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .global-part-preview-mini {
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        width: auto;
+        max-width: none;
+        border-radius: 10px;
+    }
+
+    .global-part-preview-mini:not(.is-collapsed) .global-part-preview-mini-video {
+        aspect-ratio: 16 / 10;
+    }
+
+    .global-part-preview-mini.is-collapsed {
+        width: auto;
+    }
+}

@@ -1281,6 +1281,7 @@
             previewMiniCollapsed: false,
             previewMiniProgress: 0,
             previewProgressHandler: null,
+            previewRestoreOptions: null,
             previewCloseIntent: 'stop',
             editPartsEditing: false,
             editPartsLoading: false,
@@ -1737,6 +1738,7 @@
             // 监听页面关闭/刷新事件，防止在批量工作进行时意外关闭
             window.addEventListener('beforeunload', this.handleBeforeUnload);
             window.addEventListener('pagehide', this.handlePageHide);
+            window.addEventListener('message', this.handleGlobalPartPreviewMessage);
         },
         methods: {
             // 是否是"预期跳过"类型（不是真正的异常）
@@ -1829,6 +1831,11 @@
                 if (this.editPartsSessionId && this.currentDetail && this.currentDetail.id && !this.editPartsSaving) {
                     this.requestEditPartsTempCleanup(true);
                 }
+            },
+            handleGlobalPartPreviewMessage: function(event) {
+                if (event.origin !== window.location.origin) return;
+                if (!event.data || event.data.type !== 'globalPartPreviewRestore') return;
+                this.restorePartPreviewFromGlobal(event.data.payload || {});
             },
             toggleBatchMode: function() {
                 if (this.batchVisibilityRunning) {
@@ -3864,13 +3871,14 @@
             canPreviewPart: function(p) {
                 return !!(p && p.partId && this.getPartFilePath(p));
             },
-            openPartPreview: function(p) {
+            openPartPreview: function(p, restoreOptions) {
                 if (!this.canPreviewPart(p)) return;
                 this.stopPartPreview();
                 this.previewPart = p;
                 this.previewDialogVisible = true;
                 this.previewDetached = false;
                 this.previewMiniCollapsed = false;
+                this.previewRestoreOptions = restoreOptions || null;
                 this.previewCloseIntent = 'stop';
                 this.previewMode = 'flv';
                 this.previewError = '';
@@ -3886,7 +3894,12 @@
                         _this.previewError = (resp && resp.message) ? resp.message : '预览不可用';
                         return;
                     }
-                    if (resp.cacheReady && resp.cacheUrl) {
+                    var restoreMode = _this.previewRestoreOptions && _this.previewRestoreOptions.mode;
+                    if (restoreMode === 'flv') {
+                        _this.switchPreviewSource('flv');
+                    } else if (restoreMode === 'mp4' && resp.cacheReady && resp.cacheUrl) {
+                        _this.switchPreviewSource('mp4');
+                    } else if (resp.cacheReady && resp.cacheUrl) {
                         _this.switchPreviewSource('mp4');
                     } else if (autoPlay) {
                         _this.switchPreviewSource('flv');
@@ -3907,6 +3920,10 @@
                 try {
                     previousTime = _this.previewArtPlayer && _this.previewArtPlayer.video ? _this.previewArtPlayer.video.currentTime : 0;
                 } catch (e) {}
+                if (!previousTime && _this.previewRestoreOptions && _this.previewRestoreOptions.currentTime) {
+                    previousTime = Number(_this.previewRestoreOptions.currentTime) || 0;
+                }
+                _this.previewRestoreOptions = null;
                 _this.destroyPreviewArtPlayer();
                 _this.previewMode = mode === 'mp4' ? 'mp4' : 'flv';
                 var base = '/part/preview/' + _this.previewPart.partId;
@@ -4004,8 +4021,79 @@
                     return false;
                 }
             },
+            canUseGlobalPartPreview: function() {
+                try {
+                    return !!(window.parent && window.parent !== window && window.parent.GlobalPartPreviewPlayer && typeof window.parent.GlobalPartPreviewPlayer.open === 'function');
+                } catch (e) {
+                    return false;
+                }
+            },
+            getPartPreviewTransferPayload: function(collapsed) {
+                if (!this.previewPart || !this.previewPart.partId) return null;
+                var currentTime = 0;
+                var paused = false;
+                var volume = null;
+                try {
+                    if (this.previewArtPlayer && this.previewArtPlayer.video) {
+                        currentTime = this.previewArtPlayer.video.currentTime || 0;
+                        paused = !!this.previewArtPlayer.video.paused;
+                        volume = this.previewArtPlayer.video.volume;
+                    }
+                } catch (e) {}
+                var base = '/part/preview/' + this.previewPart.partId;
+                var url = this.withPreviewAuth(this.previewMode === 'mp4' ? (base + '/cache') : (base + '/source'));
+                var danmakuUrl = '';
+                if (this.previewMeta && this.previewMeta.danmakuReady && this.previewMeta.danmakuUrl) {
+                    danmakuUrl = this.withPreviewAuth(this.previewMeta.danmakuUrl);
+                }
+                return {
+                    partId: this.previewPart.partId,
+                    page: this.previewPart.page,
+                    part: Object.assign({}, this.previewPart),
+                    fileName: this.previewMeta && this.previewMeta.fileName ? this.previewMeta.fileName : (this.previewPart.name || this.previewPart.title || ''),
+                    title: this.previewPart.title || '',
+                    mode: this.previewMode === 'mp4' ? 'mp4' : 'flv',
+                    url: url,
+                    danmakuUrl: danmakuUrl,
+                    currentTime: currentTime,
+                    paused: paused,
+                    volume: volume,
+                    collapsed: !!collapsed
+                };
+            },
+            transferPartPreviewToGlobal: function(collapsed) {
+                if (!this.canUseGlobalPartPreview()) return false;
+                var payload = this.getPartPreviewTransferPayload(collapsed);
+                if (!payload) return false;
+                var opened = false;
+                try {
+                    opened = window.parent.GlobalPartPreviewPlayer.open(payload) !== false;
+                } catch (e) {
+                    opened = false;
+                }
+                if (!opened) return false;
+                this.stopPartPreview();
+                return true;
+            },
+            restorePartPreviewFromGlobal: function(payload) {
+                if (!payload || !payload.partId) return;
+                var part = payload.part || {
+                    partId: payload.partId,
+                    page: payload.page || 0,
+                    name: payload.fileName || payload.title || '分P视频',
+                    title: payload.title || ''
+                };
+                if (!this.getPartFilePath(part)) {
+                    part.filePath = payload.fileName || payload.title || ('part-' + payload.partId);
+                }
+                this.openPartPreview(part, {
+                    mode: payload.mode === 'mp4' ? 'mp4' : 'flv',
+                    currentTime: payload.currentTime || 0
+                });
+            },
             detachPartPreview: function() {
                 if (!this.previewPart) return;
+                if (this.transferPartPreviewToGlobal(this.previewMiniCollapsed)) return;
                 this.previewDetached = true;
                 this.previewMiniCollapsed = false;
                 this.previewCloseIntent = 'detach';
@@ -4293,6 +4381,7 @@
                 this.previewDetached = false;
                 this.previewMiniCollapsed = false;
                 this.previewMiniProgress = 0;
+                this.previewRestoreOptions = null;
                 this.previewCloseIntent = 'stop';
             },
             closePartPreview: function() {
@@ -5328,6 +5417,7 @@
             document.removeEventListener('visibilitychange', this.handleVisibilityChange);
             window.removeEventListener('beforeunload', this.handleBeforeUnload);
             window.removeEventListener('pagehide', this.handlePageHide);
+            window.removeEventListener('message', this.handleGlobalPartPreviewMessage);
             this.editPartUploadQueue = [];
             this.editPartUploadRunning = false;
             this.notifyParentOperationStatus();

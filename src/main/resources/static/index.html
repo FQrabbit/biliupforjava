@@ -19,6 +19,7 @@
     <link href="css/pages/home.css" rel="stylesheet">
     <link href="css/user.css" rel="stylesheet">
     <link href="css/log.css" rel="stylesheet">
+    <link href="css/global-preview-player.css" rel="stylesheet">
     <script src="js/jquery-3.3.1.min.js"></script>
     <script src="js/vue.min.js"></script>
     <script src="js/element-ui.js"></script>
@@ -28,6 +29,7 @@
     <script src="js/frontend-cache-refresh.js"></script>
     <script src="js/mixins.js"></script>
     <script src="js/privacy.js"></script>
+    <script src="js/global-preview-player.js"></script>
     <script src="js/pages/user.js"></script>
 </head>
 <body>
@@ -327,7 +329,7 @@
                                         inactive-text="旧流程(稳定)"
                                         @change="checkConfigChanges">
                                     </el-switch>
-                                    <div class="config-help">默认使用旧上传流程(稳定)。开启后优先使用浏览器 multipart 上传链路，遇到异常会自动回退旧流程，并在录制历史中标记回退状态。同时，新流程可能用户自定义节点的能力会失效，更多的使用平台自动下发的节点来传递视频。</div>
+                                    <div class="config-help">默认使用旧上传流程(稳定)。开启后优先使用浏览器 multipart 上传链路，支持分P暂停、继续上传，以及进程意外关闭后的分片级断点续传；已完成分片会保留，最多重传最后一个未完成分片。遇到异常会自动回退旧流程，并在录制历史中标记回退状态。新流程可能无法使用用户自定义上传节点，会更多使用平台自动下发的节点。</div>
                                 </div>
                             </div>
 
