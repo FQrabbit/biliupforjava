@@ -106,22 +106,29 @@ public class PartPreviewService {
         result.put("cacheReady", cacheReady);
         result.put("sourceUrl", "/part/preview/" + partId + "/source");
         result.put("cacheUrl", cacheReady ? "/part/preview/" + partId + "/cache" : null);
+        Path danmakuFile = resolveDanmakuFile(previewFile);
+        result.put("danmakuReady", danmakuFile != null);
+        result.put("danmakuUrl", danmakuFile == null ? null : "/part/preview/" + partId + "/danmaku");
+        result.put("danmakuFileName", danmakuFile == null || danmakuFile.getFileName() == null ? null : danmakuFile.getFileName().toString());
         result.put("task", taskMap(tasks.get(partId)));
         return result;
     }
 
-    public Map<String, Object> prepare(Long partId) {
+    public Map<String, Object> prepare(Long partId, boolean force) {
         PreviewFile previewFile = resolvePreviewFile(partId);
         if (!previewFile.available) {
             return Map.of("accepted", false, "message", previewFile.message, "task", taskMap(null));
         }
-        if (isCacheReady(previewFile)) {
-            touchCache(previewFile);
-            return Map.of("accepted", true, "status", "SUCCESS", "cacheReady", true, "task", taskMap(null));
-        }
         PreviewTaskStatus existing = tasks.get(partId);
         if (existing != null && existing.isActive()) {
             return Map.of("accepted", true, "status", existing.status, "cacheReady", false, "task", taskMap(existing));
+        }
+        if (isCacheReady(previewFile)) {
+            if (!force) {
+                touchCache(previewFile);
+                return Map.of("accepted", true, "status", "SUCCESS", "cacheReady", true, "task", taskMap(null));
+            }
+            deleteCache(previewFile);
         }
         PreviewTaskStatus status = new PreviewTaskStatus(partId, previewFile.durationSeconds);
         tasks.put(partId, status);
@@ -165,6 +172,15 @@ public class PartPreviewService {
             return previewFile.withStreamFile(previewFile.cacheFile, "video/mp4");
         }
         return previewFile.unavailable("预览缓存不存在或已过期");
+    }
+
+    public PreviewFile getDanmaku(Long partId) {
+        PreviewFile previewFile = resolvePreviewFile(partId);
+        Path danmakuFile = resolveDanmakuFile(previewFile);
+        if (previewFile.available && danmakuFile != null) {
+            return previewFile.withStreamFile(danmakuFile, "application/xml; charset=utf-8");
+        }
+        return previewFile.unavailable("Danmaku file not found");
     }
 
     private void runPrepare(PreviewFile previewFile, PreviewTaskStatus status) {
@@ -349,6 +365,32 @@ public class PartPreviewService {
         }
     }
 
+    private Path resolveDanmakuFile(PreviewFile previewFile) {
+        try {
+            if (previewFile == null || !previewFile.available || previewFile.sourceFile == null) {
+                return null;
+            }
+            Path source = previewFile.sourceFile.normalize().toAbsolutePath();
+            Path parent = source.getParent();
+            Path fileName = source.getFileName();
+            if (parent == null || fileName == null) {
+                return null;
+            }
+            String name = fileName.toString();
+            int dot = name.lastIndexOf('.');
+            if (dot <= 0) {
+                return null;
+            }
+            Path danmaku = parent.resolve(name.substring(0, dot) + ".xml").normalize().toAbsolutePath();
+            if (!isUnderWorkPath(danmaku) || !Files.exists(danmaku) || !Files.isRegularFile(danmaku)) {
+                return null;
+            }
+            return danmaku;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private boolean isCacheReady(PreviewFile previewFile) {
         try {
             if (!Files.exists(previewFile.cacheFile)
@@ -417,6 +459,19 @@ public class PartPreviewService {
     private void touchCache(PreviewFile previewFile) {
         touch(previewFile.cacheFile);
         touch(previewFile.metaFile);
+    }
+
+    private void deleteCache(PreviewFile previewFile) {
+        try {
+            Files.deleteIfExists(previewFile.tempCacheFile);
+            Files.deleteIfExists(previewFile.cacheFile);
+            Files.deleteIfExists(previewFile.metaFile);
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("PartPreview.CacheDeleteFailed")
+                    .add("partId", previewFile.partId)
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
     }
 
     @Scheduled(fixedDelayString = "${record.preview.cleanup-interval-ms:3600000}", initialDelay = 300000)

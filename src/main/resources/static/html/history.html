@@ -1093,7 +1093,7 @@
                 </div>
             </div>
             <div class="part-preview-video-wrap">
-                <video ref="partPreviewVideo" class="part-preview-video" controls playsinline></video>
+                <div ref="partPreviewPlayer" class="part-preview-video"></div>
             </div>
             <div v-if="previewMeta && previewMeta.recording" class="part-preview-tip is-warning">
                 文件仍在写入，直接预览可能可用，但生成 MP4 预览可能不完整。
@@ -1108,9 +1108,9 @@
             <div v-if="previewError" class="part-preview-tip is-error">{{ previewError }}</div>
         </div>
         <div slot="footer" class="dialog-footer">
-            <el-button size="small" @click="switchPreviewSource('flv')" :disabled="previewMode === 'flv'">回退 FLV</el-button>
-            <el-button size="small" type="warning" plain @click="cancelPreviewPrepare" :disabled="!previewTask || (previewTask.status !== 'RUNNING' && previewTask.status !== 'PENDING')">取消封装</el-button>
-            <el-button size="small" type="primary" @click="preparePartPreview" :loading="previewPreparing" :disabled="!previewPart || (previewTask && (previewTask.status === 'RUNNING' || previewTask.status === 'PENDING'))">生成可拖动预览</el-button>
+            <el-button v-if="showPreviewFallbackButton" size="small" @click="switchPreviewSource('flv')">回退 FLV</el-button>
+            <el-button v-if="showPreviewCancelButton" size="small" type="warning" plain @click="cancelPreviewPrepare">取消封装</el-button>
+            <el-button size="small" type="primary" @click="preparePartPreview" :loading="previewPreparing" :disabled="previewPrepareDisabled">{{ previewPrepareButtonText }}</el-button>
             <el-button size="small" @click="previewDialogVisible = false">关闭</el-button>
         </div>
     </el-dialog>
@@ -1239,6 +1239,9 @@
             previewPreparing: false,
             previewTaskTimer: null,
             previewError: '',
+            previewArtPlayer: null,
+            previewArtPlayerLoader: null,
+            previewDanmukuLoader: null,
             previewFlvPlayer: null,
             previewMpegtsLoader: null,
             editPartsEditing: false,
@@ -1368,6 +1371,25 @@
             },
             visibilityActionDisabledReason: function() {
                 return this.getVisibilityDisabledReasonForItem(this.history);
+            },
+            isPreviewTaskActive: function() {
+                var status = this.previewTask && this.previewTask.status;
+                return this.previewPreparing || status === 'RUNNING' || status === 'PENDING';
+            },
+            isPreviewCacheReady: function() {
+                return !!(this.previewMeta && this.previewMeta.cacheReady);
+            },
+            showPreviewFallbackButton: function() {
+                return this.isPreviewCacheReady && this.previewMode === 'mp4' && !this.isPreviewTaskActive;
+            },
+            showPreviewCancelButton: function() {
+                return this.isPreviewTaskActive;
+            },
+            previewPrepareDisabled: function() {
+                return !this.previewPart || this.isPreviewTaskActive;
+            },
+            previewPrepareButtonText: function() {
+                return this.isPreviewCacheReady ? '重新生成可拖动预览' : '生成可拖动预览';
             },
             activeFilterCount: function() {
                 let count = 0;
@@ -3802,64 +3824,149 @@
             switchPreviewSource: function(mode) {
                 var _this = this;
                 if (!_this.previewPart || !_this.previewPart.partId) return;
-                var video = _this.$refs.partPreviewVideo;
-                if (!video) {
+                var container = _this.$refs.partPreviewPlayer;
+                if (!container) {
                     _this.$nextTick(function() { _this.switchPreviewSource(mode); });
                     return;
                 }
-                _this.destroyPreviewFlvPlayer();
+                var previousTime = 0;
+                try {
+                    previousTime = _this.previewArtPlayer && _this.previewArtPlayer.video ? _this.previewArtPlayer.video.currentTime : 0;
+                } catch (e) {}
+                _this.destroyPreviewArtPlayer();
                 _this.previewMode = mode === 'mp4' ? 'mp4' : 'flv';
                 var base = '/part/preview/' + _this.previewPart.partId;
                 var src = _this.withPreviewAuth(_this.previewMode === 'mp4' ? (base + '/cache') : (base + '/source'));
-                try {
-                    video.pause();
-                    video.removeAttribute('src');
-                    video.load();
-                    if (_this.previewMode === 'flv') {
-                        _this.loadMpegts(function() {
-                            if (!_this.previewDialogVisible || _this.previewMode !== 'flv') return;
-                            if (!window.mpegts || !window.mpegts.isSupported || !window.mpegts.isSupported()) {
-                                _this.previewError = '当前浏览器不支持 FLV 快速预览，请生成可拖动预览';
-                                return;
-                            }
-                            try {
-                                _this.destroyPreviewFlvPlayer();
-                                _this.previewFlvPlayer = window.mpegts.createPlayer({ type: 'flv', isLive: false, url: src });
-                                _this.previewFlvPlayer.attachMediaElement(video);
-                                _this.previewFlvPlayer.load();
-                            } catch (e) {
-                                _this.previewError = '播放器初始化失败';
-                            }
-                        }, function() {
-                            _this.previewError = 'FLV 播放组件加载失败，请生成可拖动预览';
-                        });
-                    } else {
-                        video.src = src;
-                        video.load();
-                    }
-                } catch (e) {
-                    _this.previewError = '播放器初始化失败';
+                _this.previewError = '';
+
+                var loaders = [_this.loadArtPlayer()];
+                if (_this.previewMode === 'flv') {
+                    loaders.push(_this.loadMpegtsPromise());
                 }
+                if (_this.previewMeta && _this.previewMeta.danmakuReady && _this.previewMeta.danmakuUrl) {
+                    loaders.push(_this.loadDanmukuPlugin());
+                }
+
+                Promise.all(loaders).then(function() {
+                    if (!_this.previewDialogVisible || !_this.previewPart || !_this.previewPart.partId) return;
+                    if (!window.Artplayer) {
+                        _this.previewError = '播放器组件加载失败';
+                        return;
+                    }
+                    if (_this.previewMode === 'flv' && (!window.mpegts || !window.mpegts.isSupported || !window.mpegts.isSupported())) {
+                        _this.previewError = '当前浏览器不支持 FLV 快速预览，请生成可拖动预览';
+                        return;
+                    }
+                    var plugins = [];
+                    if (_this.previewMeta && _this.previewMeta.danmakuReady && _this.previewMeta.danmakuUrl && window.artplayerPluginDanmuku) {
+                        plugins.push(window.artplayerPluginDanmuku({
+                            danmuku: _this.withPreviewAuth(_this.previewMeta.danmakuUrl)
+                        }));
+                    }
+                    try {
+                        _this.previewArtPlayer = new window.Artplayer({
+                            container: container,
+                            url: src,
+                            type: _this.previewMode === 'flv' ? 'flv' : 'mp4',
+                            autoplay: true,
+                            pip: true,
+                            setting: true,
+                            playbackRate: true,
+                            aspectRatio: true,
+                            flip: true,
+                            rotate: true,
+                            autoSize: true,
+                            autoMini: true,
+                            mutex: true,
+                            light: true,
+                            miniProgressBar: true,
+                            backdrop: true,
+                            fullscreen: true,
+                            fullscreenWeb: true,
+                            lang: 'zh-cn',
+                            plugins: plugins,
+                            customType: {
+                                flv: function(video, url) {
+                                    _this.destroyPreviewFlvPlayer();
+                                    _this.previewFlvPlayer = window.mpegts.createPlayer({
+                                        type: 'flv',
+                                        isLive: false,
+                                        url: url
+                                    });
+                                    _this.previewFlvPlayer.attachMediaElement(video);
+                                    _this.previewFlvPlayer.load();
+                                }
+                            }
+                        });
+                        if (previousTime > 0) {
+                            _this.previewArtPlayer.once('ready', function() {
+                                try {
+                                    _this.previewArtPlayer.seek = previousTime;
+                                } catch (e) {}
+                            });
+                        }
+                    } catch (e) {
+                        _this.previewError = '播放器初始化失败';
+                    }
+                }).catch(function() {
+                    _this.previewError = '播放器组件加载失败';
+                });
             },
-            loadMpegts: function(done, fail) {
+            loadArtPlayer: function() {
+                if (window.Artplayer) {
+                    return Promise.resolve();
+                }
+                if (!this.previewArtPlayerLoader) {
+                    this.previewArtPlayerLoader = this.loadScript('../js/artplayer.min.js');
+                }
+                return this.previewArtPlayerLoader;
+            },
+            loadDanmukuPlugin: function() {
+                if (window.artplayerPluginDanmuku) {
+                    return Promise.resolve();
+                }
+                if (!this.previewDanmukuLoader) {
+                    this.previewDanmukuLoader = this.loadScript('../js/artplayer-plugin-danmuku.min.js');
+                }
+                return this.previewDanmukuLoader;
+            },
+            loadMpegtsPromise: function() {
                 if (window.mpegts) {
-                    done && done();
-                    return;
+                    return Promise.resolve();
                 }
                 if (!this.previewMpegtsLoader) {
-                    this.previewMpegtsLoader = new Promise(function(resolve, reject) {
-                        var script = document.createElement('script');
-                        script.src = '../js/mpegts.min.js';
-                        script.async = true;
-                        script.onload = resolve;
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
+                    this.previewMpegtsLoader = this.loadScript('../js/mpegts.min.js');
                 }
-                this.previewMpegtsLoader.then(function() {
+                return this.previewMpegtsLoader;
+            },
+            loadMpegts: function(done, fail) {
+                this.loadMpegtsPromise().then(function() {
                     done && done();
                 }).catch(function() {
                     fail && fail();
+                });
+            },
+            loadScript: function(src) {
+                return new Promise(function(resolve, reject) {
+                    var existing = document.querySelector('script[src="' + src + '"]');
+                    if (existing) {
+                        if (existing.dataset.loaded === 'true') {
+                            resolve();
+                        } else {
+                            existing.addEventListener('load', resolve, { once: true });
+                            existing.addEventListener('error', reject, { once: true });
+                        }
+                        return;
+                    }
+                    var script = document.createElement('script');
+                    script.src = src;
+                    script.async = true;
+                    script.onload = function() {
+                        script.dataset.loaded = 'true';
+                        resolve();
+                    };
+                    script.onerror = reject;
+                    document.head.appendChild(script);
                 });
             },
             withPreviewAuth: function(url) {
@@ -3872,13 +3979,38 @@
             },
             preparePartPreview: function() {
                 var _this = this;
+                if (_this.isPreviewCacheReady && !_this.isPreviewTaskActive) {
+                    _this.$confirm('重新生成会删除当前 MP4 预览缓存，并重新调用 ffmpeg 封装。确认继续吗？', '重新生成预览', {
+                        confirmButtonText: '重新生成',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(function() {
+                        _this.doPreparePartPreview(true);
+                    }).catch(function() {});
+                    return;
+                }
+                _this.doPreparePartPreview(false);
+            },
+            doPreparePartPreview: function(force) {
+                var _this = this;
                 if (!_this.previewPart || !_this.previewPart.partId) return;
+                if (force) {
+                    _this.switchPreviewSource('flv');
+                    if (_this.previewMeta) {
+                        _this.$set(_this.previewMeta, 'cacheReady', false);
+                        _this.$set(_this.previewMeta, 'cacheUrl', null);
+                    }
+                }
                 _this.previewPreparing = true;
                 _this.previewError = '';
-                ApiUtil.post('/part/preview/' + _this.previewPart.partId + '/prepare', {}, function(resp) {
+                ApiUtil.post('/part/preview/' + _this.previewPart.partId + '/prepare' + (force ? '?force=true' : ''), {}, function(resp) {
                     _this.previewPreparing = false;
                     _this.previewTask = (resp && resp.task) ? resp.task : null;
                     if (resp && resp.cacheReady) {
+                        if (_this.previewMeta) {
+                            _this.$set(_this.previewMeta, 'cacheReady', true);
+                            _this.$set(_this.previewMeta, 'cacheUrl', '/part/preview/' + _this.previewPart.partId + '/cache');
+                        }
                         _this.switchPreviewSource('mp4');
                         return;
                     }
@@ -3905,6 +4037,10 @@
                         var status = _this.previewTask && _this.previewTask.status;
                         if (status === 'SUCCESS' && resp && resp.cacheReady) {
                             _this.stopPreviewTaskPolling();
+                            if (_this.previewMeta) {
+                                _this.$set(_this.previewMeta, 'cacheReady', true);
+                                _this.$set(_this.previewMeta, 'cacheUrl', resp.cacheUrl || ('/part/preview/' + _this.previewPart.partId + '/cache'));
+                            }
                             _this.switchPreviewSource('mp4');
                         } else if (status === 'FAILED' || status === 'CANCELLED') {
                             _this.stopPreviewTaskPolling();
@@ -3938,15 +4074,7 @@
             },
             closePartPreview: function() {
                 this.stopPreviewTaskPolling();
-                this.destroyPreviewFlvPlayer();
-                var video = this.$refs ? this.$refs.partPreviewVideo : null;
-                if (video) {
-                    try {
-                        video.pause();
-                        video.removeAttribute('src');
-                        video.load();
-                    } catch (e) {}
-                }
+                this.destroyPreviewArtPlayer();
                 this.previewDialogVisible = false;
                 this.previewPart = null;
                 this.previewMeta = null;
@@ -3954,6 +4082,15 @@
                 this.previewMode = 'flv';
                 this.previewPreparing = false;
                 this.previewError = '';
+            },
+            destroyPreviewArtPlayer: function() {
+                if (this.previewArtPlayer) {
+                    try {
+                        this.previewArtPlayer.destroy(true);
+                    } catch (e) {}
+                    this.previewArtPlayer = null;
+                }
+                this.destroyPreviewFlvPlayer();
             },
             destroyPreviewFlvPlayer: function() {
                 if (this.previewFlvPlayer) {

@@ -7206,6 +7206,12 @@
     background: #050505;
 }
 
+.part-preview-video .artplayer-app,
+.part-preview-video .art-video-player {
+    width: 100%;
+    height: 100%;
+}
+
 .part-preview-tip {
     padding: 9px 12px;
     border-radius: 6px;

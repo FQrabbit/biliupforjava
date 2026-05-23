@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import top.sshh.bililiverecoder.service.PartPreviewService;
@@ -35,8 +36,9 @@ public class PartPreviewController {
     }
 
     @PostMapping("/{partId}/prepare")
-    public Map<String, Object> prepare(@PathVariable Long partId) {
-        return previewService.prepare(partId);
+    public Map<String, Object> prepare(@PathVariable Long partId,
+                                       @RequestParam(value = "force", defaultValue = "false") boolean force) {
+        return previewService.prepare(partId, force);
     }
 
     @GetMapping("/{partId}/task")
@@ -59,6 +61,12 @@ public class PartPreviewController {
     public ResponseEntity<StreamingResponseBody> cache(@PathVariable Long partId,
                                                        @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
         return stream(previewService.getCache(partId), rangeHeader);
+    }
+
+    @GetMapping("/{partId}/danmaku")
+    public ResponseEntity<StreamingResponseBody> danmaku(@PathVariable Long partId,
+                                                         @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
+        return stream(previewService.getDanmaku(partId), rangeHeader);
     }
 
     private ResponseEntity<StreamingResponseBody> stream(PartPreviewService.PreviewFile previewFile, String rangeHeader) {
