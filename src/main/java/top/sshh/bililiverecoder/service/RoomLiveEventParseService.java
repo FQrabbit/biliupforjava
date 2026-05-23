@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.dom4j.DocumentFactory;
 import org.dom4j.Element;
 import org.dom4j.ElementHandler;
 import org.dom4j.ElementPath;
@@ -139,7 +140,7 @@ public class RoomLiveEventParseService {
             giftCatalogService.syncRoomGiftCatalog(part.getRoomId(), false);
             eventRepository.deleteByPartId(part.getId());
             danmuUserStatsRepository.deleteByPartId(part.getId());
-            SAXReader saxReader = new SAXReader();
+            SAXReader saxReader = new SAXReader(new DocumentFactory());
             try {
                 saxReader.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", false);
             } catch (Exception e) {

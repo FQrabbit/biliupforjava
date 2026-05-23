@@ -79,7 +79,9 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
             "top.sshh.bililiverecoder.util.bili.user.Sys_notice",
             "top.sshh.bililiverecoder.util.bili.user.Theme",
             "top.sshh.bililiverecoder.util.bili.user.UserMyRootBean",
+            "top.sshh.bililiverecoder.util.bili.user.UserMyRootBean$Data",
             "top.sshh.bililiverecoder.util.bili.user.UserRootBean",
+            "top.sshh.bililiverecoder.util.bili.user.UserRootBean$Data",
             "top.sshh.bililiverecoder.util.bili.user.User_honour_info",
             "top.sshh.bililiverecoder.util.bili.user.Vip",
             "top.sshh.bililiverecoder.util.bili.user.Watched_show",
@@ -116,6 +118,22 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
             MemberCategory.INVOKE_PUBLIC_METHODS, MemberCategory.INVOKE_DECLARED_METHODS);
         hints.reflection().registerType(TypeReference.of("jakarta.websocket.RemoteEndpoint$Async"), 
             MemberCategory.INVOKE_PUBLIC_METHODS, MemberCategory.INVOKE_DECLARED_METHODS);
+        String[] log4jMessageFactories = {
+            "org.apache.logging.log4j.message.DefaultFlowMessageFactory",
+            "org.apache.logging.log4j.message.ParameterizedMessageFactory",
+            "org.apache.logging.log4j.message.ParameterizedNoReferenceMessageFactory",
+            "org.apache.logging.log4j.message.ReusableMessageFactory",
+            "org.apache.logging.log4j.message.SimpleMessageFactory",
+            "org.apache.logging.log4j.message.FormattedMessageFactory",
+            "org.apache.logging.log4j.message.StringFormatterMessageFactory",
+            "org.apache.logging.log4j.message.MessageFormatMessageFactory",
+            "org.apache.logging.log4j.message.LocalizedMessageFactory"
+        };
+        for (String className : log4jMessageFactories) {
+            hints.reflection().registerType(TypeReference.of(className),
+                MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS,
+                MemberCategory.INVOKE_DECLARED_CONSTRUCTORS);
+        }
         hints.reflection().registerType(TypeReference.of("org.springframework.web.socket.adapter.standard.StandardWebSocketSession"), 
             MemberCategory.INVOKE_PUBLIC_METHODS, MemberCategory.INVOKE_DECLARED_METHODS);
 

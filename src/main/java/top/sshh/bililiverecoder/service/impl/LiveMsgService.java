@@ -6,6 +6,7 @@ import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.dom4j.DocumentFactory;
 import org.dom4j.Element;
 import org.dom4j.ElementHandler;
 import org.dom4j.ElementPath;
@@ -146,7 +147,7 @@ public class LiveMsgService {
                 parseXmlStartNs = System.nanoTime();
 
                 // 创建SAXReader对象
-                SAXReader saxReader = new SAXReader();
+                SAXReader saxReader = new SAXReader(new DocumentFactory());
                 // 禁用安全限制以支持大文件
                 try {
                     saxReader.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", false);

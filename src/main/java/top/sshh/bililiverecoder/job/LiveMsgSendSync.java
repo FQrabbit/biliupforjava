@@ -16,6 +16,7 @@ import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.RoomLiveEventParseService;
 import top.sshh.bililiverecoder.service.RoomLiveGiftCatalogService;
+import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -80,6 +81,9 @@ public class LiveMsgSendSync {
 
     @Autowired
     private RoomLiveGiftCatalogService roomLiveGiftCatalogService;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
 
     private static final Lock lock = new ReentrantLock();
 
@@ -546,6 +550,8 @@ public class LiveMsgSendSync {
             return;
         }
 
+        final long normalDanmakuIntervalMs = systemConfigService.getNormalDanmakuIntervalMs();
+        final long highLevelDanmakuIntervalMs = systemConfigService.getHighLevelDanmakuIntervalMs();
 
         try {
             boolean tryLock = lock.tryLock();
@@ -613,7 +619,7 @@ public class LiveMsgSendSync {
                                             .add("waitSec", 120));
                                     Thread.sleep(120 * 1000L);
                                 } else if (code == 0) {
-                                    Thread.sleep(25 * 1000L);
+                                    Thread.sleep(highLevelDanmakuIntervalMs);
                                 } else {
                                     // 其他失败情况，默认暂停5秒，防止死循环风控
                                     Thread.sleep(5000L);
@@ -744,7 +750,7 @@ public class LiveMsgSendSync {
                         if (code == 36703) {
                             Thread.sleep(120 * 1000L);
                         } else if (code == 0) {
-                            Thread.sleep(25 * 1000L);
+                            Thread.sleep(normalDanmakuIntervalMs);
                         } else {
                             // 其他未中断的错误（如36714），默认暂停5秒
                             Thread.sleep(5000L);

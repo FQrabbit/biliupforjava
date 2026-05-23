@@ -285,6 +285,38 @@
 
                                 <div class="config-item">
                                     <label class="config-label">
+                                        <i class="el-icon-chat-dot-round"></i>
+                                        普通弹幕发送间隔
+                                        <span class="config-unit">秒</span>
+                                    </label>
+                                    <el-input
+                                        v-model="systemConfig.normalDanmakuIntervalSeconds"
+                                        @input="validateNumber($event, 'normalDanmakuIntervalSeconds', false)"
+                                        placeholder="请输入数字"
+                                        size="small"
+                                        class="config-input">
+                                    </el-input>
+                                    <div class="config-help">普通弹幕成功发送后等待多久再继续发送，默认 25 秒。数值过低可能更容易触发风控</div>
+                                </div>
+
+                                <div class="config-item">
+                                    <label class="config-label">
+                                        <i class="el-icon-medal"></i>
+                                        高级弹幕发送间隔
+                                        <span class="config-unit">秒</span>
+                                    </label>
+                                    <el-input
+                                        v-model="systemConfig.highLevelDanmakuIntervalSeconds"
+                                        @input="validateNumber($event, 'highLevelDanmakuIntervalSeconds', false)"
+                                        placeholder="请输入数字"
+                                        size="small"
+                                        class="config-input">
+                                    </el-input>
+                                    <div class="config-help">SC、上舰、礼物等高级弹幕成功发送后等待多久再继续发送，默认 25 秒</div>
+                                </div>
+
+                                <div class="config-item">
+                                    <label class="config-label">
                                         <i class="el-icon-guide"></i>
                                         新版上传流程
                                         <span class="config-unit">实验</span>
@@ -907,6 +939,8 @@
                 uploadMb: 0,
                 mergeIntervalMinutes: 20,
                 maxConnections: 3,
+                normalDanmakuIntervalSeconds: 25,
+                highLevelDanmakuIntervalSeconds: 25,
                 newUploadFlowEnabled: false
             },
             originalConfig: {
@@ -914,6 +948,8 @@
                 uploadMb: 0,
                 mergeIntervalMinutes: 20,
                 maxConnections: 3,
+                normalDanmakuIntervalSeconds: 25,
+                highLevelDanmakuIntervalSeconds: 25,
                 newUploadFlowEnabled: false
             },
             configLoading: false,
@@ -1302,14 +1338,18 @@
                 var originalUploadMb = parseFloat(self.originalConfig.uploadMb) || 0;
                 var originalMergeIntervalMinutes = parseInt(self.originalConfig.mergeIntervalMinutes) || 20;
                 var originalMaxConnections = parseInt(self.originalConfig.maxConnections) || 3;
+                var originalNormalDanmakuIntervalSeconds = parseInt(self.originalConfig.normalDanmakuIntervalSeconds) || 25;
+                var originalHighLevelDanmakuIntervalSeconds = parseInt(self.originalConfig.highLevelDanmakuIntervalSeconds) || 25;
                 var originalNewUploadFlowEnabled = !!self.originalConfig.newUploadFlowEnabled;
                 var currentApiQps = parseFloat(self.systemConfig.apiQps) || 0;
                 var currentUploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
                 var currentMergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
                 var currentMaxConnections = parseInt(self.systemConfig.maxConnections) || 3;
+                var currentNormalDanmakuIntervalSeconds = parseInt(self.systemConfig.normalDanmakuIntervalSeconds) || 25;
+                var currentHighLevelDanmakuIntervalSeconds = parseInt(self.systemConfig.highLevelDanmakuIntervalSeconds) || 25;
                 var currentNewUploadFlowEnabled = !!self.systemConfig.newUploadFlowEnabled;
 
-                self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections) || (originalNewUploadFlowEnabled !== currentNewUploadFlowEnabled);
+                self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections) || (originalNormalDanmakuIntervalSeconds !== currentNormalDanmakuIntervalSeconds) || (originalHighLevelDanmakuIntervalSeconds !== currentHighLevelDanmakuIntervalSeconds) || (originalNewUploadFlowEnabled !== currentNewUploadFlowEnabled);
             },
             resetConfig: function() {
                 // 重置配置
@@ -1318,6 +1358,8 @@
                 self.systemConfig.uploadMb = self.originalConfig.uploadMb;
                 self.systemConfig.mergeIntervalMinutes = self.originalConfig.mergeIntervalMinutes;
                 self.systemConfig.maxConnections = self.originalConfig.maxConnections;
+                self.systemConfig.normalDanmakuIntervalSeconds = self.originalConfig.normalDanmakuIntervalSeconds;
+                self.systemConfig.highLevelDanmakuIntervalSeconds = self.originalConfig.highLevelDanmakuIntervalSeconds;
                 self.systemConfig.newUploadFlowEnabled = !!self.originalConfig.newUploadFlowEnabled;
                 self.hasConfigChanges = false;
             },
@@ -1334,6 +1376,10 @@
                                 self.systemConfig.mergeIntervalMinutes = parseInt(item.configValue);
                             } else if (item.configKey === 'upload.max-concurrent-connections') {
                                 self.systemConfig.maxConnections = parseInt(item.configValue);
+                            } else if (item.configKey === 'bili.dm.normal-send-interval-seconds') {
+                                self.systemConfig.normalDanmakuIntervalSeconds = parseInt(item.configValue);
+                            } else if (item.configKey === 'bili.dm.high-level-send-interval-seconds') {
+                                self.systemConfig.highLevelDanmakuIntervalSeconds = parseInt(item.configValue);
                             } else if (item.configKey === 'upload.new-flow-enabled') {
                                 self.systemConfig.newUploadFlowEnabled = item.configValue === true || item.configValue === 'true' || item.configValue === '1';
                             }
@@ -1345,6 +1391,8 @@
                         uploadMb: self.systemConfig.uploadMb,
                         mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
                         maxConnections: self.systemConfig.maxConnections,
+                        normalDanmakuIntervalSeconds: self.systemConfig.normalDanmakuIntervalSeconds,
+                        highLevelDanmakuIntervalSeconds: self.systemConfig.highLevelDanmakuIntervalSeconds,
                         newUploadFlowEnabled: !!self.systemConfig.newUploadFlowEnabled
                     };
                 }, function(e) {
@@ -1360,11 +1408,18 @@
                 var uploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
                 var mergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
                 var maxConnections = parseInt(self.systemConfig.maxConnections) || 3;
+                var normalDanmakuIntervalSeconds = parseInt(self.systemConfig.normalDanmakuIntervalSeconds) || 25;
+                var highLevelDanmakuIntervalSeconds = parseInt(self.systemConfig.highLevelDanmakuIntervalSeconds) || 25;
                 var newUploadFlowEnabled = !!self.systemConfig.newUploadFlowEnabled;
                 
                 if (mergeIntervalMinutes > 1440) {
                     this.configLoading = false;
                     this.$message.warning('合并时间间隔不能超过24小时(1440分钟)');
+                    return;
+                }
+                if (normalDanmakuIntervalSeconds > 600 || highLevelDanmakuIntervalSeconds > 600) {
+                    this.configLoading = false;
+                    this.$message.warning('弹幕发送间隔不能超过600秒');
                     return;
                 }
                 
@@ -1373,6 +1428,8 @@
                     { key: 'bili.limit.upload-mb', value: String(uploadMb) },
                     { key: 'bili.publish.merge-interval-minutes', value: String(mergeIntervalMinutes) },
                     { key: 'upload.max-concurrent-connections', value: String(maxConnections) },
+                    { key: 'bili.dm.normal-send-interval-seconds', value: String(normalDanmakuIntervalSeconds) },
+                    { key: 'bili.dm.high-level-send-interval-seconds', value: String(highLevelDanmakuIntervalSeconds) },
                     { key: 'upload.new-flow-enabled', value: String(newUploadFlowEnabled) }
                 ];
                 
@@ -1389,6 +1446,8 @@
                         uploadMb: self.systemConfig.uploadMb,
                         mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
                         maxConnections: self.systemConfig.maxConnections,
+                        normalDanmakuIntervalSeconds: self.systemConfig.normalDanmakuIntervalSeconds,
+                        highLevelDanmakuIntervalSeconds: self.systemConfig.highLevelDanmakuIntervalSeconds,
                         newUploadFlowEnabled: !!self.systemConfig.newUploadFlowEnabled
                     };
                     self.hasConfigChanges = false;
