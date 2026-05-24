@@ -879,6 +879,10 @@ public class RecordBiliPublishService {
                 }
                 if (hasReplacementFile) {
                     RecordHistoryPart part = prepareEditUploadPart(history, room, item, page);
+                    if (part == null) {
+                        markEditPartsTaskFailed(status, "文件不在工作目录下或文件不存在: P" + page);
+                        return;
+                    }
                     uploadPartWithUserSerialBlocking(room, part);
                     part = partRepository.findById(part.getId()).orElse(part);
                     if (!part.isUpload() || StringUtils.isBlank(part.getFileName())) {
@@ -889,7 +893,7 @@ public class RecordBiliPublishService {
                     if (part.getCid() != null && part.getCid() > 0) {
                         dto.setCid(part.getCid());
                     }
-                    String persistedFilePath = "local".equalsIgnoreCase(item.source) ? null : item.filePath;
+                    String persistedFilePath = "local".equalsIgnoreCase(item.source) ? null : part.getFilePath();
                     syncEditUploadResult(history, item, part, page, dto.getTitle(), persistedFilePath, dto.getFilename(), dto.getCid());
                 } else {
                     BiliVideoPartInfoResponse.Video online = findOnlineVideoForSubmitItem(item, onlineByPage, onlineByTitle, onlineByFilename, onlineByCid);
@@ -2636,6 +2640,16 @@ public class RecordBiliPublishService {
         part.setRecording(false);
         part.setSourceType("EDIT_PART");
         String path = normalizeFilePath(StringUtils.defaultIfBlank(item.filePath, item.fileRef));
+        if (StringUtils.isNotBlank(path)) {
+            String realPath = resolveRealPathUnderWorkPath(path);
+            if (realPath == null) {
+                log.warn("[BLR] {}", LogKvs.event("Publish.EditParts.FileNotUnderWorkPath")
+                        .add("historyId", history.getId())
+                        .add("path", path));
+                return null;
+            }
+            path = realPath;
+        }
         File file = new File(path);
         part.setRoomId(history.getRoomId());
         part.setHistoryId(history.getId());
@@ -3165,6 +3179,19 @@ public class RecordBiliPublishService {
             return null;
         }
         return filePath.replace("\\", "/");
+    }
+
+    private String resolveRealPathUnderWorkPath(String filePath) {
+        try {
+            Path workReal = Paths.get(workPath).toRealPath();
+            Path targetReal = Paths.get(filePath).toRealPath();
+            if (targetReal.startsWith(workReal) && Files.isRegularFile(targetReal)) {
+                return targetReal.toString().replace("\\", "/");
+            }
+        } catch (Exception e) {
+            // reject on any resolution failure
+        }
+        return null;
     }
 
     private static String extractFileNameNoExt(String filePath) {

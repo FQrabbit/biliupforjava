@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
@@ -330,7 +331,7 @@ public class HistoryController {
 
     private void addCandidateSearchRoot(Set<String> roots, String dirPath) {
         String normalized = normalizeFsPath(dirPath);
-        if (StringUtils.isBlank(normalized) || !isUnderWorkPath(normalized)) {
+        if (StringUtils.isBlank(normalized)) {
             return;
         }
         if (isFilesystemRoot(normalized)) {
@@ -344,9 +345,13 @@ public class HistoryController {
             return;
         }
         File dir = new File(normalized);
-        if (dir.exists() && dir.isDirectory()) {
-            roots.add(dir.getPath().replace("\\", "/"));
+        if (!dir.exists() || !dir.isDirectory()) {
+            return;
         }
+        if (!isExistingPathUnderWorkPath(dir.getPath())) {
+            return;
+        }
+        roots.add(dir.getPath().replace("\\", "/"));
     }
 
     private void collectCandidateFiles(File root,
@@ -388,7 +393,19 @@ public class HistoryController {
                                   String[] allowedExt,
                                   List<Map<String, Object>> items,
                                   Set<String> seenPaths) {
-        File f = path.toFile();
+        Path realPath;
+        try {
+            realPath = path.toRealPath();
+            if (!isExistingPathUnderWorkPath(realPath.toString())) {
+                return;
+            }
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("History.CandidateFiles.SkipUnresolvablePath")
+                    .add("path", path.toString())
+                    .addIfNotBlank("err", e.getMessage()));
+            return;
+        }
+        File f = realPath.toFile();
         String name = f.getName();
         if (name == null) {
             return;
@@ -421,15 +438,14 @@ public class HistoryController {
         return false;
     }
 
-    private boolean isUnderWorkPath(String path) {
-        String normalizedWork = normalizeFsPath(workPath);
-        String normalizedPath = normalizeFsPath(path);
-        if (StringUtils.isBlank(normalizedWork) || StringUtils.isBlank(normalizedPath)) {
+    private boolean isExistingPathUnderWorkPath(String path) {
+        try {
+            Path workReal = Paths.get(workPath).toRealPath();
+            Path targetReal = Paths.get(path).toRealPath();
+            return targetReal.startsWith(workReal);
+        } catch (Exception e) {
             return false;
         }
-        normalizedWork = normalizedWork.endsWith("/") ? normalizedWork : (normalizedWork + "/");
-        normalizedPath = normalizedPath.endsWith("/") ? normalizedPath : (normalizedPath + "/");
-        return normalizedPath.toLowerCase(java.util.Locale.ROOT).startsWith(normalizedWork.toLowerCase(java.util.Locale.ROOT));
     }
 
     private String normalizeFsPath(String path) {
@@ -658,17 +674,21 @@ public class HistoryController {
                     if (filePath == null) {
                         continue;
                     }
-                    if (!filePath.startsWith(workPath)) {
+                    int lastSlash = filePath.lastIndexOf('/');
+                    if (lastSlash < 0) {
+                        continue;
+                    }
+                    String startDirPath = filePath.substring(0, lastSlash + 1);
+                    String fileName = filePath.substring(lastSlash + 1, filePath.lastIndexOf("."));
+                    if (!isExistingPathUnderWorkPath(startDirPath)) {
                         Map<String, Object> entry = new LinkedHashMap<>();
                         entry.put("path", filePath);
                         entry.put("kind", "unknown");
                         entry.put("status", "skipped");
-                        entry.put("reason", "文件不在 workPath 下，出于安全跳过");
+                        entry.put("reason", "父目录不在 workPath 下，出于安全跳过");
                         notDeletedFiles.add(entry);
                         continue;
                     }
-                    String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                    String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
                     File startDir = new File(startDirPath);
                     File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
                     if (files == null) {

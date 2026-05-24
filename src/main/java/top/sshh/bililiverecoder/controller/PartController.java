@@ -33,6 +33,8 @@ import top.sshh.bililiverecoder.util.bili.upload.EdtiorSpaceRequest;
 import top.sshh.bililiverecoder.util.bili.upload.pojo.EditorSpaceBean;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -505,19 +507,20 @@ public class PartController {
             result.put("msg", "请选择文件");
             return result;
         }
-        if (!isUnderWorkPath(filePath)) {
+        String realPath = resolveRealPathUnderWorkPath(filePath);
+        if (realPath == null) {
             result.put("type", "warning");
             result.put("msg", "文件不在工作目录下，已拒绝");
             return result;
         }
-        File file = new File(filePath);
-        if (!file.exists() || !file.isFile()) {
+        File file = new File(realPath);
+        if (!file.isFile()) {
             result.put("type", "warning");
             result.put("msg", "文件不存在");
             return result;
         }
 
-        part.setFilePath(filePath);
+        part.setFilePath(realPath);
         part.setFileSize(file.length());
         if (part.isRecording()) {
             part.setRecording(false);
@@ -566,14 +569,17 @@ public class PartController {
         return result;
     }
 
-    private boolean isUnderWorkPath(String filePath) {
+    private String resolveRealPathUnderWorkPath(String filePath) {
         try {
-            String normalizedWork = (workPath.endsWith("/") ? workPath : (workPath + "/")).replace("\\", "/");
-            String fp = filePath.replace("\\", "/");
-            return fp.toLowerCase(java.util.Locale.ROOT).startsWith(normalizedWork.toLowerCase(java.util.Locale.ROOT));
+            Path workReal = Paths.get(workPath).toRealPath();
+            Path targetReal = Paths.get(filePath).toRealPath();
+            if (targetReal.startsWith(workReal)) {
+                return targetReal.toString().replace("\\", "/");
+            }
         } catch (Exception e) {
-            return false;
+            // reject on any resolution failure
         }
+        return null;
     }
 
     private ReviewAuthContext resolveReviewAuthContext(RecordHistory history, RecordRoom room) {

@@ -328,15 +328,16 @@ public class PartPreviewService {
         if (StringUtils.isBlank(part.getFilePath())) {
             return PreviewFile.unavailableStatic("分P文件路径为空");
         }
-        Path source = Paths.get(part.getFilePath()).normalize().toAbsolutePath();
-        String lowerName = source.getFileName() == null ? "" : source.getFileName().toString().toLowerCase(Locale.ROOT);
+        Path sourceNominal = Paths.get(part.getFilePath()).normalize().toAbsolutePath();
+        String lowerName = sourceNominal.getFileName() == null ? "" : sourceNominal.getFileName().toString().toLowerCase(Locale.ROOT);
         if (ALLOWED_EXT.stream().noneMatch(lowerName::endsWith)) {
             return PreviewFile.unavailableStatic("不支持该文件格式");
         }
-        if (!isUnderWorkPath(source)) {
+        Path source = resolveRealPathUnderWorkPath(sourceNominal);
+        if (source == null) {
             return PreviewFile.unavailableStatic("文件不在工作目录内");
         }
-        if (!Files.exists(source) || !Files.isRegularFile(source)) {
+        if (!Files.isRegularFile(source)) {
             return PreviewFile.unavailableStatic("分P文件不存在");
         }
         Path cacheDir;
@@ -365,13 +366,17 @@ public class PartPreviewService {
         );
     }
 
-    private boolean isUnderWorkPath(Path source) {
+    private Path resolveRealPathUnderWorkPath(Path source) {
         try {
-            Path work = Paths.get(workPath).normalize().toAbsolutePath();
-            return source.normalize().toAbsolutePath().startsWith(work);
+            Path workReal = Paths.get(workPath).toRealPath();
+            Path targetReal = source.toRealPath();
+            if (targetReal.startsWith(workReal)) {
+                return targetReal;
+            }
         } catch (Exception e) {
-            return false;
+            // reject on any resolution failure
         }
+        return null;
     }
 
     private Path resolveDanmakuFile(PreviewFile previewFile) {
@@ -379,7 +384,7 @@ public class PartPreviewService {
             if (previewFile == null || !previewFile.available || previewFile.sourceFile == null) {
                 return null;
             }
-            Path source = previewFile.sourceFile.normalize().toAbsolutePath();
+            Path source = previewFile.sourceFile;
             Path parent = source.getParent();
             Path fileName = source.getFileName();
             if (parent == null || fileName == null) {
@@ -390,11 +395,12 @@ public class PartPreviewService {
             if (dot <= 0) {
                 return null;
             }
-            Path danmaku = parent.resolve(name.substring(0, dot) + ".xml").normalize().toAbsolutePath();
-            if (!isUnderWorkPath(danmaku) || !Files.exists(danmaku) || !Files.isRegularFile(danmaku)) {
+            Path danmaku = parent.resolve(name.substring(0, dot) + ".xml");
+            Path danmakuReal = resolveRealPathUnderWorkPath(danmaku);
+            if (danmakuReal == null || !Files.isRegularFile(danmakuReal)) {
                 return null;
             }
-            return danmaku;
+            return danmakuReal;
         } catch (Exception e) {
             return null;
         }
