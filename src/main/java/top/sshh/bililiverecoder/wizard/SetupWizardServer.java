@@ -308,7 +308,7 @@ public class SetupWizardServer {
 
         private String extractJsonValue(String json, String key) {
             // 匹配字符串
-            String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";
+            String pattern = "\"" + key + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"";
             java.util.regex.Matcher m = java.util.regex.Pattern.compile(pattern).matcher(json);
             if (m.find()) {
                 return unescapeJsonString(m.group(1));

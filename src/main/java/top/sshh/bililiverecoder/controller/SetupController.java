@@ -133,7 +133,7 @@ public class SetupController {
     }
 
     private static String extractJsonValue(String json, String key) {
-        String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";
+        String pattern = "\"" + key + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"";
         Matcher m = Pattern.compile(pattern).matcher(json);
         if (m.find()) {
             return unescapeJsonString(m.group(1));
