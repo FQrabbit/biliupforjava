@@ -1127,7 +1127,7 @@
     </el-dialog>
 
     <transition name="part-preview-mini">
-        <div v-if="previewDetached && previewPart" class="part-preview-mini" :class="{ 'is-collapsed': previewMiniCollapsed }" :style="{ '--part-preview-mini-progress': previewMiniProgress + '%' }">
+        <div v-if="previewDetached && previewPart" class="part-preview-mini" :class="{ 'is-collapsed': previewMiniCollapsed, 'is-paused': previewMiniPaused }" :style="{ '--part-preview-mini-progress': previewMiniProgress + '%' }">
             <div class="part-preview-mini-video" ref="partPreviewMiniPlayer"></div>
             <div class="part-preview-mini-bar">
                 <div class="part-preview-mini-meta">
@@ -1135,9 +1135,13 @@
                     <span class="part-preview-mini-title">{{ previewMeta && previewMeta.fileName ? maskText(previewMeta.fileName) : '分P视频' }}</span>
                     <span class="part-preview-mini-mode">{{ previewMode === 'mp4' ? 'MP4' : 'FLV' }}</span>
                 </div>
+                <button type="button" class="part-preview-mini-btn part-preview-mini-play" :title="previewMiniPaused ? '播放' : '暂停'" @click="togglePreviewMiniPlayback">
+                    <i :class="previewMiniPaused ? 'el-icon-video-play' : 'el-icon-video-pause'"></i>
+                </button>
+                <div class="part-preview-mini-wave" aria-hidden="true"></div>
                 <div class="part-preview-mini-actions">
                     <button type="button" class="part-preview-mini-btn" :title="previewMiniCollapsed ? '展开小窗' : '折叠音频条'" @click="togglePreviewMiniCollapsed">
-                        <i :class="previewMiniCollapsed ? 'el-icon-video-play' : 'el-icon-minus'"></i>
+                        <i :class="previewMiniCollapsed ? 'el-icon-plus' : 'el-icon-minus'"></i>
                     </button>
                     <button type="button" class="part-preview-mini-btn" title="返回大窗" @click="restorePartPreviewDialog">
                         <i class="el-icon-full-screen"></i>
@@ -1287,6 +1291,7 @@
             previewDetached: false,
             previewMiniCollapsed: false,
             previewMiniProgress: 0,
+            previewMiniPaused: true,
             previewProgressHandler: null,
             previewRestoreOptions: null,
             previewCloseIntent: 'stop',
@@ -4137,11 +4142,27 @@
             togglePreviewMiniCollapsed: function() {
                 this.previewMiniCollapsed = !this.previewMiniCollapsed;
             },
+            togglePreviewMiniPlayback: function() {
+                var video = null;
+                try {
+                    video = this.previewArtPlayer && this.previewArtPlayer.video;
+                } catch (e) {}
+                if (!video) return;
+                try {
+                    if (video.paused) {
+                        video.play();
+                    } else {
+                        video.pause();
+                    }
+                } catch (e) {}
+                this.syncPartPreviewMiniProgress();
+            },
             syncPartPreviewMiniProgress: function() {
                 var video = null;
                 try {
                     video = this.previewArtPlayer && this.previewArtPlayer.video;
                 } catch (e) {}
+                this.previewMiniPaused = !video || video.paused;
                 if (!video || !isFinite(video.duration) || video.duration <= 0) {
                     this.previewMiniProgress = 0;
                     return;
@@ -4159,7 +4180,7 @@
                     _this.syncPartPreviewMiniProgress();
                 };
                 this.previewProgressHandler = handler;
-                ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:ended'].forEach(function(eventName) {
+                ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:play', 'video:pause', 'video:ended'].forEach(function(eventName) {
                     try {
                         player.on(eventName, handler);
                     } catch (e) {}
@@ -4169,7 +4190,7 @@
                 if (!this.previewProgressHandler || !this.previewArtPlayer) return;
                 var player = this.previewArtPlayer;
                 var handler = this.previewProgressHandler;
-                ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:ended'].forEach(function(eventName) {
+                ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:play', 'video:pause', 'video:ended'].forEach(function(eventName) {
                     try {
                         player.off(eventName, handler);
                     } catch (e) {}
@@ -4337,46 +4358,12 @@
                 });
             },
             beforeClosePartPreviewDialog: function(done) {
-                if (this.previewCloseIntent === 'detach' || !this.isPartPreviewPlaying) {
-                    this.previewCloseIntent = this.previewCloseIntent === 'detach' ? 'detach' : 'stop';
-                    done();
-                    return;
-                }
-                this.confirmClosePartPreview(done);
+                this.previewCloseIntent = 'stop';
+                done();
             },
             requestClosePartPreview: function() {
-                var _this = this;
-                if (!_this.isPartPreviewPlaying) {
-                    _this.previewCloseIntent = 'stop';
-                    _this.previewDialogVisible = false;
-                    return;
-                }
-                _this.confirmClosePartPreview(function() {
-                    _this.previewDialogVisible = false;
-                });
-            },
-            confirmClosePartPreview: function(done) {
-                var _this = this;
-                _this.$msgbox({
-                    title: '关闭预览',
-                    message: '视频正在播放，要放到右下角后台继续播放吗？',
-                    showCancelButton: true,
-                    distinguishCancelAndClose: true,
-                    confirmButtonText: '后台播放',
-                    cancelButtonText: '停止播放',
-                    type: 'warning'
-                }).then(function() {
-                    _this.previewCloseIntent = 'detach';
-                    done && done();
-                    _this.$nextTick(function() {
-                        _this.detachPartPreview();
-                    });
-                }).catch(function(action) {
-                    if (action === 'cancel') {
-                        _this.previewCloseIntent = 'stop';
-                        done && done();
-                    }
-                });
+                this.previewCloseIntent = 'stop';
+                this.previewDialogVisible = false;
             },
             onPartPreviewDialogClosed: function() {
                 if (this.previewCloseIntent === 'detach' || this.previewDetached) {
@@ -4398,6 +4385,7 @@
                 this.previewDetached = false;
                 this.previewMiniCollapsed = false;
                 this.previewMiniProgress = 0;
+                this.previewMiniPaused = true;
                 this.previewRestoreOptions = null;
                 this.previewCloseIntent = 'stop';
             },

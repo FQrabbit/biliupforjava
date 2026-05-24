@@ -91,6 +91,20 @@
                         <p class="login-subtitle">检测到当前环境未配置启动参数，请填写以下基础信息完成初始化设置。</p>
                     </div>
 
+                    <el-alert
+                        v-if="containerized"
+                        title="检测到容器环境 (Docker / k8s)"
+                        type="warning"
+                        :closable="false"
+                        show-icon
+                        style="margin-bottom: 20px;">
+                        <p style="margin: 0; line-height: 1.8;">
+                            当前服务运行在容器中，<strong>命令行参数或环境变量会覆盖以下 application.yml 配置</strong>。
+                            <br>如需修改核心参数（端口、工作路径等），建议通过容器启动命令或 docker-compose 配置变动。
+                            <br>此处保存的配置可能在重启后不生效，仅供参考。
+                        </p>
+                    </el-alert>
+
                     <el-form :model="form" :rules="rules" ref="setupForm" label-position="top" @submit.native.prevent="handleSave">
                         <div class="form-section-title">基础配置 (必填)</div>
                         <el-row :gutter="20">
@@ -164,6 +178,18 @@
                                 </el-form-item>
                             </el-col>
                         </el-row>
+                        <el-row :gutter="20">
+                            <el-col :span="12">
+                                <el-form-item label="预览缓存目录 (可选)" prop="cachePath">
+                                    <el-input v-model="form.cachePath" placeholder="留空则使用默认路径 (工作路径/_preview_cache)"></el-input>
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="12">
+                                <el-form-item label="自定义启动参数 (可选)" prop="jvmArgs">
+                                    <el-input v-model="form.jvmArgs" placeholder="例如: -Xmx2g -Xms512m -Dfile.encoding=UTF-8"></el-input>
+                                </el-form-item>
+                            </el-col>
+                        </el-row>
 
                         <div class="setup-actions">
                             <el-button type="primary" @click="handleSave" :loading="loading" size="large">保存配置并应用</el-button>
@@ -195,18 +221,29 @@
                     username: '',
                     password: '',
                     encoding: 'UTF-8',
-                    timezone: 'Asia/Shanghai'
+                    timezone: 'Asia/Shanghai',
+                    cachePath: '',
+                    jvmArgs: ''
                 },
                 rules: {
                     port: [
                         { required: true, message: '端口号不能为空', trigger: 'blur' },
-                        { type: 'number', message: '端口号必须为数字', trigger: 'blur' }
+                        { validator: function(rule, value, callback) {
+                            if (value === '' || value === null || value === undefined) {
+                                callback(new Error('端口号不能为空'));
+                            } else if (!/^\d+$/.test(String(value))) {
+                                callback(new Error('端口号必须为数字'));
+                            } else {
+                                callback();
+                            }
+                        }, trigger: 'blur' }
                     ],
                     workPath: [
                         { required: true, message: '工作路径不能为空', trigger: 'blur' }
                     ]
                 },
                 loading: false,
+                containerized: false,
                 theme: localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
                 themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'classic',
                 _parallaxRaf: null,
@@ -225,8 +262,31 @@
         mounted() {
             this.applyTheme(this.theme);
             this.initParallax();
+            this.loadExistingConfig();
         },
         methods: {
+            loadExistingConfig() {
+                fetch('/api/setup/config')
+                    .then(res => {
+                        if (res.ok) return res.json();
+                        return null;
+                    })
+                    .then(data => {
+                        if (data) {
+                            // 回填已有配置
+                            if (data.port) this.form.port = Number(data.port);
+                            if (data.workPath) this.form.workPath = data.workPath;
+                            if (data.username) this.form.username = data.username;
+                            if (data.password) this.form.password = data.password;
+                            if (data.encoding) this.form.encoding = data.encoding;
+                            if (data.timezone) this.form.timezone = data.timezone;
+                            if (data.cachePath) this.form.cachePath = data.cachePath;
+                            if (data.jvmArgs) this.form.jvmArgs = data.jvmArgs;
+                            if (data.containerized !== undefined) this.containerized = data.containerized;
+                        }
+                    })
+                    .catch(() => { /* 向导模式或无网络，忽略 */ });
+            },
             applyTheme(theme) {
                 this.theme = theme === 'dark' ? 'dark' : 'light';
                 if (window.ThemeTokens && typeof window.ThemeTokens.applyCurrent === 'function') {
@@ -304,13 +364,18 @@
                             });
                             
                             if (res.ok) {
-                                this.$alert('配置已成功保存！\n进程即将退出，请手动重新启动程序以使配置生效。', '配置成功', {
-                                    confirmButtonText: '我知道了',
-                                    type: 'success',
-                                    callback: () => {
-                                        window.close();
-                                    }
-                                });
+                                var result = await res.json().catch(() => ({}));
+                                if (result.success) {
+                                    this.$alert('配置已成功保存！\n请手动重新启动程序以使配置生效。', '配置成功', {
+                                        confirmButtonText: '我知道了',
+                                        type: 'success',
+                                        callback: () => {
+                                            window.close();
+                                        }
+                                    });
+                                } else {
+                                    this.$message.error('保存配置失败: ' + (result.message || '未知错误'));
+                                }
                             } else {
                                 throw new Error('Failed to save config');
                             }

@@ -49,6 +49,8 @@ public class PartPreviewService {
     private String workPath;
     @Value("${record.preview.ffmpeg-path:ffmpeg}")
     private String ffmpegPath;
+    @Value("${record.preview.cache-path:}")
+    private String cachePath;
     @Value("${record.preview.cache-ttl-hours:24}")
     private long cacheTtlHours;
     @Value("${record.preview.max-concurrent-tasks:1}")
@@ -337,7 +339,14 @@ public class PartPreviewService {
         if (!Files.exists(source) || !Files.isRegularFile(source)) {
             return PreviewFile.unavailableStatic("分P文件不存在");
         }
-        Path cacheDir = Paths.get(workPath, "_preview_cache", String.valueOf(partId)).normalize().toAbsolutePath();
+        Path cacheDir;
+        if (cachePath != null && !cachePath.isBlank()) {
+            Path configured = Paths.get(cachePath).normalize();
+            cacheDir = (configured.isAbsolute() ? configured : Paths.get(workPath).resolve(configured))
+                    .resolve(String.valueOf(partId)).normalize().toAbsolutePath();
+        } else {
+            cacheDir = Paths.get(workPath, "_preview_cache", String.valueOf(partId)).normalize().toAbsolutePath();
+        }
         String contentType = lowerName.endsWith(".mp4") || lowerName.endsWith(".m4v") ? "video/mp4" : "video/x-flv";
         return new PreviewFile(
                 true,

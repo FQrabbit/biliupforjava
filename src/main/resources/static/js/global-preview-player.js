@@ -8,6 +8,7 @@
         badge: null,
         mode: null,
         collapseIcon: null,
+        playIcon: null,
         art: null,
         flv: null,
         data: null,
@@ -55,6 +56,8 @@
             '    <span class="global-part-preview-mini-title"></span>',
             '    <span class="global-part-preview-mini-mode"></span>',
             '  </div>',
+            '  <button type="button" class="global-part-preview-mini-btn global-part-preview-mini-play" data-action="play" title="暂停/播放"><i class="el-icon-video-pause"></i></button>',
+            '  <div class="global-part-preview-mini-wave" aria-hidden="true"></div>',
             '  <div class="global-part-preview-mini-actions">',
             '    <button type="button" class="global-part-preview-mini-btn" data-action="collapse" title="折叠音频条"><i class="el-icon-minus"></i></button>',
             '    <button type="button" class="global-part-preview-mini-btn" data-action="restore" title="返回大窗"><i class="el-icon-full-screen"></i></button>',
@@ -69,9 +72,11 @@
         state.badge = root.querySelector('.global-part-preview-mini-badge');
         state.mode = root.querySelector('.global-part-preview-mini-mode');
         state.collapseIcon = root.querySelector('[data-action="collapse"] i');
+        state.playIcon = root.querySelector('[data-action="play"] i');
         root.querySelector('[data-action="collapse"]').addEventListener('click', function() {
             setCollapsed(!state.collapsed);
         });
+        root.querySelector('[data-action="play"]').addEventListener('click', togglePlayback);
         root.querySelector('[data-action="restore"]').addEventListener('click', restoreToHistory);
         root.querySelector('[data-action="stop"]').addEventListener('click', stop);
     }
@@ -83,8 +88,33 @@
         var button = state.root.querySelector('[data-action="collapse"]');
         if (button) button.title = state.collapsed ? '展开小窗' : '折叠音频条';
         if (state.collapseIcon) {
-            state.collapseIcon.className = state.collapsed ? 'el-icon-video-play' : 'el-icon-minus';
+            state.collapseIcon.className = state.collapsed ? 'el-icon-plus' : 'el-icon-minus';
         }
+    }
+
+    function syncPlaybackState() {
+        var paused = true;
+        try {
+            paused = !state.art || !state.art.video || state.art.video.paused;
+        } catch (e) {}
+        if (state.playIcon) {
+            state.playIcon.className = paused ? 'el-icon-video-play' : 'el-icon-video-pause';
+        }
+        if (state.root) {
+            state.root.classList.toggle('is-paused', paused);
+        }
+    }
+
+    function togglePlayback() {
+        if (!state.art || !state.art.video) return;
+        try {
+            if (state.art.video.paused) {
+                state.art.video.play();
+            } else {
+                state.art.video.pause();
+            }
+        } catch (e) {}
+        syncPlaybackState();
     }
 
     function loadArtPlayer() {
@@ -117,7 +147,7 @@
 
     function unbindProgress() {
         if (!state.progressHandler || !state.art) return;
-        ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:ended'].forEach(function(name) {
+        ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:play', 'video:pause', 'video:ended'].forEach(function(name) {
             try {
                 state.art.off(name, state.progressHandler);
             } catch (e) {}
@@ -138,13 +168,14 @@
         if (state.root) {
             state.root.style.setProperty('--global-part-preview-progress', state.progress.toFixed(2) + '%');
         }
+        syncPlaybackState();
     }
 
     function bindProgress() {
         unbindProgress();
         if (!state.art) return;
         state.progressHandler = syncProgress;
-        ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:ended'].forEach(function(name) {
+        ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:play', 'video:pause', 'video:ended'].forEach(function(name) {
             try {
                 state.art.on(name, state.progressHandler);
             } catch (e) {}
@@ -169,6 +200,7 @@
         state.badge = null;
         state.mode = null;
         state.collapseIcon = null;
+        state.playIcon = null;
         state.data = null;
         state.progress = 0;
         state.collapsed = false;

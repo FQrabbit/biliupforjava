@@ -50,7 +50,8 @@ public class MvcConfig implements WebMvcConfigurer{
                          "/.well-known/**",
                         "/error",
                         "/api/version",
-                        "/api/version/check"
+                        "/api/version/check",
+                        "/api/setup/**"
                 );
     }
 }

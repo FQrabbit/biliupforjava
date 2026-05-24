@@ -337,6 +337,9 @@
                                 <el-button class="modern-btn" type="primary" @click="saveSystemConfig" :loading="configLoading" icon="el-icon-check" size="small">
                                     保存配置
                                 </el-button>
+                                <el-button class="modern-btn" type="info" @click="openSetupWizard" icon="el-icon-setting" size="small" style="margin-left: 12px;">
+                                    向导参数配置
+                                </el-button>
                             </div>
                         </div>
                     </transition>
@@ -1459,6 +1462,9 @@
                 }).finally(function() {
                     self.configLoading = false;
                 });
+            },
+            openSetupWizard: function() {
+                window.open('/html/setup.html', '_blank');
             },
             checkUpdate: function() {
                 var self = this;

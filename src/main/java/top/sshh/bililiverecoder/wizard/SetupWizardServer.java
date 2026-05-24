@@ -3,6 +3,7 @@ package top.sshh.bililiverecoder.wizard;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import top.sshh.bililiverecoder.util.ContainerUtils;
 
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -87,22 +88,7 @@ public class SetupWizardServer {
     }
 
     private static boolean isRunningInContainer() {
-        if (new File("/.dockerenv").exists()) {
-            return true;
-        }
-        File cgroup = new File("/proc/1/cgroup");
-        if (!cgroup.exists()) {
-            return false;
-        }
-        try {
-            String content = Files.readString(cgroup.toPath(), StandardCharsets.UTF_8).toLowerCase();
-            return content.contains("docker")
-                    || content.contains("containerd")
-                    || content.contains("kubepods")
-                    || content.contains("podman");
-        } catch (IOException ignored) {
-            return false;
-        }
+        return ContainerUtils.isRunningInContainer();
     }
 
     // 获取进程（Jar/Exe）所在的物理绝对路径
@@ -238,26 +224,37 @@ public class SetupWizardServer {
 
                 // 提取前端传来的 JSON 字段
                 String port = extractJsonValue(body, "port");
-                String workPath = extractJsonValue(body, "workPath");
+                String workPath = normalizePath(extractJsonValue(body, "workPath"));
                 String username = extractJsonValue(body, "username");
                 String password = extractJsonValue(body, "password");
                 String encoding = extractJsonValue(body, "encoding");
                 String timezone = extractJsonValue(body, "timezone");
+                String cachePath = normalizePath(extractJsonValue(body, "cachePath"));
+                String jvmArgs = extractJsonValue(body, "jvmArgs");
 
                 // 生成 application.yml 内容
                 StringBuilder yml = new StringBuilder();
+                // 将 JVM 启动参数作为注释写入文件顶部，方便用户查阅
+                if (jvmArgs != null && !jvmArgs.isBlank()) {
+                    yml.append("# JVM 启动参数 (需在启动脚本中手动传入): ").append(jvmArgs).append("\n");
+                    yml.append("# 例如启动命令: java ").append(jvmArgs).append(" -jar biliupforjava.jar\n\n");
+                }
                 yml.append("server:\n");
                 yml.append("  port: ").append(port == null || port.isEmpty() ? "44122" : port).append("\n\n");
-                
+
                 yml.append("record:\n");
                 if (workPath != null && !workPath.isEmpty()) {
-                    yml.append("  work-path: \"").append(workPath.replace("\\", "\\\\")).append("\"\n");
+                    yml.append("  work-path: \"").append(workPath).append("\"\n");
                 }
                 if (username != null && !username.isEmpty()) {
                     yml.append("  userName: \"").append(username).append("\"\n");
                 }
                 if (password != null && !password.isEmpty()) {
                     yml.append("  password: \"").append(password).append("\"\n");
+                }
+                if (cachePath != null && !cachePath.isBlank()) {
+                    yml.append("  preview:\n");
+                    yml.append("    cache-path: \"").append(cachePath).append("\"\n");
                 }
                 
                 // 将编码和时区配置也写入配置文件中，以便 Spring Boot 读取
@@ -273,6 +270,12 @@ public class SetupWizardServer {
                 if (timezone != null && !timezone.isEmpty()) {
                     yml.append("  jackson:\n");
                     yml.append("    time-zone: \"").append(timezone).append("\"\n");
+                }
+
+                // 将 JVM 启动参数同时保存为可读属性，方便后续查询回填
+                if (jvmArgs != null && !jvmArgs.isBlank()) {
+                    yml.append("\napp:\n");
+                    yml.append("  jvm-args: \"").append(jvmArgs).append("\"\n");
                 }
 
                 // 保存到进程所在目录的 application.yml，强制使用 UTF-8 编码
@@ -308,7 +311,7 @@ public class SetupWizardServer {
             String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";
             java.util.regex.Matcher m = java.util.regex.Pattern.compile(pattern).matcher(json);
             if (m.find()) {
-                return m.group(1);
+                return unescapeJsonString(m.group(1));
             }
             // 匹配数字
             pattern = "\"" + key + "\"\\s*:\\s*(\\d+)";
@@ -317,6 +320,59 @@ public class SetupWizardServer {
                 return m.group(1);
             }
             return "";
+        }
+
+        /**
+         * JSON 字符串反转义：将 JSON 文本中的转义序列还原为实际字符。
+         * 例如 {@code D:\\录播姬} → {@code D:\录播姬}
+         */
+        private static String unescapeJsonString(String s) {
+            if (s == null || s.isEmpty()) return s;
+            StringBuilder sb = new StringBuilder(s.length());
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c == '\\' && i + 1 < s.length()) {
+                    char next = s.charAt(++i);
+                    switch (next) {
+                        case '\\': sb.append('\\'); break;
+                        case '"':  sb.append('"'); break;
+                        case '/':  sb.append('/'); break;
+                        case 'b':  sb.append('\b'); break;
+                        case 'f':  sb.append('\f'); break;
+                        case 'n':  sb.append('\n'); break;
+                        case 'r':  sb.append('\r'); break;
+                        case 't':  sb.append('\t'); break;
+                        case 'u':
+                            if (i + 4 < s.length()) {
+                                try {
+                                    String hex = s.substring(i + 1, i + 5);
+                                    sb.append((char) Integer.parseInt(hex, 16));
+                                    i += 4;
+                                } catch (NumberFormatException e) {
+                                    sb.append('\\').append('u');
+                                }
+                            } else {
+                                sb.append('\\').append('u');
+                            }
+                            break;
+                        default:
+                            sb.append('\\').append(next);
+                            break;
+                    }
+                } else {
+                    sb.append(c);
+                }
+            }
+            return sb.toString();
+        }
+
+        /**
+         * 路径规范化：将反斜杠统一转为正斜杠。
+         * Java File 类在 Windows/Linux 上均能正确处理正斜杠。
+         */
+        private static String normalizePath(String path) {
+            if (path == null || path.isEmpty()) return path;
+            return path.replace('\\', '/');
         }
     }
 }
