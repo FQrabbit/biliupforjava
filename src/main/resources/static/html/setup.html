@@ -239,7 +239,31 @@
                         }, trigger: 'blur' }
                     ],
                     workPath: [
-                        { required: true, message: '工作路径不能为空', trigger: 'blur' }
+                        { required: true, message: '工作路径不能为空', trigger: 'blur' },
+                        { validator: function(rule, value, callback) {
+                            if (!value) return callback();
+                            if (value.indexOf('..') !== -1) {
+                                return callback(new Error('路径不允许包含 ".." 上级目录引用'));
+                            }
+                            var invalid = value.match(/[<>"|?*]/);
+                            if (invalid) {
+                                return callback(new Error('路径包含非法字符: ' + invalid[0]));
+                            }
+                            callback();
+                        }, trigger: 'blur' }
+                    ],
+                    cachePath: [
+                        { validator: function(rule, value, callback) {
+                            if (!value) return callback();
+                            if (value.indexOf('..') !== -1) {
+                                return callback(new Error('路径不允许包含 ".." 上级目录引用'));
+                            }
+                            var invalid = value.match(/[<>"|?*]/);
+                            if (invalid) {
+                                return callback(new Error('路径包含非法字符: ' + invalid[0]));
+                            }
+                            callback();
+                        }, trigger: 'blur' }
                     ]
                 },
                 loading: false,
@@ -377,7 +401,8 @@
                                     this.$message.error('保存配置失败: ' + (result.message || '未知错误'));
                                 }
                             } else {
-                                throw new Error('Failed to save config');
+                                var errResult = await res.json().catch(() => ({}));
+                                this.$message.error('保存配置失败: ' + (errResult.message || '服务器返回错误 ' + res.status));
                             }
                         } catch (error) {
                             this.$message.error('保存配置失败，请重试或检查日志。');

@@ -232,29 +232,52 @@ public class SetupWizardServer {
                 String cachePath = normalizePath(extractJsonValue(body, "cachePath"));
                 String jvmArgs = extractJsonValue(body, "jvmArgs");
 
+                // 路径安全校验
+                String pathError = validatePath(workPath);
+                if (pathError != null) {
+                    String response = "{\"success\":false,\"message\":\"工作路径无效: " + pathError.replace("\"", "\\\"") + "\"}";
+                    t.getResponseHeaders().set("Content-Type", "application/json");
+                    t.sendResponseHeaders(400, response.length());
+                    OutputStream os = t.getResponseBody();
+                    os.write(response.getBytes());
+                    os.close();
+                    return;
+                }
+                pathError = validatePath(cachePath);
+                if (pathError != null) {
+                    String response = "{\"success\":false,\"message\":\"缓存路径无效: " + pathError.replace("\"", "\\\"") + "\"}";
+                    t.getResponseHeaders().set("Content-Type", "application/json");
+                    t.sendResponseHeaders(400, response.length());
+                    OutputStream os = t.getResponseBody();
+                    os.write(response.getBytes());
+                    os.close();
+                    return;
+                }
+
                 // 生成 application.yml 内容
                 StringBuilder yml = new StringBuilder();
                 // 将 JVM 启动参数作为注释写入文件顶部，方便用户查阅
                 if (jvmArgs != null && !jvmArgs.isBlank()) {
-                    yml.append("# JVM 启动参数 (需在启动脚本中手动传入): ").append(jvmArgs).append("\n");
-                    yml.append("# 例如启动命令: java ").append(jvmArgs).append(" -jar biliupforjava.jar\n\n");
+                    String safeJvm = sanitizeForComment(jvmArgs);
+                    yml.append("# JVM 启动参数 (需在启动脚本中手动传入): ").append(safeJvm).append("\n");
+                    yml.append("# 例如启动命令: java ").append(safeJvm).append(" -jar biliupforjava.jar\n\n");
                 }
                 yml.append("server:\n");
-                yml.append("  port: ").append(port == null || port.isEmpty() ? "44122" : port).append("\n\n");
+                yml.append("  port: ").append(port == null || port.isEmpty() ? "44122" : escapeYamlValue(port)).append("\n\n");
 
                 yml.append("record:\n");
                 if (workPath != null && !workPath.isEmpty()) {
-                    yml.append("  work-path: \"").append(workPath).append("\"\n");
+                    yml.append("  work-path: \"").append(escapeYamlValue(workPath)).append("\"\n");
                 }
                 if (username != null && !username.isEmpty()) {
-                    yml.append("  userName: \"").append(username).append("\"\n");
+                    yml.append("  userName: \"").append(escapeYamlValue(username)).append("\"\n");
                 }
                 if (password != null && !password.isEmpty()) {
-                    yml.append("  password: \"").append(password).append("\"\n");
+                    yml.append("  password: \"").append(escapeYamlValue(password)).append("\"\n");
                 }
                 if (cachePath != null && !cachePath.isBlank()) {
                     yml.append("  preview:\n");
-                    yml.append("    cache-path: \"").append(cachePath).append("\"\n");
+                    yml.append("    cache-path: \"").append(escapeYamlValue(cachePath)).append("\"\n");
                 }
                 
                 // 将编码和时区配置也写入配置文件中，以便 Spring Boot 读取
@@ -262,20 +285,20 @@ public class SetupWizardServer {
                     yml.append("spring:\n");
                     yml.append("  http:\n");
                     yml.append("    encoding:\n");
-                    yml.append("      charset: ").append(encoding).append("\n");
+                    yml.append("      charset: \"").append(escapeYamlValue(encoding)).append("\"\n");
                     yml.append("      enabled: true\n");
                     yml.append("      force: true\n");
                 }
                 
                 if (timezone != null && !timezone.isEmpty()) {
                     yml.append("  jackson:\n");
-                    yml.append("    time-zone: \"").append(timezone).append("\"\n");
+                    yml.append("    time-zone: \"").append(escapeYamlValue(timezone)).append("\"\n");
                 }
 
                 // 将 JVM 启动参数同时保存为可读属性，方便后续查询回填
                 if (jvmArgs != null && !jvmArgs.isBlank()) {
                     yml.append("\napp:\n");
-                    yml.append("  jvm-args: \"").append(jvmArgs).append("\"\n");
+                    yml.append("  jvm-args: \"").append(escapeYamlValue(jvmArgs)).append("\"\n");
                 }
 
                 // 保存到进程所在目录的 application.yml，强制使用 UTF-8 编码
@@ -373,6 +396,62 @@ public class SetupWizardServer {
         private static String normalizePath(String path) {
             if (path == null || path.isEmpty()) return path;
             return path.replace('\\', '/');
+        }
+
+        /**
+         * 路径安全校验：检查路径遍历和 Windows 保留字符。
+         * 返回错误消息表示不合法，返回 null 表示通过。
+         */
+        private static String validatePath(String path) {
+            if (path == null || path.isEmpty()) return null;
+            // 检查 Windows 保留字符
+            for (char c : path.toCharArray()) {
+                if (c == '<' || c == '>' || c == '"' || c == '|' || c == '?' || c == '*') {
+                    return "路径包含非法字符: " + c;
+                }
+            }
+            // 检查路径遍历 ../
+            String normalized = path.replace('\\', '/');
+            for (String seg : normalized.split("/")) {
+                if ("..".equals(seg)) {
+                    return "路径不允许包含 '..' 上级目录引用";
+                }
+            }
+            return null;
+        }
+
+        /**
+         * 注释文本净化：移除换行符，防止 YAML 注释行断裂导致注入。
+         */
+        private static String sanitizeForComment(String value) {
+            if (value == null || value.isEmpty()) return value;
+            return value.replace("\r\n", " ").replace('\n', ' ').replace('\r', ' ');
+        }
+
+        /**
+         * YAML 双引号字符串转义：确保写入 application.yml 的值不会破坏 YAML 语法。
+         * 对反斜杠、双引号及控制字符进行转义。
+         */
+        private static String escapeYamlValue(String value) {
+            if (value == null || value.isEmpty()) return value;
+            StringBuilder sb = new StringBuilder(value.length());
+            for (char c : value.toCharArray()) {
+                switch (c) {
+                    case '\\': sb.append("\\\\"); break;
+                    case '"':  sb.append("\\\""); break;
+                    case '\n': sb.append("\\n"); break;
+                    case '\r': sb.append("\\r"); break;
+                    case '\t': sb.append("\\t"); break;
+                    default:
+                        if (c < 0x20) {
+                            sb.append(String.format("\\u%04X", (int) c));
+                        } else {
+                            sb.append(c);
+                        }
+                        break;
+                }
+            }
+            return sb.toString();
         }
     }
 }
