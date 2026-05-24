@@ -11,7 +11,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -68,6 +70,48 @@ public class SetupController {
             result.put("success", false);
             result.put("message", "缓存路径无效: " + pathError);
             return result;
+        }
+
+        // port 范围校验
+        if (port != null && !port.isEmpty()) {
+            try {
+                int portNum = Integer.parseInt(port);
+                if (portNum < 1 || portNum > 65535) {
+                    return errorResult("端口号必须在 1-65535 范围内，当前值: " + portNum);
+                }
+            } catch (NumberFormatException e) {
+                return errorResult("端口号格式无效: " + port);
+            }
+        }
+
+        // workPath 存在且可写校验
+        if (workPath != null && !workPath.isEmpty()) {
+            String pathErr = validatePathAccess(workPath);
+            if (pathErr != null) {
+                return errorResult("工作路径不可用: " + pathErr);
+            }
+        }
+
+        // cachePath 存在且可写校验
+        if (cachePath != null && !cachePath.isEmpty()) {
+            String pathErr = validatePathAccess(cachePath);
+            if (pathErr != null) {
+                return errorResult("缓存路径不可用: " + pathErr);
+            }
+        }
+
+        // timezone 校验
+        if (timezone != null && !timezone.isEmpty()) {
+            if (!ZoneId.getAvailableZoneIds().contains(timezone)) {
+                return errorResult("不被支持的时区: " + timezone);
+            }
+        }
+
+        // encoding 校验
+        if (encoding != null && !encoding.isEmpty()) {
+            if (!Charset.isSupported(encoding)) {
+                return errorResult("不被支持的编码: " + encoding);
+            }
         }
 
         // 密码为 ****** 表示未修改，沿用旧密码
@@ -270,5 +314,39 @@ public class SetupController {
             }
         }
         return sb.toString();
+    }
+
+    private static Map<String, Object> errorResult(String message) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", false);
+        result.put("message", message);
+        return result;
+    }
+
+    /**
+     * Verify that a path either exists as a writable directory, or that
+     * its parent directory exists and is writable (so the path can be
+     * created on first use).
+     */
+    private static String validatePathAccess(String path) {
+        File dir = new File(path);
+        if (dir.exists()) {
+            if (!dir.isDirectory()) {
+                return "该路径已存在但不是目录";
+            }
+            if (!dir.canWrite()) {
+                return "该目录不可写，请检查权限";
+            }
+            return null;
+        }
+        // Directory doesn't exist — check if parent can be created
+        File parent = dir.getAbsoluteFile().getParentFile();
+        if (parent == null || !parent.exists()) {
+            return "上级目录不存在，无法创建";
+        }
+        if (!parent.canWrite()) {
+            return "上级目录不可写，无法创建";
+        }
+        return null;
     }
 }

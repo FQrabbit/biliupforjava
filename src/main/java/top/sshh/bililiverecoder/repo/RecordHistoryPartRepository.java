@@ -9,9 +9,18 @@ import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Stream;
 
 @Repository
 public interface RecordHistoryPartRepository extends CrudRepository<RecordHistoryPart, Long> {
+
+    /**
+     * 流式读取全部分P记录，用于导出配置时逐条写入 JSON，避免一次性加载全部到内存。
+     * 调用方必须在 try-with-resources 中使用，并确保在事务内调用。
+     */
+    @Query("select p from RecordHistoryPart p order by p.id")
+    @Transactional(readOnly = true)
+    Stream<RecordHistoryPart> streamAll();
 
     RecordHistoryPart findByFilePath(String path);
 

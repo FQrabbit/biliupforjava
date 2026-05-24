@@ -234,7 +234,12 @@
                             } else if (!/^\d+$/.test(String(value))) {
                                 callback(new Error('端口号必须为数字'));
                             } else {
-                                callback();
+                                var num = parseInt(value, 10);
+                                if (num < 1 || num > 65535) {
+                                    callback(new Error('端口号必须在 1-65535 范围内'));
+                                } else {
+                                    callback();
+                                }
                             }
                         }, trigger: 'blur' }
                     ],

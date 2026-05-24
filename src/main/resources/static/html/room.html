@@ -3938,10 +3938,10 @@
                 this.initTable();
             },
             beforeConfigUpload: function (file) {
-                var maxConfigSize = 1024 * 1024 * 1024;
+                var maxConfigSize = 128 * 1024 * 1024;
                 if (file && file.size > maxConfigSize) {
-                    this.$message.error('导入配置文件不能超过 1GB，请重新导出时减少弹幕数据范围或暂不包含弹幕数据');
-                    this.failConfigProgress('导入失败', '配置文件超过 1GB');
+                    this.$message.error('导入配置文件不能超过 128MB，请重新导出时不勾选弹幕数据再试');
+                    this.failConfigProgress('导入失败', '配置文件超过 128MB，当前导入上限为 128MB（为保护后端内存）。含弹幕数据的导出文件可能超过此限制，请重新导出时不勾选弹幕。');
                     return false;
                 }
                 this.startConfigProgress('导入配置', '正在上传并解析配置文件', '后端解析中...');

@@ -8,8 +8,8 @@ server:
 spring:
   servlet:
     multipart:
-      max-file-size: 1024MB
-      max-request-size: 1100MB
+      max-file-size: 512MB
+      max-request-size: 600MB
   datasource:
     hikari:
       jdbc-url: jdbc:h2:retry:${record.work-path}/db

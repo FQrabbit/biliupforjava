@@ -1,6 +1,8 @@
 package top.sshh.bililiverecoder.controller;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONException;
+import com.alibaba.fastjson.JSONReader;
 import com.alibaba.fastjson.TypeReference;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -16,6 +18,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.LiveMsgRepository;
@@ -30,8 +33,14 @@ import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.UploadEnums;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -47,6 +56,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 @RestController
 @RequestMapping("/room")
@@ -178,6 +188,11 @@ public class RoomController {
     }
 
 
+    /**
+     * 流式导出配置：直接从数据库逐条读取实体并写入 HTTP 响应输出流，
+     * 不在内存中构建完整的 Map 或 JSON String，避免大文件（如百万级弹幕）导致 OOM。
+     */
+    @Transactional(readOnly = true)
     @PostMapping("/exportConfig")
     public void exportConfig(@RequestBody ExportConfigParams params, HttpServletResponse response) throws IOException {
         long total = 1;
@@ -188,89 +203,158 @@ public class RoomController {
         if (params.isExportLiveMsg()) total += liveMsgRepository.count();
         long processed = 0;
         startConfigTask("export", "导出配置", total);
-        Map<String,Object> map = new LinkedHashMap<>();
-        try {
-        if(params.isExportRoom()){
-            updateConfigTask("导出房间", "正在读取房间配置", processed);
-            List<RecordRoom> roomList = this.list();
-            processed += roomList.size();
-            updateConfigTask("导出房间", "房间 " + roomList.size() + " 条", processed);
-            map.put("roomList",roomList);
-        }
-        if(params.isExportUser()){
-            updateConfigTask("导出用户", "正在读取用户配置", processed);
-            List<BiliBiliUser> userList = new ArrayList<>();
-            Iterator<BiliBiliUser> userIterator = userRepository.findAll().iterator();
-            while (userIterator.hasNext()) {
-                userList.add(userIterator.next());
-                processed++;
-                if (processed % 500 == 0) updateConfigTask("导出用户", "已读取 " + userList.size() + " 个用户", processed);
-            }
-            updateConfigTask("导出用户", "用户 " + userList.size() + " 条", processed);
-            map.put("userList",userList);
-        }
-        if(params.isExportHistory()){
-            updateConfigTask("导出历史", "正在读取录制历史", processed);
-            List<RecordHistory> historyList = new ArrayList<>();
-            Iterator<RecordHistory> historyIterator = historyRepository.findAll().iterator();
-            while (historyIterator.hasNext()) {
-                historyList.add(historyIterator.next());
-                processed++;
-                if (processed % 1000 == 0) updateConfigTask("导出历史", "已读取 " + historyList.size() + " 场历史", processed);
-            }
-            map.put("historyList",historyList);
-            updateConfigTask("导出分P", "正在读取分P记录", processed);
-            List<RecordHistoryPart> partList = new ArrayList<>();
-            Iterator<RecordHistoryPart> partIterator = partRepository.findAll().iterator();
-            while (partIterator.hasNext()) {
-                partList.add(partIterator.next());
-                processed++;
-                if (processed % 1000 == 0) updateConfigTask("导出分P", "已读取 " + partList.size() + " 个分P", processed);
-            }
-            map.put("partList",partList);
-        }
-        if(params.isExportSystemConfig()){
-            updateConfigTask("导出系统配置", "正在读取系统配置", processed);
-            List<SystemConfig> systemConfigList = new ArrayList<>();
-            systemConfigRepository.findAll().forEach(item -> systemConfigList.add(item));
-            processed += systemConfigList.size();
-            updateConfigTask("导出系统配置", "系统配置 " + systemConfigList.size() + " 条", processed);
-            map.put("systemConfigList", systemConfigList);
-        }
-        if(params.isExportLiveMsg()){
-            updateConfigTask("导出弹幕", "正在读取弹幕数据", processed);
-            List<LiveMsg> liveMsgList = new ArrayList<>();
-            Iterator<LiveMsg> liveMsgIterator = liveMsgRepository.findAll().iterator();
-            while (liveMsgIterator.hasNext()) {
-                liveMsgList.add(liveMsgIterator.next());
-                processed++;
-                if (processed % 5000 == 0) updateConfigTask("导出弹幕", "已读取 " + liveMsgList.size() + " 条弹幕", processed);
-            }
-            updateConfigTask("导出弹幕", "弹幕 " + liveMsgList.size() + " 条", processed);
-            map.put("liveMsgList", liveMsgList);
-        }
-        updateConfigTask("生成文件", "正在序列化 JSON", Math.max(processed, total - 1));
-        String jsonString = JSON.toJSONString(map);
-        String timeString = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分"));
-        // 构造响应头，指定文件名，并将文件名进行URL编码
-        String encodedFilename = URLEncoder.encode("biliupForJavaConfig_"+timeString+".json", StandardCharsets.UTF_8).replaceAll("\\+", "%20");
 
-        response.setContentType("application/json");
+        String timeString = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分"));
+        String encodedFilename = URLEncoder.encode("biliupForJavaConfig_"+timeString+".json", StandardCharsets.UTF_8)
+                .replaceAll("\\+", "%20");
+
+        response.setContentType("application/json; charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename="+encodedFilename);
-        // 将JSON字符串写入到响应输出流中
-        OutputStream out = response.getOutputStream();
-        out.write(jsonString.getBytes(StandardCharsets.UTF_8));
-        out.flush();
-        out.close();
-        finishConfigTask("导出完成");
+
+        try (OutputStream out = response.getOutputStream();
+             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), 65536)) {
+            writer.write("{");
+            boolean[] firstSection = {true};
+
+            // userList 必须在 roomList 之前导出，确保流式导入时 ID 映射可用
+            if(params.isExportUser()){
+                updateConfigTask("导出用户", "正在读取用户配置", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "userList");
+                long[] localProcessed = {processed};
+                int count = writeEntityList(writer, userRepository.findAll().iterator(),
+                        idx -> { localProcessed[0]++; if (localProcessed[0] % 500 == 0)
+                            updateConfigTask("导出用户", "已读取 " + idx + " 个用户", localProcessed[0]); });
+                processed = localProcessed[0];
+                writer.write("]");
+                updateConfigTask("导出用户", "用户 " + count + " 条", processed);
+            }
+            if(params.isExportRoom()){
+                updateConfigTask("导出房间", "正在读取房间配置", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomList");
+                int count = writeEntityList(writer, roomRepository.findAll().iterator(), null);
+                processed += count;
+                writer.write("]");
+                updateConfigTask("导出房间", "房间 " + count + " 条", processed);
+            }
+            if(params.isExportHistory()){
+                updateConfigTask("导出历史", "正在读取录制历史", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "historyList");
+                long[] localProcessed = {processed};
+                int count = writeEntityStream(writer, historyRepository.streamAll(),
+                        idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
+                            updateConfigTask("导出历史", "已读取 " + idx + " 场历史", localProcessed[0]); });
+                processed = localProcessed[0];
+                writer.write("]");
+                updateConfigTask("导出历史", "历史 " + count + " 条", processed);
+
+                updateConfigTask("导出分P", "正在读取分P记录", processed);
+                firstSection[0] = writeSectionKey(writer, false, "partList");
+                localProcessed[0] = processed;
+                count = writeEntityStream(writer, partRepository.streamAll(),
+                        idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
+                            updateConfigTask("导出分P", "已读取 " + idx + " 个分P", localProcessed[0]); });
+                processed = localProcessed[0];
+                writer.write("]");
+                updateConfigTask("导出分P", "分P " + count + " 条", processed);
+            }
+            if(params.isExportSystemConfig()){
+                updateConfigTask("导出系统配置", "正在读取系统配置", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "systemConfigList");
+                int count = writeEntityList(writer, systemConfigRepository.findAll().iterator(), null);
+                processed += count;
+                writer.write("]");
+                updateConfigTask("导出系统配置", "系统配置 " + count + " 条", processed);
+            }
+            if(params.isExportLiveMsg()){
+                updateConfigTask("导出弹幕", "正在读取弹幕数据", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "liveMsgList");
+                long[] localProcessed = {processed};
+                int count = writeEntityStream(writer, liveMsgRepository.streamAll(),
+                        idx -> { localProcessed[0]++; if (localProcessed[0] % 5000 == 0)
+                            updateConfigTask("导出弹幕", "已读取 " + idx + " 条弹幕", localProcessed[0]); });
+                processed = localProcessed[0];
+                writer.write("]");
+                updateConfigTask("导出弹幕", "弹幕 " + count + " 条", processed);
+            }
+
+            writer.write("}");
+            writer.flush();
+            if (params.isExportLiveMsg()) {
+                finishConfigTask("导出完成。注意：含弹幕数据的配置文件可能超过导入上限（"
+                        + (MAX_CONFIG_IMPORT_SIZE / 1024 / 1024) + "MB），届时将无法导回。"
+                        + "如文件过大，请重新导出时不勾选弹幕数据。");
+            } else {
+                finishConfigTask("导出完成");
+            }
         } catch (IOException | RuntimeException e) {
             failConfigTask("导出失败：" + e.getMessage());
             throw e;
         }
     }
 
+    /** 写入 JSON section key，如 ,"roomList":[，返回 false 表示已写过 section */
+    private static boolean writeSectionKey(BufferedWriter writer, boolean isFirst, String key) throws IOException {
+        if (!isFirst) writer.write(",");
+        writer.write("\""); writer.write(key); writer.write("\":[");
+        return false;
+    }
+
+    /** 从 Iterator 逐条序列化实体写入，返回写入数量 */
+    private <T> int writeEntityList(BufferedWriter writer, Iterator<T> iterator,
+                                    java.util.function.IntConsumer progressCallback) throws IOException {
+        int count = 0;
+        boolean first = true;
+        while (iterator.hasNext()) {
+            if (!first) writer.write(",");
+            writer.write(JSON.toJSONString(iterator.next()));
+            first = false;
+            count++;
+            if (progressCallback != null) progressCallback.accept(count);
+        }
+        return count;
+    }
+
+    /** 从 Stream 逐条序列化实体写入（用于大表流式读取），返回写入数量 */
+    private <T> int writeEntityStream(BufferedWriter writer, Stream<T> stream,
+                                      java.util.function.IntConsumer progressCallback) throws IOException {
+        int[] count = {0};
+        boolean[] first = {true};
+        try (stream) {
+            stream.forEach(entity -> {
+                try {
+                    if (!first[0]) writer.write(",");
+                    writer.write(JSON.toJSONString(entity));
+                    first[0] = false;
+                    count[0]++;
+                    if (progressCallback != null) progressCallback.accept(count[0]);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+        return count[0];
+    }
+
+    /**
+     * 配置导入最大尺寸：128MB。
+     * 使用 JSONReader 流式解析：只保持当前 section 在内存中，逐条反序列化并分批 saveAll，
+     * 不再一次性加载整个文件 byte[] / Map / List。
+     */
+    private static final long MAX_CONFIG_IMPORT_SIZE = 128L * 1024 * 1024;
+
+    /** 流式导入时每批保存的实体数量，与 JPA batch_size 对齐 */
+    private static final int IMPORT_BATCH_SIZE = 1000;
+
     @PostMapping("/uploadConfig")
     public void uploadConfig(@RequestParam("file") MultipartFile file) throws IOException {
+        long fileSize = file.getSize();
+        if (fileSize > MAX_CONFIG_IMPORT_SIZE) {
+            throw new IOException("配置文件过大（" + (fileSize / 1024 / 1024) + "MB），"
+                    + "最大支持 " + (MAX_CONFIG_IMPORT_SIZE / 1024 / 1024) + "MB。"
+                    + "请重新导出时减少弹幕数据范围或暂不包含弹幕数据");
+        }
         long totalStartNs = System.nanoTime();
         long importUsersStartNs = 0L;
         long importRoomsStartNs = 0L;
@@ -286,221 +370,457 @@ public class RoomController {
         int importedLiveMsgCount = 0;
         int skippedPartCount = 0;
         int skippedLiveMsgCount = 0;
-        // 获取上传的文件内容
-        byte[] bytes = file.getBytes();
-        // 将文件内容转换为JSON字符串
-        String json = new String(bytes, StandardCharsets.UTF_8);
 
-        // 将JSON字符串转换为Map对象
-        Map<String,Object> configMap = JSON.parseObject(json, new TypeReference<>() {
-        });
-        if (configMap == null) {
-            throw new IOException("Invalid config json");
-        }
-        List<RecordRoom> roomList = parseConfigList(configMap, "roomList", new TypeReference<>() {});
-        List<BiliBiliUser> userList = parseConfigList(configMap, "userList", new TypeReference<>() {});
-        List<RecordHistory> historyList = parseConfigList(configMap, "historyList", new TypeReference<>() {});
-        List<RecordHistoryPart> partList = parseConfigList(configMap, "partList", new TypeReference<>() {});
-        List<SystemConfig> systemConfigList = parseConfigList(configMap, "systemConfigList", new TypeReference<>() {});
-        List<LiveMsg> liveMsgList = parseConfigList(configMap, "liveMsgList", new TypeReference<>() {});
-        long importTotal = (long) userList.size() + roomList.size() + historyList.size()
-                + partList.size() + systemConfigList.size() + liveMsgList.size();
-        long importProcessed = 0L;
-        startConfigTask("import", "导入配置", Math.max(1L, importTotal));
-        try {
+        // 流式解析：使用 JSONReader 逐 section 读取，避免将整个文件加载到内存
+        startConfigTask("import", "导入配置", Math.max(1L, fileSize));
+        try (InputStream is = new BufferedInputStream(file.getInputStream(), 65536);
+             JSONReader reader = new JSONReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
 
+            reader.startObject();
 
-        Map<Long,Long> userIdConverMap = new HashMap<>();
-        if(userList.size()>0){
-            importUsersStartNs = System.nanoTime();
-            updateConfigTask("导入用户", "正在导入用户配置", importProcessed);
-            for (BiliBiliUser user : userList) {
-                if (user.getUid() == null) {
-                    continue;
-                }
-                Long id = user.getId();
-                user.setId(null);
-                BiliBiliUser dbUser = userRepository.findByUid(user.getUid());
-                if(dbUser != null){
-                    user.setId(dbUser.getId());
-                }
-                userRepository.save(user);
-                if (id != null) {
-                    userIdConverMap.put(id,user.getId());
-                }
-                importedUserCount++;
-            }
-            importProcessed += userList.size();
-            updateConfigTask("导入用户", "用户 " + importedUserCount + " 条", importProcessed);
-            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Users.Success")
-                    .add("count", importedUserCount));
-        }
-        if(roomList.size()>0){
-            importRoomsStartNs = System.nanoTime();
-            updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
-            for (RecordRoom room : roomList) {
-                if (StringUtils.isBlank(room.getRoomId())) {
-                    continue;
-                }
-                Long oldUploadUserId = room.getUploadUserId();
-                room.setId(null);
-                RecordRoom dbRoom = roomRepository.findByRoomId(room.getRoomId());
-                if(dbRoom != null){
-                    room.setId(dbRoom.getId());
-                    if (oldUploadUserId == null || !userIdConverMap.containsKey(oldUploadUserId)) {
-                        room.setUploadUserId(dbRoom.getUploadUserId());
+            Map<Long, Long> userIdConverMap = new HashMap<>();
+            Map<Long, Long> historyIdConverMap = new HashMap<>();
+            Map<Long, Long> partIdConverMap = new HashMap<>();
+
+            // 兼容旧导出文件：roomList 可能在 userList 之前（新导出已修复为 userList 优先）
+            List<RecordRoom> pendingRooms = null;
+            List<RecordHistoryPart> pendingParts = null;
+
+            long importProcessed = 0L;
+
+            while (reader.hasNext()) {
+                String key = reader.readString();
+                switch (key) {
+                    case "userList" -> {
+                        importUsersStartNs = System.nanoTime();
+                        updateConfigTask("导入用户", "正在导入用户配置", importProcessed);
+                        importedUserCount = importUserSection(reader, userIdConverMap);
+                        importProcessed += importedUserCount;
+                        updateConfigTask("导入用户", "用户 " + importedUserCount + " 条", importProcessed);
+                        log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Users.Success")
+                                .add("count", importedUserCount));
+                        if (pendingRooms != null) {
+                            importRoomsStartNs = System.nanoTime();
+                            updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
+                            importedRoomCount = importRoomBatch(pendingRooms, userIdConverMap);
+                            importProcessed += importedRoomCount;
+                            pendingRooms = null;
+                            updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
+                            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
+                                    .add("count", importedRoomCount));
+                        }
                     }
-                } else if (oldUploadUserId != null && userIdConverMap.containsKey(oldUploadUserId)) {
-                    room.setUploadUserId(userIdConverMap.get(oldUploadUserId));
-                } else if (oldUploadUserId != null && userRepository.findById(oldUploadUserId).isPresent()) {
-                    room.setUploadUserId(oldUploadUserId);
-                } else {
-                    room.setUploadUserId(null);
-                }
-                if (oldUploadUserId != null && userIdConverMap.containsKey(oldUploadUserId)) {
-                    room.setUploadUserId(userIdConverMap.get(oldUploadUserId));
-                }
-                if (room.getSortOrder() == null) {
-                    room.setSortOrder(nextSortOrder());
-                }
-                normalizeGiftReplySettings(room);
-                roomRepository.save(room);
-                importedRoomCount++;
-            }
-            importProcessed += roomList.size();
-            updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
-            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
-                    .add("count", importedRoomCount));
-        }
-        Map<Long,Long> historyIdConverMap = new HashMap<>();
-        if(historyList.size()>0){
-            importHistoriesStartNs = System.nanoTime();
-            updateConfigTask("导入历史", "正在导入录制历史", importProcessed);
-            for (RecordHistory history : historyList) {
-                Long oldId = history.getId();
-                history.setId(null);
-                RecordHistory dbHistory = historyRepository.findBySessionId(history.getSessionId());
-                if(dbHistory != null){
-                    history.setId(dbHistory.getId());
-                }
-                historyRepository.save(history);
-                if (oldId != null) {
-                    historyIdConverMap.put(oldId,history.getId());
-                }
-                importedHistoryCount++;
-            }
-            importProcessed += historyList.size();
-            updateConfigTask("导入历史", "历史 " + importedHistoryCount + " 条", importProcessed);
-            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Histories.Success")
-                    .add("count", importedHistoryCount));
-        }
-        Map<Long,Long> partIdConverMap = new HashMap<>();
-        if(partList.size()>0){
-            importPartsStartNs = System.nanoTime();
-            updateConfigTask("导入分P", "正在导入分P记录", importProcessed);
-            for (RecordHistoryPart part : partList) {
-                Long oldId = part.getId();
-                Long oldHistoryId = part.getHistoryId();
-                part.setId(null);
-                RecordHistoryPart dbPart = StringUtils.isNotBlank(part.getFilePath())
-                        ? partRepository.findByFilePath(part.getFilePath())
-                        : null;
-                if(dbPart != null){
-                    part.setId(dbPart.getId());
-                }
-                if (oldHistoryId != null && historyIdConverMap.containsKey(oldHistoryId)) {
-                    part.setHistoryId(historyIdConverMap.get(oldHistoryId));
-                } else if (dbPart != null) {
-                    part.setHistoryId(dbPart.getHistoryId());
-                } else {
-                    skippedPartCount++;
-                    continue;
-                }
-                partRepository.save(part);
-                if (oldId != null) {
-                    partIdConverMap.put(oldId,part.getId());
-                }
-                importedPartCount++;
-            }
-            importProcessed += partList.size();
-            updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
-            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
-                    .add("count", importedPartCount));
-        }
-        // 在控制台输出转换后的Map对象
-        if(systemConfigList.size()>0){
-            importSystemConfigsStartNs = System.nanoTime();
-            updateConfigTask("导入系统配置", "正在导入系统配置", importProcessed);
-            for (SystemConfig systemConfig : systemConfigList) {
-                if (StringUtils.isBlank(systemConfig.getConfigKey()) || systemConfig.getConfigValue() == null) {
-                    continue;
-                }
-                systemConfigService.updateConfig(systemConfig.getConfigKey(), systemConfig.getConfigValue());
-                importedSystemConfigCount++;
-            }
-            importProcessed += systemConfigList.size();
-            updateConfigTask("导入系统配置", "系统配置 " + importedSystemConfigCount + " 条", importProcessed);
-            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.SystemConfigs.Success")
-                    .add("count", importedSystemConfigCount));
-        }
-        if(liveMsgList.size()>0){
-            importLiveMsgsStartNs = System.nanoTime();
-            updateConfigTask("导入弹幕", "正在导入弹幕数据", importProcessed);
-            Set<Long> mappedPartIds = new HashSet<>(partIdConverMap.values());
-            for (Long partId : mappedPartIds) {
-                liveMsgRepository.deleteByPartId(partId);
-            }
-            for (LiveMsg liveMsg : liveMsgList) {
-                Long newPartId = partIdConverMap.get(liveMsg.getPartId());
-                if (newPartId == null) {
-                    skippedLiveMsgCount++;
-                    continue;
-                }
-                liveMsg.setId(null);
-                liveMsg.setPartId(newPartId);
-                liveMsgRepository.save(liveMsg);
-                importedLiveMsgCount++;
-                importProcessed++;
-                if (importProcessed % 5000 == 0) {
-                    updateConfigTask("导入弹幕", "已导入 " + importedLiveMsgCount + " 条弹幕", importProcessed);
+                    case "roomList" -> {
+                        importRoomsStartNs = System.nanoTime();
+                        updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
+                        if (userIdConverMap.isEmpty()) {
+                            pendingRooms = readRoomSection(reader);
+                        } else {
+                            importedRoomCount = importRoomSection(reader, userIdConverMap);
+                            importProcessed += importedRoomCount;
+                            updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
+                            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
+                                    .add("count", importedRoomCount));
+                        }
+                    }
+                    case "historyList" -> {
+                        importHistoriesStartNs = System.nanoTime();
+                        updateConfigTask("导入历史", "正在导入录制历史", importProcessed);
+                        importedHistoryCount = importHistorySection(reader, historyIdConverMap);
+                        importProcessed += importedHistoryCount;
+                        updateConfigTask("导入历史", "历史 " + importedHistoryCount + " 条", importProcessed);
+                        log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Histories.Success")
+                                .add("count", importedHistoryCount));
+                        if (pendingParts != null) {
+                            importPartsStartNs = System.nanoTime();
+                            updateConfigTask("导入分P", "正在导入分P记录", importProcessed);
+                            int[] pr = importPartBatch(pendingParts, historyIdConverMap, partIdConverMap);
+                            importedPartCount = pr[0];
+                            skippedPartCount = pr[1];
+                            importProcessed += pr[2];
+                            pendingParts = null;
+                            updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
+                            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
+                                    .add("count", importedPartCount));
+                        }
+                    }
+                    case "partList" -> {
+                        importPartsStartNs = System.nanoTime();
+                        updateConfigTask("导入分P", "正在导入分P记录", importProcessed);
+                        if (historyIdConverMap.isEmpty()) {
+                            pendingParts = readPartSection(reader);
+                        } else {
+                            int[] pr = importPartSection(reader, historyIdConverMap, partIdConverMap);
+                            importedPartCount = pr[0];
+                            skippedPartCount = pr[1];
+                            importProcessed += pr[2];
+                            updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
+                            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
+                                    .add("count", importedPartCount));
+                        }
+                    }
+                    case "systemConfigList" -> {
+                        importSystemConfigsStartNs = System.nanoTime();
+                        updateConfigTask("导入系统配置", "正在导入系统配置", importProcessed);
+                        importedSystemConfigCount = importSystemConfigSection(reader);
+                        importProcessed += importedSystemConfigCount;
+                        updateConfigTask("导入系统配置", "系统配置 " + importedSystemConfigCount + " 条", importProcessed);
+                        log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.SystemConfigs.Success")
+                                .add("count", importedSystemConfigCount));
+                    }
+                    case "liveMsgList" -> {
+                        importLiveMsgsStartNs = System.nanoTime();
+                        updateConfigTask("导入弹幕", "正在导入弹幕数据", importProcessed);
+                        int[] mr = importLiveMsgSection(reader, partIdConverMap, importProcessed);
+                        importedLiveMsgCount = mr[0];
+                        skippedLiveMsgCount = mr[1];
+                        importProcessed += mr[2];
+                        updateConfigTask("导入弹幕", "弹幕 " + importedLiveMsgCount + " 条，跳过 " + skippedLiveMsgCount + " 条", importProcessed);
+                        log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.LiveMsgs.Success")
+                                .add("count", importedLiveMsgCount)
+                                .add("skipped", skippedLiveMsgCount));
+                    }
+                    default -> reader.readObject();
                 }
             }
-            importProcessed = importTotal;
-            updateConfigTask("导入弹幕", "弹幕 " + importedLiveMsgCount + " 条，跳过 " + skippedLiveMsgCount + " 条", importProcessed);
-            log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.LiveMsgs.Success")
-                    .add("count", importedLiveMsgCount)
-                    .add("skipped", skippedLiveMsgCount));
-        }
+            // 兜底处理：如果只导入了 room/part 而没有先导 user/history
+            // （例如导入文件只有 roomList 没有 userList），缓存的数据会在这里落库
+            if (pendingRooms != null) {
+                importRoomsStartNs = System.nanoTime();
+                updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
+                importedRoomCount = importRoomBatch(pendingRooms, userIdConverMap);
+                importProcessed += importedRoomCount;
+                pendingRooms = null;
+                updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
+                log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
+                        .add("count", importedRoomCount));
+            }
+            if (pendingParts != null) {
+                importPartsStartNs = System.nanoTime();
+                updateConfigTask("导入分P", "正在导入分P记录", importProcessed);
+                int[] pr = importPartBatch(pendingParts, historyIdConverMap, partIdConverMap);
+                importedPartCount = pr[0];
+                skippedPartCount = pr[1];
+                importProcessed += pr[2];
+                pendingParts = null;
+                updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
+                log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
+                        .add("count", importedPartCount));
+            }
+            reader.endObject();
+
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Done")
-                .addRoundCount("importedUser", importedUserCount)
-                .addRoundCount("importedRoom", importedRoomCount)
-                .addRoundCount("importedHistory", importedHistoryCount)
-                .addRoundCount("importedPart", importedPartCount)
-                .addRoundCount("importedSystemConfig", importedSystemConfigCount)
-                .addRoundCount("importedLiveMsg", importedLiveMsgCount)
-                .addRoundCount("skippedPart", skippedPartCount)
-                .addRoundCount("skippedLiveMsg", skippedLiveMsgCount)
-                .addStageCostMs("importUsers", importUsersStartNs)
-                .addStageCostMs("importRooms", importRoomsStartNs)
-                .addStageCostMs("importHistories", importHistoriesStartNs)
-                .addStageCostMs("importParts", importPartsStartNs)
-                .addStageCostMs("importSystemConfigs", importSystemConfigsStartNs)
-                .addStageCostMs("importLiveMsgs", importLiveMsgsStartNs)
-                .addStageCostMs("total", totalStartNs));
-        finishConfigTask("导入完成");
+                    .addRoundCount("importedUser", importedUserCount)
+                    .addRoundCount("importedRoom", importedRoomCount)
+                    .addRoundCount("importedHistory", importedHistoryCount)
+                    .addRoundCount("importedPart", importedPartCount)
+                    .addRoundCount("importedSystemConfig", importedSystemConfigCount)
+                    .addRoundCount("importedLiveMsg", importedLiveMsgCount)
+                    .addRoundCount("skippedPart", skippedPartCount)
+                    .addRoundCount("skippedLiveMsg", skippedLiveMsgCount)
+                    .addStageCostMs("importUsers", importUsersStartNs)
+                    .addStageCostMs("importRooms", importRoomsStartNs)
+                    .addStageCostMs("importHistories", importHistoriesStartNs)
+                    .addStageCostMs("importParts", importPartsStartNs)
+                    .addStageCostMs("importSystemConfigs", importSystemConfigsStartNs)
+                    .addStageCostMs("importLiveMsgs", importLiveMsgsStartNs)
+                    .addStageCostMs("total", totalStartNs));
+            finishConfigTask("导入完成");
         } catch (RuntimeException e) {
             failConfigTask("导入失败：" + e.getMessage());
             throw e;
         }
     }
 
-    private <T> List<T> parseConfigList(Map<String,Object> configMap, String key, TypeReference<List<T>> typeReference) {
-        Object value = configMap.get(key);
-        if (value == null) {
-            return Collections.emptyList();
+    // ========== 流式导入 section 处理方法 ==========
+
+    /** 流式导入用户：逐条读取、去重、分批 saveAll，构建旧ID→新ID映射 */
+    private int importUserSection(JSONReader reader, Map<Long, Long> userIdConverMap) {
+        reader.startArray();
+        List<BiliBiliUser> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
+        List<Long> batchOldIds = new ArrayList<>(IMPORT_BATCH_SIZE);
+        int count = 0;
+        while (reader.hasNext()) {
+            BiliBiliUser user = reader.readObject(BiliBiliUser.class);
+            if (user.getUid() == null) continue;
+            Long oldId = user.getId();
+            user.setId(null);
+            BiliBiliUser dbUser = userRepository.findByUid(user.getUid());
+            if (dbUser != null) {
+                user.setId(dbUser.getId());
+            }
+            batch.add(user);
+            batchOldIds.add(oldId);
+            count++;
+            if (batch.size() >= IMPORT_BATCH_SIZE) {
+                userRepository.saveAll(batch);
+                for (int i = 0; i < batch.size(); i++) {
+                    Long oid = batchOldIds.get(i);
+                    if (oid != null) userIdConverMap.put(oid, batch.get(i).getId());
+                }
+                batch.clear();
+                batchOldIds.clear();
+            }
         }
-        List<T> list = JSON.parseObject(JSON.toJSONString(value), typeReference);
-        return list == null ? Collections.emptyList() : list;
+        if (!batch.isEmpty()) {
+            userRepository.saveAll(batch);
+            for (int i = 0; i < batch.size(); i++) {
+                Long oid = batchOldIds.get(i);
+                if (oid != null) userIdConverMap.put(oid, batch.get(i).getId());
+            }
+        }
+        reader.endArray();
+        return count;
+    }
+
+    /** 流式导入房间：逐条读取、去重、uploadUserId 映射、分批 saveAll */
+    private int importRoomSection(JSONReader reader, Map<Long, Long> userIdConverMap) {
+        reader.startArray();
+        List<RecordRoom> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
+        int count = 0;
+        while (reader.hasNext()) {
+            RecordRoom room = reader.readObject(RecordRoom.class);
+            if (StringUtils.isBlank(room.getRoomId())) continue;
+            importOneRoom(room, userIdConverMap);
+            batch.add(room);
+            count++;
+            if (batch.size() >= IMPORT_BATCH_SIZE) {
+                roomRepository.saveAll(batch);
+                batch.clear();
+            }
+        }
+        if (!batch.isEmpty()) roomRepository.saveAll(batch);
+        reader.endArray();
+        return count;
+    }
+
+    /** 处理单个房间的导入逻辑（去重、uploadUserId 映射、排序、规范化） */
+    private void importOneRoom(RecordRoom room, Map<Long, Long> userIdConverMap) {
+        Long oldUploadUserId = room.getUploadUserId();
+        room.setId(null);
+        RecordRoom dbRoom = roomRepository.findByRoomId(room.getRoomId());
+        if (dbRoom != null) {
+            room.setId(dbRoom.getId());
+            if (oldUploadUserId == null || !userIdConverMap.containsKey(oldUploadUserId)) {
+                room.setUploadUserId(dbRoom.getUploadUserId());
+            }
+        } else if (oldUploadUserId != null && userIdConverMap.containsKey(oldUploadUserId)) {
+            room.setUploadUserId(userIdConverMap.get(oldUploadUserId));
+        } else if (oldUploadUserId != null && userRepository.findById(oldUploadUserId).isPresent()) {
+            room.setUploadUserId(oldUploadUserId);
+        } else {
+            room.setUploadUserId(null);
+        }
+        if (oldUploadUserId != null && userIdConverMap.containsKey(oldUploadUserId)) {
+            room.setUploadUserId(userIdConverMap.get(oldUploadUserId));
+        }
+        if (room.getSortOrder() == null) {
+            room.setSortOrder(nextSortOrder());
+        }
+        normalizeGiftReplySettings(room);
+    }
+
+    /** 批量导入已缓存的房间列表（兼容旧导出文件） */
+    private int importRoomBatch(List<RecordRoom> rooms, Map<Long, Long> userIdConverMap) {
+        int count = 0;
+        for (RecordRoom room : rooms) {
+            if (StringUtils.isBlank(room.getRoomId())) continue;
+            importOneRoom(room, userIdConverMap);
+            roomRepository.save(room);
+            count++;
+        }
+        return count;
+    }
+
+    /** 读取房间列表到内存（兼容旧导出文件中 roomList 在 userList 之前的情况） */
+    private List<RecordRoom> readRoomSection(JSONReader reader) {
+        reader.startArray();
+        List<RecordRoom> rooms = new ArrayList<>();
+        while (reader.hasNext()) {
+            rooms.add(reader.readObject(RecordRoom.class));
+        }
+        reader.endArray();
+        return rooms;
+    }
+
+    /** 流式导入录制历史：逐条读取、去重、分批 saveAll，构建旧ID→新ID映射 */
+    private int importHistorySection(JSONReader reader, Map<Long, Long> historyIdConverMap) {
+        reader.startArray();
+        List<RecordHistory> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
+        List<Long> batchOldIds = new ArrayList<>(IMPORT_BATCH_SIZE);
+        int count = 0;
+        while (reader.hasNext()) {
+            RecordHistory history = reader.readObject(RecordHistory.class);
+            Long oldId = history.getId();
+            history.setId(null);
+            RecordHistory dbHistory = historyRepository.findBySessionId(history.getSessionId());
+            if (dbHistory != null) {
+                history.setId(dbHistory.getId());
+            }
+            batch.add(history);
+            batchOldIds.add(oldId);
+            count++;
+            if (batch.size() >= IMPORT_BATCH_SIZE) {
+                historyRepository.saveAll(batch);
+                for (int i = 0; i < batch.size(); i++) {
+                    Long oid = batchOldIds.get(i);
+                    if (oid != null) historyIdConverMap.put(oid, batch.get(i).getId());
+                }
+                batch.clear();
+                batchOldIds.clear();
+            }
+        }
+        if (!batch.isEmpty()) {
+            historyRepository.saveAll(batch);
+            for (int i = 0; i < batch.size(); i++) {
+                Long oid = batchOldIds.get(i);
+                if (oid != null) historyIdConverMap.put(oid, batch.get(i).getId());
+            }
+        }
+        reader.endArray();
+        return count;
+    }
+
+    /** 流式导入分P记录：逐条读取、去重、historyId 映射、分批 saveAll，构建旧ID→新ID映射。
+     *  @return [importedCount, skippedCount, totalCount] */
+    private int[] importPartSection(JSONReader reader, Map<Long, Long> historyIdConverMap,
+                                     Map<Long, Long> partIdConverMap) {
+        reader.startArray();
+        List<RecordHistoryPart> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
+        List<Long> batchOldIds = new ArrayList<>(IMPORT_BATCH_SIZE);
+        int imported = 0, skipped = 0;
+        while (reader.hasNext()) {
+            RecordHistoryPart part = reader.readObject(RecordHistoryPart.class);
+            Long oldId = part.getId();
+            Long oldHistoryId = part.getHistoryId();
+            part.setId(null);
+            RecordHistoryPart dbPart = StringUtils.isNotBlank(part.getFilePath())
+                    ? partRepository.findByFilePath(part.getFilePath()) : null;
+            if (dbPart != null) {
+                part.setId(dbPart.getId());
+            }
+            if (oldHistoryId != null && historyIdConverMap.containsKey(oldHistoryId)) {
+                part.setHistoryId(historyIdConverMap.get(oldHistoryId));
+            } else if (dbPart != null) {
+                part.setHistoryId(dbPart.getHistoryId());
+            } else {
+                skipped++;
+                continue;
+            }
+            batch.add(part);
+            batchOldIds.add(oldId);
+            imported++;
+            if (batch.size() >= IMPORT_BATCH_SIZE) {
+                partRepository.saveAll(batch);
+                for (int i = 0; i < batch.size(); i++) {
+                    Long oid = batchOldIds.get(i);
+                    if (oid != null) partIdConverMap.put(oid, batch.get(i).getId());
+                }
+                batch.clear();
+                batchOldIds.clear();
+            }
+        }
+        if (!batch.isEmpty()) {
+            partRepository.saveAll(batch);
+            for (int i = 0; i < batch.size(); i++) {
+                Long oid = batchOldIds.get(i);
+                if (oid != null) partIdConverMap.put(oid, batch.get(i).getId());
+            }
+        }
+        reader.endArray();
+        return new int[]{imported, skipped, imported + skipped};
+    }
+
+    /** 批量导入已缓存的分P列表（兼容旧导出文件） */
+    private int[] importPartBatch(List<RecordHistoryPart> parts, Map<Long, Long> historyIdConverMap,
+                                   Map<Long, Long> partIdConverMap) {
+        int imported = 0, skipped = 0;
+        for (RecordHistoryPart part : parts) {
+            Long oldId = part.getId();
+            Long oldHistoryId = part.getHistoryId();
+            part.setId(null);
+            RecordHistoryPart dbPart = StringUtils.isNotBlank(part.getFilePath())
+                    ? partRepository.findByFilePath(part.getFilePath()) : null;
+            if (dbPart != null) {
+                part.setId(dbPart.getId());
+            }
+            if (oldHistoryId != null && historyIdConverMap.containsKey(oldHistoryId)) {
+                part.setHistoryId(historyIdConverMap.get(oldHistoryId));
+            } else if (dbPart != null) {
+                part.setHistoryId(dbPart.getHistoryId());
+            } else {
+                skipped++;
+                continue;
+            }
+            partRepository.save(part);
+            if (oldId != null) partIdConverMap.put(oldId, part.getId());
+            imported++;
+        }
+        return new int[]{imported, skipped, imported + skipped};
+    }
+
+    /** 读取分P列表到内存（兼容旧导出文件中 partList 在 historyList 之前的情况） */
+    private List<RecordHistoryPart> readPartSection(JSONReader reader) {
+        reader.startArray();
+        List<RecordHistoryPart> parts = new ArrayList<>();
+        while (reader.hasNext()) {
+            parts.add(reader.readObject(RecordHistoryPart.class));
+        }
+        reader.endArray();
+        return parts;
+    }
+
+    /** 流式导入系统配置：逐条读取、跳过无效、逐条写入 */
+    private int importSystemConfigSection(JSONReader reader) {
+        reader.startArray();
+        int count = 0;
+        while (reader.hasNext()) {
+            SystemConfig systemConfig = reader.readObject(SystemConfig.class);
+            if (StringUtils.isBlank(systemConfig.getConfigKey()) || systemConfig.getConfigValue() == null) {
+                continue;
+            }
+            systemConfigService.updateConfig(systemConfig.getConfigKey(), systemConfig.getConfigValue());
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    /** 流式导入弹幕：先清除已映射分P的历史弹幕，再逐条读取、partId 映射、分批 saveAll。
+     *  @return [importedCount, skippedCount, totalCount] */
+    private int[] importLiveMsgSection(JSONReader reader, Map<Long, Long> partIdConverMap, long baseProcessed) {
+        // 先清除已映射分P的历史弹幕
+        Set<Long> mappedPartIds = new HashSet<>(partIdConverMap.values());
+        for (Long partId : mappedPartIds) {
+            liveMsgRepository.deleteByPartId(partId);
+        }
+        reader.startArray();
+        List<LiveMsg> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
+        int imported = 0, skipped = 0;
+        long processed = baseProcessed;
+        while (reader.hasNext()) {
+            LiveMsg liveMsg = reader.readObject(LiveMsg.class);
+            Long newPartId = partIdConverMap.get(liveMsg.getPartId());
+            if (newPartId == null) {
+                skipped++;
+                continue;
+            }
+            liveMsg.setId(null);
+            liveMsg.setPartId(newPartId);
+            batch.add(liveMsg);
+            imported++;
+            processed++;
+            if (batch.size() >= IMPORT_BATCH_SIZE) {
+                liveMsgRepository.saveAll(batch);
+                batch.clear();
+            }
+            if (processed % 5000 == 0) {
+                updateConfigTask("导入弹幕", "已导入 " + imported + " 条弹幕", processed);
+            }
+        }
+        if (!batch.isEmpty()) liveMsgRepository.saveAll(batch);
+        reader.endArray();
+        return new int[]{imported, skipped, imported + skipped};
     }
 
     private Integer nextSortOrder() {
