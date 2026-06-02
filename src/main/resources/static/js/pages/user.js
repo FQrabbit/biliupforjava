@@ -28,7 +28,8 @@ Vue.component('user-page', {
             loginStatus: 'pending', // 待定、已扫码、成功、已过期、失败
             loading: false,
             isMobile: window.innerWidth <= 768,
-            viewMode: 'card'
+            viewMode: 'card',
+            avatarErrors: {}
         };
     },
     computed: {
@@ -147,6 +148,40 @@ Vue.component('user-page', {
         handleEdit: function (index, row) {
             this.user = JSON.parse(JSON.stringify(row));
             this.dialogFormVisible = true;
+        },
+        buildAvatarProxyUrl: function (url) {
+            if (!url) return '';
+            var token = localStorage.getItem('biliup_auth');
+            var proxyUrl = '/room/image-proxy?kind=avatar&url=' + encodeURIComponent(url);
+            if (token) {
+                proxyUrl += '&auth=' + encodeURIComponent(token);
+            }
+            return proxyUrl;
+        },
+        getAvatarErrorKey: function (item) {
+            return (item && item.id ? item.id : 'unknown') + ':' + (item && item.face ? item.face : '');
+        },
+        shouldShowAvatar: function (item) {
+            if (!item || this.privacyMode || !item.face) return false;
+            return !this.avatarErrors[this.getAvatarErrorKey(item)];
+        },
+        handleAvatarError: function (item) {
+            if (!item) return;
+            this.$set(this.avatarErrors, this.getAvatarErrorKey(item), true);
+        },
+        refreshUserProfile: function (item) {
+            var self = this;
+            if (!item || !item.id) return;
+            ApiUtil.get('/biliUser/refresh/' + item.id, function (data) {
+                if (data && data.success) {
+                    self.$message.success(data.msg || '用户信息已更新');
+                    self.fetchUserList();
+                } else {
+                    self.$message.warning((data && data.msg) || '用户信息刷新失败');
+                }
+            }, function () {
+                self.$message.error('用户信息刷新失败');
+            });
         },
         updateUser: function () {
             var self = this;

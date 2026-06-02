@@ -839,6 +839,20 @@ public class BiliApi {
         return cookieHeader;
     }
 
+    private static String normalizeWebCookieHeader(String cookie) {
+        if (StringUtils.isBlank(cookie)) {
+            return null;
+        }
+        try {
+            return Cookie.parse(cookie).getCookie();
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("BiliApi.Cookie.NormalizeFailed")
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+            return cookie;
+        }
+    }
+
     private static boolean containsCookie(String cookieHeader, String key) {
         if (StringUtils.isBlank(cookieHeader) || StringUtils.isBlank(key)) {
             return false;
@@ -917,6 +931,76 @@ public class BiliApi {
             cardResponseDto.setCode(-400);
             return cardResponseDto;
         }
+    }
+
+    public static Map<Long, BiliUserCard> getUserCards(Collection<Long> uids) {
+        return new LinkedHashMap<>();
+    }
+
+    public static Map<Long, BiliUserCard> getUserCards(Collection<Long> uids, String cookie) {
+        Map<Long, BiliUserCard> result = new LinkedHashMap<>();
+        if (uids == null || uids.isEmpty()) {
+            return result;
+        }
+        String cookieHeader = normalizeWebCookieHeader(cookie);
+        if (StringUtils.isBlank(cookieHeader) || !containsCookie(cookieHeader, "SESSDATA")) {
+            return result;
+        }
+
+        List<Long> safeUids = uids.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(50)
+                .toList();
+        if (safeUids.isEmpty()) {
+            return result;
+        }
+
+        String uidParam = safeUids.stream().map(String::valueOf).collect(Collectors.joining(","));
+        String url = "https://api.bilibili.com/x/polymer/pc-electron/v1/user/cards?uids=" + uidParam;
+        Map<String, String> headers = new HashMap<>();
+        headers.put("referer", "https://www.bilibili.com/");
+        headers.put("user-agent", USER_AGENT);
+        headers.put("accept", "application/json, text/plain, */*");
+        headers.put("Cookie", cookieHeader);
+
+        String res = HttpClientUtil.get(url, headers);
+        com.alibaba.fastjson.JSONObject root = JSON.parseObject(res);
+        if (root == null || root.getIntValue("code") != 0) {
+            LogKvs kvs = LogKvs.event("BiliApi.UserCards.Failed")
+                    .add("uids", uidParam)
+                    .add("code", root == null ? null : root.getInteger("code"))
+                    .addIfNotBlank("message", root == null ? null : root.getString("message"));
+            if (root != null && root.getIntValue("code") == -101) {
+                log.debug("[BLR] {}", kvs);
+            } else {
+                log.warn("[BLR] {}", kvs);
+            }
+            return result;
+        }
+
+        com.alibaba.fastjson.JSONObject data = root.getJSONObject("data");
+        if (data == null) {
+            return result;
+        }
+        for (String key : data.keySet()) {
+            com.alibaba.fastjson.JSONObject item = data.getJSONObject(key);
+            if (item == null) {
+                continue;
+            }
+            BiliUserCard card = item.toJavaObject(BiliUserCard.class);
+            long mid = card.getMid();
+            if (mid <= 0) {
+                try {
+                    mid = Long.parseLong(key);
+                } catch (Exception ignored) {
+                }
+            }
+            if (mid > 0) {
+                result.put(mid, card);
+            }
+        }
+        return result;
     }
 
     /**

@@ -490,7 +490,13 @@
                  :class="{ 'is-active': item.login && item.enable, 'is-warning': !item.login }"
                  v-for="item in tableData" :key="item.id">
                 <div class="user-card-header">
-                    <div class="user-avatar">{{ privacyMode ? '*' : (item.uname || 'U').charAt(0).toUpperCase() }}</div>
+                    <div class="user-avatar">
+                        <img v-if="shouldShowAvatar(item)"
+                             :src="buildAvatarProxyUrl(item.face)"
+                             referrerpolicy="no-referrer"
+                             @error="handleAvatarError(item)">
+                        <span v-else>{{ privacyMode ? '*' : (item.uname || 'U').charAt(0).toUpperCase() }}</span>
+                    </div>
                     <div class="user-info">
                         <h3 class="user-name">{{ maskText(item.uname || '未命名用户') }}</h3>
                         <div class="user-uid">UID: {{ maskText(item.uid) }}</div>
@@ -531,6 +537,7 @@
                     </div>
                 </div>
                 <div class="user-card-footer">
+                    <el-button size="small" icon="el-icon-refresh" @click="refreshUserProfile(item)">刷新资料</el-button>
                     <el-button size="small" icon="el-icon-edit" @click="handleEdit(0, item)">设置</el-button>
                     <el-popconfirm @confirm="deleteUser(item.id)" title="确定移除该账号吗？" confirm-button-text="移除" cancel-button-text="取消" confirm-button-type="danger">
                         <el-button slot="reference" size="small" type="danger" icon="el-icon-delete">移除</el-button>

@@ -36,6 +36,8 @@ public class RecordRoom {
     // 主播头像
     private String userCover;
 
+    private LocalDateTime userCoverUpdateTime;
+
     // 主播ID
     private Long anchorId;
     

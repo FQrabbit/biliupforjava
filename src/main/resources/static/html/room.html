@@ -253,7 +253,7 @@
                         <span>{{ index + 1 }}</span>
                     </div>
                     <div class="room-avatar">
-                        <img v-if="!privacyMode && item.userCover" :src="buildImageProxyUrl(item.userCover)" referrerpolicy="no-referrer">
+                        <img v-if="!privacyMode && item.userCover" :src="buildAvatarProxyUrl(item.userCover)" referrerpolicy="no-referrer">
                         <span v-else>{{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}</span>
                         <span v-if="item.streaming" class="live-indicator"></span>
                         
@@ -3598,6 +3598,15 @@
                 if (!url) return '';
                 var token = localStorage.getItem('biliup_auth');
                 var proxyUrl = '/room/image-proxy?url=' + encodeURIComponent(url);
+                if (token) {
+                    proxyUrl += '&auth=' + encodeURIComponent(token);
+                }
+                return proxyUrl;
+            },
+            buildAvatarProxyUrl: function(url) {
+                if (!url) return '';
+                var token = localStorage.getItem('biliup_auth');
+                var proxyUrl = '/room/image-proxy?kind=avatar&url=' + encodeURIComponent(url);
                 if (token) {
                     proxyUrl += '&auth=' + encodeURIComponent(token);
                 }

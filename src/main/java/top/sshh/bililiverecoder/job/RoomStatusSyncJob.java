@@ -131,6 +131,7 @@ public class RoomStatusSyncJob {
                             changed = true;
                             // 主播ID变了，强制更新性别和头像
                             room.setGender(null);
+                            room.setUserCoverUpdateTime(null);
                         }
                         
                         boolean needUpdateMasterInfo = room.getGender() == null || room.getUserCover() == null;
@@ -158,6 +159,10 @@ public class RoomStatusSyncJob {
                                     String face = info.getFace();
                                     if (face != null && !face.equals(room.getUserCover())) {
                                         room.setUserCover(face);
+                                        room.setUserCoverUpdateTime(LocalDateTime.now());
+                                        changed = true;
+                                    } else if (face != null && room.getUserCoverUpdateTime() == null) {
+                                        room.setUserCoverUpdateTime(LocalDateTime.now());
                                         changed = true;
                                     }
                                     

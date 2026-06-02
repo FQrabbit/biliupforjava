@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
 import top.sshh.bililiverecoder.entity.data.BiliSessionDto;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
+import top.sshh.bililiverecoder.service.impl.BiliBiliUserService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PngBitMatrixWriter;
@@ -29,6 +30,9 @@ public class BiliUserController {
 
     @Autowired
     BiliUserRepository biliUserRepository;
+
+    @Autowired
+    BiliBiliUserService biliBiliUserService;
 
     // 存储登录会话信息：key -> {authCode, createTime, status, message}
     private final Map<String, LoginSession> loginSessionMap = new ConcurrentHashMap<>();
@@ -235,10 +239,14 @@ public class BiliUserController {
 
     @GetMapping("/list")
     public List<BiliBiliUser> listBillUser() {
+        List<BiliBiliUser> dbUsers = new ArrayList<>();
+        biliUserRepository.findAll().forEach(dbUsers::add);
+        List<BiliBiliUser> users = biliBiliUserService.refreshCachedProfilesIfNeeded(dbUsers, false);
         List<BiliBiliUser> list = new ArrayList<>();
-        for (BiliBiliUser biliBiliUser : biliUserRepository.findAll()) {
+        for (BiliBiliUser biliBiliUser : users) {
             biliBiliUser.setAccessToken(null);
             biliBiliUser.setRefreshToken(null);
+            biliBiliUser.setCookies(null);
             list.add(biliBiliUser);
         }
         return list;
@@ -285,6 +293,16 @@ public class BiliUserController {
         if (userOptional.isPresent()) {
             BiliBiliUser user = userOptional.get();
             try {
+                if (System.currentTimeMillis() >= 0) {
+                    boolean refreshed = biliBiliUserService.refreshCachedProfile(user);
+                    user.setAccessToken(null);
+                    user.setRefreshToken(null);
+                    user.setCookies(null);
+                    result.put("success", refreshed);
+                    result.put("user", user);
+                    result.put("msg", refreshed ? "用户信息已更新" : "获取用户信息失败");
+                    return result;
+                }
                 BiliApi.BiliUserCardResponseDto cardResp = BiliApi.getUserCard(user.getUid());
                 if (cardResp != null && cardResp.getCode() == 0 && cardResp.getCard() != null) {
                     user.setUname(cardResp.getCard().getName());

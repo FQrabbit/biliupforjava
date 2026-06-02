@@ -20,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.*;
+import top.sshh.bililiverecoder.entity.data.BiliUserCard;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
@@ -87,8 +88,10 @@ public class RoomController {
             .maximumSize(1000)
             .expireAfterWrite(1, TimeUnit.DAYS)
             .build();
+    private static final long ROOM_AVATAR_CACHE_DAYS = 30;
     private final Map<String, CompletableFuture<CachedImage>> imageInflight = new ConcurrentHashMap<>();
     private final Semaphore imageProxySemaphore = new Semaphore(3, true);
+    private final Semaphore avatarProxySemaphore = new Semaphore(8, true);
     // 记录上一次请求B站的时间戳
     private final AtomicLong lastRequestTime = new AtomicLong(0);
     private volatile ConfigTaskStatus configTaskStatus = ConfigTaskStatus.idle();
@@ -184,7 +187,68 @@ public class RoomController {
 
     @PostMapping
     public List<RecordRoom> list() {
-        return roomRepository.findAllOrderBySortOrder();
+        List<RecordRoom> rooms = roomRepository.findAllOrderBySortOrder();
+        refreshRoomAvatarCacheIfNeeded(rooms);
+        return rooms;
+    }
+
+    private void refreshRoomAvatarCacheIfNeeded(List<RecordRoom> rooms) {
+        if (rooms == null || rooms.isEmpty()) {
+            return;
+        }
+        List<RecordRoom> pending = rooms.stream()
+                .filter(room -> room != null && room.getAnchorId() != null)
+                .filter(room -> StringUtils.isBlank(room.getUserCover()) || isRoomAvatarCacheExpired(room))
+                .toList();
+        if (pending.isEmpty()) {
+            return;
+        }
+
+        List<RecordRoom> changed = new ArrayList<>();
+        String cookie = findUsableBiliUserCookie();
+        for (int from = 0; from < pending.size(); from += 50) {
+            List<RecordRoom> batch = pending.subList(from, Math.min(from + 50, pending.size()));
+            try {
+                Map<Long, BiliUserCard> cards = BiliApi.getUserCards(batch.stream().map(RecordRoom::getAnchorId).toList(), cookie);
+                for (RecordRoom room : batch) {
+                    BiliUserCard card = cards.get(room.getAnchorId());
+                    if (card == null || StringUtils.isBlank(card.getFace())) {
+                        continue;
+                    }
+                    boolean updated = false;
+                    if (!card.getFace().equals(room.getUserCover())) {
+                        room.setUserCover(card.getFace());
+                        updated = true;
+                    }
+                    if (updated || isRoomAvatarCacheExpired(room)) {
+                        room.setUserCoverUpdateTime(LocalDateTime.now());
+                        changed.add(room);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[BLR] {}", LogKvs.event("Room.Avatar.BatchRefreshFailed")
+                        .add("batchSize", batch.size())
+                        .addIfNotBlank("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()));
+            }
+        }
+        if (!changed.isEmpty()) {
+            roomRepository.saveAll(changed);
+        }
+    }
+
+    private boolean isRoomAvatarCacheExpired(RecordRoom room) {
+        LocalDateTime updatedAt = room.getUserCoverUpdateTime();
+        return updatedAt == null || updatedAt.isBefore(LocalDateTime.now().minusDays(ROOM_AVATAR_CACHE_DAYS));
+    }
+
+    private String findUsableBiliUserCookie() {
+        for (BiliBiliUser user : userRepository.findAll()) {
+            if (user != null && StringUtils.isNotBlank(user.getCookies())) {
+                return user.getCookies();
+            }
+        }
+        return null;
     }
 
 
@@ -1475,11 +1539,13 @@ public class RoomController {
     }
 
     @GetMapping(value = "/image-proxy")
-    public ResponseEntity<byte[]> imageProxy(@RequestParam("url") String url) {
+    public ResponseEntity<byte[]> imageProxy(@RequestParam("url") String url,
+                                             @RequestParam(value = "kind", required = false) String kind) {
         long totalStartNs = System.nanoTime();
         if (url == null || url.isBlank()) {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
+        boolean avatar = "avatar".equalsIgnoreCase(kind);
         try {
             CachedImage cached = imageCache.getIfPresent(url);
             if (cached != null) {
@@ -1507,8 +1573,9 @@ public class RoomController {
             CompletableFuture<CachedImage> inFlight = imageInflight.putIfAbsent(url, placeholder);
             if (inFlight == null) {
                 boolean acquired = false;
+                Semaphore semaphore = avatar ? avatarProxySemaphore : imageProxySemaphore;
                 try {
-                    acquired = imageProxySemaphore.tryAcquire(4, TimeUnit.SECONDS);
+                    acquired = semaphore.tryAcquire(4, TimeUnit.SECONDS);
                     if (!acquired) {
                         placeholder.completeExceptionally(new RuntimeException("image_proxy_busy"));
                         log.warn("[BLR] {}", LogKvs.event("ImageProxy.Busy")
@@ -1519,15 +1586,17 @@ public class RoomController {
                     
                     // 增加全局请求间隔控制：每次请求回源前，强制等待至少500ms
                     // 结合Semaphore=3，即使3个并发，也会被这个串行sleep拖慢节奏
-                    synchronized (lastRequestTime) {
-                        long now = System.currentTimeMillis();
-                        long last = lastRequestTime.get();
-                        if (now - last < 600) {
-                            try {
-                                Thread.sleep(600 - (now - last));
-                            } catch (InterruptedException ignored) {}
+                    if (!avatar) {
+                        synchronized (lastRequestTime) {
+                            long now = System.currentTimeMillis();
+                            long last = lastRequestTime.get();
+                            if (now - last < 600) {
+                                try {
+                                    Thread.sleep(600 - (now - last));
+                                } catch (InterruptedException ignored) {}
+                            }
+                            lastRequestTime.set(System.currentTimeMillis());
                         }
-                        lastRequestTime.set(System.currentTimeMillis());
                     }
 
                     CachedImage loaded = loadImageFromUpstream(url, uri);
@@ -1538,7 +1607,7 @@ public class RoomController {
                     throw e;
                 } finally {
                     if (acquired) {
-                        imageProxySemaphore.release();
+                        semaphore.release();
                     }
                     imageInflight.remove(url, placeholder);
                 }
