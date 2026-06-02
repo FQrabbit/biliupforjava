@@ -56,22 +56,19 @@
                                          :class="'is-' + workspaceUsageLevel"
                                          :style="{ width: workspaceUsageProgressWidth }"></div>
                                 </div>
-                            </div>
-                            <div class="workspace-status-item is-database"
-                                 :title="workspaceStatus.databasePath || workspaceStatus.databaseSizeNote || ''">
-                                <div>
-                                    <div class="workspace-status-label">数据库大小</div>
-                                    <div class="workspace-status-subtext">{{ workspaceStatus.databaseSizeNote || '统计当前 H2 数据库文件，压缩数据库后大小可能变化' }}</div>
+                                <div class="workspace-status-usage-meta">
+                                    <span>剩余 {{ workspaceFreeSpaceDisplay }}</span>
                                 </div>
-                                <span class="workspace-status-value is-database-size">{{ workspaceStatus.databaseDisplaySize || '--' }}</span>
                             </div>
-                            <div class="workspace-status-item">
-                                <span class="workspace-status-label">待上传文件</span>
-                                <span class="workspace-status-value">{{ workspaceStatus.pendingUploadCount || 0 }}</span>
+                            <div class="workspace-status-item"
+                                 :title="workspaceDatabaseSizeTitle">
+                                <span class="workspace-status-label">数据库大小</span>
+                                <span class="workspace-status-value">{{ workspaceStatus.databaseDisplaySize || '--' }}</span>
                             </div>
-                            <div class="workspace-status-item">
-                                <span class="workspace-status-label">上传队列</span>
-                                <span class="workspace-status-value">{{ workspaceStatus.queuedUploadCount || 0 }}</span>
+                            <div class="workspace-status-item"
+                                 :title="workspaceUploadStatusTitle">
+                                <span class="workspace-status-label">上传任务</span>
+                                <span class="workspace-status-value">{{ workspaceUploadStatusDisplay }}</span>
                             </div>
                             <div class="workspace-status-item">
                                 <span class="workspace-status-label">检查时间</span>
@@ -1020,6 +1017,7 @@
                 usedPercent: 0,
                 alertThresholdPercent: 95,
                 alert: false,
+                freeBytes: -1,
                 pendingUploadCount: 0,
                 queuedUploadCount: 0,
                 activeUploadCount: 0,
@@ -1081,6 +1079,9 @@
                 }
                 return this.workspaceUsagePercentNumber.toFixed(2) + '%';
             },
+            workspaceFreeSpaceDisplay: function() {
+                return this.formatBytes(this.workspaceStatus.freeBytes);
+            },
             workspaceUsageLevel: function() {
                 if (this.workspaceUsagePercentNumber === null) {
                     return 'normal';
@@ -1107,6 +1108,29 @@
                     return '0%';
                 }
                 return this.workspaceUsagePercentNumber.toFixed(2) + '%';
+            },
+            workspaceDatabaseSizeTitle: function() {
+                var note = this.workspaceStatus.databaseSizeNote || '统计当前 H2 数据库文件，压缩数据库后大小可能变化';
+                if (this.workspaceStatus.databasePath) {
+                    return note + '；路径：' + this.workspaceStatus.databasePath;
+                }
+                return note;
+            },
+            workspaceUploadStatusDisplay: function() {
+                var active = Number(this.workspaceStatus.activeUploadCount) || 0;
+                var queued = Number(this.workspaceStatus.queuedUploadCount) || 0;
+                var waiting = Math.max(0, queued - active);
+                var pending = Number(this.workspaceStatus.pendingUploadCount) || 0;
+                if (active > 0 || waiting > 0) {
+                    return '上传中 ' + active + ' / 等待 ' + waiting;
+                }
+                if (pending > 0) {
+                    return '待处理 ' + pending;
+                }
+                return '空闲';
+            },
+            workspaceUploadStatusTitle: function() {
+                return '上传中：当前正在执行的上传任务；等待：已进入上传调度器但还没开始的分P；待处理：数据库中符合上传条件但尚未进入队列的分P。';
             }
         },
         mounted: function() {
@@ -1187,6 +1211,22 @@
             }
         },
         methods: {
+            formatBytes: function(bytes) {
+                var value = Number(bytes);
+                if (!isFinite(value) || value < 0) {
+                    return '--';
+                }
+                var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                var unitIndex = 0;
+                while (value >= 1024 && unitIndex < units.length - 1) {
+                    value = value / 1024;
+                    unitIndex++;
+                }
+                if (unitIndex === 0) {
+                    return value.toFixed(0) + ' B';
+                }
+                return value.toFixed(2) + ' ' + units[unitIndex];
+            },
             fetchWorkspaceUsageStatus: function() {
                 var self = this;
                 self.workspaceStatusLoading = true;

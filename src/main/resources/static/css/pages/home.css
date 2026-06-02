@@ -417,16 +417,6 @@
     gap: 8px;
 }
 
-.workspace-status-item.is-database {
-    align-items: flex-start;
-    padding: 10px 12px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--border-light));
-    border-radius: var(--radius-md);
-    background: linear-gradient(135deg,
-        color-mix(in srgb, var(--primary-color) 8%, transparent) 0%,
-        color-mix(in srgb, var(--success-color) 7%, transparent) 100%);
-}
-
 .workspace-status-item-head {
     display: flex;
     align-items: center;
@@ -441,13 +431,6 @@
 .workspace-status-value {
     color: var(--text-primary);
     font-weight: 600;
-}
-
-.workspace-status-value.is-database-size {
-    flex-shrink: 0;
-    padding-top: 1px;
-    font-size: 13px;
-    letter-spacing: 0.01em;
 }
 
 .workspace-status-value.is-warning {
@@ -490,12 +473,11 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger-color) 36%, transparent);
 }
 
-.workspace-status-subtext {
-    margin-top: 4px;
-    max-width: 190px;
+.workspace-status-usage-meta {
+    margin-top: -3px;
     color: var(--text-disabled);
     font-size: 11px;
-    line-height: 1.45;
+    line-height: 1.2;
 }
 
 .workspace-status-hint {
