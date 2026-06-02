@@ -6785,6 +6785,8 @@
 
     display: flex;
 
+    align-items: center;
+
     gap: 15px;
 
     border-left: 1px solid var(--border-light);
@@ -6792,6 +6794,31 @@
     border-right: 1px solid var(--border-light);
 
     padding: 0 20px;
+
+}
+
+.batch-options-help,
+.tab-help-icon {
+
+    color: var(--text-secondary);
+
+    cursor: help;
+
+}
+
+.tab-help-icon {
+
+    margin-left: 4px;
+
+    font-size: 13px;
+
+}
+
+.batch-options-help {
+
+    margin-right: -6px;
+
+    font-size: 14px;
 
 }
 

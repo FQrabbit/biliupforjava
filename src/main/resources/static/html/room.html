@@ -555,6 +555,9 @@
                                         </el-tooltip>
                                     </el-option>
                                 </el-select>
+                                <div class="config-field-hint">
+                                    保存时会校验小节是否属于所选合集；不匹配时会自动改为该合集的第一个小节，无法校验时会清空合集设置。
+                                </div>
                             </el-form-item>
                             <el-form-item label="小节">
                                 <el-select v-model="room.sectionId" placeholder="选择小节" style="width: 100%" clearable filterable>
@@ -642,10 +645,22 @@
                             <div class="switch-grid">
                                 <div class="switch-card">
                                     <span class="switch-label">自动上传</span>
+                                    <el-tooltip effect="dark" placement="top">
+                                        <div slot="content">
+                                            控制后续录制是否进入自动上传/投稿流程；关闭不会删除本地录制文件，也不会撤回已经发布的稿件。
+                                        </div>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                    </el-tooltip>
                                     <el-switch v-model="room.upload" active-color="#10b981"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">仅自己可见</span>
+                                    <el-tooltip effect="dark" placement="top">
+                                        <div slot="content">
+                                            投稿时使用“仅自己可见”；已发布稿件的可见性需要在历史页或B站稿件管理中单独调整。
+                                        </div>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                    </el-tooltip>
                                     <el-switch v-model="room.isOnlySelf" :active-value="1" :inactive-value="0" active-color="#10b981"></el-switch>
                                 </div>
                             </div>
@@ -763,6 +778,9 @@
                                     </el-form-item>
                                 </el-col>
                             </el-row>
+                            <div class="config-field-hint threshold-policy-hint">
+                                分P低于任一阈值时会跳过自动上传/投稿；后续是否保留本地文件仍取决于下面的文件后处理规则。
+                            </div>
 
                             <el-form-item label="文件后处理">
                                 <el-select v-model="room.deleteType" placeholder="选择处理方式" style="width: 100%">
@@ -787,10 +805,30 @@
                             
                             <el-form-item v-if="room.deleteType == 3" label="删除天数">
                                 <el-input type="number" v-model="room.deleteDay" placeholder="请输入天数"></el-input>
+                                <el-alert
+                                        class="delete-policy-hint"
+                                        type="warning"
+                                        :closable="false"
+                                        show-icon
+                                        title="这个规则会同时检查历史录制文件"
+                                        description="保存后，当前直播间里以前保留下来、尚未标记删除的旧分P文件，也会按这个天数在定时任务中处理。">
+                                </el-alert>
                             </el-form-item>
 
                             <el-form-item v-if="[4,5,6,7,8,10,11].includes(room.deleteType)" label="目标目录">
                                 <el-input v-model="room.moveDir" placeholder="/path/to/dir"></el-input>
+                                <div class="config-field-hint">
+                                    目标目录会保留录制工作目录下的相对层级；移动会更新分P文件路径，复制会保留原文件。
+                                </div>
+                                <el-alert
+                                        v-if="[6,7].includes(room.deleteType)"
+                                        class="delete-policy-hint"
+                                        type="info"
+                                        :closable="false"
+                                        show-icon
+                                        title="录制结束后会立即处理当前分P"
+                                        description="选择“录制后移动/复制”时，文件关闭后就会触发处理，不会等投稿或审核完成。">
+                                </el-alert>
                             </el-form-item>
                         </div>
                     </div>
@@ -841,6 +879,12 @@
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">高能投稿</span>
+                                    <el-tooltip effect="dark" placement="top">
+                                        <div slot="content">
+                                            投稿完成后根据弹幕热度生成高能剪辑；需要有可解析的弹幕数据，因子越高筛选越严格。
+                                        </div>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                    </el-tooltip>
                                     <el-switch v-model="room.highEnergyCut" active-color="#10b981"></el-switch>
                                 </div>
                                 <div class="switch-card" v-if="room.highEnergyCut">
@@ -2875,6 +2919,7 @@
             exportConfigDialog: false,
             editLiveMsgSettingVisible: false,
             room: {},
+            originalRoomDeleteType: null,
             addRoom: {},
             exportConfig: {
                 exportRoom: true,
@@ -3297,6 +3342,7 @@
             },
             handleEdit: function (index, row) {
                 this.room = JSON.parse(JSON.stringify(row));
+                this.originalRoomDeleteType = this.room.deleteType;
                 this.normalizeGiftReplyRoom(this.room);
                 // 转换推送标签字符串为数组
                 this.pushMsgTagsArray = this.room.pushMsgTags ? this.room.pushMsgTags.split(',').filter(t => t.trim()) : [];
@@ -3362,21 +3408,39 @@
                     }
                 }
 
-                $.ajax({
-                    url: '/room/update',
-                    contentType: 'application/json;charset=utf-8',
-                    type: 'post',
-                    data: JSON.stringify(_this.room),
-                    dataType: 'json',
-                    success: function (data) {
-                        _this.$message({
-                            message: '保存成功',
-                            type: 'success'
-                        });
-                        _this.dialogFormVisible = false;
-                        _this.initTable();
-                    }
-                });
+                var submitRoomUpdate = function () {
+                    $.ajax({
+                        url: '/room/update',
+                        contentType: 'application/json;charset=utf-8',
+                        type: 'post',
+                        data: JSON.stringify(_this.room),
+                        dataType: 'json',
+                        success: function (data) {
+                            _this.$message({
+                                message: '保存成功',
+                                type: 'success'
+                            });
+                            _this.dialogFormVisible = false;
+                            _this.originalRoomDeleteType = _this.room.deleteType;
+                            _this.initTable();
+                        }
+                    });
+                };
+
+                if (_this.originalRoomDeleteType === 0 && _this.room.deleteType === 3) {
+                    _this.$confirm(
+                            '切换为“几天后删除”后，系统会按当前天数检查这个直播间下所有尚未删除的历史录制分P。以前在“不删除”期间保留下来的旧文件，也可能在定时任务中被删除。',
+                            '确认文件后处理规则',
+                            {
+                                confirmButtonText: '继续保存',
+                                cancelButtonText: '再检查一下',
+                                type: 'warning'
+                            }
+                    ).then(submitRoomUpdate).catch(function () {});
+                    return;
+                }
+
+                submitRoomUpdate();
             },
             addRoomF: function () {
                 let _this = this;

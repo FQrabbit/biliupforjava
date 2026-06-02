@@ -57,6 +57,14 @@
                                          :style="{ width: workspaceUsageProgressWidth }"></div>
                                 </div>
                             </div>
+                            <div class="workspace-status-item is-database"
+                                 :title="workspaceStatus.databasePath || workspaceStatus.databaseSizeNote || ''">
+                                <div>
+                                    <div class="workspace-status-label">数据库大小</div>
+                                    <div class="workspace-status-subtext">{{ workspaceStatus.databaseSizeNote || '统计当前 H2 数据库文件，压缩数据库后大小可能变化' }}</div>
+                                </div>
+                                <span class="workspace-status-value is-database-size">{{ workspaceStatus.databaseDisplaySize || '--' }}</span>
+                            </div>
                             <div class="workspace-status-item">
                                 <span class="workspace-status-label">待上传文件</span>
                                 <span class="workspace-status-value">{{ workspaceStatus.pendingUploadCount || 0 }}</span>
@@ -1015,6 +1023,10 @@
                 pendingUploadCount: 0,
                 queuedUploadCount: 0,
                 activeUploadCount: 0,
+                databaseBytes: -1,
+                databaseDisplaySize: '--',
+                databasePath: '',
+                databaseSizeNote: '',
                 updatedAt: '',
                 error: ''
             },

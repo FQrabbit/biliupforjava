@@ -129,6 +129,18 @@ body {
     margin-left: 0;
 }
 
+.stats-action-menu-note {
+    grid-column: 1 / -1;
+    max-width: 360px;
+    padding: 8px 10px;
+    border: 1px solid var(--warning-border, rgba(250, 173, 20, 0.25));
+    border-radius: 6px;
+    background: var(--warning-soft-bg-faint, rgba(250, 173, 20, 0.08));
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
 .stats-hidden-file {
     display: none;
 }

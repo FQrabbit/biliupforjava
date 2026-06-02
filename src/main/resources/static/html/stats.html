@@ -85,6 +85,9 @@
                 <el-button class="stats-more-btn" size="small" icon="el-icon-more" @click="toggleMoreActions">更多操作</el-button>
                 <transition name="stats-action-menu">
                     <div v-if="moreActionsVisible" class="stats-action-menu">
+                        <div class="stats-action-menu-note">
+                            推荐优先使用“补全未统计”。重建会清空并重算统计缓存，缺少 XML 源文件时统计可能不完整；压缩数据库耗时较长，可能影响正在处理的稿件。
+                        </div>
                         <el-button size="small" icon="el-icon-finished" :loading="backfilling" @click="backfillStats">补全未统计</el-button>
                         <el-button size="small" type="warning" plain icon="el-icon-delete" :loading="cleaning" @click="cleanupStats">清理缓存</el-button>
                         <el-button size="small" type="warning" plain icon="el-icon-brush" :loading="cleaningStaleStates" @click="cleanupStaleRecordingStates">清理旧录制状态</el-button>
@@ -1054,7 +1057,7 @@ new Vue({
         },
         rebuildStats: function () {
             var self = this;
-            this.$confirm('重建会清空统计缓存并重新生成，耗时取决于历史和弹幕数量。', '重建统计', {
+            this.$confirm('非必要不建议重建。重建会清空统计缓存并重新生成，耗时取决于历史和弹幕数量；如果部分录播 XML 源文件已经缺失，对应场次的弹幕/用户等统计可能无法完整恢复。一般优先使用“补全未统计”。', '重建统计', {
                 confirmButtonText: '开始重建',
                 cancelButtonText: '取消',
                 type: 'warning'
@@ -1263,7 +1266,7 @@ new Vue({
         },
         compactDatabase: function () {
             var self = this;
-            this.$confirm('数据库压缩会进入维护模式：期间 webhook 会先写入本地队列，投稿/统计等本地后台任务可能被中断并在后续自愈恢复。开始前会自动备份数据库。', '压缩数据库', {
+            this.$confirm('数据库压缩需要一定时间，期间可能影响正在上传、投稿、统计或处理中的稿件任务；开始前会自动备份数据库。建议在没有重要任务运行时执行。', '压缩数据库', {
                 confirmButtonText: '开始压缩',
                 cancelButtonText: '取消',
                 type: 'warning'

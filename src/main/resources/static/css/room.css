@@ -5619,6 +5619,32 @@
 
 }
 
+.delete-policy-hint {
+
+    margin-top: 8px;
+
+}
+
+.config-field-hint {
+
+    margin-top: 8px;
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    line-height: 1.6;
+
+}
+
+.threshold-policy-hint {
+
+    margin-top: -4px;
+
+    margin-bottom: 14px;
+
+}
+
 
 
 .option-card {

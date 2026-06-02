@@ -3,11 +3,13 @@ package top.sshh.bililiverecoder.service;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.util.TaskUtil;
 
+import java.io.IOException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +18,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import javax.sql.DataSource;
 
 @Slf4j
 @Service
@@ -31,12 +35,18 @@ public class WorkspaceUsageService {
 
     private final UploadUserSerialScheduler uploadUserSerialScheduler;
     private final RecordHistoryPartRepository partRepository;
+    private final DataSource dataSource;
+    private final Environment environment;
     private volatile WorkspaceUsageSnapshot latestSnapshot;
 
     public WorkspaceUsageService(UploadUserSerialScheduler uploadUserSerialScheduler,
-                                 RecordHistoryPartRepository partRepository) {
+                                 RecordHistoryPartRepository partRepository,
+                                 DataSource dataSource,
+                                 Environment environment) {
         this.uploadUserSerialScheduler = uploadUserSerialScheduler;
         this.partRepository = partRepository;
+        this.dataSource = dataSource;
+        this.environment = environment;
     }
 
     @PostConstruct
@@ -86,6 +96,7 @@ public class WorkspaceUsageService {
         int pendingUploadCount = partRepository.countPendingUploadPartsWithHistoryUploadEnabled();
         int queuedUploadCount = uploadUserSerialScheduler.getTotalPendingUploadCount();
         int activeUploadCount = TaskUtil.partUploadTask.size();
+        DatabaseSize databaseSize = collectDatabaseSize(normalizedWorkPath);
         return WorkspaceUsageSnapshot.success(
                 normalizedWorkPath,
                 probePath.toString(),
@@ -97,8 +108,89 @@ public class WorkspaceUsageService {
                 alert,
                 pendingUploadCount,
                 queuedUploadCount,
-                activeUploadCount
+                activeUploadCount,
+                databaseSize
         );
+    }
+
+    private DatabaseSize collectDatabaseSize(String normalizedWorkPath) {
+        Path basePath = resolveH2DatabaseBasePath(normalizedWorkPath);
+        if (basePath == null) {
+            return DatabaseSize.unavailable("仅本地 H2 数据库可显示文件大小");
+        }
+        long bytes = 0L;
+        int existingFiles = 0;
+        for (Path file : new Path[]{basePath.resolveSibling(basePath.getFileName() + ".mv.db"), basePath.resolveSibling(basePath.getFileName() + ".h2.db")}) {
+            try {
+                if (Files.isRegularFile(file)) {
+                    bytes += Files.size(file);
+                    existingFiles++;
+                }
+            } catch (IOException ignored) {
+            }
+        }
+        if (existingFiles == 0) {
+            return DatabaseSize.unavailable("数据库文件暂未生成");
+        }
+        return DatabaseSize.available(bytes, formatBytes(bytes), basePath.toString().replace("\\", "/"));
+    }
+
+    private Path resolveH2DatabaseBasePath(String normalizedWorkPath) {
+        String jdbcUrl = environment.getProperty("spring.datasource.hikari.jdbc-url");
+        if (jdbcUrl == null || jdbcUrl.isBlank()) {
+            jdbcUrl = environment.getProperty("spring.datasource.url");
+        }
+        try {
+            if ((jdbcUrl == null || jdbcUrl.isBlank()) && dataSource instanceof com.zaxxer.hikari.HikariDataSource hikariDataSource) {
+                jdbcUrl = hikariDataSource.getJdbcUrl();
+            }
+        } catch (Exception ignored) {
+        }
+        if (jdbcUrl == null || jdbcUrl.isBlank()) {
+            return Paths.get(normalizedWorkPath, "db").toAbsolutePath().normalize();
+        }
+        String prefix = "jdbc:h2:";
+        if (!jdbcUrl.startsWith(prefix)) {
+            return null;
+        }
+        String location = jdbcUrl.substring(prefix.length());
+        int optionIndex = location.indexOf(';');
+        if (optionIndex >= 0) {
+            location = location.substring(0, optionIndex);
+        }
+        while (location.startsWith("retry:")) {
+            location = location.substring("retry:".length());
+        }
+        if (location.startsWith("mem:") || location.startsWith("tcp:") || location.startsWith("ssl:")) {
+            return null;
+        }
+        if (location.startsWith("file:")) {
+            location = location.substring("file:".length());
+        }
+        if (location.startsWith("~/")) {
+            location = System.getProperty("user.home") + location.substring(1);
+        }
+        if (location.isBlank()) {
+            return Paths.get(normalizedWorkPath, "db").toAbsolutePath().normalize();
+        }
+        return Paths.get(location).toAbsolutePath().normalize();
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes < 0L) {
+            return "--";
+        }
+        String[] units = {"B", "KB", "MB", "GB", "TB"};
+        double value = bytes;
+        int unitIndex = 0;
+        while (value >= 1024.0d && unitIndex < units.length - 1) {
+            value = value / 1024.0d;
+            unitIndex++;
+        }
+        if (unitIndex == 0) {
+            return bytes + " B";
+        }
+        return String.format(java.util.Locale.ROOT, "%.2f %s", value, units[unitIndex]);
     }
 
     private static Path pickExistingPath(Path original) {
@@ -144,6 +236,10 @@ public class WorkspaceUsageService {
         private final int pendingUploadCount;
         private final int queuedUploadCount;
         private final int activeUploadCount;
+        private final long databaseBytes;
+        private final String databaseDisplaySize;
+        private final String databasePath;
+        private final String databaseSizeNote;
         private final String updatedAt;
         private final String error;
 
@@ -159,6 +255,7 @@ public class WorkspaceUsageService {
                                        int pendingUploadCount,
                                        int queuedUploadCount,
                                        int activeUploadCount,
+                                       DatabaseSize databaseSize,
                                        String updatedAt,
                                        String error) {
             this.valid = valid;
@@ -173,6 +270,10 @@ public class WorkspaceUsageService {
             this.pendingUploadCount = pendingUploadCount;
             this.queuedUploadCount = queuedUploadCount;
             this.activeUploadCount = activeUploadCount;
+            this.databaseBytes = databaseSize.bytes();
+            this.databaseDisplaySize = databaseSize.displaySize();
+            this.databasePath = databaseSize.path();
+            this.databaseSizeNote = databaseSize.note();
             this.updatedAt = updatedAt;
             this.error = error;
         }
@@ -187,7 +288,8 @@ public class WorkspaceUsageService {
                                                       boolean alert,
                                                       int pendingUploadCount,
                                                       int queuedUploadCount,
-                                                      int activeUploadCount) {
+                                                      int activeUploadCount,
+                                                      DatabaseSize databaseSize) {
             return new WorkspaceUsageSnapshot(
                     true,
                     workPath,
@@ -201,6 +303,7 @@ public class WorkspaceUsageService {
                     pendingUploadCount,
                     queuedUploadCount,
                     activeUploadCount,
+                    databaseSize,
                     LocalDateTime.now().format(TIME_FMT),
                     null
             );
@@ -220,6 +323,7 @@ public class WorkspaceUsageService {
                     0,
                     0,
                     0,
+                    DatabaseSize.unavailable("状态不可用"),
                     LocalDateTime.now().format(TIME_FMT),
                     error
             );
@@ -239,6 +343,7 @@ public class WorkspaceUsageService {
                     0,
                     0,
                     0,
+                    DatabaseSize.unavailable("状态尚未准备好"),
                     LocalDateTime.now().format(TIME_FMT),
                     "snapshot not ready"
             );
@@ -258,9 +363,23 @@ public class WorkspaceUsageService {
             map.put("pendingUploadCount", pendingUploadCount);
             map.put("queuedUploadCount", queuedUploadCount);
             map.put("activeUploadCount", activeUploadCount);
+            map.put("databaseBytes", databaseBytes);
+            map.put("databaseDisplaySize", databaseDisplaySize);
+            map.put("databasePath", databasePath);
+            map.put("databaseSizeNote", databaseSizeNote);
             map.put("updatedAt", updatedAt);
             map.put("error", error);
             return map;
+        }
+    }
+
+    private record DatabaseSize(long bytes, String displaySize, String path, String note) {
+        private static DatabaseSize available(long bytes, String displaySize, String path) {
+            return new DatabaseSize(bytes, displaySize, path, "统计当前 H2 数据库文件，压缩数据库后大小可能变化");
+        }
+
+        private static DatabaseSize unavailable(String note) {
+            return new DatabaseSize(-1L, "--", null, note);
         }
     }
 }

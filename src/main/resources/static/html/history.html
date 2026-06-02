@@ -112,6 +112,9 @@
                 <el-tab-pane name="archived" :disabled="isMultiSelectMode || batchVisibilityRunning">
                     <span slot="label">
                         已归档的稿件
+                        <el-tooltip effect="dark" content="归档表示不再参与常规处理；不会删除本地文件或稿件记录，必要时可在详情中恢复处理。" placement="top">
+                            <i class="el-icon-question tab-help-icon"></i>
+                        </el-tooltip>
                         <el-badge v-if="archivedCount > 0" :value="archivedCount" class="item" type="info" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
                     </span>
                 </el-tab-pane>
@@ -507,6 +510,9 @@
             <span class="batch-count" style="color:#67c23a;">可切换 {{ selectedVisibilityEligibleCount }} 项</span>
             <span class="batch-count" v-if="selectedVisibilityIneligibleCount > 0" style="color:#e6a23c;">不可切换 {{ selectedVisibilityIneligibleCount }} 项</span>
             <div class="batch-options">
+                <el-tooltip effect="dark" content="不勾选时只删除数据库记录；勾选后会同时尝试删除对应本地文件，删除失败会在完成后提示。" placement="top">
+                    <i class="el-icon-info batch-options-help"></i>
+                </el-tooltip>
                 <el-checkbox v-model="batchDeleteOptions.deleteVideo" :disabled="batchVisibilityRunning">同时删除视频文件</el-checkbox>
                 <el-checkbox v-model="batchDeleteOptions.deleteDanmaku" :disabled="batchVisibilityRunning">同时删除弹幕文件</el-checkbox>
                 <el-checkbox v-model="batchDeleteOptions.deleteCover" :disabled="batchVisibilityRunning">同时删除封面图片</el-checkbox>
