@@ -1410,6 +1410,48 @@
     }, 
     {
       "pattern":"\\Qtop/sshh/bililiverecoder/util/bili/Cookie.class\\E"
+    }, 
+    {
+      "pattern":"\\Qorg/xml/sax/ContentHandler.class\\E"
+    }, 
+    {
+      "pattern":"\\Qorg/xml/sax/DTDHandler.class\\E"
+    }, 
+    {
+      "pattern":"\\Qorg/xml/sax/EntityResolver.class\\E"
+    }, 
+    {
+      "pattern":"\\Qorg/xml/sax/helpers/DefaultHandler.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/HistoryController$SendListStats.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/SetupController.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/StatsController$LimitingInputStream.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/controller/StatsController$StreamSizeExceededException.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/MultipartUploadPart.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/entity/MultipartUploadSession.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/MultipartUploadPartRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/repo/MultipartUploadSessionRepository.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/MultipartUploadSessionService.class\\E"
+    }, 
+    {
+      "pattern":"\\Qtop/sshh/bililiverecoder/service/UploadPauseService.class\\E"
     }
   ]},
   "bundles":[

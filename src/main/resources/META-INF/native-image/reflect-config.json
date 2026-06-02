@@ -5079,7 +5079,8 @@
     {"name":"getPersistentEntity","parameterTypes":["org.springframework.data.util.TypeInformation"] }, 
     {"name":"getRequiredPersistentEntity","parameterTypes":["java.lang.Class"] }, 
     {"name":"getRequiredPersistentEntity","parameterTypes":["org.springframework.data.mapping.PersistentProperty"] }, 
-    {"name":"getRequiredPersistentEntity","parameterTypes":["org.springframework.data.util.TypeInformation"] }
+    {"name":"getRequiredPersistentEntity","parameterTypes":["org.springframework.data.util.TypeInformation"] }, 
+    {"name":"getPersistentEntity","parameterTypes":["java.lang.Class"] }
   ]
 },
 {
@@ -8422,7 +8423,10 @@
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"<init>","parameterTypes":["java.util.concurrent.Executor"] }]
+  "methods":[
+    {"name":"<init>","parameterTypes":["java.util.concurrent.Executor"] }, 
+    {"name":"<init>","parameterTypes":["java.util.concurrent.Executor","org.springframework.beans.factory.ObjectProvider"] }
+  ]
 },
 {
   "name":"top.sshh.bililiverecoder.service.WebhookEventDispatcher",
@@ -8968,5 +8972,86 @@
   "name":"top.sshh.bililiverecoder.util.UploadProgressTracker$State",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.controller.RoomController$$SpringCGLIB$$0",
+  "fields":[
+    {"name":"CGLIB$CALLBACK_FILTER"}, 
+    {"name":"CGLIB$FACTORY_DATA"}
+  ],
+  "methods":[{"name":"CGLIB$SET_THREAD_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.controller.SetupController",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":["org.springframework.core.env.Environment"] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.MultipartUploadPart",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.MultipartUploadSession",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.MultipartUploadPartRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.repo.MultipartUploadSessionRepository",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true
+},
+{
+  "name":"top.sshh.bililiverecoder.service.MultipartUploadSessionService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.MultipartUploadSessionService$$SpringCGLIB$$0",
+  "fields":[
+    {"name":"CGLIB$CALLBACK_FILTER"}, 
+    {"name":"CGLIB$FACTORY_DATA"}
+  ],
+  "methods":[{"name":"CGLIB$SET_THREAD_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.UploadPauseService",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"top.sshh.bililiverecoder.service.UploadPauseService$$SpringCGLIB$$0",
+  "fields":[
+    {"name":"CGLIB$CALLBACK_FILTER"}, 
+    {"name":"CGLIB$FACTORY_DATA"}
+  ],
+  "methods":[{"name":"CGLIB$SET_THREAD_CALLBACKS","parameterTypes":["org.springframework.cglib.proxy.Callback[]"] }]
 }
 ]

@@ -13,6 +13,7 @@ import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -55,6 +56,18 @@ public class RecordEventStreamEndService implements RecordEventService {
             Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
             if (historyOptional.isPresent()) {
                 RecordHistory history = historyOptional.get();
+                if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isForceArchived()) {
+                    if (history.isForceArchived()) {
+                        room.setHistoryId(-1L);
+                        room.setSessionId(null);
+                        roomRepository.save(room);
+                    }
+                    log.info("[BLR] {}", LogKvs.event("StreamEnd.SkipHistoryUpdate")
+                            .add("roomId", eventData.getRoomId())
+                            .add("historyId", history.getId())
+                            .add("forceArchived", history.isForceArchived()));
+                    return;
+                }
                 history.setStreaming(false);
                 history.setUpdateTime(LocalDateTime.now());
                 history.setEndTime(LocalDateTime.now());

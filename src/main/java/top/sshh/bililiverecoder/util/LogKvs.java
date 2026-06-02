@@ -707,6 +707,17 @@ public final class LogKvs {
         EVENT_ZH.put("HighEnergyCut.Upload.MultipartComplete.ConflictRetry", "高能剪辑：分片完成检测到冲突，准备重试");
         EVENT_ZH.put("HighEnergyCut.Upload.MultipartComplete.Retry", "高能剪辑：分片完成提交失败，正在重试");
     }
+    static {
+        // 强制归档硬停止/恢复
+        EVENT_ZH.put("History.RestoreForceArchive.Success", "强制归档已恢复处理");
+        EVENT_ZH.put("StreamEnd.SkipHistoryUpdate", "下播事件：目标稿件已强制归档或房间不匹配，跳过更新结束时间");
+        EVENT_ZH.put("RecordEnd.SkipHistoryUpdate", "录制结束事件：目标稿件已强制归档或房间不匹配，跳过更新结束时间");
+        EVENT_ZH.put("FileClosed.SkipHistoryUpdate", "文件关闭事件：目标稿件已强制归档或房间不匹配，跳过更新结束时间");
+        EVENT_ZH.put("RoomStatusSyncJob.SkipForceArchivedHistory", "直播状态同步：当前稿件已强制归档，跳过历史结束时间更新");
+        EVENT_ZH.put("Blrec.RecordingFinished.SkipForceArchived", "blrec 录制结束：当前稿件已强制归档，跳过历史结束时间更新");
+        EVENT_ZH.put("Blrec.RecordingCancelled.SkipForceArchived", "blrec 录制取消：当前稿件已强制归档，跳过历史结束时间更新");
+
+    }
 
     private LogKvs() {
     }

@@ -23,6 +23,7 @@ import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -82,6 +83,20 @@ public class RecordEventRecordEndService implements RecordEventService {
             Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
             if (historyOptional.isPresent()) {
                 RecordHistory history = historyOptional.get();
+                if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isForceArchived()) {
+                    room.setRecording(false);
+                    room.setStreaming(false);
+                    room.setSessionId(null);
+                    if (history.isForceArchived()) {
+                        room.setHistoryId(-1L);
+                    }
+                    roomRepository.save(room);
+                    log.info("[BLR] {}", LogKvs.event("RecordEnd.SkipHistoryUpdate")
+                            .add("roomId", eventData.getRoomId())
+                            .add("historyId", history.getId())
+                            .add("forceArchived", history.isForceArchived()));
+                    return;
+                }
                 history.setSessionId(eventData.getSessionId());
                 history.setEndTime(LocalDateTime.now());
                 history.setRecording(false);

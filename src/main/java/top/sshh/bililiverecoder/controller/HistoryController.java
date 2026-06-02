@@ -1083,6 +1083,11 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            if (history.isForceArchived()) {
+                result.put("type", "warning");
+                result.put("msg", "稿件已强制归档，请先恢复处理");
+                return result;
+            }
             history.setUploadRetryCount(0);
             history = historyRepository.save(history);
             publishService.asyncPublishRecordHistory(history);
@@ -1112,6 +1117,11 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            if (history.isForceArchived()) {
+                result.put("type", "warning");
+                result.put("msg", "稿件已强制归档，请先恢复处理");
+                return result;
+            }
             history.setUploadRetryCount(0);
             history = historyRepository.save(history);
             String msg = HighEnergyCutPublishService.taskRunningMsg.get(history.getId());
@@ -1154,8 +1164,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            if (history.isForceArchived()) {
+                result.put("type", "warning");
+                result.put("msg", "稿件已强制归档，请先恢复处理");
+                return result;
+            }
             history.setUploadRetryCount(0);
-            history.setForceArchived(false);
             history = historyRepository.save(history);
             publishService.asyncRepublishRecordHistory(history);
             result.put("type", "success");
@@ -1225,6 +1239,10 @@ public class HistoryController {
                 changed = true;
             }
 
+            RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+            boolean roomDetached = detachRoomHistoryIfCurrent(room, history);
+            changed = changed || roomDetached;
+
             if (changed) {
                 historyRepository.save(history);
                 result.put("type", "success");
@@ -1233,6 +1251,7 @@ public class HistoryController {
                         .add("historyId", id)
                         .add("roomId", history.getRoomId())
                         .add("uploadClosed", uploadClosed)
+                        .add("roomDetached", roomDetached)
                         .addStageCostMs("total", totalStartNs));
             } else {
                 result.put("type", "info");
@@ -1248,6 +1267,55 @@ public class HistoryController {
 
 
      // 动态查询条件（复用于列表查询和总数统计）
+    @GetMapping("/restoreForceArchive/{id}")
+    public Map<String, String> restoreForceArchive(@PathVariable("id") Long id) {
+        long totalStartNs = System.nanoTime();
+        Map<String, String> result = new HashMap<>();
+        if (id == null) {
+            result.put("type", "info");
+            result.put("msg", "请输入id");
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(id);
+        if (historyOptional.isPresent()) {
+            RecordHistory history = historyOptional.get();
+            if (history.isForceArchived()) {
+                history.setForceArchived(false);
+                history.setUpdateTime(LocalDateTime.now());
+                historyRepository.save(history);
+                result.put("type", "success");
+                result.put("msg", "已恢复处理");
+                log.info("[BLR] {}", LogKvs.event("History.RestoreForceArchive.Success")
+                        .add("historyId", id)
+                        .add("roomId", history.getRoomId())
+                        .addStageCostMs("total", totalStartNs));
+            } else {
+                result.put("type", "info");
+                result.put("msg", "该稿件未强制归档");
+            }
+            return result;
+        } else {
+            result.put("type", "warning");
+            result.put("msg", "录制历史不存在");
+            return result;
+        }
+    }
+
+    private boolean detachRoomHistoryIfCurrent(RecordRoom room, RecordHistory history) {
+        if (room == null || history == null || history.getId() == null) {
+            return false;
+        }
+        if (!Objects.equals(room.getHistoryId(), history.getId())) {
+            return false;
+        }
+        room.setHistoryId(-1L);
+        room.setSessionId(null);
+        room.setRecording(false);
+        room.setStreaming(false);
+        roomRepository.save(room);
+        return true;
+    }
+
     private List<Predicate> getPredicates(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root, RecordHistoryDTO request) {
         List<Predicate> predicatesList = new ArrayList<>();
         if (StringUtils.isNotBlank(request.getRoomId())) {

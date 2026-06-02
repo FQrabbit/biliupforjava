@@ -81,7 +81,14 @@ public class RoomStatusSyncJob {
                                         room.setHistoryId(-1L);
                                         changed = true;
                                     } else {
-                                        if (history.isRecording() || history.isStreaming()) {
+                                        if (history.isForceArchived()) {
+                                            room.setHistoryId(-1L);
+                                            room.setSessionId(null);
+                                            changed = true;
+                                            log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.SkipForceArchivedHistory")
+                                                    .add("roomId", room.getRoomId())
+                                                    .add("historyId", history.getId()));
+                                        } else if (history.isRecording() || history.isStreaming()) {
                                             history.setRecording(false);
                                             history.setStreaming(false);
                                             history.setEndTime(LocalDateTime.now());

@@ -44,6 +44,15 @@ public class BlrecRecordingFinishedEventService implements BlrecEventService {
         Optional<RecordHistory> historyOpt = historyRepository.findById(room.getHistoryId());
         if (historyOpt.isPresent()) {
             RecordHistory history = historyOpt.get();
+            if (history.isForceArchived()) {
+                room.setHistoryId(-1L);
+                room.setSessionId(null);
+                roomRepository.save(room);
+                log.info("[BLR] {}", LogKvs.event("Blrec.RecordingFinished.SkipForceArchived")
+                        .add("roomId", roomId)
+                        .add("historyId", history.getId()));
+                return;
+            }
             history.setRecording(false);
             history.setStreaming(room.isStreaming());
             history.setEndTime(LocalDateTime.now());

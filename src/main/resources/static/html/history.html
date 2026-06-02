@@ -903,9 +903,9 @@
             <div class="detail-footer-actions" v-if="currentDetail.id">
                 <!-- 常用操作 -->
                 <div class="action-group-primary">
-                    <el-button class="modern-btn" @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit">编辑</el-button>
+                    <el-button class="modern-btn" @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit" :disabled="currentDetail.forceArchived">编辑</el-button>
                     <el-button class="modern-btn" @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
-                    <el-button v-if="currentDetail.waitingForPublish" class="modern-btn breathing" @click="touchPublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-s-release">立即投稿</el-button>
+                    <el-button v-if="currentDetail.waitingForPublish && !currentDetail.forceArchived" class="modern-btn breathing" @click="touchPublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-s-release">立即投稿</el-button>
                 </div>
 
                 <!-- 更多操作开关 -->
@@ -923,20 +923,21 @@
                     <div class="action-group-secondary" v-show="showMoreActions">
                         <div class="action-sub-group">
                             <span class="action-group-label">发布管理</span>
-                            <el-button class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
-                            <el-button class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
-                            <el-button v-if="currentDetail.upload && !currentDetail.publish && currentDetail.partCount > 0 && currentDetail.uploadPartCount === currentDetail.partCount" class="modern-btn" @click="retryPublishOnly(currentDetail.id)" size="mini" type="primary" plain icon="el-icon-refresh">重试发布</el-button>
-                            <el-button class="modern-btn" @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
-                            <el-button class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
+                            <el-button v-if="!currentDetail.forceArchived && currentDetail.upload && !currentDetail.publish && currentDetail.partCount > 0 && currentDetail.uploadPartCount === currentDetail.partCount" class="modern-btn" @click="retryPublishOnly(currentDetail.id)" size="mini" type="primary" plain icon="el-icon-refresh">重试发布</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
+                            <el-button v-if="currentDetail.forceArchived" class="modern-btn" @click="restoreForceArchive(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">恢复处理</el-button>
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
                             <span class="action-group-label">录制与数据</span>
-                            <el-button class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
-                            <el-tooltip effect="dark" content="强制停止所有未完成操作并归档（适用于卡住的任务）" placement="top">
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
+                            <el-tooltip v-if="!currentDetail.forceArchived" effect="dark" content="强制停止所有未完成操作并归档（适用于卡住的任务）" placement="top">
                                 <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button">强制归档</el-button>
                             </el-tooltip>
-                            <el-button class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
                             <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
                         </div>
                         <div class="action-divider"></div>
@@ -1674,13 +1675,14 @@
             // 判断是否有删除选项被选中，用于禁用批量可见性按钮
             canShowHistoryPauseButton: function() {
                 if (!this.currentDetail || !this.currentDetail.id || this.currentDetail.uploadPaused) return false;
+                if (this.currentDetail.forceArchived) return false;
                 if (!this.currentDetail.upload || this.currentDetail.publish) return false;
                 return this.mergedParts.some(function(p) {
                     return p && p.state !== 'SUCCESS' && p.state !== 'SKIPPED' && p.state !== 'ISSUE';
                 });
             },
             canShowHistoryResumeButton: function() {
-                return !!(this.currentDetail && this.currentDetail.id && this.currentDetail.uploadPaused && this.currentDetail.upload && !this.currentDetail.publish);
+                return !!(this.currentDetail && this.currentDetail.id && !this.currentDetail.forceArchived && this.currentDetail.uploadPaused && this.currentDetail.upload && !this.currentDetail.publish);
             },
             isDeleteOptionSelected: function() {
                 return this.batchDeleteOptions.deleteVideo || this.batchDeleteOptions.deleteDanmaku || this.batchDeleteOptions.deleteCover;
@@ -2326,6 +2328,40 @@
                         error: function() {
                             loading.close();
                             _this.$message.error('强制归档请求失败');
+                        }
+                    });
+                }).catch(() => {});
+            },
+            restoreForceArchive: function(id) {
+                let _this = this;
+                this.$confirm('此操作只会取消强制归档标记，不会自动恢复录制。恢复后可再按需重新开启上传或重置状态。<br/><br/>确定要恢复处理吗？', '恢复处理确认', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '恢复处理',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    const loading = _this.$loading({
+                        lock: true,
+                        text: '正在恢复处理...',
+                        spinner: 'el-icon-loading',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    $.ajax({
+                        url: '/history/restoreForceArchive/' + id,
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            loading.close();
+                            _this.$message({
+                                message: data.msg,
+                                type: data.type
+                            });
+                            _this.detailDialogVisible = false;
+                            _this.initTable();
+                        },
+                        error: function() {
+                            loading.close();
+                            _this.$message.error('恢复处理请求失败');
                         }
                     });
                 }).catch(() => {});
