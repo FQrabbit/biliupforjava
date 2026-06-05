@@ -287,6 +287,7 @@ public final class LogKvs {
         EVENT_ZH.put("ImageProxy.InvalidScheme", "图片代理：Scheme不合法");
         EVENT_ZH.put("ImageProxy.Failed", "图片代理：请求失败");
         EVENT_ZH.put("Http.Request.Failed", "HTTP 请求失败(网络/超时/连接问题)");
+        EVENT_ZH.put("Http.Notify.ServerChan3.Request.Failed", "Server酱3通知发送失败(网络/超时/连接问题)");
         EVENT_ZH.put("Http.Response.Error", "HTTP 响应非 2xx(服务端错误/被拦截/参数异常)");
         EVENT_ZH.put("Http.RiskControl.Triggered", "检测到风控(-412)，可能需要降低频率或更换网络");
         EVENT_ZH.put("Http.Dns.UnknownHost.Retry", "域名解析失败，等待后重试");

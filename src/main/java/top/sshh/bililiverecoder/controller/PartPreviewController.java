@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,9 +27,13 @@ import java.util.Map;
 public class PartPreviewController {
 
     private static final int BUFFER_SIZE = 1024 * 1024;
+    private static final long FOLLOW_SLEEP_MS = 300L;
 
     @Autowired
     private PartPreviewService previewService;
+
+    @Value("${record.preview.source-follow-idle-timeout-ms:15000}")
+    private long sourceFollowIdleTimeoutMs;
 
     @GetMapping("/{partId}/meta")
     public Map<String, Object> meta(@PathVariable Long partId) {
@@ -54,22 +59,22 @@ public class PartPreviewController {
     @GetMapping("/{partId}/source")
     public ResponseEntity<StreamingResponseBody> source(@PathVariable Long partId,
                                                         @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
-        return stream(previewService.getSource(partId), rangeHeader);
+        return stream(previewService.getSource(partId), rangeHeader, true);
     }
 
     @GetMapping("/{partId}/cache")
     public ResponseEntity<StreamingResponseBody> cache(@PathVariable Long partId,
                                                        @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
-        return stream(previewService.getCache(partId), rangeHeader);
+        return stream(previewService.getCache(partId), rangeHeader, false);
     }
 
     @GetMapping("/{partId}/danmaku")
     public ResponseEntity<StreamingResponseBody> danmaku(@PathVariable Long partId,
                                                          @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
-        return stream(previewService.getDanmaku(partId), rangeHeader);
+        return stream(previewService.getDanmaku(partId), rangeHeader, false);
     }
 
-    private ResponseEntity<StreamingResponseBody> stream(PartPreviewService.PreviewFile previewFile, String rangeHeader) {
+    private ResponseEntity<StreamingResponseBody> stream(PartPreviewService.PreviewFile previewFile, String rangeHeader, boolean allowFollow) {
         if (previewFile == null || !previewFile.available() || previewFile.streamFile() == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
@@ -77,40 +82,17 @@ public class PartPreviewController {
             Path file = previewFile.streamFile();
             long length = Files.size(file);
             Range range = parseRange(rangeHeader, length);
-            StreamingResponseBody body = outputStream -> {
-                try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
-                    raf.seek(range.start);
-                    byte[] buffer = new byte[BUFFER_SIZE];
-                    long remaining = range.length();
-                    while (remaining > 0) {
-                        int read = raf.read(buffer, 0, (int) Math.min(buffer.length, remaining));
-                        if (read < 0) {
-                            break;
-                        }
-                        try {
-                            outputStream.write(buffer, 0, read);
-                        } catch (IOException e) {
-                            if (isClientAbort(e)) {
-                                return;
-                            }
-                            throw e;
-                        }
-                        remaining -= read;
-                    }
-                    try {
-                        outputStream.flush();
-                    } catch (IOException e) {
-                        if (!isClientAbort(e)) {
-                            throw e;
-                        }
-                    }
-                }
-            };
+            boolean followGrowingSource = allowFollow && previewFile.recording() && !range.partial;
+            StreamingResponseBody body = followGrowingSource
+                    ? followGrowingFile(file, range.start)
+                    : fixedRangeFile(file, range);
 
             HttpHeaders headers = new HttpHeaders();
             headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
             headers.setContentType(MediaType.parseMediaType(previewFile.contentType() == null ? "application/octet-stream" : previewFile.contentType()));
-            headers.setContentLength(range.length());
+            if (!followGrowingSource) {
+                headers.setContentLength(range.length());
+            }
             if (range.partial) {
                 headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + range.start + "-" + range.end + "/" + length);
                 return new ResponseEntity<>(body, headers, HttpStatus.PARTIAL_CONTENT);
@@ -118,6 +100,81 @@ public class PartPreviewController {
             return new ResponseEntity<>(body, headers, HttpStatus.OK);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+
+    private StreamingResponseBody fixedRangeFile(Path file, Range range) {
+        return outputStream -> {
+            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+                raf.seek(range.start);
+                byte[] buffer = new byte[BUFFER_SIZE];
+                long remaining = range.length();
+                while (remaining > 0) {
+                    int read = raf.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+                    if (read < 0) {
+                        break;
+                    }
+                    try {
+                        outputStream.write(buffer, 0, read);
+                    } catch (IOException e) {
+                        if (isClientAbort(e)) {
+                            return;
+                        }
+                        throw e;
+                    }
+                    remaining -= read;
+                }
+                flushQuietly(outputStream);
+            }
+        };
+    }
+
+    private StreamingResponseBody followGrowingFile(Path file, long start) {
+        return outputStream -> {
+            long idleTimeoutMs = Math.max(1000L, sourceFollowIdleTimeoutMs);
+            long idleStartedAt = -1L;
+            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+                raf.seek(Math.max(0, start));
+                byte[] buffer = new byte[BUFFER_SIZE];
+                while (true) {
+                    int read = raf.read(buffer);
+                    if (read > 0) {
+                        idleStartedAt = -1L;
+                        try {
+                            outputStream.write(buffer, 0, read);
+                            outputStream.flush();
+                        } catch (IOException e) {
+                            if (isClientAbort(e)) {
+                                return;
+                            }
+                            throw e;
+                        }
+                        continue;
+                    }
+                    if (idleStartedAt < 0) {
+                        idleStartedAt = System.currentTimeMillis();
+                    } else if (System.currentTimeMillis() - idleStartedAt >= idleTimeoutMs) {
+                        break;
+                    }
+                    try {
+                        Thread.sleep(FOLLOW_SLEEP_MS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                flushQuietly(outputStream);
+            }
+        };
+    }
+
+    private void flushQuietly(java.io.OutputStream outputStream) throws IOException {
+        try {
+            outputStream.flush();
+        } catch (IOException e) {
+            if (!isClientAbort(e)) {
+                throw e;
+            }
         }
     }
 

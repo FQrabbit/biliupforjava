@@ -169,6 +169,7 @@ public final class PushNotifyClient {
             }
 
             String apiUrl = buildServerChan3ApiUrl(serverChanSendKey);
+            String serverChanUid = extractServerChan3Uid(serverChanSendKey);
             if (StringUtils.isBlank(apiUrl)) {
                 log.warn("[BLR] {}", LogKvs.event("Notify.ServerChan3.Send.Failed")
                         .add("roomId", room.getRoomId())
@@ -180,8 +181,17 @@ public final class PushNotifyClient {
                     apiUrl,
                     headers,
                     form,
+                    false,
+                    LogKvs.event("Http.Notify.ServerChan3.Request.Failed")
+                            .add("roomId", room.getRoomId())
+                            .addIfNotBlank("uname", room.getUname())
+                            .addIfNotBlank("notifyTitle", title)
+                            .addIfNotBlank("serverChanUid", serverChanUid),
                     false
             );
+            if (StringUtils.isBlank(resp)) {
+                return;
+            }
             JSONObject json = JSON.parseObject(resp);
             Integer code = json.getInteger("code");
             if (code == null || code != 0) {
@@ -197,6 +207,15 @@ public final class PushNotifyClient {
                     .addIfNotBlank("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
         }
+    }
+
+    private static String extractServerChan3Uid(String sendKey) {
+        String trimmedSendKey = StringUtils.defaultString(sendKey).trim();
+        Matcher matcher = SERVER_CHAN3_UID_PATTERN.matcher(trimmedSendKey);
+        if (matcher.matches()) {
+            return matcher.group(1);
+        }
+        return null;
     }
 
     private static String buildTitle(String text) {

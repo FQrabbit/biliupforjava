@@ -80,6 +80,14 @@ public class HttpClientUtil {
     public static String post(String url, Map<String, String> headers,
                               Map<String, String> formParams,
                               Boolean allowCookie) {
+        return post(url, headers, formParams, allowCookie, null, true);
+    }
+
+    public static String post(String url, Map<String, String> headers,
+                              Map<String, String> formParams,
+                              Boolean allowCookie,
+                              LogKvs requestFailedLog,
+                              boolean throwOnFailure) {
         FormBody.Builder builder = new FormBody.Builder();
         formParams.forEach(builder::add);
         RequestBody formBody = builder
@@ -93,13 +101,17 @@ public class HttpClientUtil {
         try {
             return execute(currentClient, build);
         } catch (IOException e) {
-            log.error("[BLR] {}", LogKvs.event("Http.Request.Failed")
+            LogKvs kvs = requestFailedLog == null ? LogKvs.event("Http.Request.Failed") : requestFailedLog;
+            log.error("[BLR] {}", kvs
                     .add("method", "POST")
                     .addUrl("url", url)
                     .add("allowCookie", allowCookie)
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
-            throw new RuntimeException(e.getMessage());
+            if (throwOnFailure) {
+                throw new RuntimeException(e.getMessage());
+            }
+            return null;
         }
     }
 
