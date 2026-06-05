@@ -15,10 +15,20 @@
         collapsed: false,
         progress: 0,
         progressHandler: null,
+        recoveryTimer: null,
+        recoveryHandler: null,
+        recovering: false,
+        recoverAttempts: 0,
+        lastVideoTime: 0,
+        lastProgressAt: 0,
         artLoader: null,
         mpegtsLoader: null,
         danmukuLoader: null
     };
+    var RECOVER_STALL_MS = 10000;
+    var BUFFER_NUDGE_SECONDS = 0.12;
+    var BUFFER_NUDGE_MIN_AHEAD = 1.2;
+    var BUFFER_GAP_JUMP_MAX_SECONDS = 6;
 
     function loadScript(src) {
         return new Promise(function(resolve, reject) {
@@ -145,6 +155,281 @@
         state.flv = null;
     }
 
+    function addRecoverNonce(url) {
+        if (!url) return url;
+        return url + (url.indexOf('?') >= 0 ? '&' : '?') + '_previewRecover=' + Date.now();
+    }
+
+    function createFlvPlayer(video, url) {
+        destroyFlv();
+        state.flv = window.mpegts.createPlayer({
+            type: 'flv',
+            isLive: false,
+            url: addRecoverNonce(url)
+        });
+        bindFlvRecoveryEvents(state.flv);
+        state.flv.attachMediaElement(video);
+        state.flv.load();
+    }
+
+    function bindFlvRecoveryEvents(flv) {
+        if (!flv || !window.mpegts || !window.mpegts.Events) return;
+        var events = window.mpegts.Events;
+        if (events.ERROR) {
+            try {
+                flv.on(events.ERROR, function() {
+                    scheduleRecovery('flv-error', true);
+                });
+            } catch (e) {}
+        }
+        if (events.LOADING_COMPLETE) {
+            try {
+                flv.on(events.LOADING_COMPLETE, function() {
+                    scheduleRecovery('flv-loading-complete', false);
+                });
+            } catch (e) {}
+        }
+        if (events.STATISTICS_INFO) {
+            try {
+                flv.on(events.STATISTICS_INFO, function() {
+                    markPlaybackProgress();
+                });
+            } catch (e) {}
+        }
+    }
+
+    function markPlaybackProgress() {
+        var video = null;
+        try {
+            video = state.art && state.art.video;
+        } catch (e) {}
+        if (!video) return;
+        var current = Number(video.currentTime) || 0;
+        var moved = Math.abs(current - state.lastVideoTime) >= 0.2;
+        if (moved) {
+            state.lastVideoTime = current;
+            state.lastProgressAt = Date.now();
+            state.recoverAttempts = 0;
+        }
+        if (moved || video.paused) {
+            clearRecoveryTimer();
+        }
+    }
+
+    function clearRecoveryTimer() {
+        if (state.recoveryTimer) {
+            clearTimeout(state.recoveryTimer);
+            state.recoveryTimer = null;
+        }
+    }
+
+    function scheduleRecovery(reason, immediate) {
+        if (!state.art || !state.data || state.recovering) return;
+        clearRecoveryTimer();
+        var wait = immediate ? 0 : RECOVER_STALL_MS;
+        var observedTime = 0;
+        try {
+            observedTime = state.art.video ? state.art.video.currentTime || 0 : 0;
+        } catch (e) {}
+        state.recoveryTimer = setTimeout(function() {
+            var currentTime = 0;
+            try {
+                currentTime = state.art && state.art.video ? state.art.video.currentTime || 0 : 0;
+            } catch (e) {}
+            if (!immediate && Math.abs(currentTime - observedTime) > 0.5) {
+                clearRecoveryTimer();
+                return;
+            }
+            recoverPlayback(reason);
+        }, wait);
+    }
+
+    function bindRecoveryEvents() {
+        unbindRecoveryEvents();
+        var video = null;
+        try {
+            video = state.art && state.art.video;
+        } catch (e) {}
+        if (!video) return;
+        state.recoveryHandler = function(event) {
+            if (!state.art || !state.data) return;
+            if (event.type === 'playing' || event.type === 'canplay' || event.type === 'timeupdate') {
+                markPlaybackProgress();
+                return;
+            }
+            if (event.type === 'error') {
+                scheduleRecovery('video-error', true);
+                return;
+            }
+            scheduleRecovery('video-' + event.type, false);
+        };
+        ['waiting', 'stalled', 'error', 'playing', 'canplay', 'timeupdate'].forEach(function(name) {
+            try {
+                video.addEventListener(name, state.recoveryHandler);
+            } catch (e) {}
+        });
+        state.lastVideoTime = Number(video.currentTime) || 0;
+        state.lastProgressAt = Date.now();
+    }
+
+    function unbindRecoveryEvents() {
+        clearRecoveryTimer();
+        var video = null;
+        try {
+            video = state.art && state.art.video;
+        } catch (e) {}
+        if (video && state.recoveryHandler) {
+            ['waiting', 'stalled', 'error', 'playing', 'canplay', 'timeupdate'].forEach(function(name) {
+                try {
+                    video.removeEventListener(name, state.recoveryHandler);
+                } catch (e) {}
+            });
+        }
+        state.recoveryHandler = null;
+    }
+
+    function getBufferedRepairTarget(video) {
+        if (!video || video.error || !video.buffered) return null;
+        var current = Number(video.currentTime) || 0;
+        var ranges = video.buffered;
+        var nearestNext = null;
+        for (var i = 0; i < ranges.length; i++) {
+            var start = 0;
+            var end = 0;
+            try {
+                start = ranges.start(i);
+                end = ranges.end(i);
+            } catch (e) {
+                continue;
+            }
+            if (!isFinite(start) || !isFinite(end) || end <= start) continue;
+            if (current >= start && current < end) {
+                if (end - current >= BUFFER_NUDGE_MIN_AHEAD) {
+                    return {
+                        type: 'nudge',
+                        time: Math.min(current + BUFFER_NUDGE_SECONDS, end - 0.05)
+                    };
+                }
+                continue;
+            }
+            if (start > current && (nearestNext === null || start < nearestNext)) {
+                nearestNext = start;
+            }
+        }
+        if (nearestNext !== null && nearestNext - current <= BUFFER_GAP_JUMP_MAX_SECONDS) {
+            return {
+                type: 'gap',
+                time: nearestNext + 0.05
+            };
+        }
+        return null;
+    }
+
+    function tryBufferedRepair(video) {
+        if (!video || video.paused) return false;
+        var target = getBufferedRepairTarget(video);
+        if (!target || !isFinite(target.time) || target.time < 0) return false;
+        try {
+            video.currentTime = target.time;
+        } catch (e) {
+            return false;
+        }
+        try {
+            video.play();
+        } catch (e) {}
+        return true;
+    }
+
+    function recoverPlayback(reason, skipBufferedRepair) {
+        if (!state.art || !state.data || state.recovering) return;
+        state.recovering = true;
+        state.recoverAttempts += 1;
+        var snapshot = getSnapshot() || {};
+        var video = null;
+        try {
+            video = state.art.video;
+        } catch (e) {}
+        if (!skipBufferedRepair && tryBufferedRepair(video)) {
+            setTimeout(function() {
+                var current = 0;
+                try {
+                    current = state.art && state.art.video ? state.art.video.currentTime || 0 : 0;
+                } catch (e) {}
+                if (!snapshot.paused && Math.abs(current - (snapshot.currentTime || 0)) < 0.2 && state.data) {
+                    state.recovering = false;
+                    recoverPlayback(reason, true);
+                    return;
+                }
+                state.recovering = false;
+            }, 1800);
+            return;
+        }
+        try {
+            if (state.data.mode !== 'mp4' && video && window.mpegts) {
+                createFlvPlayer(video, state.data.url);
+                restoreVideoState(snapshot, video);
+            } else if (video && state.data.url) {
+                video.src = addRecoverNonce(state.data.url);
+                video.load();
+                restoreVideoState(snapshot, video);
+            } else if (state.recoverAttempts >= 3) {
+                open(snapshot);
+                return;
+            }
+        } catch (e) {
+            if (state.recoverAttempts >= 3) {
+                open(snapshot);
+                return;
+            }
+        } finally {
+            setTimeout(function() {
+                state.recovering = false;
+            }, 1200);
+        }
+        if (state.recoverAttempts >= 3) {
+            setTimeout(function() {
+                var current = 0;
+                try {
+                    current = state.art && state.art.video ? state.art.video.currentTime || 0 : 0;
+                } catch (e) {}
+                if (Math.abs(current - (snapshot.currentTime || 0)) < 0.5 && !snapshot.paused) {
+                    open(snapshot);
+                }
+            }, RECOVER_STALL_MS);
+        }
+    }
+
+    function restoreVideoState(snapshot, video) {
+        if (!video) return;
+        var seekTo = Number(snapshot.currentTime) || 0;
+        var apply = function() {
+            try {
+                if (seekTo > 0 && isFinite(video.duration)) {
+                    video.currentTime = Math.min(seekTo, Math.max(0, video.duration - 0.3));
+                }
+            } catch (e) {}
+            try {
+                if (snapshot.volume !== undefined && snapshot.volume !== null) {
+                    video.volume = Math.max(0, Math.min(1, Number(snapshot.volume)));
+                }
+            } catch (e) {}
+            try {
+                if (snapshot.playbackRate) {
+                    video.playbackRate = Number(snapshot.playbackRate) || 1;
+                }
+            } catch (e) {}
+            try {
+                if (!snapshot.paused) {
+                    video.play();
+                }
+            } catch (e) {}
+        };
+        try {
+            video.addEventListener('loadedmetadata', apply, { once: true });
+        } catch (e) {}
+        setTimeout(apply, 200);
+    }
+
     function unbindProgress() {
         if (!state.progressHandler || !state.art) return;
         ['ready', 'video:timeupdate', 'video:durationchange', 'video:loadedmetadata', 'video:seeking', 'video:seeked', 'video:play', 'video:pause', 'video:ended'].forEach(function(name) {
@@ -183,6 +468,7 @@
     }
 
     function stop() {
+        unbindRecoveryEvents();
         unbindProgress();
         if (state.art) {
             try {
@@ -204,6 +490,10 @@
         state.data = null;
         state.progress = 0;
         state.collapsed = false;
+        state.recovering = false;
+        state.recoverAttempts = 0;
+        state.lastVideoTime = 0;
+        state.lastProgressAt = 0;
     }
 
     function open(data) {
@@ -250,18 +540,13 @@
                 plugins: plugins,
                 customType: {
                     flv: function(video, url) {
-                        destroyFlv();
-                        state.flv = window.mpegts.createPlayer({
-                            type: 'flv',
-                            isLive: false,
-                            url: url
-                        });
-                        state.flv.attachMediaElement(video);
-                        state.flv.load();
+                        createFlvPlayer(video, url);
                     }
                 }
             });
             bindProgress();
+            bindRecoveryEvents();
+            state.recoverAttempts = 0;
             if (data.volume !== undefined && data.volume !== null) {
                 try {
                     state.art.video.volume = Math.max(0, Math.min(1, Number(data.volume)));
@@ -293,6 +578,7 @@
                 snapshot.currentTime = state.art.video.currentTime || snapshot.currentTime || 0;
                 snapshot.paused = state.art.video.paused;
                 snapshot.volume = state.art.video.volume;
+                snapshot.playbackRate = state.art.video.playbackRate || 1;
             }
         } catch (e) {}
         return snapshot;
