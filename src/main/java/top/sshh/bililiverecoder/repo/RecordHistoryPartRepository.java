@@ -32,6 +32,16 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     List<RecordHistoryPart> findByHistoryIdOrderByStartTimeAsc(Long historyId);
 
+    @Query("""
+            select p from RecordHistoryPart p
+            where p.historyId = ?1
+              and p.uploadRetryCount < 9999
+              and p.cid is not null
+              and p.cid <> 0
+            order by p.startTime asc
+            """)
+    List<RecordHistoryPart> findDispatchablePartsByHistoryId(Long historyId);
+
     List<RecordHistoryPart> findByIdIn(List<Long> ids);
 
     List<RecordHistoryPart> findByRoomIdAndFileDeleteIsFalseAndEndTimeIsBefore(String roomId, LocalDateTime deleteTime);

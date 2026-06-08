@@ -47,6 +47,9 @@ public class videoSyncJob {
 
 
     // 定时查询录制历史，每五分钟验证一下是否发布成功
+    @Autowired
+    private LiveMsgSendSync liveMsgSendSync;
+
     @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void syncVideo() {
         //查询出所有需要同步的录播记录
@@ -306,6 +309,7 @@ public class videoSyncJob {
             }
         }
         // 只有在自动同步（发布后处理）流程中才考虑删除文件
+        liveMsgSendSync.enqueueHistoryDispatch(next.getId());
         if (doPostPublishProcessing) {
             for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
                 RecordHistoryPart part = partRepository.findByHistoryIdAndTitle(next.getId(), page.getPart());

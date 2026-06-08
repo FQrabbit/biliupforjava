@@ -32,6 +32,126 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
     List<LiveMsg> findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(int pool, int code, List<Long> partIds);
     Page<LiveMsg> findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(int pool, int code, List<Long> partIds, Pageable page);
 
+    Page<LiveMsg> findByPartIdAndPoolAndCodeOrderBySendTimeAsc(Long partId, int pool, int code, Pageable page);
+
+    @Query("""
+            select distinct m.partId
+            from LiveMsg m
+            where m.pool = 0
+              and m.code = -1
+              and m.partId in (
+                  select p.id
+                  from RecordHistoryPart p
+                  where p.uploadRetryCount < 9999
+                    and p.cid is not null
+                    and p.cid <> 0
+                    and exists (
+                        select 1
+                        from RecordHistory h
+                        where h.id = p.historyId
+                          and h.publish = true
+                          and h.code = 0
+                    )
+                    and exists (
+                        select 1
+                        from RecordRoom r
+                        where r.roomId = p.roomId
+                          and r.sendDm = true
+                    )
+              )
+            order by m.partId asc
+            """)
+    List<Long> findPendingNormalDispatchPartIds(Pageable page);
+
+    @Query("""
+            select distinct m.partId
+            from LiveMsg m
+            where m.pool = 1
+              and m.code = -1
+              and m.partId in (
+                  select p.id
+                  from RecordHistoryPart p
+                  where p.uploadRetryCount < 9999
+                    and p.cid is not null
+                    and p.cid <> 0
+                    and exists (
+                        select 1
+                        from RecordHistory h
+                        where h.id = p.historyId
+                          and h.publish = true
+                          and h.code = 0
+                    )
+                    and exists (
+                        select 1
+                        from RecordRoom r
+                        where r.roomId = p.roomId
+                          and r.sendSc = true
+                    )
+              )
+            order by m.partId asc
+            """)
+    List<Long> findPendingHighDispatchPartIds(Pageable page);
+
+    @Query("""
+            select distinct m.partId
+            from LiveMsg m
+            where m.pool = 0
+              and m.code = -1
+              and m.partId in (
+                  select p.id
+                  from RecordHistoryPart p
+                  where p.historyId = ?1
+                    and p.uploadRetryCount < 9999
+                    and p.cid is not null
+                    and p.cid <> 0
+                    and exists (
+                        select 1
+                        from RecordHistory h
+                        where h.id = p.historyId
+                          and h.publish = true
+                          and h.code = 0
+                    )
+                    and exists (
+                        select 1
+                        from RecordRoom r
+                        where r.roomId = p.roomId
+                          and r.sendDm = true
+                    )
+              )
+            order by m.partId asc
+            """)
+    List<Long> findPendingNormalDispatchPartIdsByHistoryId(Long historyId, Pageable page);
+
+    @Query("""
+            select distinct m.partId
+            from LiveMsg m
+            where m.pool = 1
+              and m.code = -1
+              and m.partId in (
+                  select p.id
+                  from RecordHistoryPart p
+                  where p.historyId = ?1
+                    and p.uploadRetryCount < 9999
+                    and p.cid is not null
+                    and p.cid <> 0
+                    and exists (
+                        select 1
+                        from RecordHistory h
+                        where h.id = p.historyId
+                          and h.publish = true
+                          and h.code = 0
+                    )
+                    and exists (
+                        select 1
+                        from RecordRoom r
+                        where r.roomId = p.roomId
+                          and r.sendSc = true
+                    )
+              )
+            order by m.partId asc
+            """)
+    List<Long> findPendingHighDispatchPartIdsByHistoryId(Long historyId, Pageable page);
+
     /**
      * 查询字幕池弹幕
      * @param partId
@@ -39,6 +159,8 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
      * @return
      */
     List<LiveMsg> findByPartIdAndPoolAndCidNotNullOrderBySendTimeAsc(Long partId, int pool);
+
+    List<LiveMsg> findByPartIdInAndPoolAndCidNotNullOrderByPartIdAscSendTimeAsc(List<Long> partIds, int pool);
 
     int countByPartId(Long partId);
 

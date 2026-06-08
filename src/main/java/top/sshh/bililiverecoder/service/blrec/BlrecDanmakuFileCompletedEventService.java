@@ -7,6 +7,7 @@ import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.blrec.BlrecDataDTO;
 import top.sshh.bililiverecoder.entity.blrec.BlrecEventDTO;
+import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
@@ -24,6 +25,9 @@ public class BlrecDanmakuFileCompletedEventService implements BlrecEventService 
     
     @Autowired
     private LiveMsgService liveMsgService;
+
+    @Autowired
+    private LiveMsgSendSync liveMsgSendSync;
 
     @Override
     public void processing(BlrecEventDTO event) {
@@ -57,6 +61,7 @@ public class BlrecDanmakuFileCompletedEventService implements BlrecEventService 
         // 调用现有的 LiveMsgService 来解析 XML 文件
         // 注意：LiveMsgService 内部会自动将 .flv 路径替换为 .xml
         liveMsgService.processing(part);
+        liveMsgSendSync.enqueueHistoryDispatch(part.getHistoryId());
         
         log.info("[BLR] {}", LogKvs.event("Blrec.DanmakuCompleted.Processed")
                 .add("roomId", roomId)

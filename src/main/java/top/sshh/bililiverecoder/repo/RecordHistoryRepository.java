@@ -54,6 +54,15 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByPublishIsTrueAndSendReplyIsFalseAndCodeIn(List<Integer> codes);
 
+    @org.springframework.data.jpa.repository.Query("""
+            select h from RecordHistory h
+            where h.publish = true
+              and h.sendReply = false
+              and h.code in (0, -50)
+            order by h.id asc
+            """)
+    List<RecordHistory> findPendingReplyHistories(Pageable pageable);
+
     List<RecordHistory> findByBvIdNotNullAndPublishIsTrueAndCodeLessThan(int code);
 
     long countByEndTimeIsNotNull();

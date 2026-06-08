@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
+import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 import top.sshh.bililiverecoder.job.videoSyncJob;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
@@ -111,6 +112,8 @@ public class RecordBiliPublishService {
     private ShutdownState shutdownState;
     @Autowired
     private videoSyncJob videoSyncJob;
+    @Autowired
+    private LiveMsgSendSync liveMsgSendSync;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -1974,6 +1977,7 @@ public class RecordBiliPublishService {
                             msgRepository.deleteAll(liveMsgs);
                             liveMsgService.processing(part);
                         }
+                        liveMsgSendSync.enqueueHistoryDispatch(history.getId());
                         //处理高能剪辑事件
                         if (room.isHighEnergyCut()) {
                             highEnergyCutPublishService.process(history);

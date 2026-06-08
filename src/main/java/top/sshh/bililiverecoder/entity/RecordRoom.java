@@ -8,6 +8,11 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
+@Table(indexes = {
+        @Index(name = "idx_record_room_room_id", columnList = "roomId"),
+        @Index(name = "idx_record_room_send_dm", columnList = "sendDm"),
+        @Index(name = "idx_record_room_send_sc", columnList = "sendSc")
+})
 public class RecordRoom {
 
     @Id

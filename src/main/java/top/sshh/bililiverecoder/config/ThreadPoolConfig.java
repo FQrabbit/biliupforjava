@@ -65,4 +65,81 @@ public class ThreadPoolConfig {
         scheduler.initialize();
         return scheduler;
     }
+
+    @Bean("danmakuExecutor")
+    public TaskExecutor danmakuExecutor(
+            @Value("${bili.dm.executor.core-pool-size:2}") int corePoolSize,
+            @Value("${bili.dm.executor.max-pool-size:4}") int maxPoolSize,
+            @Value("${bili.dm.executor.queue-capacity:1000}") int queueCapacity,
+            @Value("${bili.dm.executor.await-termination-seconds:5}") int awaitTerminationSeconds
+    ) {
+        return createTaskExecutor(
+                Math.max(1, corePoolSize),
+                Math.max(1, maxPoolSize),
+                Math.max(0, queueCapacity),
+                Math.max(0, awaitTerminationSeconds),
+                "danmaku-reply-");
+    }
+
+    @Bean("danmakuHighExecutor")
+    public TaskExecutor danmakuHighExecutor(
+            @Value("${bili.dm.high-executor.core-pool-size:1}") int corePoolSize,
+            @Value("${bili.dm.high-executor.max-pool-size:1}") int maxPoolSize,
+            @Value("${bili.dm.high-executor.queue-capacity:200}") int queueCapacity,
+            @Value("${bili.dm.high-executor.await-termination-seconds:5}") int awaitTerminationSeconds
+    ) {
+        return createTaskExecutor(
+                Math.max(1, corePoolSize),
+                Math.max(1, maxPoolSize),
+                Math.max(0, queueCapacity),
+                Math.max(0, awaitTerminationSeconds),
+                "danmaku-high-");
+    }
+
+    @Bean("danmakuNormalExecutor")
+    public TaskExecutor danmakuNormalExecutor(
+            @Value("${bili.dm.normal-executor.core-pool-size:2}") int corePoolSize,
+            @Value("${bili.dm.normal-executor.max-pool-size:4}") int maxPoolSize,
+            @Value("${bili.dm.normal-executor.queue-capacity:1000}") int queueCapacity,
+            @Value("${bili.dm.normal-executor.await-termination-seconds:5}") int awaitTerminationSeconds
+    ) {
+        return createTaskExecutor(
+                Math.max(1, corePoolSize),
+                Math.max(1, maxPoolSize),
+                Math.max(0, queueCapacity),
+                Math.max(0, awaitTerminationSeconds),
+                "danmaku-normal-");
+    }
+
+    @Bean("danmakuTaskScheduler")
+    public ThreadPoolTaskScheduler danmakuTaskScheduler(
+            @Value("${bili.dm.scheduler-pool-size:1}") int poolSize,
+            @Value("${bili.dm.scheduler-await-termination-seconds:2}") int awaitTerminationSeconds
+    ) {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(Math.max(1, poolSize));
+        scheduler.setThreadNamePrefix("danmaku-scheduler-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(Math.max(0, awaitTerminationSeconds));
+        scheduler.setRemoveOnCancelPolicy(true);
+        scheduler.initialize();
+        return scheduler;
+    }
+
+    private ThreadPoolTaskExecutor createTaskExecutor(int corePoolSize,
+                                                      int maxPoolSize,
+                                                      int queueCapacity,
+                                                      int awaitTerminationSeconds,
+                                                      String threadNamePrefix) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(Math.max(corePoolSize, maxPoolSize));
+        executor.setQueueCapacity(queueCapacity);
+        executor.setThreadNamePrefix(threadNamePrefix);
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(awaitTerminationSeconds);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.initialize();
+        return executor;
+    }
 }

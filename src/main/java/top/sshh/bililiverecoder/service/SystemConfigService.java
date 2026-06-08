@@ -24,9 +24,18 @@ public class SystemConfigService {
     public static final String KEY_UPLOAD_NEW_FLOW_ENABLED = "upload.new-flow-enabled";
     public static final String KEY_NORMAL_DANMAKU_INTERVAL_SECONDS = "bili.dm.normal-send-interval-seconds";
     public static final String KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS = "bili.dm.high-level-send-interval-seconds";
+    public static final String KEY_DANMAKU_RECONCILE_INTERVAL_SECONDS = "bili.dm.reconcile-interval-seconds";
+    public static final String KEY_DANMAKU_DISPATCH_BATCH_SIZE = "bili.dm.dispatch-batch-size";
+    public static final String KEY_DANMAKU_MAX_NORMAL_WORKERS = "bili.dm.max-normal-workers";
+
+    private static final String OBSOLETE_KEY_DANMAKU_DISPATCH_ENABLED = "bili.dm.dispatch-enabled";
+    private static final String OBSOLETE_KEY_DANMAKU_ACCOUNT_API_INTERVAL_SECONDS = "bili.dm.account-api-interval-seconds";
 
     private static final long DEFAULT_NORMAL_DANMAKU_INTERVAL_SECONDS = 25L;
     private static final long DEFAULT_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS = 25L;
+    private static final long DEFAULT_DANMAKU_RECONCILE_INTERVAL_SECONDS = 300L;
+    private static final int DEFAULT_DANMAKU_DISPATCH_BATCH_SIZE = 200;
+    private static final int DEFAULT_DANMAKU_MAX_NORMAL_WORKERS = 2;
 
     @Autowired
     private SystemConfigRepository systemConfigRepository;
@@ -40,6 +49,8 @@ public class SystemConfigService {
     @PostConstruct
     public void init() {
         log.info("[BLR] {}", LogKvs.event("SystemConfig.Init").add("msg", "Initializing system configurations"));
+        removeObsoleteConfig(OBSOLETE_KEY_DANMAKU_DISPATCH_ENABLED);
+        removeObsoleteConfig(OBSOLETE_KEY_DANMAKU_ACCOUNT_API_INTERVAL_SECONDS);
         
         // 加载API速率限制
         loadOrInitConfig(KEY_API_RATE_LIMIT, "5.0", "Bilibili API 请求限速 (QPS) 0:不限速");
@@ -52,6 +63,21 @@ public class SystemConfigService {
         loadOrInitConfig(KEY_UPLOAD_NEW_FLOW_ENABLED, "false", "是否使用浏览器 multipart 上传流程，失败后自动回退旧流程");
         loadOrInitConfig(KEY_NORMAL_DANMAKU_INTERVAL_SECONDS, String.valueOf(DEFAULT_NORMAL_DANMAKU_INTERVAL_SECONDS), "发送普通弹幕间隔(秒)");
         loadOrInitConfig(KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, String.valueOf(DEFAULT_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS), "发送高级弹幕(SC/上舰/礼物)间隔(秒)");
+        initDanmakuDispatchConfig();
+    }
+
+    private void initDanmakuDispatchConfig() {
+        loadOrInitConfig(KEY_DANMAKU_RECONCILE_INTERVAL_SECONDS, String.valueOf(DEFAULT_DANMAKU_RECONCILE_INTERVAL_SECONDS), "Queued danmaku reconciliation interval seconds");
+        loadOrInitConfig(KEY_DANMAKU_DISPATCH_BATCH_SIZE, String.valueOf(DEFAULT_DANMAKU_DISPATCH_BATCH_SIZE), "Queued danmaku reconciliation batch size");
+        loadOrInitConfig(KEY_DANMAKU_MAX_NORMAL_WORKERS, String.valueOf(DEFAULT_DANMAKU_MAX_NORMAL_WORKERS), "Max concurrent normal danmaku workers");
+    }
+
+    private void removeObsoleteConfig(String key) {
+        if (systemConfigRepository.existsById(key)) {
+            systemConfigRepository.deleteById(key);
+            log.info("[BLR] {}", LogKvs.event("SystemConfig.RemoveObsolete")
+                    .add("key", key));
+        }
     }
 
     private void loadOrInitConfig(String key, String defaultValue, String description) {
@@ -72,6 +98,11 @@ public class SystemConfigService {
     }
 
     public void updateConfig(String key, String value) {
+        if (isObsoleteConfigKey(key)) {
+            log.info("[BLR] {}", LogKvs.event("SystemConfig.IgnoreObsolete")
+                    .add("key", key));
+            return;
+        }
         value = normalizeConfigValue(key, value);
         Optional<SystemConfig> configOpt = systemConfigRepository.findById(key);
         SystemConfig config = configOpt.orElse(new SystemConfig());
@@ -152,6 +183,36 @@ public class SystemConfigService {
                 }
                 return String.valueOf(lv);
             }
+            if (KEY_DANMAKU_RECONCILE_INTERVAL_SECONDS.equals(key)) {
+                long lv = Math.round(v);
+                if (lv < 60) {
+                    return "60";
+                }
+                if (lv > 3600) {
+                    return "3600";
+                }
+                return String.valueOf(lv);
+            }
+            if (KEY_DANMAKU_DISPATCH_BATCH_SIZE.equals(key)) {
+                int iv = (int) Math.round(v);
+                if (iv < 10) {
+                    return "10";
+                }
+                if (iv > 1000) {
+                    return "1000";
+                }
+                return String.valueOf(iv);
+            }
+            if (KEY_DANMAKU_MAX_NORMAL_WORKERS.equals(key)) {
+                int iv = (int) Math.round(v);
+                if (iv < 1) {
+                    return "1";
+                }
+                if (iv > 8) {
+                    return "8";
+                }
+                return String.valueOf(iv);
+            }
             return value;
         } catch (NumberFormatException e) {
             return value;
@@ -210,6 +271,18 @@ public class SystemConfigService {
         return getLongConfig(KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, DEFAULT_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, 1L, 600L) * 1000L;
     }
 
+    public long getDanmakuReconcileIntervalMs() {
+        return getLongConfig(KEY_DANMAKU_RECONCILE_INTERVAL_SECONDS, DEFAULT_DANMAKU_RECONCILE_INTERVAL_SECONDS, 60L, 3600L) * 1000L;
+    }
+
+    public int getDanmakuDispatchBatchSize() {
+        return (int) getLongConfig(KEY_DANMAKU_DISPATCH_BATCH_SIZE, DEFAULT_DANMAKU_DISPATCH_BATCH_SIZE, 10L, 1000L);
+    }
+
+    public int getDanmakuMaxNormalWorkers() {
+        return (int) getLongConfig(KEY_DANMAKU_MAX_NORMAL_WORKERS, DEFAULT_DANMAKU_MAX_NORMAL_WORKERS, 1L, 8L);
+    }
+
     private long getLongConfig(String key, long defaultValue, long minValue, long maxValue) {
         return systemConfigRepository.findById(key)
                 .map(SystemConfig::getConfigValue)
@@ -222,5 +295,10 @@ public class SystemConfigService {
                     }
                 })
                 .orElse(defaultValue);
+    }
+
+    private boolean isObsoleteConfigKey(String key) {
+        return OBSOLETE_KEY_DANMAKU_DISPATCH_ENABLED.equals(key)
+                || OBSOLETE_KEY_DANMAKU_ACCOUNT_API_INTERVAL_SECONDS.equals(key);
     }
 }

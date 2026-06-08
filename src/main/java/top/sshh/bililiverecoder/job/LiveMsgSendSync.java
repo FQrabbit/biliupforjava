@@ -14,6 +14,7 @@ import org.springframework.util.CollectionUtils;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.service.DanmakuSendScheduler;
 import top.sshh.bililiverecoder.service.RoomLiveEventParseService;
 import top.sshh.bililiverecoder.service.RoomLiveGiftCatalogService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
@@ -85,15 +86,17 @@ public class LiveMsgSendSync {
     @Autowired
     private SystemConfigService systemConfigService;
 
+    @Autowired
+    private DanmakuSendScheduler danmakuSendScheduler;
+
     private static final Lock lock = new ReentrantLock();
+    private volatile long lastReconcileAtMs = 0L;
 
     public static Set<Long> skipOrdinaryPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static Set<Long> skipAdvancedPartIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     @Scheduled(fixedDelay = 60000, initialDelay = 5000)
     public void sndMsgProcess() {
-        skipOrdinaryPartIds.clear();
-        skipAdvancedPartIds.clear();
         long roundStartNs = System.nanoTime();
         int historyCount = 0;
         int candidatePartCount = 0;
@@ -101,6 +104,16 @@ public class LiveMsgSendSync {
         int pendingHighCount = 0;
         log.debug("[BLR] {}", LogKvs.event("LiveMsgSendSync.Start"));
         try {
+            if (isQueuedDispatchMode()) {
+                ReconcileStats stats = reconcileQueuedDispatch(false);
+                historyCount = stats.historyCount();
+                candidatePartCount = stats.candidatePartCount();
+                pendingNormalCount = stats.pendingNormalCount();
+                pendingHighCount = stats.pendingHighCount();
+                return;
+            }
+            skipOrdinaryPartIds.clear();
+            skipAdvancedPartIds.clear();
             long startTime = System.currentTimeMillis();
             
             // 获取需要发送评论的稿件
@@ -773,6 +786,407 @@ public class LiveMsgSendSync {
                     .addStageCostMs("total", roundStartNs));
         }
 
+    }
+
+    public void enqueueHistoryDispatch(Long historyId) {
+        if (historyId == null) {
+            return;
+        }
+        enqueueHistoryDispatchInternal(historyId);
+    }
+
+    private boolean isQueuedDispatchMode() {
+        return true;
+    }
+
+    private ReconcileStats reconcileQueuedDispatch(boolean force) {
+        long now = System.currentTimeMillis();
+        long intervalMs = systemConfigService.getDanmakuReconcileIntervalMs();
+        if (!force && now - lastReconcileAtMs < intervalMs) {
+            return new ReconcileStats(0, 0, danmakuSendScheduler.pendingNormalPartCount(), danmakuSendScheduler.pendingHighPartCount());
+        }
+        if (!lock.tryLock()) {
+            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Lock.Failed"));
+            return new ReconcileStats(0, 0, danmakuSendScheduler.pendingNormalPartCount(), danmakuSendScheduler.pendingHighPartCount());
+        }
+        long startNs = System.nanoTime();
+        int replyEnqueued = 0;
+        int normalEnqueued = 0;
+        int highEnqueued = 0;
+        try {
+            lastReconcileAtMs = now;
+            int batchSize = systemConfigService.getDanmakuDispatchBatchSize();
+            Pageable page = PageRequest.of(0, batchSize);
+
+            List<RecordHistory> replyHistories = historyRepository.findPendingReplyHistories(page);
+            for (RecordHistory history : replyHistories) {
+                if (history != null && history.getId() != null) {
+                    if (danmakuSendScheduler.enqueueReply(history.getId(), () -> processReplyThenDispatch(history.getId()))) {
+                        replyEnqueued++;
+                    }
+                }
+            }
+
+            List<Long> highPartIds = msgRepository.findPendingHighDispatchPartIds(page);
+            for (Long partId : highPartIds) {
+                if (danmakuSendScheduler.enqueueHighPart(partId)) {
+                    highEnqueued++;
+                }
+            }
+            List<Long> normalPartIds = msgRepository.findPendingNormalDispatchPartIds(page);
+            for (Long partId : normalPartIds) {
+                if (danmakuSendScheduler.enqueueNormalPart(partId)) {
+                    normalEnqueued++;
+                }
+            }
+
+            int duplicateSkipped = replyHistories.size() + normalPartIds.size() + highPartIds.size()
+                    - replyEnqueued - normalEnqueued - highEnqueued;
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reconcile.Done")
+                    .add("replyDiscovered", replyHistories.size())
+                    .add("normalDiscovered", normalPartIds.size())
+                    .add("highDiscovered", highPartIds.size())
+                    .add("replyEnqueued", replyEnqueued)
+                    .add("normalEnqueued", normalEnqueued)
+                    .add("highEnqueued", highEnqueued)
+                    .add("duplicateSkipped", duplicateSkipped)
+                    .add("pendingReplyQueue", danmakuSendScheduler.pendingReplyCount())
+                    .add("pendingNormalQueue", danmakuSendScheduler.pendingNormalPartCount())
+                    .add("pendingHighQueue", danmakuSendScheduler.pendingHighPartCount())
+                    .addStageCostMs("reconcile", startNs));
+            return new ReconcileStats(replyHistories.size(), normalPartIds.size() + highPartIds.size(),
+                    normalPartIds.size(), highPartIds.size());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void processReplyThenDispatch(Long historyId) {
+        try {
+            processReply(historyId);
+        } finally {
+            enqueuePartDispatchByHistory(historyId);
+        }
+    }
+
+    private void enqueueHistoryDispatchInternal(Long historyId) {
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            return;
+        }
+        RecordHistory history = historyOptional.get();
+        if (!history.isPublish() || (history.getCode() != 0 && history.getCode() != -50)) {
+            return;
+        }
+        if (!history.isSendReply()) {
+            danmakuSendScheduler.enqueueReply(historyId, () -> processReplyThenDispatch(historyId));
+        } else {
+            enqueuePartDispatchByHistory(historyId);
+        }
+    }
+
+    private void enqueuePartDispatchByHistory(Long historyId) {
+        if (historyId == null) {
+            return;
+        }
+        int batchSize = systemConfigService.getDanmakuDispatchBatchSize();
+        Pageable page = PageRequest.of(0, batchSize);
+        for (Long partId : msgRepository.findPendingHighDispatchPartIdsByHistoryId(historyId, page)) {
+            danmakuSendScheduler.enqueueHighPart(partId);
+        }
+        for (Long partId : msgRepository.findPendingNormalDispatchPartIdsByHistoryId(historyId, page)) {
+            danmakuSendScheduler.enqueueNormalPart(partId);
+        }
+    }
+
+    private void processReply(Long historyId) {
+        long startNs = System.nanoTime();
+        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
+        if (historyOptional.isEmpty()) {
+            return;
+        }
+        RecordHistory history = historyOptional.get();
+        if (!history.isPublish() || history.isSendReply() || (history.getCode() != 0 && history.getCode() != -50)) {
+            return;
+        }
+        List<RecordHistoryPart> parts = partRepository.findDispatchablePartsByHistoryId(history.getId());
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        boolean sendDmEnabled = room != null && Boolean.TRUE.equals(room.getSendDm());
+        boolean sendScEnabled = room != null && Boolean.TRUE.equals(room.getSendSc());
+        if (!sendDmEnabled && !sendScEnabled) {
+            history.setSendReply(true);
+            historyRepository.save(history);
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.AllDmDisabled.Archive")
+                    .add("roomId", history.getRoomId())
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("title", history.getTitle()));
+            return;
+        }
+        if (!sendScEnabled) {
+            history.setSendReply(true);
+            historyRepository.save(history);
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.SkipByRoomConfig")
+                    .add("roomId", history.getRoomId())
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("title", history.getTitle()));
+            return;
+        }
+
+        BiliBiliUser user = resolveUploadUser(room, history);
+        boolean isPrivateFlow = false;
+        try {
+            if (user != null) {
+                BiliVideoInfoResponse videoInfo = BiliApi.getVideoInfo(user, history.getBvId());
+                if (videoInfo != null && videoInfo.getData() != null && videoInfo.getData().getState() == -50) {
+                    isPrivateFlow = true;
+                    switchVisibility(history, user, 0, "LiveMsgSendSync.Visibility.SwitchPublic.Response");
+                    sleepQuietly(15_000L, "privatePublicWait");
+                }
+            }
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.PrivateFlow.SkipByError")
+                    .addIfNotBlank("title", history.getTitle())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("avId", history.getAvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            return;
+        }
+
+        try {
+            DateFormat format = new SimpleDateFormat("HH:mm:ss");
+            format.setTimeZone(TimeZone.getTimeZone("UTC"));
+            List<String> replyLines = new ArrayList<>();
+            List<Long> partIds = parts.stream()
+                    .map(RecordHistoryPart::getId)
+                    .filter(Objects::nonNull)
+                    .toList();
+            boolean hasScReply = false;
+            boolean hasGuardReply = false;
+            boolean hasOtherHighLevelReply = false;
+            if (!partIds.isEmpty()) {
+                Map<Long, List<LiveMsg>> messagesByPart = new HashMap<>();
+                for (LiveMsg liveMsg : msgRepository.findByPartIdInAndPoolAndCidNotNullOrderByPartIdAscSendTimeAsc(partIds, 1)) {
+                    messagesByPart.computeIfAbsent(liveMsg.getPartId(), ignored -> new ArrayList<>()).add(liveMsg);
+                }
+                for (RecordHistoryPart part : parts) {
+                    List<LiveMsg> msgList = messagesByPart.getOrDefault(part.getId(), Collections.emptyList());
+                    for (LiveMsg liveMsg : msgList) {
+                        String contextText = liveMsg.getContext();
+                        if (contextText != null && contextText.startsWith("SC [")) {
+                            hasScReply = true;
+                        } else if (contextText != null && contextText.startsWith("⚓")) {
+                            hasGuardReply = true;
+                        } else {
+                            hasOtherHighLevelReply = true;
+                        }
+                        replyLines.add(part.getPage() + "#" + format.format(new Date(liveMsg.getSendTime()))
+                                + "  " + contextText + "\n");
+                    }
+                }
+            }
+            int giftReplyCount = 0;
+            if (room != null && Boolean.TRUE.equals(room.getSendGiftReply())) {
+                giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format);
+            }
+            List<BiliReply> replies = buildVideoReplies(history,
+                    buildReplyHeader(hasScReply, hasGuardReply, hasOtherHighLevelReply, giftReplyCount),
+                    replyLines);
+            if (user == null && !replies.isEmpty()) {
+                log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.SkipNoUploadUser")
+                        .add("roomId", history.getRoomId())
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("bvid", history.getBvId())
+                        .addIfNotBlank("title", history.getTitle())
+                        .add("replyCount", replies.size()));
+                return;
+            }
+            if (replies.isEmpty()) {
+                log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.None")
+                        .addIfNotBlank("title", history.getTitle())
+                        .addIfNotBlank("bvid", history.getBvId())
+                        .addIfNotBlank("avId", history.getAvId()));
+                history.setSendReply(true);
+                historyRepository.save(history);
+                return;
+            }
+            sendReplies(history, room, user, replies);
+            history.setSendReply(true);
+            historyRepository.save(history);
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Dispatch.Done")
+                    .add("historyId", history.getId())
+                    .add("replyCount", replies.size())
+                    .addStageCostMs("reply", startNs));
+        } finally {
+            if (isPrivateFlow && user != null) {
+                try {
+                    switchVisibility(history, user, 1, "LiveMsgSendSync.Visibility.SwitchPrivate.Response");
+                    sleepQuietly(5_000L, "privateSwitchBackWait");
+                } catch (Exception e) {
+                    log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPrivate.Error")
+                            .addIfNotBlank("title", history.getTitle())
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("avId", history.getAvId())
+                            .addIfNotBlank("err", e.getMessage())
+                            .add("ex", e.getClass().getSimpleName()), e);
+                }
+            }
+        }
+    }
+
+    private BiliBiliUser resolveUploadUser(RecordRoom room, RecordHistory history) {
+        if (room == null || room.getUploadUserId() == null) {
+            return null;
+        }
+        Optional<BiliBiliUser> userOptional = userRepository.findById(room.getUploadUserId());
+        if (userOptional.isEmpty()) {
+            return null;
+        }
+        BiliBiliUser user = userOptional.get();
+        if (!(user.isLogin() && user.isEnable())) {
+            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.UploadUser.InvalidState")
+                    .add("uid", user.getUid())
+                    .addIfNotBlank("uname", user.getUname())
+                    .add("login", user.isLogin())
+                    .add("enable", user.isEnable())
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId()));
+            return null;
+        }
+        return user;
+    }
+
+    private void switchVisibility(RecordHistory history, BiliBiliUser user, int visibility, String eventName) {
+        String editRes = BiliApi.updateVideoVisibility(user, Long.parseLong(history.getAvId()), visibility);
+        int editCode = -1;
+        String editMsg = null;
+        try {
+            com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
+            Integer c = jsonObject.getInteger("code");
+            editCode = c == null ? -1 : c;
+            editMsg = jsonObject.getString("message");
+            if (editCode != 0) {
+                throw new RuntimeException("visibility switch failed: " + editRes);
+            }
+        } catch (RuntimeException e) {
+            log.error("[BLR] {}", LogKvs.event(eventName)
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("avId", history.getAvId())
+                    .add("visibility", visibility)
+                    .add("code", editCode)
+                    .addIfNotBlank("message", editMsg)
+                    .add("respLen", editRes == null ? 0 : editRes.length()), e);
+            throw e;
+        }
+        log.info("[BLR] {}", LogKvs.event(eventName)
+                .addIfNotBlank("bvid", history.getBvId())
+                .add("visibility", visibility)
+                .add("code", editCode)
+                .addIfNotBlank("message", editMsg)
+                .add("respLen", editRes == null ? 0 : editRes.length()));
+    }
+
+    private void sendReplies(RecordHistory history, RecordRoom room, BiliBiliUser user, List<BiliReply> replies) {
+        try {
+            String replId = null;
+            for (int i = 0; i < replies.size(); i++) {
+                BiliReply reply = replies.get(i);
+                reply.setRoot(replId);
+                reply.setParent(replId);
+                BiliReplyResponse replyResponse = BiliApi.sendVideoReply(user, reply);
+                if (replyResponse.getCode() != 0) {
+                    log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Failed")
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("avId", reply.getOid())
+                            .add("code", replyResponse.getCode())
+                            .addIfNotBlank("message", replyResponse.getMessage()));
+                    throw new RuntimeException("send reply failed: " + replyResponse.getMessage());
+                }
+                log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Success")
+                        .addIfNotBlank("bvid", history.getBvId())
+                        .addIfNotBlank("avId", reply.getOid())
+                        .add("index", i)
+                        .add("messageLen", reply.getMessage() == null ? 0 : reply.getMessage().length()));
+                if (i == 0 && replyResponse.getData() != null) {
+                    replId = replyResponse.getData().getRpid();
+                    sleepQuietly(2_000L, "replyTopWait");
+                    reply.setRpid(replyResponse.getData().getRpid());
+                    reply.setAction("1");
+                    BiliReplyResponse response = BiliApi.topVideoReply(user, reply);
+                    if (response.getCode() == 404) {
+                        sleepQuietly(2_000L, "replyTopRetryWait");
+                        BiliApi.topVideoReply(user, reply);
+                    } else if (response.getCode() != 0) {
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Top.Failed")
+                                .addIfNotBlank("bvid", history.getBvId())
+                                .addIfNotBlank("avId", reply.getOid())
+                                .addIfNotBlank("rpid", reply.getRpid())
+                                .add("code", response.getCode())
+                                .addIfNotBlank("message", response.getMessage()));
+                    }
+                }
+                sendReplyPush(room, history, user, reply);
+                sleepQuietly(5_000L, "replyThrottle");
+            }
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.BatchFailed")
+                    .addIfNotBlank("title", history.getTitle())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("avId", history.getAvId())
+                    .add("replyCount", replies.size())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            sendReplyFailurePush(room, history, replies, e);
+            throw e;
+        }
+    }
+
+    private void sendReplyPush(RecordRoom room, RecordHistory history, BiliBiliUser user, BiliReply reply) {
+        try {
+            if (room != null && PushNotifyClient.canSend(room, room.getWxuid(), room.getPushMsgTags(), "视频评论")) {
+                Message message = new Message();
+                message.setAppToken(wxToken);
+                message.setContentType(Message.CONTENT_TYPE_TEXT);
+                message.setContent(WX_MSG_FORMAT.formatted(room.getUname(), history.getTitle(), history.getBvId(),
+                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                        reply.getMessage(), "发送成功", user.getUname()));
+                message.setUid(room.getWxuid());
+                PushNotifyClient.sendParallel(room, message);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void sendReplyFailurePush(RecordRoom room, RecordHistory history, List<BiliReply> replies, Exception error) {
+        try {
+            if (room != null && PushNotifyClient.canSend(room, room.getWxuid(), room.getPushMsgTags(), "视频评论")) {
+                Message message = new Message();
+                message.setAppToken(wxToken);
+                message.setContentType(Message.CONTENT_TYPE_TEXT);
+                message.setContent(WX_MSG_FORMAT.formatted(room.getUname(), history.getTitle(), history.getBvId(),
+                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                        JSON.toJSONString(replies), "发送失败", error == null ? "" : error.getMessage()));
+                message.setUid(room.getWxuid());
+                PushNotifyClient.sendParallel(room, message);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void sleepQuietly(long waitMs, String phase) {
+        try {
+            Thread.sleep(waitMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.SleepInterrupted")
+                    .add("phase", phase)
+                    .add("waitMs", waitMs), e);
+        }
+    }
+
+    private record ReconcileStats(int historyCount, int candidatePartCount, int pendingNormalCount, int pendingHighCount) {
     }
 
     private String buildReplyHeader(boolean hasScReply, boolean hasGuardReply, boolean hasOtherHighLevelReply, int giftReplyCount) {
