@@ -1,6 +1,4 @@
-/* ========== 深色模式下的样式覆盖 ========== */
-/* 暗色主题下 Element UI 组件 & 共享组件的覆盖样式 */
-/* 从 element-override.css 拆分而来 */
+/* 深色主题下 Element UI 和公共组件的覆盖样式 */
 
 [data-theme="dark"] .el-dialog,
 [data-theme="dark"] .el-message-box,

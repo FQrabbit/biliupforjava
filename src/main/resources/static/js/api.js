@@ -174,3 +174,6 @@ const COMMON_BOOL_OPTIONS = [
     { label: '是', value: true },
     { label: '否', value: false }
 ];
+
+window.ApiUtil = ApiUtil;
+window.COMMON_BOOL_OPTIONS = COMMON_BOOL_OPTIONS;

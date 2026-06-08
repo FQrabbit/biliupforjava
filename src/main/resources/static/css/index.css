@@ -1,19 +1,5 @@
 ﻿/*
- * ============================================
- * index.css - 兼容性重定向文件
- * ============================================
- * 原内容已拆分至以下文件：
- *   css/base/variables.css       - CSS 变量定义
- *   css/base/reset.css           - 全局重置 & 滚动条
- *   css/base/element-override.css - Element UI 覆盖 & 共享组件
- *   css/animations/transitions.css - 动画 & Vue 过渡
- *   css/pages/home.css           - 首页布局 & 导航
- *
- * 所有 HTML 文件已直接引用上述拆分文件。
- * 此文件仅为兼容保留，后续版本将被删除。
- *
- * 原始文件已备份至 index.css.bak (2556 行)
- * ============================================
+ * 旧样式入口保留文件
  */
 @import url('base/variables.css');
 @import url('base/reset.css');

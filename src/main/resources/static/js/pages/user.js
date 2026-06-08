@@ -1,15 +1,5 @@
 /**
- * pages/user.js — 用户管理页面组件
- *
- * 功能：
- *   - 用户列表展示和管理
- *   - 二维码登录流程
- *   - 用户信息编辑和保存
- *
- * 事件：
- *   @connection-status：连接状态变化（断开/正常）
- *
- * 依赖：api.js, mixins.js, privacy.js
+ * 用户管理页组件
  */
 
 Vue.component('user-page', {
@@ -76,7 +66,7 @@ Vue.component('user-page', {
         fetchUserList: function () {
             var self = this;
             self.loading = true;
-            ApiUtil.get('/biliUser/list', function (data) {
+            UserApi.list(function (data) {
                 self.tableData = data;
                 self.loading = false;
                 self.$nextTick(function () {
@@ -94,7 +84,7 @@ Vue.component('user-page', {
             self.loginLoading = true;
             self.loginStatus = 'pending';
 
-            ApiUtil.get('/biliUser/login', function (data) {
+            UserApi.loginQr(function (data) {
                 self.loginLoading = false;
                 if (data.error) {
                     self.$message.error(data.error);
@@ -114,7 +104,7 @@ Vue.component('user-page', {
             self.loginCheckTimer = setInterval(function () {
                 if (!self.loginKey) return;
 
-                ApiUtil.get('/biliUser/loginCheck?key=' + self.loginKey, function (data) {
+                UserApi.loginCheck(self.loginKey, function (data) {
                     self.loginStatus = data.status;
 
                     if (data.status === 'success') {
@@ -139,7 +129,7 @@ Vue.component('user-page', {
             var self = this;
             self.stopLoginCheck();
             if (self.loginKey) {
-                ApiUtil.get('/biliUser/loginCancel?key=' + self.loginKey);
+                UserApi.loginCancel(self.loginKey, function () {});
                 self.loginKey = '';
             }
             self.dialogLoginVisible = false;
@@ -172,7 +162,7 @@ Vue.component('user-page', {
         refreshUserProfile: function (item) {
             var self = this;
             if (!item || !item.id) return;
-            ApiUtil.get('/biliUser/refresh/' + item.id, function (data) {
+            UserApi.refresh(item.id, function (data) {
                 if (data && data.success) {
                     self.$message.success(data.msg || '用户信息已更新');
                     self.fetchUserList();
@@ -186,7 +176,7 @@ Vue.component('user-page', {
         updateUser: function () {
             var self = this;
             self.saveLoading = true;
-            ApiUtil.post('/biliUser/update', self.user, function (data) {
+            UserApi.update(self.user, function (data) {
                 self.saveLoading = false;
                 self.$message.success('设置已保存');
                 self.fetchUserList();
@@ -198,7 +188,7 @@ Vue.component('user-page', {
         },
         deleteUser: function (id) {
             var self = this;
-            ApiUtil.get('/biliUser/delete/' + id, function (data) {
+            UserApi.remove(id, function (data) {
                 self.$message({
                     message: data.msg || '移除成功',
                     type: data.type || 'success'
