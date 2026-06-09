@@ -322,12 +322,14 @@ public final class LogKvs {
 
         // 定时任务
         EVENT_ZH.put("DeletePartFileJob.Start", "定时任务：开始清理分P文件");
+        EVENT_ZH.put("DeletePartFileJob.SkipBlankPath", "定时任务：分P文件路径为空，已标记跳过");
         EVENT_ZH.put("DeletePartFileJob.SkipNotExists", "定时任务：文件不存在，跳过");
         EVENT_ZH.put("DeletePartFileJob.Success", "定时任务：删除成功");
         EVENT_ZH.put("DeletePartFileJob.FailedRetry", "定时任务：删除失败，准备重试");
         EVENT_ZH.put("DeletePartFileJob.FailedGiveUp", "定时任务：删除失败，已放弃");
         EVENT_ZH.put("DeletePartFileJob.Round.Done", "定时任务：分P文件删除轮次完成");
         EVENT_ZH.put("MovePartFileJob.Start", "定时任务：开始移动分P文件");
+        EVENT_ZH.put("MovePartFileJob.SkipBlankPath", "定时任务：分P文件路径为空，已标记跳过");
         EVENT_ZH.put("MovePartFileJob.Success", "定时任务：移动成功");
         EVENT_ZH.put("MovePartFileJob.Failed", "定时任务：移动失败");
         EVENT_ZH.put("MovePartFileJob.Round.Done", "定时任务：分P文件移动轮次完成");

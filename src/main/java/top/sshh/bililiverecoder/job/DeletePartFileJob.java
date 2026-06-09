@@ -54,16 +54,22 @@ public class DeletePartFileJob {
             }
             for (RecordHistoryPart part : partList) {
                 String filePath = part.getFilePath();
+                if (filePath == null || filePath.isBlank()) {
+                    log.warn("[BLR] {}", LogKvs.event("DeletePartFileJob.SkipBlankPath")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("historyId", part.getHistoryId()));
+                    markFileDeleteDone(part);
+                    continue;
+                }
                 File file = new File(filePath);
                 if (!file.exists()) {
                     log.info("[BLR] {}", LogKvs.event("DeletePartFileJob.SkipNotExists")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
                             .add("filePath", filePath));
-                    part.setFileDelete(true);
-                    part.setDeleteRetryCount(0);
-                    part.setDeleteFailReason(null);
-                    partRepository.save(part);
+                    markFileDeleteDone(part);
                     continue;
                 }
 
@@ -120,6 +126,15 @@ public class DeletePartFileJob {
             .addRoundCount("scannedPart", scannedPartCount)
                 .addStageCostMs("total", roundStartNs));
     }
+
+    private void markFileDeleteDone(RecordHistoryPart part) {
+        part.setFileDelete(true);
+        part.setDeleteRetryCount(0);
+        part.setDeleteFailReason(null);
+        part.setDeleteFailType(null);
+        partRepository.save(part);
+    }
+
     @Scheduled(fixedDelay = 3600000, initialDelay = 60000)
     public void moveFileProcess() {
         long roundStartNs = System.nanoTime();
@@ -139,6 +154,15 @@ public class DeletePartFileJob {
             }
             for (RecordHistoryPart part : partList) {
                 String filePath = part.getFilePath();
+                if (filePath == null || filePath.isBlank()) {
+                    log.warn("[BLR] {}", LogKvs.event("MovePartFileJob.SkipBlankPath")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("partId", part.getId())
+                            .add("historyId", part.getHistoryId()));
+                    markFileDeleteDone(part);
+                    continue;
+                }
                 String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
                 String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
                 String toDirPath = room.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
