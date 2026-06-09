@@ -62,9 +62,12 @@ public class DanmakuSendScheduler {
     private final Set<Long> pendingNormalPartIds = ConcurrentHashMap.newKeySet();
     private final Set<Long> pendingReplyHistoryIds = ConcurrentHashMap.newKeySet();
     private final Set<Long> busyUserIds = ConcurrentHashMap.newKeySet();
-    private final Map<Long, Long> nextNormalSendAtByUid = new ConcurrentHashMap<>();
-    private final Map<Long, Long> nextHighSendAtByUid = new ConcurrentHashMap<>();
-    private final Map<Long, Long> nextRateLimitPauseAtByUid = new ConcurrentHashMap<>();
+    private final Object danmakuPermitLock = new Object();
+    private final Object commentPermitLock = new Object();
+    private volatile long nextGlobalDanmakuSendAtMs = 0L;
+    private volatile long nextGlobalCommentSendAtMs = 0L;
+    private final Map<Long, Long> nextDanmakuAccountPauseAtByUid = new ConcurrentHashMap<>();
+    private final Map<Long, Long> nextCommentAccountPauseAtByUid = new ConcurrentHashMap<>();
 
     private final AtomicBoolean highDispatchScheduled = new AtomicBoolean(false);
     private final AtomicBoolean normalDispatchScheduled = new AtomicBoolean(false);
@@ -231,24 +234,39 @@ public class DanmakuSendScheduler {
                 return;
             }
             Optional<BiliBiliUser> userOptional = userRepository.findById(room.getUploadUserId());
-            if (userOptional.isEmpty() || userOptional.get().getUid() == null || !userOptional.get().isLogin() || !userOptional.get().isEnable()) {
+            if (userOptional.isEmpty() || userOptional.get().getUid() == null || !userOptional.get().isLogin()) {
                 markMessageDone(msg);
                 requeueHighPart(partId, 0L);
                 return;
             }
             BiliBiliUser user = userOptional.get();
-            long cooldownWaitMs = highCooldownWaitMs(user.getUid());
-            if (cooldownWaitMs > 0L) {
-                requeueHighPart(partId, cooldownWaitMs);
+            long accountWaitMs = danmakuAccountCooldownWaitMs(user.getUid());
+            if (accountWaitMs > 0L) {
+                requeueHighPart(partId, accountWaitMs);
                 log.debug("[BLR] {}", LogKvs.event("DanmakuDispatch.High.UserCooldown")
                         .add("uid", user.getUid())
                         .addIfNotBlank("uname", user.getUname())
-                        .add("waitMs", cooldownWaitMs)
+                        .add("waitMs", accountWaitMs)
+                        .add("partId", partId));
+                return;
+            }
+            long globalWaitMs = globalDanmakuWaitMs();
+            if (globalWaitMs > 0L) {
+                requeueHighPart(partId, globalWaitMs);
+                log.debug("[BLR] {}", LogKvs.event("DanmakuDispatch.High.GlobalCooldown")
+                        .add("waitMs", globalWaitMs)
                         .add("partId", partId));
                 return;
             }
             if (!busyUserIds.add(user.getUid())) {
                 requeueHighPart(partId, BUSY_RETRY_MS);
+                return;
+            }
+            long businessDelayMs = systemConfigService.getDanmakuSendIntervalMs();
+            long reserveWaitMs = reserveGlobalDanmakuSlot(businessDelayMs);
+            if (reserveWaitMs > 0L) {
+                busyUserIds.remove(user.getUid());
+                requeueHighPart(partId, reserveWaitMs);
                 return;
             }
             int code;
@@ -266,15 +284,11 @@ public class DanmakuSendScheduler {
                         .add("contextLen", msg.getContext() == null ? 0 : msg.getContext().length()));
                 sendHighFailurePush(room, part, msg, user, code);
             }
-            long businessDelayMs = code == 0 || code == 36703
-                    ? systemConfigService.getHighLevelDanmakuIntervalMs()
-                    : Math.max(ERROR_PAUSE_MS, systemConfigService.getHighLevelDanmakuIntervalMs());
             long requeueDelayMs;
             if (code == 36703) {
                 restoreMessagePending(msg);
-                markHighCooldown(user.getUid(), businessDelayMs);
-                markRateLimitPause(user.getUid(), RATE_LIMIT_PAUSE_MS);
-                requeueDelayMs = highCooldownWaitMs(user.getUid());
+                markDanmakuAccountPause(user.getUid(), RATE_LIMIT_PAUSE_MS);
+                requeueDelayMs = Math.max(globalDanmakuWaitMs(), danmakuAccountCooldownWaitMs(user.getUid()));
                 log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.RateLimit.Pause")
                         .addIfNotBlank("uname", user.getUname())
                         .add("code", code)
@@ -283,8 +297,10 @@ public class DanmakuSendScheduler {
                         .add("rateLimitPauseMs", RATE_LIMIT_PAUSE_MS)
                         .add("waitMs", requeueDelayMs));
             } else {
-                markHighCooldown(user.getUid(), businessDelayMs);
-                requeueDelayMs = highCooldownWaitMs(user.getUid());
+                if (code != 0) {
+                    extendGlobalDanmakuSlot(Math.max(ERROR_PAUSE_MS, businessDelayMs));
+                }
+                requeueDelayMs = globalDanmakuWaitMs();
             }
             requeueHighPart(partId, requeueDelayMs);
             log.info("[BLR] {}", LogKvs.event("DanmakuDispatch.High.Sent")
@@ -293,6 +309,7 @@ public class DanmakuSendScheduler {
                     .add("businessDelayMs", businessDelayMs)
                     .add("rateLimitPauseMs", code == 36703 ? RATE_LIMIT_PAUSE_MS : 0L)
                     .add("requeueDelayMs", requeueDelayMs)
+                    .add("globalWaitMs", globalDanmakuWaitMs())
                     .addStageCostMs("send", startNs));
         } catch (Exception e) {
             requeueHighPart(partId, ERROR_PAUSE_MS);
@@ -358,10 +375,25 @@ public class DanmakuSendScheduler {
                 pendingNormalPartIds.remove(partId);
                 return;
             }
+            long globalWaitMs = globalDanmakuWaitMs();
+            if (globalWaitMs > 0L) {
+                requeueNormalPart(partId, globalWaitMs);
+                log.debug("[BLR] {}", LogKvs.event("DanmakuDispatch.Normal.GlobalCooldown")
+                        .add("waitMs", globalWaitMs)
+                        .add("partId", partId));
+                return;
+            }
             UserReservation reservation = reserveNormalUser();
             BiliBiliUser user = reservation.user();
             if (user == null) {
                 requeueNormalPart(partId, reservation.waitMs());
+                return;
+            }
+            long businessDelayMs = systemConfigService.getDanmakuSendIntervalMs();
+            long reserveWaitMs = reserveGlobalDanmakuSlot(businessDelayMs);
+            if (reserveWaitMs > 0L) {
+                busyUserIds.remove(user.getUid());
+                requeueNormalPart(partId, reserveWaitMs);
                 return;
             }
             int code;
@@ -372,11 +404,9 @@ public class DanmakuSendScheduler {
                 busyUserIds.remove(user.getUid());
             }
             if (code == 36703) {
-                long businessDelayMs = systemConfigService.getNormalDanmakuIntervalMs();
                 restoreMessagePending(msg);
-                markNormalCooldown(user.getUid(), businessDelayMs);
-                markRateLimitPause(user.getUid(), RATE_LIMIT_PAUSE_MS);
-                long waitMs = normalCooldownWaitMs(user.getUid());
+                markDanmakuAccountPause(user.getUid(), RATE_LIMIT_PAUSE_MS);
+                long waitMs = danmakuAccountCooldownWaitMs(user.getUid());
                 log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.RateLimit.Pause")
                         .addIfNotBlank("uname", user.getUname())
                         .add("code", code)
@@ -385,18 +415,17 @@ public class DanmakuSendScheduler {
                         .add("rateLimitPauseMs", RATE_LIMIT_PAUSE_MS)
                         .add("waitMs", waitMs));
             } else {
-                long businessDelayMs = code == 0
-                        ? systemConfigService.getNormalDanmakuIntervalMs()
-                        : Math.max(ERROR_PAUSE_MS, systemConfigService.getNormalDanmakuIntervalMs());
-                markNormalCooldown(user.getUid(), businessDelayMs);
+                if (code != 0) {
+                    extendGlobalDanmakuSlot(Math.max(ERROR_PAUSE_MS, businessDelayMs));
+                }
             }
-            requeueNormalPart(partId, 0L);
+            requeueNormalPart(partId, globalDanmakuWaitMs());
             log.info("[BLR] {}", LogKvs.event("DanmakuDispatch.Normal.Sent")
                     .add("partId", partId)
                     .addIfNotBlank("uname", user.getUname())
                     .add("code", code)
-                    .add("normalWaitMs", normalCooldownWaitMs(user.getUid()))
-                    .add("rateLimitPauseMs", rateLimitPauseWaitMs(user.getUid()))
+                    .add("globalWaitMs", globalDanmakuWaitMs())
+                    .add("accountWaitMs", danmakuAccountCooldownWaitMs(user.getUid()))
                     .addStageCostMs("send", startNs));
         } catch (Exception e) {
             requeueNormalPart(partId, ERROR_PAUSE_MS);
@@ -446,7 +475,7 @@ public class DanmakuSendScheduler {
                 continue;
             }
             hasUsableUser = true;
-            long cooldownWaitMs = normalCooldownWaitMs(user.getUid());
+            long cooldownWaitMs = danmakuAccountCooldownWaitMs(user.getUid());
             if (cooldownWaitMs > 0L) {
                 waitMs = Math.min(waitMs, cooldownWaitMs);
                 continue;
@@ -483,16 +512,116 @@ public class DanmakuSendScheduler {
         msgRepository.save(msg);
     }
 
-    private long normalCooldownWaitMs(Long uid) {
-        return Math.max(cooldownWaitMs(nextNormalSendAtByUid, uid), rateLimitPauseWaitMs(uid));
+    public void waitForCommentSendPermit(BiliBiliUser user, String bvid, int index) {
+        Long uid = user == null ? null : user.getUid();
+        if (uid == null) {
+            throw new IllegalStateException("comment upload user uid is missing");
+        }
+        while (true) {
+            long accountWaitMs = commentAccountCooldownWaitMs(uid);
+            if (accountWaitMs > 0L) {
+                log.debug("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.AccountCooldown")
+                        .add("uid", uid)
+                        .addIfNotBlank("uname", user.getUname())
+                        .addIfNotBlank("bvid", bvid)
+                        .add("index", index)
+                        .add("waitMs", accountWaitMs));
+                sleepPermit(accountWaitMs);
+                continue;
+            }
+            long globalWaitMs = globalCommentWaitMs();
+            if (globalWaitMs > 0L) {
+                log.debug("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.GlobalCooldown")
+                        .add("uid", uid)
+                        .addIfNotBlank("uname", user.getUname())
+                        .addIfNotBlank("bvid", bvid)
+                        .add("index", index)
+                        .add("waitMs", globalWaitMs));
+                sleepPermit(globalWaitMs);
+                continue;
+            }
+            if (!busyUserIds.add(uid)) {
+                sleepPermit(BUSY_RETRY_MS);
+                continue;
+            }
+            long reserveWaitMs = reserveGlobalCommentSlot(systemConfigService.getCommentSendIntervalMs());
+            if (reserveWaitMs <= 0L) {
+                return;
+            }
+            busyUserIds.remove(uid);
+            sleepPermit(reserveWaitMs);
+        }
     }
 
-    private long highCooldownWaitMs(Long uid) {
-        return Math.max(cooldownWaitMs(nextHighSendAtByUid, uid), rateLimitPauseWaitMs(uid));
+    public void releaseCommentSendPermit(BiliBiliUser user) {
+        if (user != null && user.getUid() != null) {
+            busyUserIds.remove(user.getUid());
+        }
     }
 
-    private long rateLimitPauseWaitMs(Long uid) {
-        return cooldownWaitMs(nextRateLimitPauseAtByUid, uid);
+    public void markCommentFailure(BiliBiliUser user, Integer code) {
+        Long uid = user == null ? null : user.getUid();
+        if (uid == null) {
+            return;
+        }
+        long delayMs = isRateLimitCode(code)
+                ? RATE_LIMIT_PAUSE_MS
+                : Math.max(ERROR_PAUSE_MS, systemConfigService.getCommentSendIntervalMs());
+        markCooldown(nextCommentAccountPauseAtByUid, uid, delayMs);
+        log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.AccountPause")
+                .add("uid", uid)
+                .addIfNotBlank("uname", user.getUname())
+                .add("code", code)
+                .add("pauseMs", delayMs));
+    }
+
+    private long danmakuAccountCooldownWaitMs(Long uid) {
+        return cooldownWaitMs(nextDanmakuAccountPauseAtByUid, uid);
+    }
+
+    private long commentAccountCooldownWaitMs(Long uid) {
+        return cooldownWaitMs(nextCommentAccountPauseAtByUid, uid);
+    }
+
+    private long globalDanmakuWaitMs() {
+        return globalWaitMs(nextGlobalDanmakuSendAtMs);
+    }
+
+    private long globalCommentWaitMs() {
+        return globalWaitMs(nextGlobalCommentSendAtMs);
+    }
+
+    private long globalWaitMs(long nextAt) {
+        long waitMs = nextAt - System.currentTimeMillis();
+        return Math.max(0L, waitMs);
+    }
+
+    private long reserveGlobalDanmakuSlot(long delayMs) {
+        synchronized (danmakuPermitLock) {
+            long waitMs = globalDanmakuWaitMs();
+            if (waitMs > 0L) {
+                return waitMs;
+            }
+            nextGlobalDanmakuSendAtMs = System.currentTimeMillis() + Math.max(0L, delayMs);
+            return 0L;
+        }
+    }
+
+    private long reserveGlobalCommentSlot(long delayMs) {
+        synchronized (commentPermitLock) {
+            long waitMs = globalCommentWaitMs();
+            if (waitMs > 0L) {
+                return waitMs;
+            }
+            nextGlobalCommentSendAtMs = System.currentTimeMillis() + Math.max(0L, delayMs);
+            return 0L;
+        }
+    }
+
+    private void extendGlobalDanmakuSlot(long delayMs) {
+        synchronized (danmakuPermitLock) {
+            nextGlobalDanmakuSendAtMs = Math.max(nextGlobalDanmakuSendAtMs, System.currentTimeMillis() + Math.max(0L, delayMs));
+        }
     }
 
     private long cooldownWaitMs(Map<Long, Long> cooldowns, Long uid) {
@@ -511,16 +640,8 @@ public class DanmakuSendScheduler {
         return waitMs;
     }
 
-    private void markNormalCooldown(Long uid, long delayMs) {
-        markCooldown(nextNormalSendAtByUid, uid, delayMs);
-    }
-
-    private void markHighCooldown(Long uid, long delayMs) {
-        markCooldown(nextHighSendAtByUid, uid, delayMs);
-    }
-
-    private void markRateLimitPause(Long uid, long delayMs) {
-        markCooldown(nextRateLimitPauseAtByUid, uid, delayMs);
+    private void markDanmakuAccountPause(Long uid, long delayMs) {
+        markCooldown(nextDanmakuAccountPauseAtByUid, uid, delayMs);
     }
 
     private void markCooldown(Map<Long, Long> cooldowns, Long uid, long delayMs) {
@@ -529,6 +650,19 @@ public class DanmakuSendScheduler {
         }
         long nextAt = System.currentTimeMillis() + Math.max(0L, delayMs);
         cooldowns.merge(uid, nextAt, Math::max);
+    }
+
+    private boolean isRateLimitCode(Integer code) {
+        return code != null && (code == 36703 || code == -352 || code == -412 || code == 12002);
+    }
+
+    private void sleepPermit(long waitMs) {
+        try {
+            Thread.sleep(Math.max(1L, waitMs));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("send permit wait interrupted", e);
+        }
     }
 
     private void requeueHighPart(Long partId, long delayMs) {

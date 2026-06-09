@@ -422,21 +422,27 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsgSendSync.Reply.Top.Failed", "视频评论置顶失败");
         EVENT_ZH.put("LiveMsgSendSync.Reply.BatchFailed", "SC/上舰评论批量发送失败");
         EVENT_ZH.put("LiveMsgSendSync.Reply.None", "没有需要发送的评论");
-        EVENT_ZH.put("LiveMsgSendSync.Reply.SkipByRoomConfig", "视频评论发送：按房间配置跳过(SC关闭)");
+        EVENT_ZH.put("LiveMsgSendSync.GiftReply.Scan", "视频评论发送：礼物评论扫描结果");
+        EVENT_ZH.put("LiveMsgSendSync.Reply.SkipByRoomConfig", "视频评论发送：按房间配置跳过(SC/礼物评论关闭)");
         EVENT_ZH.put("LiveMsgSendSync.Reply.SkipNoUploadUser", "视频评论发送：缺少可用上传账号，跳过");
+        EVENT_ZH.put("LiveMsgSendSync.Reply.GlobalCooldown", "视频评论发送：等待全局评论间隔");
+        EVENT_ZH.put("LiveMsgSendSync.Reply.AccountCooldown", "视频评论发送：等待投稿账号冷却");
+        EVENT_ZH.put("LiveMsgSendSync.Reply.AccountPause", "视频评论发送：投稿账号进入冷却");
         EVENT_ZH.put("LiveMsgSendSync.Visibility.SwitchPrivate.Response", "私有稿件评论流程：切回仅自己可见响应");
         EVENT_ZH.put("LiveMsgSendSync.Visibility.SwitchPrivate.Failed", "私有稿件评论流程：切回仅自己可见失败");
         EVENT_ZH.put("LiveMsgSendSync.Visibility.SwitchPrivate.Error", "私有稿件评论流程：切回仅自己可见异常");
         EVENT_ZH.put("LiveMsgSendSync.SleepInterrupted", "弹幕/评论发送：等待被中断");
         EVENT_ZH.put("LiveMsgSendSync.Lock.Failed", "弹幕发送：获取锁失败");
         EVENT_ZH.put("LiveMsgSendSync.Part.SkipMissingCid", "分P缺失CID，跳过弹幕发送");
-        EVENT_ZH.put("LiveMsgSendSync.UploadUser.InvalidState", "弹幕/评论发送：上传账号不可用(未登录或未启用)");
-        EVENT_ZH.put("LiveMsgSendSync.AllDmDisabled.Archive", "弹幕/评论发送：房间普通弹幕/SC全关闭，直接归档");
+        EVENT_ZH.put("LiveMsgSendSync.UploadUser.InvalidState", "弹幕/评论发送：上传账号不可用(未登录或缺少UID)");
+        EVENT_ZH.put("LiveMsgSendSync.AllDmDisabled.Archive", "弹幕/评论发送：房间普通弹幕/SC/礼物评论全关闭，直接归档");
         EVENT_ZH.put("LiveMsgSendSync.PendingPart.Empty", "弹幕/评论发送：没有待处理分P");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.Start", "高级弹幕发送开始");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.SkipByManual", "手动跳过高级弹幕发送");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.Send.Failed", "高级弹幕发送失败");
         EVENT_ZH.put("LiveMsgSendSync.HighLevel.RateLimit.Pause", "高级弹幕发送频控，暂停一段时间");
+        EVENT_ZH.put("DanmakuDispatch.High.GlobalCooldown", "高级弹幕发送：等待全局弹幕间隔");
+        EVENT_ZH.put("DanmakuDispatch.High.UserCooldown", "高级弹幕发送：等待投稿账号冷却");
         EVENT_ZH.put("LiveMsgSendSync.Normal.EmptyExit", "普通弹幕待发送为0，退出任务");
         EVENT_ZH.put("LiveMsgSendSync.Normal.Start", "普通弹幕发送开始");
         EVENT_ZH.put("LiveMsgSendSync.Normal.SkipByManual", "手动跳过普通弹幕发送");
@@ -449,6 +455,7 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsgSendSync.Normal.Send.VideoNotApproved", "普通弹幕发送失败：视频未审核通过");
         EVENT_ZH.put("LiveMsgSendSync.Normal.Send.UserDisabled", "普通弹幕发送失败：账号异常，已禁用该用户");
         EVENT_ZH.put("LiveMsgSendSync.Normal.Send.Failed", "普通弹幕发送失败");
+        EVENT_ZH.put("DanmakuDispatch.Normal.GlobalCooldown", "普通弹幕发送：等待全局弹幕间隔");
         EVENT_ZH.put("LiveMsgSendSync.Done", "定时任务：弹幕/评论发送完成");
 
         // 弹幕

@@ -61,8 +61,8 @@ public class SystemConfigService {
         // 加载上传最大并发连接数
         loadOrInitConfig(KEY_UPLOAD_MAX_CONNECTIONS, "3", "上传最大并发连接数 (1-16) 控制同时进行的分片上传连接数，值越小网络占用越少");
         loadOrInitConfig(KEY_UPLOAD_NEW_FLOW_ENABLED, "false", "是否使用浏览器 multipart 上传流程，失败后自动回退旧流程");
-        loadOrInitConfig(KEY_NORMAL_DANMAKU_INTERVAL_SECONDS, String.valueOf(DEFAULT_NORMAL_DANMAKU_INTERVAL_SECONDS), "发送普通弹幕间隔(秒)");
-        loadOrInitConfig(KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, String.valueOf(DEFAULT_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS), "发送高级弹幕(SC/上舰/礼物)间隔(秒)");
+        loadOrInitConfig(KEY_NORMAL_DANMAKU_INTERVAL_SECONDS, String.valueOf(DEFAULT_NORMAL_DANMAKU_INTERVAL_SECONDS), "弹幕发送间隔(秒)：普通弹幕与SC/上舰高级弹幕共用的全局发送节拍");
+        loadOrInitConfig(KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, String.valueOf(DEFAULT_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS), "评论发送间隔(秒)：SC/上舰列表评论与礼物评论共用的全局发送节拍");
         initDanmakuDispatchConfig();
     }
 
@@ -114,8 +114,8 @@ public class SystemConfigService {
             if (KEY_MERGE_INTERVAL_MINUTES.equals(key)) config.setDescription("短时间开播合并时间 (分钟)");
             if (KEY_UPLOAD_MAX_CONNECTIONS.equals(key)) config.setDescription("上传最大并发连接数 (1-16)");
             if (KEY_UPLOAD_NEW_FLOW_ENABLED.equals(key)) config.setDescription("是否使用浏览器 multipart 上传流程");
-            if (KEY_NORMAL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("发送普通弹幕间隔(秒)");
-            if (KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("发送高级弹幕(SC/上舰/礼物)间隔(秒)");
+            if (KEY_NORMAL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("弹幕发送间隔(秒)：普通弹幕与SC/上舰高级弹幕共用的全局发送节拍");
+            if (KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("评论发送间隔(秒)：SC/上舰列表评论与礼物评论共用的全局发送节拍");
         }
         systemConfigRepository.save(config);
         
@@ -264,10 +264,18 @@ public class SystemConfigService {
     }
 
     public long getNormalDanmakuIntervalMs() {
-        return getLongConfig(KEY_NORMAL_DANMAKU_INTERVAL_SECONDS, DEFAULT_NORMAL_DANMAKU_INTERVAL_SECONDS, 1L, 600L) * 1000L;
+        return getDanmakuSendIntervalMs();
     }
 
     public long getHighLevelDanmakuIntervalMs() {
+        return getCommentSendIntervalMs();
+    }
+
+    public long getDanmakuSendIntervalMs() {
+        return getLongConfig(KEY_NORMAL_DANMAKU_INTERVAL_SECONDS, DEFAULT_NORMAL_DANMAKU_INTERVAL_SECONDS, 1L, 600L) * 1000L;
+    }
+
+    public long getCommentSendIntervalMs() {
         return getLongConfig(KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, DEFAULT_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, 1L, 600L) * 1000L;
     }
 

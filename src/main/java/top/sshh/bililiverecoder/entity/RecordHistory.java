@@ -166,6 +166,12 @@ public class RecordHistory {
     @Transient
     private Boolean roomSendSc;
 
+    /**
+     * 房间是否开启礼物评论（仅用于前端展示，不入库）
+     */
+    @Transient
+    private Boolean roomSendGiftReply;
+
 
     @Transient
     private LocalDateTime from;
@@ -217,24 +223,25 @@ public class RecordHistory {
             // 说明：sendReply 在数据库里表示“SC/上舰评论是否已发送”（历史字段名沿用，不改表）
             // 普通/高级弹幕是否发送，由房间开关决定；待发送数量由 Controller 统计后回填到 transient 字段
             // 如果没有回填房间开关（例如某些非列表接口直接返回 entity），则保持旧逻辑，避免误判
-            if (roomSendDm == null && roomSendSc == null) {
+            if (roomSendDm == null && roomSendSc == null && roomSendGiftReply == null) {
                 return sendReply ? "已完成" : "发送弹幕中";
             }
 
             boolean dmEnabled = Boolean.TRUE.equals(roomSendDm);
             boolean scEnabled = Boolean.TRUE.equals(roomSendSc);
+            boolean giftReplyEnabled = Boolean.TRUE.equals(roomSendGiftReply);
             int pendingNormal = Math.max(0, pendingNormalMsgCount);
             int pendingHigh = Math.max(0, pendingHighMsgCount);
             int pending = pendingNormal + pendingHigh;
 
             // 如果弹幕/SC 全部关闭，就不要卡在“发送中”
-            if (!dmEnabled && !scEnabled) {
+            if (!dmEnabled && !scEnabled && !giftReplyEnabled) {
                 return "已完成";
             }
 
-            // 先看评论（SC列表）是否需要发送
-            if (scEnabled && !sendReply && pendingHigh > 0) {
-                return "发送弹幕中";
+            // 先看评论（SC/上舰列表或礼物评论）是否需要发送
+            if (!sendReply && ((scEnabled && pendingHigh > 0) || giftReplyEnabled)) {
+                return "发送评论中";
             }
 
             // 评论已处理完，再看弹幕队列是否还有待发送

@@ -1399,7 +1399,8 @@ public class HistoryController {
         disabledRooms.select(roomRoot.get("roomId"));
         Predicate dmOff = criteriaBuilder.or(criteriaBuilder.isNull(roomRoot.get("sendDm")), criteriaBuilder.isFalse(roomRoot.get("sendDm")));
         Predicate scOff = criteriaBuilder.or(criteriaBuilder.isNull(roomRoot.get("sendSc")), criteriaBuilder.isFalse(roomRoot.get("sendSc")));
-        disabledRooms.where(criteriaBuilder.and(dmOff, scOff));
+        Predicate giftReplyOff = criteriaBuilder.or(criteriaBuilder.isNull(roomRoot.get("sendGiftReply")), criteriaBuilder.isFalse(roomRoot.get("sendGiftReply")));
+        disabledRooms.where(criteriaBuilder.and(dmOff, scOff, giftReplyOff));
         Predicate allDmDisabled = root.get("roomId").in(disabledRooms);
 
         return criteriaBuilder.and(
@@ -1547,8 +1548,10 @@ public class HistoryController {
             // 发送开关与待发送数量（仅用于状态展示，不影响后台任务）
             boolean sendDm = room != null && Boolean.TRUE.equals(room.getSendDm());
             boolean sendSc = room != null && Boolean.TRUE.equals(room.getSendSc());
+            boolean sendGiftReply = room != null && Boolean.TRUE.equals(room.getSendGiftReply());
             history.setRoomSendDm(sendDm);
             history.setRoomSendSc(sendSc);
+            history.setRoomSendGiftReply(sendGiftReply);
             history.setPendingNormalMsgCount(sendDm ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : msgStats.pendingNormalMsgCount()) : 0);
             history.setPendingHighMsgCount(sendSc ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : msgStats.pendingHighMsgCount()) : 0);
         }

@@ -195,6 +195,7 @@ public class LiveMsgSendSync {
             RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
             boolean sendDmEnabled = room != null && Boolean.TRUE.equals(room.getSendDm());
             boolean sendScEnabled = room != null && Boolean.TRUE.equals(room.getSendSc());
+            boolean sendGiftReplyEnabled = room != null && Boolean.TRUE.equals(room.getSendGiftReply());
 
             //如果没有发送评论
             if (!history.isSendReply()) {
@@ -208,7 +209,7 @@ public class LiveMsgSendSync {
                     Optional<BiliBiliUser> userOptional = userRepository.findById(uploadUserId);
                     if (userOptional.isPresent()) {
                         user = userOptional.get();
-                        if (!(user.isLogin() && user.isEnable())) {
+                        if (!(user.getUid() != null && user.isLogin())) {
                             log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.UploadUser.InvalidState")
                                     .add("uid", user.getUid())
                                     .addIfNotBlank("uname", user.getUname())
@@ -221,8 +222,8 @@ public class LiveMsgSendSync {
                     }
                 }
 
-                // 普通弹幕/高级弹幕/SC 全关闭：直接标记“评论已处理”，避免状态卡住
-                if (!sendDmEnabled && !sendScEnabled) {
+                // 普通弹幕/高级弹幕/SC/礼物评论全关闭：直接标记“评论已处理”，避免状态卡住
+                if (!sendDmEnabled && !sendScEnabled && !sendGiftReplyEnabled) {
                     history.setSendReply(true);
                     historyRepository.save(history);
                     log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.AllDmDisabled.Archive")
@@ -233,8 +234,8 @@ public class LiveMsgSendSync {
                     continue;
                 }
 
-                // 未开启 SC/上舰发送时，不发送“SC/上舰列表评论”，直接认为评论阶段已完成
-                if (!sendScEnabled) {
+                // 未开启 SC/上舰发送且未开启礼物评论时，直接认为评论阶段已完成
+                if (!sendScEnabled && !sendGiftReplyEnabled) {
                     history.setSendReply(true);
                     historyRepository.save(history);
                     log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.SkipByRoomConfig")
@@ -319,23 +320,25 @@ public class LiveMsgSendSync {
                 boolean hasScReply = false;
                 boolean hasGuardReply = false;
                 boolean hasOtherHighLevelReply = false;
-                for (RecordHistoryPart part : parts) {
-                    List<LiveMsg> msgList = msgRepository.findByPartIdAndPoolAndCidNotNullOrderBySendTimeAsc(part.getId(), 1);
-                    for (LiveMsg liveMsg : msgList) {
-                        String contextText = liveMsg.getContext();
-                        if (contextText != null && contextText.startsWith("SC [")) {
-                            hasScReply = true;
-                        } else if (contextText != null && contextText.startsWith("⚓")) {
-                            hasGuardReply = true;
-                        } else {
-                            hasOtherHighLevelReply = true;
+                if (sendScEnabled) {
+                    for (RecordHistoryPart part : parts) {
+                        List<LiveMsg> msgList = msgRepository.findByPartIdAndPoolAndCidNotNullOrderBySendTimeAsc(part.getId(), 1);
+                        for (LiveMsg liveMsg : msgList) {
+                            String contextText = liveMsg.getContext();
+                            if (contextText != null && contextText.startsWith("SC [")) {
+                                hasScReply = true;
+                            } else if (contextText != null && contextText.startsWith("⚓")) {
+                                hasGuardReply = true;
+                            } else {
+                                hasOtherHighLevelReply = true;
+                            }
+                            replyLines.add(part.getPage() + "#" + format.format(new Date(liveMsg.getSendTime()))
+                                    + "  " + contextText + "\n");
                         }
-                        replyLines.add(part.getPage() + "#" + format.format(new Date(liveMsg.getSendTime()))
-                                + "  " + contextText + "\n");
                     }
                 }
                 int giftReplyCount = 0;
-                if (room != null && Boolean.TRUE.equals(room.getSendGiftReply())) {
+                if (sendGiftReplyEnabled) {
                     giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format);
                 }
                 List<BiliReply> replies = buildVideoReplies(history,
@@ -356,7 +359,17 @@ public class LiveMsgSendSync {
                         BiliReply reply = replies.get(i);
                         reply.setRoot(replId);
                         reply.setParent(replId);
-                        BiliReplyResponse replyResponse = BiliApi.sendVideoReply(user, reply);
+                        boolean permitAcquired = false;
+                        BiliReplyResponse replyResponse;
+                        try {
+                            danmakuSendScheduler.waitForCommentSendPermit(user, history.getBvId(), i);
+                            permitAcquired = true;
+                            try {
+                                replyResponse = BiliApi.sendVideoReply(user, reply);
+                            } catch (RuntimeException e) {
+                                danmakuSendScheduler.markCommentFailure(user, null);
+                                throw e;
+                            }
                         if (replyResponse.getCode() == 0) {
                             log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Success")
                                     .addIfNotBlank("bvid", history.getBvId())
@@ -402,6 +415,7 @@ public class LiveMsgSendSync {
 
                             }
                         } else {
+                            danmakuSendScheduler.markCommentFailure(user, replyResponse.getCode());
                             log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Failed")
                                     .addIfNotBlank("bvid", history.getBvId())
                                     .addIfNotBlank("avId", reply.getOid())
@@ -410,7 +424,11 @@ public class LiveMsgSendSync {
                             throw new RuntimeException("发送评论失败: " + replyResponse.getMessage());
                         }
                         //等待一段时间在发送
-                        Thread.sleep(5000L);
+                        } finally {
+                            if (permitAcquired) {
+                                danmakuSendScheduler.releaseCommentSendPermit(user);
+                            }
+                        }
                     }
                     // 全部发送成功后，标记为已发送
                     history.setSendReply(true);
@@ -563,8 +581,7 @@ public class LiveMsgSendSync {
             return;
         }
 
-        final long normalDanmakuIntervalMs = systemConfigService.getNormalDanmakuIntervalMs();
-        final long highLevelDanmakuIntervalMs = systemConfigService.getHighLevelDanmakuIntervalMs();
+        final long danmakuSendIntervalMs = systemConfigService.getDanmakuSendIntervalMs();
 
         try {
             boolean tryLock = lock.tryLock();
@@ -632,7 +649,7 @@ public class LiveMsgSendSync {
                                             .add("waitSec", 120));
                                     Thread.sleep(120 * 1000L);
                                 } else if (code == 0) {
-                                    Thread.sleep(highLevelDanmakuIntervalMs);
+                                    Thread.sleep(danmakuSendIntervalMs);
                                 } else {
                                     // 其他失败情况，默认暂停5秒，防止死循环风控
                                     Thread.sleep(5000L);
@@ -763,7 +780,7 @@ public class LiveMsgSendSync {
                         if (code == 36703) {
                             Thread.sleep(120 * 1000L);
                         } else if (code == 0) {
-                            Thread.sleep(normalDanmakuIntervalMs);
+                            Thread.sleep(danmakuSendIntervalMs);
                         } else {
                             // 其他未中断的错误（如36714），默认暂停5秒
                             Thread.sleep(5000L);
@@ -913,7 +930,8 @@ public class LiveMsgSendSync {
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         boolean sendDmEnabled = room != null && Boolean.TRUE.equals(room.getSendDm());
         boolean sendScEnabled = room != null && Boolean.TRUE.equals(room.getSendSc());
-        if (!sendDmEnabled && !sendScEnabled) {
+        boolean sendGiftReplyEnabled = room != null && Boolean.TRUE.equals(room.getSendGiftReply());
+        if (!sendDmEnabled && !sendScEnabled && !sendGiftReplyEnabled) {
             history.setSendReply(true);
             historyRepository.save(history);
             log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.AllDmDisabled.Archive")
@@ -923,7 +941,7 @@ public class LiveMsgSendSync {
                     .addIfNotBlank("title", history.getTitle()));
             return;
         }
-        if (!sendScEnabled) {
+        if (!sendScEnabled && !sendGiftReplyEnabled) {
             history.setSendReply(true);
             historyRepository.save(history);
             log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.SkipByRoomConfig")
@@ -966,7 +984,7 @@ public class LiveMsgSendSync {
             boolean hasScReply = false;
             boolean hasGuardReply = false;
             boolean hasOtherHighLevelReply = false;
-            if (!partIds.isEmpty()) {
+            if (sendScEnabled && !partIds.isEmpty()) {
                 Map<Long, List<LiveMsg>> messagesByPart = new HashMap<>();
                 for (LiveMsg liveMsg : msgRepository.findByPartIdInAndPoolAndCidNotNullOrderByPartIdAscSendTimeAsc(partIds, 1)) {
                     messagesByPart.computeIfAbsent(liveMsg.getPartId(), ignored -> new ArrayList<>()).add(liveMsg);
@@ -988,7 +1006,7 @@ public class LiveMsgSendSync {
                 }
             }
             int giftReplyCount = 0;
-            if (room != null && Boolean.TRUE.equals(room.getSendGiftReply())) {
+            if (sendGiftReplyEnabled) {
                 giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format);
             }
             List<BiliReply> replies = buildVideoReplies(history,
@@ -1045,7 +1063,7 @@ public class LiveMsgSendSync {
             return null;
         }
         BiliBiliUser user = userOptional.get();
-        if (!(user.isLogin() && user.isEnable())) {
+        if (!(user.getUid() != null && user.isLogin())) {
             log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.UploadUser.InvalidState")
                     .add("uid", user.getUid())
                     .addIfNotBlank("uname", user.getUname())
@@ -1095,40 +1113,55 @@ public class LiveMsgSendSync {
                 BiliReply reply = replies.get(i);
                 reply.setRoot(replId);
                 reply.setParent(replId);
-                BiliReplyResponse replyResponse = BiliApi.sendVideoReply(user, reply);
-                if (replyResponse.getCode() != 0) {
-                    log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Failed")
-                            .addIfNotBlank("bvid", history.getBvId())
-                            .addIfNotBlank("avId", reply.getOid())
-                            .add("code", replyResponse.getCode())
-                            .addIfNotBlank("message", replyResponse.getMessage()));
-                    throw new RuntimeException("send reply failed: " + replyResponse.getMessage());
-                }
-                log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Success")
-                        .addIfNotBlank("bvid", history.getBvId())
-                        .addIfNotBlank("avId", reply.getOid())
-                        .add("index", i)
-                        .add("messageLen", reply.getMessage() == null ? 0 : reply.getMessage().length()));
-                if (i == 0 && replyResponse.getData() != null) {
-                    replId = replyResponse.getData().getRpid();
-                    sleepQuietly(2_000L, "replyTopWait");
-                    reply.setRpid(replyResponse.getData().getRpid());
-                    reply.setAction("1");
-                    BiliReplyResponse response = BiliApi.topVideoReply(user, reply);
-                    if (response.getCode() == 404) {
-                        sleepQuietly(2_000L, "replyTopRetryWait");
-                        BiliApi.topVideoReply(user, reply);
-                    } else if (response.getCode() != 0) {
-                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Top.Failed")
+                boolean permitAcquired = false;
+                try {
+                    danmakuSendScheduler.waitForCommentSendPermit(user, history.getBvId(), i);
+                    permitAcquired = true;
+                    BiliReplyResponse replyResponse;
+                    try {
+                        replyResponse = BiliApi.sendVideoReply(user, reply);
+                    } catch (RuntimeException e) {
+                        danmakuSendScheduler.markCommentFailure(user, null);
+                        throw e;
+                    }
+                    if (replyResponse.getCode() != 0) {
+                        danmakuSendScheduler.markCommentFailure(user, replyResponse.getCode());
+                        log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Failed")
                                 .addIfNotBlank("bvid", history.getBvId())
                                 .addIfNotBlank("avId", reply.getOid())
-                                .addIfNotBlank("rpid", reply.getRpid())
-                                .add("code", response.getCode())
-                                .addIfNotBlank("message", response.getMessage()));
+                                .add("code", replyResponse.getCode())
+                                .addIfNotBlank("message", replyResponse.getMessage()));
+                        throw new RuntimeException("send reply failed: " + replyResponse.getMessage());
+                    }
+                    log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Success")
+                            .addIfNotBlank("bvid", history.getBvId())
+                            .addIfNotBlank("avId", reply.getOid())
+                            .add("index", i)
+                            .add("messageLen", reply.getMessage() == null ? 0 : reply.getMessage().length()));
+                    if (i == 0 && replyResponse.getData() != null) {
+                        replId = replyResponse.getData().getRpid();
+                        sleepQuietly(2_000L, "replyTopWait");
+                        reply.setRpid(replyResponse.getData().getRpid());
+                        reply.setAction("1");
+                        BiliReplyResponse response = BiliApi.topVideoReply(user, reply);
+                        if (response.getCode() == 404) {
+                            sleepQuietly(2_000L, "replyTopRetryWait");
+                            BiliApi.topVideoReply(user, reply);
+                        } else if (response.getCode() != 0) {
+                            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Top.Failed")
+                                    .addIfNotBlank("bvid", history.getBvId())
+                                    .addIfNotBlank("avId", reply.getOid())
+                                    .addIfNotBlank("rpid", reply.getRpid())
+                                    .add("code", response.getCode())
+                                    .addIfNotBlank("message", response.getMessage()));
+                        }
+                    }
+                } finally {
+                    if (permitAcquired) {
+                        danmakuSendScheduler.releaseCommentSendPermit(user);
                     }
                 }
                 sendReplyPush(room, history, user, reply);
-                sleepQuietly(5_000L, "replyThrottle");
             }
         } catch (Exception e) {
             log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.BatchFailed")
@@ -1254,66 +1287,148 @@ public class LiveMsgSendSync {
         List<RoomLiveEvent> giftEvents = roomLiveEventRepository.findByHistoryIdAndTypeOrderByPartIdAscSendTimeAsc(
                 history.getId(), RoomLiveEvent.TYPE_GIFT);
         if (giftEvents.isEmpty()) {
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.GiftReply.Scan")
+                    .add("roomId", history.getRoomId())
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .add("giftEvent", 0)
+                    .add("appended", 0)
+                    .add("minPriceCny", formatMoney(minPrice))
+                    .add("skippedNoPart", 0)
+                    .add("skippedNoPrice", 0)
+                    .add("skippedBelowThreshold", 0));
             return 0;
         }
 
+        GiftCatalogLookup catalogLookup = loadGiftCatalogForGiftReply(history, room, giftEvents);
+        int appended = 0;
+        int skippedNoPart = 0;
+        int skippedNoPrice = 0;
+        int skippedBelowThreshold = 0;
+        Map<String, Integer> appendedByPriceSource = new HashMap<>();
+        for (RoomLiveEvent event : giftEvents) {
+            RecordHistoryPart part = partById.get(event.getPartId());
+            if (part == null) {
+                skippedNoPart++;
+                continue;
+            }
+            GiftPriceResolution unitPrice = resolveGiftUnitPriceCny(event, catalogLookup);
+            if (unitPrice.price() == null) {
+                skippedNoPrice++;
+                continue;
+            }
+            if (unitPrice.price().compareTo(minPrice) < 0) {
+                skippedBelowThreshold++;
+                continue;
+            }
+            long count = event.getGiftCount() == null || event.getGiftCount() <= 0 ? 1L : event.getGiftCount();
+            BigDecimal totalPrice = resolveGiftTotalPriceCny(event, unitPrice.price(), count);
+            String uname = hasText(event.getUname()) ? event.getUname() : "未知用户";
+            String giftName = hasText(event.getGiftName())
+                    ? event.getGiftName()
+                    : (hasText(unitPrice.giftName()) ? unitPrice.giftName() : "未知礼物");
+            long sendTime = event.getSendTime() == null ? 0L : event.getSendTime();
+            replyLines.add(part.getPage() + "#" + format.format(new Date(sendTime))
+                    + "  礼物 [💎" + formatMoney(unitPrice.price()) + "] "
+                    + uname + ": " + giftName + " x" + count
+                    + "，总计💎" + formatMoney(totalPrice) + "\n");
+            appendedByPriceSource.merge(unitPrice.source(), 1, Integer::sum);
+            appended++;
+        }
+        log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.GiftReply.Scan")
+                .add("roomId", history.getRoomId())
+                .add("historyId", history.getId())
+                .addIfNotBlank("bvid", history.getBvId())
+                .add("giftEvent", giftEvents.size())
+                .add("appended", appended)
+                .add("minPriceCny", formatMoney(minPrice))
+                .add("skippedNoPart", skippedNoPart)
+                .add("skippedNoPrice", skippedNoPrice)
+                .add("skippedBelowThreshold", skippedBelowThreshold)
+                .add("rawPriceHit", appendedByPriceSource.getOrDefault("raw", 0))
+                .add("roomCatalogHit", appendedByPriceSource.getOrDefault("room_catalog", 0))
+                .add("localGiftIdFallback", appendedByPriceSource.getOrDefault("local_gift_id", 0))
+                .add("localGiftNameFallback", appendedByPriceSource.getOrDefault("local_gift_name", 0)));
+        return appended;
+    }
+
+    private GiftCatalogLookup loadGiftCatalogForGiftReply(RecordHistory history, RecordRoom room, List<RoomLiveEvent> giftEvents) {
+        String roomId = hasText(history.getRoomId()) ? history.getRoomId() : (room == null ? null : room.getRoomId());
         List<Integer> giftIds = giftEvents.stream()
                 .map(RoomLiveEvent::getGiftId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        Map<Integer, RoomLiveGiftCatalog> catalogByGiftId = new HashMap<>();
-        if (!giftIds.isEmpty()) {
-            String roomId = hasText(history.getRoomId()) ? history.getRoomId() : room.getRoomId();
+        Map<String, RoomLiveGiftCatalog> roomCatalogByGiftId = new HashMap<>();
+        if (hasText(roomId) && !giftIds.isEmpty()) {
             for (RoomLiveGiftCatalog catalog : roomLiveGiftCatalogRepository.findByRoomIdAndGiftIdIn(roomId, giftIds)) {
                 if (catalog.getGiftId() != null) {
-                    catalogByGiftId.put(catalog.getGiftId(), catalog);
+                    roomCatalogByGiftId.put(giftCatalogKey(roomId, catalog.getGiftId()), catalog);
                 }
             }
         }
-        int appended = 0;
-        for (RoomLiveEvent event : giftEvents) {
-            RecordHistoryPart part = partById.get(event.getPartId());
-            if (part == null) {
-                continue;
+
+        Map<Integer, RoomLiveGiftCatalog> localByGiftId = new HashMap<>();
+        if (!giftIds.isEmpty()) {
+            for (RoomLiveGiftCatalog catalog : roomLiveGiftCatalogRepository.findPricedByGiftIdIn(giftIds)) {
+                if (catalog.getGiftId() != null && catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
+                    localByGiftId.putIfAbsent(catalog.getGiftId(), catalog);
+                }
             }
-            RoomLiveGiftCatalog catalog = event.getGiftId() == null ? null : catalogByGiftId.get(event.getGiftId());
-            BigDecimal unitPrice = resolveGiftUnitPriceCny(event, catalog);
-            if (unitPrice == null || unitPrice.compareTo(minPrice) < 0) {
-                continue;
-            }
-            long count = event.getGiftCount() == null || event.getGiftCount() <= 0 ? 1L : event.getGiftCount();
-            BigDecimal totalPrice = resolveGiftTotalPriceCny(event, unitPrice, count);
-            String uname = hasText(event.getUname()) ? event.getUname() : "未知用户";
-            String giftName = hasText(event.getGiftName())
-                    ? event.getGiftName()
-                    : (catalog != null && hasText(catalog.getGiftName()) ? catalog.getGiftName() : "未知礼物");
-            long sendTime = event.getSendTime() == null ? 0L : event.getSendTime();
-            replyLines.add(part.getPage() + "#" + format.format(new Date(sendTime))
-                    + "  礼物 [💎" + formatMoney(unitPrice) + "] "
-                    + uname + ": " + giftName + " x" + count
-                    + "，总计💎" + formatMoney(totalPrice) + "\n");
-            appended++;
         }
-        return appended;
+
+        List<String> giftNames = giftEvents.stream()
+                .map(RoomLiveEvent::getGiftName)
+                .filter(this::hasText)
+                .distinct()
+                .toList();
+        Map<String, RoomLiveGiftCatalog> localByGiftName = new HashMap<>();
+        if (!giftNames.isEmpty()) {
+            for (RoomLiveGiftCatalog catalog : roomLiveGiftCatalogRepository.findPricedByGiftNameIn(giftNames)) {
+                if (hasText(catalog.getGiftName()) && catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
+                    localByGiftName.putIfAbsent(catalog.getGiftName(), catalog);
+                }
+            }
+        }
+
+        return new GiftCatalogLookup(roomId, roomCatalogByGiftId, localByGiftId, localByGiftName);
     }
 
-    private BigDecimal resolveGiftUnitPriceCny(RoomLiveEvent event, RoomLiveGiftCatalog catalog) {
+    private GiftPriceResolution resolveGiftUnitPriceCny(RoomLiveEvent event, GiftCatalogLookup lookup) {
         Long unitCoin = event.getGiftPriceCoin();
         long count = event.getGiftCount() == null || event.getGiftCount() <= 0 ? 1L : event.getGiftCount();
         if ((unitCoin == null || unitCoin <= 0) && event.getGiftTotalCoin() != null && event.getGiftTotalCoin() > 0) {
             unitCoin = event.getGiftTotalCoin() / count;
         }
         if (unitCoin != null && unitCoin > 0) {
-            return roomLiveGiftCatalogService.toCny(unitCoin);
+            return new GiftPriceResolution(roomLiveGiftCatalogService.toCny(unitCoin), event.getGiftName(), "raw");
         }
-        if (catalog != null && catalog.getPriceCny() != null && catalog.getPriceCny().compareTo(BigDecimal.ZERO) > 0) {
-            return catalog.getPriceCny();
+
+        RoomLiveGiftCatalog catalog = null;
+        if (event.getGiftId() != null && lookup != null && hasText(lookup.roomId())) {
+            catalog = lookup.roomCatalogByGiftId().get(giftCatalogKey(lookup.roomId(), event.getGiftId()));
+            BigDecimal price = catalogPriceCny(catalog);
+            if (price != null) {
+                return new GiftPriceResolution(price, catalog.getGiftName(), "room_catalog");
+            }
         }
-        if (catalog != null && catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
-            return roomLiveGiftCatalogService.toCny(catalog.getPriceCoin());
+
+        if (event.getGiftId() != null && lookup != null) {
+            catalog = lookup.localByGiftId().get(event.getGiftId());
+            BigDecimal price = catalogPriceCny(catalog);
+            if (price != null) {
+                return new GiftPriceResolution(price, catalog.getGiftName(), "local_gift_id");
+            }
         }
-        return null;
+
+        if (hasText(event.getGiftName()) && lookup != null) {
+            catalog = lookup.localByGiftName().get(event.getGiftName());
+            BigDecimal price = catalogPriceCny(catalog);
+            if (price != null) {
+                return new GiftPriceResolution(price, catalog.getGiftName(), "local_gift_name");
+            }
+        }
+        return new GiftPriceResolution(null, event.getGiftName(), "missing");
     }
 
     private BigDecimal resolveGiftTotalPriceCny(RoomLiveEvent event, BigDecimal unitPrice, long count) {
@@ -1321,6 +1436,23 @@ public class LiveMsgSendSync {
             return roomLiveGiftCatalogService.toCny(event.getGiftTotalCoin());
         }
         return unitPrice.multiply(BigDecimal.valueOf(count));
+    }
+
+    private BigDecimal catalogPriceCny(RoomLiveGiftCatalog catalog) {
+        if (catalog == null) {
+            return null;
+        }
+        if (catalog.getPriceCny() != null && catalog.getPriceCny().compareTo(BigDecimal.ZERO) > 0) {
+            return catalog.getPriceCny();
+        }
+        if (catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
+            return roomLiveGiftCatalogService.toCny(catalog.getPriceCoin());
+        }
+        return null;
+    }
+
+    private String giftCatalogKey(String roomId, Integer giftId) {
+        return roomId + "#" + giftId;
     }
 
     private String formatMoney(BigDecimal value) {
@@ -1332,6 +1464,15 @@ public class LiveMsgSendSync {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record GiftCatalogLookup(String roomId,
+                                     Map<String, RoomLiveGiftCatalog> roomCatalogByGiftId,
+                                     Map<Integer, RoomLiveGiftCatalog> localByGiftId,
+                                     Map<String, RoomLiveGiftCatalog> localByGiftName) {
+    }
+
+    private record GiftPriceResolution(BigDecimal price, String giftName, String source) {
     }
 
 }

@@ -926,7 +926,7 @@ public class RoomController {
             dbRoom.setMoveDir(room.getMoveDir());
             dbRoom.setSendDm(room.getSendDm());
             dbRoom.setSendSc(room.getSendSc());
-            dbRoom.setSendGiftReply(Boolean.TRUE.equals(room.getSendSc()) && Boolean.TRUE.equals(room.getSendGiftReply()));
+            dbRoom.setSendGiftReply(Boolean.TRUE.equals(room.getSendGiftReply()));
             dbRoom.setGiftReplyMinPriceCny(normalizeGiftReplyMinPrice(room.getGiftReplyMinPriceCny()));
             roomRepository.save(dbRoom);
             log.info("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Fixed")
@@ -1153,7 +1153,7 @@ public class RoomController {
         if (room == null) {
             return;
         }
-        room.setSendGiftReply(Boolean.TRUE.equals(room.getSendSc()) && Boolean.TRUE.equals(room.getSendGiftReply()));
+        room.setSendGiftReply(Boolean.TRUE.equals(room.getSendGiftReply()));
         room.setGiftReplyMinPriceCny(normalizeGiftReplyMinPrice(room.getGiftReplyMinPriceCny()));
     }
 
