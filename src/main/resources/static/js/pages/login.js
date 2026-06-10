@@ -251,6 +251,71 @@ new Vue({
                 onMove(ev.touches[0]);
             }, { passive: true });
         },
+        getSafeRedirectTarget(value) {
+            if (!value) {
+                return '';
+            }
+            try {
+                var url = new URL(value, window.location.origin);
+                if (url.origin !== window.location.origin) {
+                    return '';
+                }
+                if (/\/html\/login\.html$/i.test(url.pathname)) {
+                    return '';
+                }
+                return (url.pathname || '/index.html') + (url.search || '') + (url.hash || '');
+            } catch (e) {
+                return '';
+            }
+        },
+        getRedirectTargetFromQuery() {
+            try {
+                var params = new URLSearchParams(window.location.search || '');
+                return this.getSafeRedirectTarget(params.get('redirect') || params.get('return') || params.get('next'));
+            } catch (e) {
+                return '';
+            }
+        },
+        hasLoginParam(name) {
+            try {
+                return new URLSearchParams(window.location.search || '').has(name);
+            } catch (e) {
+                return false;
+            }
+        },
+        shouldUseMobileAfterLogin() {
+            if (this.hasLoginParam('desktop') || this.hasLoginParam('forceDesktop')) {
+                return false;
+            }
+            if (this.hasLoginParam('mobile')) {
+                return true;
+            }
+            try {
+                if (localStorage.getItem('biliupforjava_force_desktop') === '1') {
+                    return false;
+                }
+            } catch (e) {
+            }
+
+            var ua = navigator.userAgent || '';
+            var phoneUa = /iPhone|iPod|Android.*Mobile|Windows Phone|Mobi/i.test(ua);
+            var coarsePointer = false;
+            try {
+                coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse) and (max-width: 760px)').matches);
+            } catch (e) {
+            }
+            var screenWidth = window.screen && window.screen.width ? window.screen.width : 0;
+            var viewportWidth = window.innerWidth || screenWidth || 0;
+            var narrowViewport = Math.min(viewportWidth || screenWidth, screenWidth || viewportWidth) <= 640;
+            return phoneUa || (coarsePointer && narrowViewport);
+        },
+        getPostLoginTarget() {
+            var redirectTarget = this.getRedirectTargetFromQuery();
+            if (redirectTarget) {
+                return redirectTarget;
+            }
+            return this.shouldUseMobileAfterLogin() ? '/mobile/index.html' : '/index.html';
+        },
         async handleLogin() {
             if (!this.form.username || !this.form.password) {
                 this.$message.warning('请输入用户名和密码');
@@ -296,8 +361,9 @@ new Vue({
                 }
 
                 this.$message.success('登录成功，正在跳转...');
+                var target = this.getPostLoginTarget();
                 setTimeout(() => {
-                    window.location.href = '../index.html';
+                    window.location.replace(target);
                 }, 320);
             } catch (e) {
                 try { localStorage.removeItem('biliup_auth'); } catch (err) {}

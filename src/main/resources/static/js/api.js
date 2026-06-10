@@ -10,6 +10,48 @@
  */
 
 // 全局配置：每次请求前检查 localStorage 是否有 token，有则带上
+function getNavigationWindow() {
+    try {
+        if (window.top && window.top !== window && window.top.location.origin === window.location.origin) {
+            return window.top;
+        }
+    } catch (e) {
+    }
+    return window;
+}
+
+function isMobilePath(pathname) {
+    return /(^|\/)mobile(\/|$)/.test(pathname || '');
+}
+
+function getCurrentNavigationPath() {
+    var navWindow = getNavigationWindow();
+    var loc = navWindow.location || window.location;
+    return (loc.pathname || '/index.html') + (loc.search || '') + (loc.hash || '');
+}
+
+function getLoginReturnPath() {
+    var topPath = getCurrentNavigationPath();
+    var currentPath = (window.location && window.location.pathname) || '';
+
+    if (isMobilePath(topPath) || isMobilePath(currentPath)) {
+        return '/mobile/index.html';
+    }
+    if (/\/html\//.test(currentPath)) {
+        return '/index.html';
+    }
+    return topPath || '/index.html';
+}
+
+function getLoginUrl() {
+    return '/html/login.html?redirect=' + encodeURIComponent(getLoginReturnPath());
+}
+
+function redirectToLogin() {
+    var navWindow = getNavigationWindow();
+    navWindow.location.href = getLoginUrl();
+}
+
 $.ajaxSetup({
     beforeSend: function(xhr) {
         const token = localStorage.getItem('biliup_auth');
@@ -20,6 +62,8 @@ $.ajaxSetup({
 });
 
 const ApiUtil = {
+    getLoginUrl: getLoginUrl,
+    redirectToLogin: redirectToLogin,
     fetchBlob: function(url, options) {
         var token = null;
         try {
@@ -37,7 +81,7 @@ const ApiUtil = {
             cache: 'no-store'
         }, requestOptions)).then(function (res) {
             if (res.status === 401) {
-                window.location.href = '/html/login.html';
+                redirectToLogin();
                 throw new Error('unauthorized');
             }
             if (!res.ok) {
@@ -70,7 +114,7 @@ const ApiUtil = {
             },
             error: function(xhr, status, error) {
                 if (xhr.status === 401) {
-                    window.location.href = '/html/login.html';
+                    redirectToLogin();
                     return;
                 }
                 if (errorCallback) {
@@ -94,7 +138,7 @@ const ApiUtil = {
             },
             error: function(xhr, status, error) {
                 if (xhr.status === 401) {
-                    window.location.href = '/html/login.html';
+                    redirectToLogin();
                     return;
                 }
                 if (errorCallback) {
@@ -118,7 +162,7 @@ const ApiUtil = {
             },
             error: function(xhr, status, error) {
                 if (xhr.status === 401) {
-                    window.location.href = '/html/login.html';
+                    redirectToLogin();
                     return;
                 }
                 if (errorCallback) {
@@ -139,7 +183,7 @@ const ApiUtil = {
                 try {
                     var ct = (jqXHR && jqXHR.getResponseHeader) ? (jqXHR.getResponseHeader('Content-Type') || '') : '';
                     if (ct.indexOf('text/html') >= 0) {
-                        window.location.href = '/html/login.html';
+                        redirectToLogin();
                         return;
                     }
                 } catch (e) {}
@@ -157,7 +201,7 @@ const ApiUtil = {
             },
             error: function(xhr, status, error) {
                 if (xhr.status === 401) {
-                    window.location.href = '/html/login.html';
+                    redirectToLogin();
                     return;
                 }
                 if (errorCallback) {
