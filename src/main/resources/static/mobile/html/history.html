@@ -1082,6 +1082,10 @@
                     <div :style="{ width: calcOverallUploadPercent() + '%' }"></div>
                 </div>
                 <p>{{ calcOverallUploadText() }}</p>
+                <div v-if="formatCurrentUploadSpeed()" class="mobile-history-upload-speed">
+                    <span>上传速度</span>
+                    <strong>{{ formatCurrentUploadSpeed() }}</strong>
+                </div>
                 <div v-if="isWaitingForUpload" class="mobile-history-detail-hint">
                     <i class="el-icon-info"></i>
                     <span>正在等待其他稿件分P上传。</span>
@@ -1124,6 +1128,7 @@
                             </div>
                             <p>
                                 <span v-if="p.fileSize">{{ formatSize(p.fileSize) }}</span>
+                                <span v-if="formatPartUploadSpeed(p)" class="mobile-history-part-speed">上传 {{ formatPartUploadSpeed(p) }}</span>
                                 <span v-if="p.stateMsg || p.issueMessage">{{ p.stateMsg || p.issueMessage }}</span>
                             </p>
                             <div class="mobile-history-detail-part-actions" v-if="canPreviewPart(p) || (p.actions && p.actions.length > 0)">

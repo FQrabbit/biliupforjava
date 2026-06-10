@@ -1421,6 +1421,28 @@
     background: color-mix(in srgb, #e6a23c 11%, var(--mobile-page-surface-strong));
 }
 
+.mobile-history-upload-speed {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid color-mix(in srgb, var(--mobile-teal) 26%, var(--mobile-page-border));
+    border-radius: 14px;
+    color: var(--mobile-teal);
+    background: color-mix(in srgb, var(--mobile-teal) 10%, var(--mobile-page-surface-strong));
+    font-size: 12px;
+    font-weight: 780;
+}
+
+.mobile-history-upload-speed strong {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+}
+
 .mobile-history-detail-inline-actions,
 .mobile-history-detail-part-actions {
     display: flex;
@@ -1507,6 +1529,14 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--mobile-page-surface-strong) 66%, transparent);
     border: 1px solid var(--mobile-page-border);
+}
+
+.mobile-history-detail-part p span.mobile-history-part-speed {
+    color: var(--mobile-teal);
+    border-color: color-mix(in srgb, var(--mobile-teal) 28%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-teal) 8%, var(--mobile-page-surface-strong));
+    font-weight: 760;
+    font-variant-numeric: tabular-nums;
 }
 
 .mobile-history-detail-dialog .detail-footer {

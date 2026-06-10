@@ -246,6 +246,39 @@
                 }
             });
         },
+        getPartUploadSpeedBytes: function(p) {
+            if (!p || p.state !== 'UPLOADING') return 0;
+
+            const backendSpeed = Number(p.speed) || 0;
+            if (backendSpeed > 0) return backendSpeed;
+
+            const partId = p.partId || p.page;
+            const track = this.progressSpeedTracking && this.progressSpeedTracking[partId];
+            if (!track || !track.samples || track.samples.length < 2) return 0;
+
+            const now = Date.now();
+            const recentSamples = track.samples.filter(s => (now - s.time) < 30000);
+            if (recentSamples.length < 2) return 0;
+
+            const weights = recentSamples.map((s, i) => i + 1);
+            const totalWeight = weights.reduce((a, b) => a + b, 0);
+            const avgChunksPerSecond = recentSamples.reduce((sum, s, i) => sum + s.speed * weights[i], 0) / totalWeight;
+            const chunkSizeBytes = this.resolveUploadChunkSizeBytes(p) || Number(track.chunkSizeBytes) || 0;
+
+            if (!isFinite(avgChunksPerSecond) || avgChunksPerSecond <= 0 || chunkSizeBytes <= 0) return 0;
+            return avgChunksPerSecond * chunkSizeBytes;
+        },
+        formatPartUploadSpeed: function(p) {
+            const speed = this.getPartUploadSpeedBytes(p);
+            return speed > 0 ? (this.formatSize(speed) + '/s') : '';
+        },
+        getCurrentUploadSpeedBytes: function() {
+            return (this.mergedParts || []).reduce((sum, p) => sum + this.getPartUploadSpeedBytes(p), 0);
+        },
+        formatCurrentUploadSpeed: function() {
+            const speed = this.getCurrentUploadSpeedBytes();
+            return speed > 0 ? (this.formatSize(speed) + '/s') : '';
+        },
         calculateRemainingTime: function(p) {
             if (!p) return null;
             const partId = p.partId || p.page;
