@@ -8,6 +8,20 @@
         canPreviewPart: function(p) {
             return !!(p && p.partId && this.getPartFilePath(p));
         },
+        getStaticJsUrl: function(fileName) {
+            var path = (window.location && window.location.pathname) || '/';
+            var markers = ['/mobile/html/', '/html/', '/mobile/'];
+            fileName = String(fileName || '').replace(/^\/+/, '');
+            for (var i = 0; i < markers.length; i++) {
+                var index = path.indexOf(markers[i]);
+                if (index >= 0) {
+                    return path.slice(0, index) + '/js/' + fileName;
+                }
+            }
+            var lastSlash = path.lastIndexOf('/');
+            var base = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : '/';
+            return base + 'js/' + fileName;
+        },
         openPartPreview: function(p, restoreOptions) {
             if (!this.canPreviewPart(p)) return;
             this.stopPartPreview();
@@ -580,7 +594,7 @@
                 return Promise.resolve();
             }
             if (!this.previewArtPlayerLoader) {
-                this.previewArtPlayerLoader = this.loadScript('../js/artplayer.min.js');
+                this.previewArtPlayerLoader = this.loadScript(this.getStaticJsUrl('artplayer.min.js'));
             }
             return this.previewArtPlayerLoader;
         },
@@ -589,7 +603,7 @@
                 return Promise.resolve();
             }
             if (!this.previewDanmukuLoader) {
-                this.previewDanmukuLoader = this.loadScript('../js/artplayer-plugin-danmuku.min.js');
+                this.previewDanmukuLoader = this.loadScript(this.getStaticJsUrl('artplayer-plugin-danmuku.min.js'));
             }
             return this.previewDanmukuLoader;
         },
@@ -598,7 +612,7 @@
                 return Promise.resolve();
             }
             if (!this.previewMpegtsLoader) {
-                this.previewMpegtsLoader = this.loadScript('../js/mpegts.min.js');
+                this.previewMpegtsLoader = this.loadScript(this.getStaticJsUrl('mpegts.min.js'));
             }
             return this.previewMpegtsLoader;
         },

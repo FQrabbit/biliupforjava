@@ -30,6 +30,9 @@ Vue.component('log-page', {
             showAlerts: false,
             sidebarVisible: window.innerWidth >= 1024,
             settingsDrawerVisible: false,
+            mobileFilterVisible: false,
+            showMobileBackTop: false,
+            mobileScrollHandler: null,
             isMobile: window.innerWidth < 768,
             freqRange: 30,
             hoveredFreqIdx: -1,
@@ -276,6 +279,9 @@ Vue.component('log-page', {
         },
         onAllDetailsOpened: function () {},
         showDetailContent: function (message) {
+            if (this.isMobile) {
+                this.allDetailsDialogVisible = false;
+            }
             this.currentDetail = message;
             this.detailDialogVisible = true;
         },
@@ -315,18 +321,23 @@ Vue.component('log-page', {
             var self = this;
             var container = this.$refs.console;
             if (container) {
-                container.addEventListener('scroll', function () {
+                if (this.mobileScrollHandler) {
+                    container.removeEventListener('scroll', this.mobileScrollHandler);
+                }
+                this.mobileScrollHandler = function () {
                     if (self.isAutoScrolling) return;
 
                     var threshold = 15;
                     var isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+                    self.showMobileBackTop = self.isMobile && container.scrollTop > 420;
 
                     if (self.autoScroll && !isAtBottom) {
                         self.autoScroll = false;
                     } else if (!self.autoScroll && isAtBottom) {
                         self.autoScroll = true;
                     }
-                });
+                };
+                container.addEventListener('scroll', this.mobileScrollHandler, { passive: true });
             }
         },
         connectWs: function () {
@@ -583,6 +594,7 @@ Vue.component('log-page', {
                 self.alerts = [];
                 self.sidebarVisible = false;
                 self.showAlerts = false;
+                self.allDetailsDialogVisible = false;
                 self.$message.success('已清除所有异常记录');
             }, function (e) {
                 console.error(e);
@@ -593,12 +605,15 @@ Vue.component('log-page', {
             return new Date(dateStr).toLocaleString();
         },
         showContext: function(alert) {
+            if (this.isMobile) {
+                this.allDetailsDialogVisible = false;
+            }
             this.currentAlert = alert;
             this.contextDialogVisible = true;
             this.loadingContext = true;
             this.contextLogs = [];
             var self = this;
-            var keyword = alert.message;
+            var keyword = (alert && alert.message) ? alert.message : '';
             if (keyword.length > 50) {
                  keyword = keyword.substring(0, 50);
             }
@@ -628,6 +643,43 @@ Vue.component('log-page', {
         },
         isSelected: function (log) {
             return this.selectionMode && this.selectedLogs.has(log);
+        },
+        handleMobileLogTap: function (log) {
+            if (this.selectionMode) {
+                this.handleLogClick(log);
+                return;
+            }
+            this.openLogDetail(log);
+        },
+        openLogDetail: function (log) {
+            if (!log) return;
+            var line = '';
+            if (log.timestamp) line += log.timestamp;
+            if (log.level) line += (line ? ' ' : '') + log.level;
+            if (log.thread) line += ' [' + log.thread + ']';
+            if (log.logger) line += ' ' + log.logger;
+            if (log.message) line += (line ? '\n\n' : '') + log.message;
+            this.currentDetail = line || log.message || '';
+            this.detailDialogVisible = true;
+        },
+        resetMobileFilters: function () {
+            this.searchKeyword = '';
+            this.visibleLevels = ['INFO', 'WARN', 'ERROR'];
+            this.hoveredFreqIdx = -1;
+        },
+        scrollMobileLogTop: function () {
+            var container = this.$refs.console;
+            if (!container) return;
+            this.autoScroll = false;
+            this.showMobileBackTop = false;
+            if (typeof container.scrollTo === 'function') {
+                container.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            } else {
+                container.scrollTop = 0;
+            }
         },
         handleLogClick: function (log) {
             if (!this.selectionMode) return;
@@ -762,6 +814,11 @@ Vue.component('log-page', {
     },
     beforeDestroy: function () {
         window.removeEventListener('resize', this.handleResize);
+        var container = this.$refs.console;
+        if (container && this.mobileScrollHandler) {
+            container.removeEventListener('scroll', this.mobileScrollHandler);
+        }
+        this.mobileScrollHandler = null;
         if (this.ws) this.ws.close();
         if (this.alertPollingTimer) {
             clearInterval(this.alertPollingTimer);

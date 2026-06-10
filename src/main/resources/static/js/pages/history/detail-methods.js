@@ -101,9 +101,7 @@
             if (code !== 0 && code !== -50) return '';
             // 仅自己可见稿件不会进入普通弹幕发送流程，视为已完成
             if (code === -50) return 'success';
-            const pendingNormal = Number(item.pendingNormalMsgCount) || 0;
-            const pendingHigh = Number(item.pendingHighMsgCount) || 0;
-            const pending = Math.max(0, pendingNormal) + Math.max(0, pendingHigh);
+            const pending = this.getDanmakuQueueCount(item);
             if (pending <= 0 && (item.roomSendSc !== true || item.sendReply)) return 'success';
             return 'warning';
         },
@@ -113,12 +111,58 @@
             if (code !== 0 && code !== -50) return '待发布';
             // 仅自己可见稿件不会进入普通弹幕发送流程，直接判定完成
             if (code === -50) return '已完成';
-            const pendingNormal = Number(item.pendingNormalMsgCount) || 0;
-            const pendingHigh = Number(item.pendingHighMsgCount) || 0;
-            const pending = Math.max(0, pendingNormal) + Math.max(0, pendingHigh);
+            const pending = this.getDanmakuQueueCount(item);
+            const pendingHigh = Math.max(0, Number(item.pendingHighMsgCount) || 0);
             if (item.roomSendSc === true && !item.sendReply && pendingHigh > 0) return '发送中';
             if (pending > 0) return '发送中';
             return '已完成';
+        },
+        openMobileDanmakuStats: function(item) {
+            if (!this.isMobile || !item) return;
+            this.showMoreActions = false;
+            this.mobileDanmakuStatsTarget = item;
+            this.mobileDanmakuStatsVisible = true;
+        },
+        closeMobileDanmakuStats: function() {
+            this.mobileDanmakuStatsVisible = false;
+            this.mobileDanmakuStatsTarget = null;
+        },
+        getMobileDanmakuStatsItem: function() {
+            return this.mobileDanmakuStatsTarget || this.currentDetail || {};
+        },
+        getMobileDanmakuStatsTitle: function() {
+            const item = this.getMobileDanmakuStatsItem();
+            const title = item && (item.title || item.roomName || item.roomId);
+            if (!title) return '当前稿件';
+            return this.maskText ? this.maskText(title) : title;
+        },
+        getMobileDanmakuStatsValue: function(key) {
+            const item = this.getMobileDanmakuStatsItem();
+            const n = Number(item && item[key]);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        },
+        getDanmakuQueueCount: function(item) {
+            const target = item || {};
+            const pendingNormal = Number(target.pendingNormalMsgCount) || 0;
+            const pendingHigh = Number(target.pendingHighMsgCount) || 0;
+            return Math.max(0, pendingNormal) + Math.max(0, pendingHigh);
+        },
+        getMobileDanmakuQueueCount: function() {
+            return this.getDanmakuQueueCount(this.getMobileDanmakuStatsItem());
+        },
+        getMobileDanmakuSuccessPercent: function() {
+            const total = this.getMobileDanmakuStatsValue('msgCount');
+            if (total <= 0) return 0;
+            const success = this.getMobileDanmakuStatsValue('successMsgCount');
+            const percent = Math.round((success * 100) / total);
+            if (percent < 0) return 0;
+            if (percent > 100) return 100;
+            return percent;
+        },
+        formatMobileDanmakuCount: function(value) {
+            const n = Number(value);
+            if (!Number.isFinite(n) || n <= 0) return '0';
+            return Math.floor(n).toLocaleString('zh-CN');
         },
         openAuditRejectDetail: function(skipFallbackRetry) {
             if (!this.canShowAuditRejectInfo) return;
@@ -475,9 +519,18 @@
         },
         setQuickFilter: function(type) {
             if (this.isMultiSelectMode) return;
-            this.resetFilters();
-            if (this.quickFilter === type) {
-                this.quickFilter = null;
+            const wasActive = this.quickFilter === type;
+            this.form.roomId = '';
+            this.form.bvId = '';
+            this.form.upload = null;
+            this.form.recording = null;
+            this.form.publish = null;
+            this.form.code = null;
+            this.form.from = null;
+            this.form.to = null;
+            this.quickFilter = null;
+            if (wasActive) {
+                this.initTable();
                 return;
             }
             this.quickFilter = type;
@@ -549,36 +602,6 @@
                 1: '#f56c6c'
             };
             return colorMap[String(code)] || '';
-        },
-        closeSwipeHint() {
-            this.showSwipeHint = false;
-            localStorage.setItem('hasShownSwipeHint', 'true');
-        },
-        handleTouchStart(e) {
-            if (this.isMultiSelectMode) return;
-            this.touchStartX = e.changedTouches[0].screenX;
-        },
-        handleTouchEnd(e) {
-            if (this.isMultiSelectMode) return;
-            this.touchEndX = e.changedTouches[0].screenX;
-            this.handleSwipe();
-        },
-        handleSwipe() {
-            if (this.isMultiSelectMode) return;
-            if (this.viewMode === 'table') return;
-            if (Math.abs(this.touchEndX - this.touchStartX) > 50) {
-                if (this.touchEndX < this.touchStartX) {
-                    if (this.form.current * this.form.pageSize < this.total) {
-                        this.transitionName = 'slide-left';
-                        this.handleCurrentChange(this.form.current + 1);
-                    }
-                } else {
-                    if (this.form.current > 1) {
-                        this.transitionName = 'slide-right';
-                        this.handleCurrentChange(this.form.current - 1);
-                    }
-                }
-            }
         },
         showDetail: function(item) {
             // 先清空再赋值，避免 Element Dialog 复用导致的短暂残影
@@ -688,6 +711,7 @@
             this.currentDetailParts = [];
             this.showAllParts = false;
             this.showMoreActions = false;
+            this.closeMobileDanmakuStats();
             this.partListMeta = { hasBlockingIssues: false, blockingIssueCount: 0 };
             if (this.previewArtPlayer && this.isPartPreviewPlaying) {
                 this.detachPartPreview();
@@ -724,19 +748,26 @@
                 this.partsAutoScrollTimer = null;
             }
         },
+        syncParentWorkspaceMode: function() {
+            this.notifyParentWorkspaceMode(!!(this.isMobile && (this.detailDialogVisible || this.editPartsEditing)));
+        },
         notifyParentWorkspaceMode: function(active) {
             try {
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({
                         type: 'iframeWorkspaceMode',
                         active: !!active,
-                        source: 'history-edit-parts'
+                        source: 'history-detail'
                     }, window.location.origin);
                 }
             } catch (e) {}
         },
         updateDetailFooterOffset: function() {
             if (!this.detailDialogVisible) return;
+            if (this.isMobile) {
+                this.detailFooterOffset = 0;
+                return;
+            }
             this.$nextTick(() => {
                 const footer = this.$refs.detailFooter;
                 if (!footer || !footer.offsetHeight) return;

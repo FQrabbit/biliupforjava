@@ -5,6 +5,18 @@
     'use strict';
 
     window.HistoryPageBatchMethods = {
+        isMobileBatchSelectionSurface: function() {
+            if (this.isMobile === true) return true;
+            if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+            var isMobileRoute = window.location && window.location.pathname && window.location.pathname.indexOf('/mobile/') !== -1;
+            var hasMobileContainer = !!document.querySelector('.mobile-history-container');
+            if (!isMobileRoute && !hasMobileContainer) return false;
+            var coarsePointer = false;
+            if (window.matchMedia) {
+                coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+            }
+            return window.innerWidth <= 1024 || coarsePointer;
+        },
         toggleBatchMode: function() {
             if (this.batchVisibilityRunning) {
                 this.$message.warning('批量可见性切换进行中，请等待完成后再退出');
@@ -19,6 +31,37 @@
             } else {
                 this.startPolling();
                 this.initTable(true);
+            }
+        },
+        handleMobileCardTap: function(item) {
+            if (!this.isMobileBatchSelectionSurface()) {
+                this.handleCardClick(item);
+                return;
+            }
+            var _this = this;
+            this.dragSelecting = false;
+            this.dragSelectMode = null;
+            this.dragLastCardId = null;
+            this.didDragSelect = false;
+            if (this.didDragSelectTimer) {
+                clearTimeout(this.didDragSelectTimer);
+                this.didDragSelectTimer = null;
+            }
+            this.pressedCardId = item.id;
+            if (this.pressedCardTimer) {
+                clearTimeout(this.pressedCardTimer);
+                this.pressedCardTimer = null;
+            }
+            this.pressedCardTimer = setTimeout(function() {
+                if (_this.pressedCardId === item.id) {
+                    _this.pressedCardId = null;
+                }
+                _this.pressedCardTimer = null;
+            }, 180);
+            if (this.isMultiSelectMode) {
+                this.toggleSelection(item);
+            } else {
+                this.showDetail(item);
             }
         },
         canOperateVisibilityForItem: function(item) {
@@ -41,6 +84,10 @@
             return '';
         },
         handleCardClick: function(item) {
+            if (this.isMobileBatchSelectionSurface()) {
+                this.handleMobileCardTap(item);
+                return;
+            }
             var _this = this;
             this.pressedCardId = item.id;
             if (this.pressedCardTimer) {
@@ -78,6 +125,7 @@
             return null;
         },
         applyDragSelectionById: function(cardId) {
+            if (this.isMobileBatchSelectionSurface()) return;
             if (!this.isMultiSelectMode) return;
             if (!cardId) return;
             if (this.dragLastCardId === cardId) return;
@@ -100,6 +148,7 @@
             }
         },
         onSelectDragStart: function(e) {
+            if (this.isMobileBatchSelectionSurface()) return;
             if (!this.isMultiSelectMode) return;
             if (this.viewMode !== 'card') return;
             if (e && e.button !== undefined && e.button !== 0) return;
@@ -116,10 +165,12 @@
             this.applyDragSelectionById(this.findClosestCardIdFromPoint(e.clientX, e.clientY));
         },
         onSelectDragMove: function(e) {
+            if (this.isMobileBatchSelectionSurface()) return;
             if (!this.dragSelecting) return;
             this.applyDragSelectionById(this.findClosestCardIdFromPoint(e.clientX, e.clientY));
         },
         onSelectDragEnd: function() {
+            if (this.isMobileBatchSelectionSurface()) return;
             if (!this.dragSelecting) return;
             this.dragSelecting = false;
             this.dragSelectMode = null;
@@ -132,6 +183,7 @@
             }, 350);
         },
         onSelectTouchStart: function(e) {
+            if (this.isMobileBatchSelectionSurface()) return;
             if (!this.isMultiSelectMode) return;
             if (this.viewMode !== 'card') return;
             if (!e || !e.touches || !e.touches[0]) return;
@@ -149,12 +201,14 @@
             this.applyDragSelectionById(this.findClosestCardIdFromPoint(t.clientX, t.clientY));
         },
         onSelectTouchMove: function(e) {
+            if (this.isMobileBatchSelectionSurface()) return;
             if (!this.dragSelecting) return;
             if (!e || !e.touches || !e.touches[0]) return;
             var t = e.touches[0];
             this.applyDragSelectionById(this.findClosestCardIdFromPoint(t.clientX, t.clientY));
         },
         onSelectTouchEnd: function() {
+            if (this.isMobileBatchSelectionSurface()) return;
             if (!this.dragSelecting) return;
             this.dragSelecting = false;
             this.dragSelectMode = null;

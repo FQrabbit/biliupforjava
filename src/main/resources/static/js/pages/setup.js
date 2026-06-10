@@ -64,7 +64,7 @@ new Vue({
             loading: false,
             containerized: false,
             theme: localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-            themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'classic',
+            themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'ocean',
             _parallaxRaf: null,
             _mx: 0,
             _my: 0
@@ -75,7 +75,7 @@ new Vue({
             if (window.ThemeTokens && typeof window.ThemeTokens.getThemeOptions === 'function') {
                 return window.ThemeTokens.getThemeOptions();
             }
-            return [{ value: 'classic', label: 'classic' }];
+            return [{ value: 'ocean', label: 'ocean' }];
         }
     },
     mounted() {

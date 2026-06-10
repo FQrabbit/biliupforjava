@@ -7768,6 +7768,7 @@
     {"name":"getRoomId","parameterTypes":[] }, 
     {"name":"getRoomName","parameterTypes":[] }, 
     {"name":"getRoomSendDm","parameterTypes":[] }, 
+    {"name":"getRoomSendGiftReply","parameterTypes":[] },
     {"name":"getRoomSendSc","parameterTypes":[] }, 
     {"name":"getRoomUpload","parameterTypes":[] }, 
     {"name":"getScMsgCount","parameterTypes":[] }, 

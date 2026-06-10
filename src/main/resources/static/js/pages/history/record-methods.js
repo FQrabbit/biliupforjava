@@ -7,6 +7,9 @@
     window.HistoryPageRecordMethods = {
         handleResize: function () {
             this.isMobile = window.innerWidth <= 768;
+            if (this.isMobile && this.viewMode !== 'card') {
+                this.viewMode = 'card';
+            }
             if (!this.userChangedPageSize) {
                 let availableHeight = window.innerHeight - 350;
                 let estimatedRowHeight = 50;

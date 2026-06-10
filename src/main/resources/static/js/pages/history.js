@@ -30,6 +30,8 @@ new Vue({
         loading: false,
         detailDialogVisible: false,
         currentDetail: {},
+        mobileDanmakuStatsVisible: false,
+        mobileDanmakuStatsTarget: null,
         currentDetailParts: [],
         partListMeta: { hasBlockingIssues: false, blockingIssueCount: 0 },
         showAllParts: false,
@@ -37,10 +39,7 @@ new Vue({
         isMobile: window.innerWidth <= 768,
         activeNames: [],
         viewMode: 'card',
-        touchStartX: 0,
-        touchEndX: 0,
         transitionName: 'fade-transform',
-        showSwipeHint: false,
         userChangedPageSize: false,
         pageSizes: [5, 10, 25, 50, 100],
         filterExpanded: false,
@@ -522,6 +521,7 @@ new Vue({
             }
         },
         detailDialogVisible: function(val) {
+            this.syncParentWorkspaceMode();
             if (val) {
                 if (!this.dialogResizeHandler) {
                     this.dialogResizeHandler = this.debounce(this.updateDetailFooterOffset, 80);
@@ -538,7 +538,7 @@ new Vue({
             }
         },
         editPartsEditing: function() {
-            this.notifyParentWorkspaceMode(this.editPartsEditing);
+            this.syncParentWorkspaceMode();
             this.$nextTick(() => {
                 this.updateDetailFooterOffset();
             });
@@ -548,13 +548,6 @@ new Vue({
         }
     },
     mounted() {
-        this.$el.addEventListener('touchstart', this.handleTouchStart, {passive: true});
-        this.$el.addEventListener('touchend', this.handleTouchEnd, {passive: true});
-
-        if (this.isMobile && !localStorage.getItem('hasShownSwipeHint')) {
-            this.showSwipeHint = true;
-        }
-
         // 页面可见性变化监听，优化进度轮询
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
@@ -599,7 +592,10 @@ new Vue({
         this.resizeHandler = this.debounce(this.handleResize, 100);
         window.addEventListener('resize', this.resizeHandler);
         var cached = localStorage.getItem('history-view-mode');
-        if (cached === 'table' || cached === 'card') {
+        if (this.isMobile) {
+            this.viewMode = 'card';
+            localStorage.setItem('history-view-mode', 'card');
+        } else if (cached === 'table' || cached === 'card') {
             this.viewMode = cached;
         }
     },
@@ -614,10 +610,6 @@ new Vue({
         } else {
             this.closePartPreview();
         }
-        if (this.$el) {
-            this.$el.removeEventListener('touchstart', this.handleTouchStart);
-            this.$el.removeEventListener('touchend', this.handleTouchEnd);
-        }
         window.removeEventListener('resize', this.resizeHandler);
         if (this.dialogResizeHandler) {
             window.removeEventListener('resize', this.dialogResizeHandler);
@@ -628,6 +620,7 @@ new Vue({
         window.removeEventListener('message', this.handleGlobalPartPreviewMessage);
         this.editPartUploadQueue = [];
         this.editPartUploadRunning = false;
+        this.notifyParentWorkspaceMode(false);
         this.notifyParentOperationStatus();
     }
 });

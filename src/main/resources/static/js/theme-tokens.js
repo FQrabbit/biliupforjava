@@ -22,6 +22,7 @@
                 '--danger-light': '#f2716f',
                 '--danger-accent': '#ff8e63',
                 '--danger-hot': '#ff726f',
+                '--mobile-on-primary': '#ffffff',
                 '--success-soft-bg-faint': 'rgba(47, 191, 113, 0.06)',
                 '--success-soft-bg': 'rgba(47, 191, 113, 0.12)',
                 '--success-soft-bg-strong': 'rgba(47, 191, 113, 0.2)',
@@ -105,6 +106,7 @@
                 '--danger-light': '#ff9693',
                 '--danger-accent': '#ff9b72',
                 '--danger-hot': '#ff8785',
+                '--mobile-on-primary': '#10131a',
                 '--success-soft-bg-faint': 'rgba(76, 204, 134, 0.08)',
                 '--success-soft-bg': 'rgba(76, 204, 134, 0.14)',
                 '--success-soft-bg-strong': 'rgba(76, 204, 134, 0.24)',
@@ -190,6 +192,7 @@
                 '--danger-light': '#ffc1bd',
                 '--danger-accent': '#ffb49a',
                 '--danger-hot': '#ff8f89',
+                '--mobile-on-primary': '#16201d',
                 '--success-soft-bg-faint': 'rgba(168, 230, 207, 0.08)',
                 '--success-soft-bg': 'rgba(168, 230, 207, 0.16)',
                 '--success-soft-bg-strong': 'rgba(168, 230, 207, 0.28)',
@@ -284,6 +287,7 @@
                 '--danger-light': '#ffc1bd',
                 '--danger-accent': '#ffb49a',
                 '--danger-hot': '#ff8f89',
+                '--mobile-on-primary': '#16201d',
                 '--success-soft-bg-faint': 'rgba(168, 230, 207, 0.1)',
                 '--success-soft-bg': 'rgba(168, 230, 207, 0.16)',
                 '--success-soft-bg-strong': 'rgba(168, 230, 207, 0.25)',
@@ -370,6 +374,7 @@
                 '--danger-light': '#ff8a5f',
                 '--danger-accent': '#ff9a3c',
                 '--danger-hot': '#ff5a27',
+                '--mobile-on-primary': '#ffffff',
                 '--success-soft-bg-faint': 'rgba(21, 82, 99, 0.06)',
                 '--success-soft-bg': 'rgba(21, 82, 99, 0.12)',
                 '--success-soft-bg-strong': 'rgba(21, 82, 99, 0.22)',
@@ -464,6 +469,7 @@
                 '--danger-light': '#ff966f',
                 '--danger-accent': '#ff9a3c',
                 '--danger-hot': '#ff5a27',
+                '--mobile-on-primary': '#102f39',
                 '--success-soft-bg-faint': 'rgba(255, 201, 60, 0.1)',
                 '--success-soft-bg': 'rgba(255, 201, 60, 0.16)',
                 '--success-soft-bg-strong': 'rgba(255, 201, 60, 0.24)',
@@ -648,10 +654,38 @@
                 root.style.setProperty(cssVar, tokens[cssVar]);
             }
         }
+
+        applyThemeColorMeta(doc, modeName, tokens);
     }
 
     function applyCurrent(doc, mode) {
         applyToDocument(doc, mode, getPalette());
+    }
+
+    function getThemeColor(mode, palette) {
+        var modeName = normalizeMode(mode);
+        var paletteName = THEMES[palette] ? palette : getPalette();
+        var tokens = getTokens(modeName, paletteName);
+        return modeName === 'dark'
+                ? (tokens['--bg-secondary'] || tokens['--bg-primary'] || '#10131a')
+                : (tokens['--primary-color'] || '#0f90ff');
+    }
+
+    function applyThemeColorMeta(doc, mode, tokens) {
+        if (!doc || !doc.head) {
+            return;
+        }
+        var modeName = normalizeMode(mode);
+        var color = modeName === 'dark'
+                ? (tokens['--bg-secondary'] || tokens['--bg-primary'] || '#10131a')
+                : (tokens['--primary-color'] || '#0f90ff');
+        var meta = doc.querySelector('meta[name="theme-color"]');
+        if (!meta) {
+            meta = doc.createElement('meta');
+            meta.setAttribute('name', 'theme-color');
+            doc.head.appendChild(meta);
+        }
+        meta.setAttribute('content', color);
     }
 
     window.ThemeTokens = {
@@ -662,6 +696,7 @@
         getPalette: getPalette,
         setPalette: setPalette,
         getTokens: getTokens,
+        getThemeColor: getThemeColor,
         applyToDocument: applyToDocument,
         applyCurrent: applyCurrent,
         getThemeNames: function () {

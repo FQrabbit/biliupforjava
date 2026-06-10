@@ -23,6 +23,12 @@ public class HtmlPageController {
             "setup"
     );
 
+    private static final Set<String> ALLOWED_MOBILE_HTML_PAGES = Set.of(
+            "history",
+            "room",
+            "stats"
+    );
+
     private final FrontendVersionService frontendVersionService;
 
     public HtmlPageController(FrontendVersionService frontendVersionService) {
@@ -36,7 +42,26 @@ public class HtmlPageController {
             return;
         }
 
-        String content = frontendVersionService.readStaticText("static/html/" + page + ".html");
+        writeRenderedHtml("static/html/" + page + ".html", response);
+    }
+
+    @GetMapping(value = {"/mobile", "/mobile/", "/mobile/index.html"}, produces = MediaType.TEXT_HTML_VALUE)
+    public void getMobileIndex(HttpServletResponse response) throws IOException {
+        writeRenderedHtml("static/mobile/index.html", response);
+    }
+
+    @GetMapping(value = "/mobile/html/{page}.html", produces = MediaType.TEXT_HTML_VALUE)
+    public void getMobileHtmlPage(@PathVariable("page") String page, HttpServletResponse response) throws IOException {
+        if (!ALLOWED_MOBILE_HTML_PAGES.contains(page)) {
+            response.sendError(HttpStatus.NOT_FOUND.value());
+            return;
+        }
+
+        writeRenderedHtml("static/mobile/html/" + page + ".html", response);
+    }
+
+    private void writeRenderedHtml(String resourcePath, HttpServletResponse response) throws IOException {
+        String content = frontendVersionService.readStaticText(resourcePath);
         if (content == null) {
             response.sendError(HttpStatus.NOT_FOUND.value());
             return;

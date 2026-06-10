@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
-    <link href="../css/element-ui.css" rel="stylesheet">
-    <link href="../css/base/variables.css" rel="stylesheet">
-    <link href="../css/base/reset.css" rel="stylesheet">
-    <link href="../css/base/element-override.css" rel="stylesheet">
-    <link href="../css/base/shared-components.css" rel="stylesheet">
-    <link href="../css/base/dark-overrides.css" rel="stylesheet">
-    <link href="../css/animations/transitions.css" rel="stylesheet">
-    <link href="../css/animations/effects.css" rel="stylesheet">
-    <link href="../css/room.css" rel="stylesheet">
+    <link rel="icon" href="../../img/icon.svg" type="image/svg+xml">
+    <link href="../../css/element-ui.css" rel="stylesheet">
+    <link href="../../css/base/variables.css" rel="stylesheet">
+    <link href="../../css/base/reset.css" rel="stylesheet">
+    <link href="../../css/base/element-override.css" rel="stylesheet">
+    <link href="../../css/base/shared-components.css" rel="stylesheet">
+    <link href="../../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../../css/animations/transitions.css" rel="stylesheet">
+    <link href="../../css/animations/effects.css" rel="stylesheet">
+    <link href="../../css/room.css" rel="stylesheet">
+    <link href="../css/mobile-pages.css" rel="stylesheet">
+    <link href="../css/mobile-room.css" rel="stylesheet">
     <style>
         .season-cover-tooltip.el-tooltip__popper {
             padding: 0 !important;
@@ -21,9 +23,7 @@
             box-shadow: none !important;
             z-index: 9999 !important;
         }
-        .season-cover-tooltip.el-tooltip__popper .popper__arrow {
-            display: none !important;
-        }
+        .season-cover-tooltip.el-tooltip__popper .popper__arrow { display: none !important; }
         .season-cover-tooltip-wrap {
             width: 240px;
             height: 135px;
@@ -32,12 +32,7 @@
             background: var(--bg-primary, #fff);
             box-shadow: 0 10px 24px rgba(0,0,0,0.25);
         }
-        .season-cover-tooltip-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
+        .season-cover-tooltip-img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .season-cover-tooltip-loading {
             width: 100%;
             height: 100%;
@@ -48,119 +43,48 @@
             font-size: 12px;
             background: var(--bg-tertiary, #f5f7fa);
         }
-        .season-option-label {
-            display: block;
-            width: 100%;
-        }
+        .season-option-label { display: block; width: 100%; }
     </style>
-    <script src="../js/jquery-3.3.1.min.js"></script>
-    <script src="../js/vue.min.js"></script>
-    <script src="../js/element-ui.js"></script>
-    <script src="../js/api.js"></script>
-    <script src="../js/api/room-api.js"></script>
-    <script src="../js/api/user-api.js"></script>
-    <script src="../js/data/bili-partitions.js"></script>
-    <script src="../js/frontend-cache-refresh.js"></script>
-    <script src="../js/theme-tokens.js"></script>
-    <script src="../js/mixins.js"></script>
-    <script src="../js/privacy.js"></script>
-    <script src="../js/app/page-bootstrap.js"></script>
+    <script src="../../js/jquery-3.3.1.min.js"></script>
+    <script src="../../js/vue.min.js"></script>
+    <script src="../../js/element-ui.js"></script>
+    <script src="../../js/api.js"></script>
+    <script src="../../js/api/room-api.js"></script>
+    <script src="../../js/api/user-api.js"></script>
+    <script src="../../js/data/bili-partitions.js"></script>
+    <script src="../../js/frontend-cache-refresh.js"></script>
+    <script src="../../js/theme-tokens.js"></script>
+    <script src="../../js/mixins.js"></script>
+    <script src="../../js/privacy.js"></script>
+    <script src="../../js/app/page-bootstrap.js"></script>
 </head>
 <body>
-<div id="roomTable" class="room-container">
-    <!-- 页面头部 -->
-    <div class="room-header">
-        <div class="room-header-left">
-            <div class="room-header-title">
-                <i class="el-icon-video-camera icon"></i>
-                <h2>直播间监控</h2>
-
-                <transition name="room-legend-collapse">
-                    <div v-if="viewMode === 'card' && !legendCollapsed" class="room-card-legend" aria-label="卡片颜色说明">
-                        <el-tooltip effect="dark" content="直播中（未录制）" placement="bottom">
-                            <div class="room-legend-item">
-                                <span class="room-legend-dot legend-streaming"></span>
-                                <span>直播中</span>
-                            </div>
-                        </el-tooltip>
-                        <el-tooltip effect="dark" content="录制中（优先显示此状态）" placement="bottom">
-                            <div class="room-legend-item">
-                                <span class="room-legend-dot legend-recording"></span>
-                                <span>录制中</span>
-                            </div>
-                        </el-tooltip>
-                    </div>
-                </transition>
-
-                <transition name="room-legend-collapse">
-                    <div v-if="viewMode === 'card' && !legendCollapsed" class="room-card-legend-compact" aria-label="卡片颜色说明(移动端)">
-                        <el-tooltip effect="dark" placement="bottom">
-                            <div slot="content">
-                                <div>红色：直播中（未录制）</div>
-                                <div>绿色：录制中（优先）</div>
-                            </div>
-                            <div class="room-legend-compact-pill">
-                                <span class="room-legend-dot legend-streaming"></span>
-                                <span class="room-legend-dot legend-recording"></span>
-                                <span class="room-legend-compact-text">颜色说明</span>
-                            </div>
-                        </el-tooltip>
-                    </div>
-                </transition>
-
-                <el-tooltip v-if="viewMode === 'card'" effect="dark" :content="legendCollapsed ? '显示颜色说明' : '隐藏颜色说明'" placement="bottom">
-                    <el-button type="text" class="room-legend-toggle" @click.stop="legendCollapsed = !legendCollapsed">
-                        <i :class="legendCollapsed ? 'el-icon-arrow-right' : 'el-icon-arrow-left'"></i>
-                    </el-button>
-                </el-tooltip>
-            </div>
-            <div class="room-stats">
-                <div class="room-stat-item" :class="{ 'is-active': roomFilter === 'all' }" @click="setRoomFilter('all')">
-                    <transition name="count-flip" mode="out-in">
-                        <div class="room-stat-value" :key="'total-' + tableData.length">{{ tableData.length }}</div>
-                    </transition>
-                    <div class="room-stat-label">总房间</div>
-                </div>
-                <div class="room-stat-item" :class="{ 'is-active': roomFilter === 'live' }" @click="setRoomFilter('live')">
-                    <transition name="count-flip" mode="out-in">
-                        <div class="room-stat-value live" :key="'live-' + tableData.filter(r => r.streaming).length">{{ tableData.filter(r => r.streaming).length }}</div>
-                    </transition>
-                    <div class="room-stat-label">直播中</div>
-                </div>
-                <div class="room-stat-item" :class="{ 'is-active': roomFilter === 'recording' }" @click="setRoomFilter('recording')">
-                    <transition name="count-flip" mode="out-in">
-                        <div class="room-stat-value recording" :key="'rec-' + tableData.filter(r => r.recording).length">{{ tableData.filter(r => r.recording).length }}</div>
-                    </transition>
-                    <div class="room-stat-label">录制中</div>
-                </div>
-            </div>
+<div id="roomTable" class="room-container mobile-room-container">
+    <section class="mobile-room-hero">
+        <div class="mobile-room-hero-copy">
+            <span>ROOM MONITOR</span>
+            <h2>{{ isSortMode ? '调整顺序' : '直播间' }}</h2>
+            <p>{{ isSortMode ? '正在调整房间顺序' : '监控直播、录制与投稿状态' }}</p>
         </div>
-        <div class="room-header-actions">
-            <el-button class="modern-btn" type="primary" @click="addRoomDialog = true" icon="el-icon-plus">
-                添加房间
-            </el-button>
-            <el-button v-if="viewMode === 'card' && !isSortMode" class="modern-btn" type="primary" plain @click="enterSortMode" icon="el-icon-rank">
-                调整顺序
-            </el-button>
-            <template v-if="viewMode === 'card' && isSortMode">
-                <el-button class="modern-btn" type="success" @click="saveSortOrder" icon="el-icon-check">保存排序</el-button>
-                <el-button class="modern-btn" plain @click="cancelSortMode" icon="el-icon-close">取消</el-button>
-                <el-button class="modern-btn" plain @click="resetSortOrder" icon="el-icon-refresh-left">重置默认</el-button>
-            </template>
-            <el-tooltip content="导出用户后若程序继续运行，则用户登录状态会失效" effect="dark" placement="top">
-                <el-button class="modern-btn" type="primary" @click="exportConfigDialog=true" icon="el-icon-download">
-                    导出配置
-                </el-button>
-            </el-tooltip>
-            <el-upload action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false" style="display: inline-block;">
-                <el-button class="modern-btn" type="primary" icon="el-icon-upload2">导入配置</el-button>
-            </el-upload>
-            <el-radio-group v-model="viewMode" size="small">
-                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
-                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
-            </el-radio-group>
-        </div>
-    </div>
+        <button type="button" class="mobile-room-hero-action" :class="{ 'is-open': mobileRoomActionsVisible }" @click="openMobileRoomActions" :aria-expanded="mobileRoomActionsVisible ? 'true' : 'false'" aria-label="打开房间管理操作">
+            <i class="el-icon-more"></i>
+        </button>
+    </section>
+
+    <section class="mobile-room-stats" aria-label="房间状态筛选">
+        <button type="button" class="mobile-room-stat" :class="{ 'is-active': roomFilter === 'all' }" @click="setRoomFilter('all')">
+            <span>全部</span>
+            <strong>{{ tableData.length }}</strong>
+        </button>
+        <button type="button" class="mobile-room-stat is-live" :class="{ 'is-active': roomFilter === 'live' }" @click="setRoomFilter('live')">
+            <span>直播中</span>
+            <strong>{{ tableData.filter(r => r.streaming).length }}</strong>
+        </button>
+        <button type="button" class="mobile-room-stat is-recording" :class="{ 'is-active': roomFilter === 'recording' }" @click="setRoomFilter('recording')">
+            <span>录制中</span>
+            <strong>{{ tableData.filter(r => r.recording).length }}</strong>
+        </button>
+    </section>
 
     <transition name="fade-slide">
         <section v-if="configOperationProgress.visible" class="config-progress-panel" :class="'is-' + configOperationProgress.status">
@@ -171,18 +95,43 @@
                 </div>
                 <em>{{ configOperationProgress.percent }}%</em>
             </div>
-            <el-progress
-                    :percentage="configOperationProgress.percent"
-                    :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)"
-                    :stroke-width="8">
-            </el-progress>
+            <el-progress :percentage="configOperationProgress.percent" :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)" :stroke-width="8"></el-progress>
             <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>
         </section>
     </transition>
 
-    <!-- 内容区域 -->
-    <transition name="fade-slide">
-        <!-- 骨架屏加载状态 -->
+    <section class="mobile-room-command-row">
+        <template v-if="isSortMode">
+            <button type="button" class="mobile-room-command is-success" @click="saveSortOrder">
+                <i class="el-icon-check"></i>
+                <span>保存</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="cancelSortMode">
+                <i class="el-icon-close"></i>
+                <span>取消</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="openMobileRoomActions">
+                <i class="el-icon-more"></i>
+                <span>更多</span>
+            </button>
+        </template>
+        <template v-else>
+            <button type="button" class="mobile-room-command is-primary" @click="openMobileAddRoom">
+                <i class="el-icon-plus"></i>
+                <span>添加房间</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="enterSortMode">
+                <i class="el-icon-rank"></i>
+                <span>排序</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="openMobileRoomActions">
+                <i class="el-icon-more"></i>
+                <span>管理</span>
+            </button>
+        </template>
+    </section>
+
+    <transition name="fade-slide" mode="out-in">
         <div v-if="loading && tableData.length === 0" class="room-card-grid" key="skeleton">
             <div class="skeleton-card" v-for="n in 3" :key="'sk-' + n">
                 <div class="skeleton-card-header">
@@ -193,271 +142,125 @@
                         <div class="skeleton-line short"></div>
                     </div>
                 </div>
-                <div class="skeleton-card-tags">
-                    <div class="skeleton-tag"></div>
-                    <div class="skeleton-tag"></div>
-                    <div class="skeleton-tag"></div>
-                </div>
-                <div class="skeleton-card-footer">
-                    <div class="skeleton-btn"></div>
-                    <div class="skeleton-btn"></div>
-                    <div class="skeleton-btn"></div>
-                </div>
             </div>
         </div>
-
-        <!-- 空状态 -->
         <div v-else-if="filteredTableData.length === 0 && !loading" class="room-empty" key="empty">
             <i class="el-icon-video-camera room-empty-icon"></i>
             <h3 class="room-empty-title">{{ roomFilter === 'all' ? '还没有添加直播间' : '当前筛选下暂无房间' }}</h3>
-            <p class="room-empty-desc">{{ roomFilter === 'all' ? '点击"添加房间"按钮，开始监控房间' : '请切换筛选查看全部房间，或等待状态变化后再查看' }}</p>
-            <el-button class="modern-btn" type="primary" @click="addRoomDialog = true" icon="el-icon-plus">
-                添加房间
-            </el-button>
+            <p class="room-empty-desc">{{ roomFilter === 'all' ? '点击“添加房间”按钮，开始监控房间' : '请切换筛选查看全部房间，或等待状态变化后再查看' }}</p>
+            <el-button class="modern-btn" type="primary" @click="openMobileAddRoom" icon="el-icon-plus">添加房间</el-button>
         </div>
-
-        <!-- 卡片视图 -->
-        <div v-else-if="viewMode === 'card'" class="room-card-grid" key="card">
-            <div class="room-card"
-                 :class="{
-                    'is-recording': item.recording,
-                    'is-streaming': item.streaming && !item.recording,
-                    'is-sorting': isSortMode,
-                    'is-dragging': draggingRoomId === item.id,
-                    'is-drag-over': dragOverRoomId === item.id
-                 }"
-                 :draggable="isSortMode"
-                 data-stagger
-                 :style="{ animationDelay: index * 40 + 'ms' }"
-                      v-for="(item, index) in filteredTableData" :key="item.id"
-                 @click="handleCardClick(item)"
-                 @dragstart.stop="handleSortDragStart(index, item, $event)"
-                 @dragover.prevent="handleSortDragOver(index, item, $event)"
-                 @drop.prevent.stop="handleSortDrop(index, item, $event)"
-                 @dragend="handleSortDragEnd">
-                
-                <div class="room-card-header">
-                    <div v-if="isSortMode" class="room-sort-handle" @click.stop title="拖动排序">
-                        <i class="el-icon-rank"></i>
-                        <span>{{ index + 1 }}</span>
-                    </div>
-                    <div class="room-avatar">
+        <div v-else class="mobile-room-list" key="list">
+            <article class="mobile-room-card" v-for="(item, index) in filteredTableData" :key="item.id" :class="[roomPrimaryStateClass(item), { 'is-sorting': isSortMode, 'is-dragging': draggingRoomId === item.id, 'is-drag-over': dragOverRoomId === item.id }]" :draggable="isSortMode" @click="handleCardClick(item)" @dragstart.stop="handleSortDragStart(index, item, $event)" @dragover.prevent="handleSortDragOver(index, item, $event)" @drop.prevent.stop="handleSortDrop(index, item, $event)" @dragend="handleSortDragEnd">
+                <div class="mobile-room-card-main">
+                    <div class="mobile-room-avatar">
                         <img v-if="!privacyMode && item.userCover" :src="buildAvatarProxyUrl(item.userCover)" referrerpolicy="no-referrer">
                         <span v-else>{{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}</span>
-                        <span v-if="item.streaming" class="live-indicator"></span>
-                        
-                        <!-- 性别图标 -->
-                        <div v-if="!privacyMode && item.gender !== null && item.gender !== -1" 
-                             class="gender-icon" 
-                             :class="item.gender === 1 ? 'male' : 'female'">
-                            <i :class="item.gender === 1 ? 'el-icon-male' : 'el-icon-female'"></i>
-                        </div>
+                        <em v-if="item.streaming"></em>
                     </div>
-                    <div class="room-info">
-                        <h3 class="room-name">{{ maskText(item.uname) }}</h3>
-                        <p class="room-title">{{ maskText(item.title || '暂无直播标题') }}</p>
-                        <div class="room-id">
-                            <i class="el-icon-house"></i>
-                            <span>{{ maskText(item.roomId) }}</span>
+                    <div class="mobile-room-card-copy">
+                        <div class="mobile-room-card-line">
+                            <span class="mobile-room-state" :class="roomPrimaryStateClass(item)">{{ roomPrimaryStateLabel(item) }}</span>
+                            <span class="mobile-room-id">#{{ maskText(item.roomId) }}</span>
                         </div>
+                        <h3>{{ maskText(item.uname) }}</h3>
+                        <p>{{ maskText(item.title || '暂无直播标题') }}</p>
+                    </div>
+                    <button v-if="!isSortMode" type="button" class="mobile-room-card-more" @click.stop="openMobileRoomCardActions(item)" aria-label="打开房间操作">
+                        <i class="el-icon-more"></i>
+                    </button>
+                    <div v-else class="mobile-room-sort-index">{{ index + 1 }}</div>
+                </div>
+                <div class="mobile-room-status-grid">
+                    <div>
+                        <span>录制</span>
+                        <strong :class="{ 'is-on': item.recording }">{{ item.recording ? '进行中' : '空闲' }}</strong>
+                    </div>
+                    <div>
+                        <span>上传</span>
+                        <strong :class="{ 'is-on': item.upload }">{{ item.upload ? '自动' : '关闭' }}</strong>
+                    </div>
+                    <div>
+                        <span>可见性</span>
+                        <strong>{{ item.isOnlySelf == 1 ? '仅自己' : '公开' }}</strong>
                     </div>
                 </div>
-                
-                <div class="room-card-body">
-                    <div class="room-tags">
-                        <span class="room-tag" :class="item.streaming ? 'live' : 'offline'">
-                            <i :class="item.streaming ? 'el-icon-video-camera' : 'el-icon-video-pause'"></i>
-                            {{ item.streaming ? '直播中' : '未直播' }}
-                        </span>
-                        <span class="room-tag" :class="item.recording ? 'recording' : 'offline'">
-                            <i :class="item.recording ? 'el-icon-video-play' : 'el-icon-video-pause'"></i>
-                            {{ item.recording ? '录制中' : '未录制' }}
-                        </span>
-                        <span class="room-tag" :class="item.upload ? 'upload' : 'offline'">
-                            <i :class="item.upload ? 'el-icon-upload' : 'el-icon-close'"></i>
-                            {{ item.upload ? '自动上传' : '关闭上传' }}
-                        </span>
-                    </div>
-                    <div class="room-meta">
-                        <span class="room-copyright" :class="item.copyright == 1 ? 'original' : 'repost'">
-                            {{ item.copyright == 1 ? '自制' : '转载' }}
-                        </span>
-                        <span class="room-partition" v-if="item.tid">
-                            <i class="el-icon-folder"></i>
-                            {{ getTypeName(item.tid) }}
-                        </span>
-                        <span class="room-visibility" :class="item.isOnlySelf == 1 ? 'private' : 'public'">
-                            <i :class="item.isOnlySelf == 1 ? 'el-icon-lock' : 'el-icon-view'"></i>
-                            {{ item.isOnlySelf == 1 ? '仅自己' : '公开' }}
-                        </span>
-                        <span class="room-delete-info">{{ formatDelete(item) }}</span>
-                    </div>
+                <div class="mobile-room-meta-strip">
+                    <span>{{ item.copyright == 1 ? '自制' : '转载' }}</span>
+                    <span v-if="item.tid">{{ getTypeName(item.tid) }}</span>
+                    <span>{{ getCoverTypeLabel(item.coverType) }}</span>
+                    <span>{{ getUploadUserName(item.uploadUserId) }}</span>
+                    <span>{{ formatDelete(item) }}</span>
                 </div>
-                
-                <div v-if="!isSortMode" class="room-card-footer" @click.stop>
-                    <el-button size="mini" type="primary" icon="el-icon-edit" @click="handleEdit(index, item)">编辑</el-button>
-                    <el-button size="mini" icon="el-icon-chat-line-round" @click="handleEeditLiveMsg(index, item)">弹幕</el-button>
-                    <el-button size="mini" type="danger" icon="el-icon-delete" @click="deleteRoom(item.id)">删除</el-button>
+                <div v-if="isSortMode" class="mobile-room-sort-controls" @click.stop>
+                    <button type="button" :disabled="index === 0" @click="moveRoomInSort(item, -1)"><i class="el-icon-arrow-up"></i> 上移</button>
+                    <button type="button" :disabled="index === filteredTableData.length - 1" @click="moveRoomInSort(item, 1)"><i class="el-icon-arrow-down"></i> 下移</button>
                 </div>
-            </div>
-        </div>
-
-        <!-- 表格视图 -->
-        <div v-else class="room-table-wrapper" key="table">
-        <el-table :data="filteredTableData" border style="width: 100%">
-            <el-table-column type="expand">
-                <template slot-scope="props">
-                    <el-form class="demo-table-expand" inline label-position="left">
-                        <el-form-item label="投稿分区id">
-                            <span>{{ props.row.tid }}</span>
-                        </el-form-item>
-                        <el-form-item label="上传线路">
-                            <span>{{ props.row.line }}</span>
-                        </el-form-item>
-                        <el-form-item label="投稿封面类型">
-                            <span v-if="props.row.coverType==='default'">系统默认</span>
-                            <span v-if="props.row.coverType==='live'">直播封面</span>
-                            <span v-if="props.row.coverType==='diy'">自定义上传</span>
-                        </el-form-item>
-                        <el-form-item label="消息通知用户">
-                            <span v-if="props.row.wxuid == null || props.row.wxuid == '' || props.row.wxuid == 'undefined'">不通知</span>
-                            <span v-if="props.row.wxuid != null && props.row.wxuid != '' && props.row.wxuid != 'undefined'">{{props.row.wxuid}}</span>
-                        </el-form-item>
-                        <el-form-item label="Server酱3">
-                            <span v-if="!props.row.serverChanSendKey">未配置</span>
-                            <span v-else>已配置</span>
-                        </el-form-item>
-                        <el-form-item label="消息通知类型">
-                            <span>{{ props.row.pushMsgTags }}</span>
-                        </el-form-item>
-                        <el-form-item label="忽略小分片">
-                            <span>{{ props.row.fileSizeLimit }}MB(小于该大小的分片会直接删除)</span>
-                        </el-form-item>
-                        <el-form-item label="忽略小分片">
-                            <span>{{ props.row.durationLimit }}秒(小于该时长的分片会直接删除)</span>
-                        </el-form-item>
-                        <el-form-item label="标题模板">
-                            <span>{{ props.row.titleTemplate }}</span>
-                        </el-form-item>
-                        <el-form-item label="分p标题模板">
-                            <span>{{ props.row.partTitleTemplate }}</span>
-                        </el-form-item>
-                        <el-form-item label="描述模板">
-                            <span>{{ props.row.descTemplate }}</span>
-                        </el-form-item>
-                        <el-form-item label="空间动态模板">
-                            <span>{{ props.row.dynamicTemplate }}</span>
-                        </el-form-item>
-                    </el-form>
-                </template>
-            </el-table-column>
-            <el-table-column label="直播间" min-width="120">
-                <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
-            </el-table-column>
-            <el-table-column label="主播" min-width="100">
-                <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
-            </el-table-column>
-            <el-table-column label="标题" min-width="150">
-                <template slot-scope="scope">{{ maskText(scope.row.title) }}</template>
-            </el-table-column>
-            <el-table-column id="copyright" label="是否自制" prop="copyright" width="120">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.copyright==1"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="scope.row.copyright==2"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column label="直播中" prop="streaming" width="100">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.streaming"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.streaming"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column label="录制中" prop="recording" width="100">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.recording"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.recording"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column label="是否上传" prop="recording" width="120">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.upload"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.upload"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column prop="sendDm" width="200">
-                <template slot="header" slot-scope="scope">
-                    <span>普通弹幕</span>
-                    <el-tooltip effect="dark" placement="top">
-                        <div slot="content">
-                            房间级开关；控制投稿后普通弹幕任务是否执行。此列为状态展示，需点击“编辑”在配置中修改。
-                        </div>
-                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                    </el-tooltip>
-                </template>
-                <template slot-scope="scope">
-                    <el-tag :type="scope.row.sendDm ? 'success' : 'info'" size="small">
-                        {{ scope.row.sendDm ? '已开启' : '已关闭' }}
-                    </el-tag>
-                </template>
-            </el-table-column>
-            <el-table-column prop="sendSc" width="260">
-                <template slot="header" slot-scope="scope">
-                    <span>高级弹幕（SC/上舰）</span>
-                    <el-tooltip effect="dark" placement="top">
-                        <div slot="content">
-                            房间级开关；控制投稿后高级弹幕（SC/上舰）任务是否执行。仅由投稿账号发送。此列为状态展示，需点击“编辑”在配置中修改。
-                        </div>
-                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                    </el-tooltip>
-                </template>
-                <template slot-scope="scope">
-                    <el-tag :type="scope.row.sendSc ? 'success' : 'info'" size="small">
-                        {{ scope.row.sendSc ? '已开启' : '已关闭' }}
-                    </el-tag>
-                </template>
-            </el-table-column>
-            <el-table-column label="文件后处理" prop="deleteFile" width="120">
-                <template slot-scope="scope">
-                    <span v-if="scope.row.deleteType == 0">不删除</span>
-                    <span v-if="scope.row.deleteType == 1">上传完成后删除</span>
-                    <span v-if="scope.row.deleteType == 2">审核通过后删除</span>
-                    <span v-if="scope.row.deleteType == 3">{{scope.row.deleteDay}}天后删除</span>
-                    <span v-if="scope.row.deleteType == 4">上传完成后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 5">审核通过后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 6">录制结束后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 7">录制结束后复制到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 8">{{scope.row.deleteDay}}天后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 9">投稿成功后删除</span>
-                    <span v-if="scope.row.deleteType == 10">投稿成功后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 11">审核通过后复制到{{scope.row.moveDir}}</span>
-                </template>
-            </el-table-column>
-            <el-table-column label="投稿用户" prop="uploadUserId" width="120">
-                <template slot-scope="scope">
-                    <div v-for="item in users">
-                        <span type="primary" v-if="scope.row.uploadUserId == item.id">{{ maskText(item.uname) }}</span>
-                    </div>
-                </template>
-            </el-table-column>
-            <el-table-column label="操作" width="140" fixed="right">
-                <template slot-scope="scope">
-                    <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
-                    <el-dropdown trigger="click" size="mini">
-                        <el-button size="mini" type="text">
-                            更多<i class="el-icon-arrow-down el-icon--right"></i>
-                        </el-button>
-                        <el-dropdown-menu slot="dropdown">
-                            <el-dropdown-item @click.native="handleEeditLiveMsg(scope.$index, scope.row)">弹幕规则</el-dropdown-item>
-                            <el-dropdown-item divided></el-dropdown-item>
-                            <el-dropdown-item @click.native="deleteRoom(scope.row.id)" style="color: #F56C6C;">删除</el-dropdown-item>
-                        </el-dropdown-menu>
-                    </el-dropdown>
-                </template>
-            </el-table-column>
-        </el-table>
+            </article>
         </div>
     </transition>
 
+    <transition name="mobile-room-fade">
+        <div v-if="mobileRoomActionsVisible || mobileRoomCardActionsVisible" class="mobile-room-sheet-backdrop" @click="closeMobileRoomSheets"></div>
+    </transition>
+
+    <transition name="mobile-room-sheet">
+        <aside v-if="mobileRoomActionsVisible" class="mobile-room-action-sheet" role="dialog" aria-label="房间管理操作">
+            <div class="mobile-room-sheet-handle"></div>
+            <div class="mobile-room-sheet-head">
+                <div>
+                    <span>{{ isSortMode ? 'Sorting' : 'Actions' }}</span>
+                    <h3>{{ isSortMode ? '排序中' : '管理操作' }}</h3>
+                </div>
+                <button type="button" @click="closeMobileRoomSheets" aria-label="关闭管理操作"><i class="el-icon-close"></i></button>
+            </div>
+            <div class="mobile-room-sheet-actions mobile-room-management-actions">
+                <template v-if="isSortMode">
+                    <div class="mobile-room-sort-sheet-note"><i class="el-icon-rank"></i><span>当前处于排序模式，请完成或取消排序后再进行其他管理操作。</span></div>
+                    <button type="button" class="mobile-room-sheet-primary is-success" @click="saveSortOrder(); closeMobileRoomSheets()"><i class="el-icon-check"></i><span>保存排序</span></button>
+                    <div class="mobile-room-sheet-action-grid is-two">
+                        <button type="button" @click="cancelSortMode(); closeMobileRoomSheets()"><i class="el-icon-close"></i><span>取消排序</span></button>
+                        <button type="button" @click="resetSortOrder(); closeMobileRoomSheets()"><i class="el-icon-refresh-left"></i><span>重置默认</span></button>
+                    </div>
+                </template>
+                <template v-else>
+                    <button type="button" class="mobile-room-sheet-primary is-primary" @click="openMobileAddRoom"><i class="el-icon-plus"></i><span>添加房间</span></button>
+                    <div class="mobile-room-sheet-action-grid">
+                        <button type="button" @click="enterSortMode(); closeMobileRoomSheets()"><i class="el-icon-rank"></i><span>调整顺序</span></button>
+                        <button type="button" @click="openMobileExportConfig"><i class="el-icon-download"></i><span>导出配置</span></button>
+                        <el-upload class="mobile-room-upload-action" action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false">
+                            <button type="button" @click="mobileRoomActionsVisible = false"><i class="el-icon-upload2"></i><span>导入配置</span></button>
+                        </el-upload>
+                    </div>
+                </template>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-room-sheet">
+        <aside v-if="mobileRoomCardActionsVisible && mobileActionRoom" class="mobile-room-action-sheet" role="dialog" aria-label="房间操作">
+            <div class="mobile-room-sheet-handle"></div>
+            <div class="mobile-room-sheet-head">
+                <div><span>Room</span><h3>{{ maskText(mobileActionRoom.uname) }}</h3></div>
+                <button type="button" @click="closeMobileRoomSheets" aria-label="关闭房间操作"><i class="el-icon-close"></i></button>
+            </div>
+            <div class="mobile-room-sheet-summary mobile-room-card-action-summary">
+                <div>
+                    <span class="mobile-room-state" :class="roomPrimaryStateClass(mobileActionRoom)">{{ roomPrimaryStateLabel(mobileActionRoom) }}</span>
+                    <span class="mobile-room-sheet-room-id">#{{ maskText(mobileActionRoom.roomId) }}</span>
+                </div>
+                <p>{{ maskText(mobileActionRoom.title || '暂无直播标题') }}</p>
+            </div>
+            <div class="mobile-room-sheet-actions mobile-room-card-actions">
+                <button type="button" class="mobile-room-sheet-primary is-primary" @click="openMobileDetail(mobileActionRoom)"><i class="el-icon-view"></i><span>查看详情</span></button>
+                <div class="mobile-room-sheet-action-grid is-two">
+                    <button type="button" @click="openMobileEditRoom(mobileActionRoom)"><i class="el-icon-edit"></i><span>编辑配置</span></button>
+                    <button type="button" @click="openMobileDanmakuRoom(mobileActionRoom)"><i class="el-icon-chat-line-round"></i><span>弹幕规则</span></button>
+                </div>
+                <button type="button" class="mobile-room-sheet-danger" @click="deleteMobileActionRoom"><i class="el-icon-delete"></i><span>删除房间</span></button>
+            </div>
+        </aside>
+    </transition>
     <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" :before-close="handleClose" :close-on-click-modal="false" custom-class="room-config-dialog">
         <div slot="title" class="dialog-header-modern">
             <div class="header-title-group">
@@ -469,6 +272,14 @@
                     <span class="room-name-tag" v-if="room.uname">{{ maskText(room.uname) }}</span>
                 </div>
             </div>
+            <nav v-if="isMobile" class="mobile-config-section-rail" aria-label="房间配置分区">
+                <button type="button" @click="scrollMobileConfigSection('mobile-room-config-basic')">基础</button>
+                <button type="button" @click="scrollMobileConfigSection('mobile-room-config-template')">模板</button>
+                <button type="button" @click="scrollMobileConfigSection('mobile-room-config-upload')">投稿</button>
+                <button type="button" @click="scrollMobileConfigSection('mobile-room-config-rules')">处理</button>
+                <button type="button" @click="scrollMobileConfigSection('mobile-room-config-danmaku')">弹幕</button>
+                <button type="button" @click="scrollMobileConfigSection('mobile-room-config-notify')">推送</button>
+            </nav>
         </div>
 
         <el-form :model="room" class="room-config-form" label-position="top" size="small">
@@ -476,7 +287,7 @@
                 <!-- 左侧列：基础与模板 -->
                 <div class="config-column">
                     <!-- 基础信息卡片 -->
-                    <div class="config-card">
+                    <div id="mobile-room-config-basic" class="config-card mobile-config-section-card">
                         <div class="card-header">
                             <i class="el-icon-collection-tag"></i>
                             <span>基础信息</span>
@@ -505,21 +316,9 @@
                             <el-form-item>
                                 <span slot="label">
                                     标签 (Tags)
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            可用变量：<br/>
-                                            ${uname} - 主播昵称<br/>
-                                            ${title} - 直播标题<br/>
-                                            ${areaName} - 直播分区<br/>
-                                            ${yyyy} - 年<br/>
-                                            ${MM} - 月<br/>
-                                            ${dd} - 日<br/>
-                                            ${HH} - 时<br/>
-                                            ${mm} - 分<br/>
-                                            ${ss} - 秒
-                                        </div>
-                                        <i class="el-icon-question" style="cursor: pointer; color: #909399; margin-left: 4px;"></i>
-                                    </el-tooltip>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileTemplateHelp('标签变量')" aria-label="查看标签变量说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
                                 </span>
                                 <el-input v-model="room.tags" placeholder="多个标签用逗号分隔"></el-input>
                             </el-form-item>
@@ -559,7 +358,7 @@
                     </div>
 
                     <!-- 模板设置卡片 -->
-                    <div class="config-card">
+                    <div id="mobile-room-config-template" class="config-card mobile-config-section-card">
                         <div class="card-header">
                             <i class="el-icon-document-copy"></i>
                             <span>模板设置</span>
@@ -568,21 +367,9 @@
                             <el-form-item>
                                 <span slot="label">
                                     标题模板
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            可用变量：<br/>
-                                            ${uname} - 主播昵称<br/>
-                                            ${title} - 直播标题<br/>
-                                            ${areaName} - 直播分区<br/>
-                                            ${yyyy} - 年<br/>
-                                            ${MM} - 月<br/>
-                                            ${dd} - 日<br/>
-                                            ${HH} - 时<br/>
-                                            ${mm} - 分<br/>
-                                            ${ss} - 秒
-                                        </div>
-                                        <i class="el-icon-question" style="cursor: pointer; color: #909399; margin-left: 4px;"></i>
-                                    </el-tooltip>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileTemplateHelp('标题模板变量')" aria-label="查看标题模板变量说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
                                 </span>
                                 <el-input v-model="room.titleTemplate" placeholder="${uname}, ${title}, ${date}"></el-input>
                             </el-form-item>
@@ -602,7 +389,7 @@
                 <!-- 右侧列：上传与规则 -->
                 <div class="config-column">
                     <!-- 上传配置卡片 -->
-                    <div class="config-card">
+                    <div id="mobile-room-config-upload" class="config-card mobile-config-section-card">
                         <div class="card-header">
                             <i class="el-icon-upload-filled"></i>
                             <span>上传配置</span>
@@ -612,10 +399,10 @@
                                 <el-select v-model="room.line" placeholder="选择线路" style="width: 100%">
                                     <el-option :label="item" :value="item" v-for="item in lines">
                                         <span style="float: left">{{ item }}</span>
-                                        <span style="float: right; font-size: 12px; color: #8492a6" v-if="lineStats[item]">
+                                        <span class="mobile-config-line-meta" v-if="lineStats[item]">
                                             <i :class="getLineStatusIcon(lineStats[item])" :style="{color: getLineStatusColor(lineStats[item])}"></i>
                                             {{ lineStats[item] }}
-                                            <span v-if="lineSpeeds[item]" style="margin-left: 5px; color: #409EFF">
+                                            <span v-if="lineSpeeds[item]" class="mobile-config-line-speed">
                                                 <i class="el-icon-upload2"></i> {{ lineSpeeds[item] }}
                                             </span>
                                         </span>
@@ -634,23 +421,17 @@
                             <div class="switch-grid">
                                 <div class="switch-card">
                                     <span class="switch-label">自动上传</span>
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            控制后续录制是否进入自动上传/投稿流程；关闭不会删除本地录制文件，也不会撤回已经发布的稿件。
-                                        </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                                    </el-tooltip>
-                                    <el-switch v-model="room.upload" active-color="#10b981"></el-switch>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileConfigHelp('自动上传', '控制后续录制是否进入自动上传/投稿流程；关闭不会删除本地录制文件，也不会撤回已经发布的稿件。')" aria-label="查看自动上传说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
+                                    <el-switch v-model="room.upload" active-color="var(--mobile-teal)"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">仅自己可见</span>
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            投稿时使用“仅自己可见”；已发布稿件的可见性需要在历史页或B站稿件管理中单独调整。
-                                        </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                                    </el-tooltip>
-                                    <el-switch v-model="room.isOnlySelf" :active-value="1" :inactive-value="0" active-color="#10b981"></el-switch>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileConfigHelp('仅自己可见', '投稿时使用“仅自己可见”；已发布稿件的可见性需要在历史页或 B 站稿件管理中单独调整。')" aria-label="查看仅自己可见说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
+                                    <el-switch v-model="room.isOnlySelf" :active-value="1" :inactive-value="0" active-color="var(--mobile-teal)"></el-switch>
                                 </div>
                             </div>
 
@@ -749,7 +530,7 @@
                     </div>
 
                     <!-- 规则与后处理 -->
-                    <div class="config-card">
+                    <div id="mobile-room-config-rules" class="config-card mobile-config-section-card">
                         <div class="card-header">
                             <i class="el-icon-finished"></i>
                             <span>规则与处理</span>
@@ -823,7 +604,7 @@
                     </div>
 
                     <!-- 其他设置 -->
-                    <div class="config-card">
+                    <div id="mobile-room-config-danmaku" class="config-card mobile-config-section-card">
                         <div class="card-header">
                             <i class="el-icon-more-outline"></i>
                             <span>其他设置</span>
@@ -832,33 +613,24 @@
                             <div class="switch-grid">
                                 <div class="switch-card">
                                     <span class="switch-label">发送弹幕</span>
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            控制投稿后普通弹幕任务是否执行；实际发送由已登录且开启“弹幕发送权限”的用户分摊执行。
-                                        </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                                    </el-tooltip>
-                                    <el-switch v-model="room.sendDm" active-color="#10b981"></el-switch>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileConfigHelp('发送弹幕', '控制投稿后普通弹幕任务是否执行；实际发送由已登录且开启“弹幕发送权限”的用户分摊执行。')" aria-label="查看发送弹幕说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
+                                    <el-switch v-model="room.sendDm" active-color="var(--mobile-teal)"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">发送SC</span>
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            控制投稿后高级弹幕（SC/上舰）任务是否执行；仅由投稿账号在登录状态下发送。
-                                        </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                                    </el-tooltip>
-                                    <el-switch v-model="room.sendSc" active-color="#10b981" @change="handleSendScChange"></el-switch>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileConfigHelp('发送 SC', '控制投稿后高级弹幕（SC/上舰）任务是否执行；仅由投稿账号在登录状态下发送。')" aria-label="查看发送 SC 说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
+                                    <el-switch v-model="room.sendSc" active-color="var(--mobile-teal)" @change="handleSendScChange"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">礼物评论</span>
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            开启后，单个礼物单价达到阈值时，会同步到视频评论区；发送仍使用投稿账号，可独立于“发送SC”开启。
-                                        </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                                    </el-tooltip>
-                                    <el-switch v-model="room.sendGiftReply" active-color="#10b981"></el-switch>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileConfigHelp('礼物评论', '开启后，单个礼物单价达到阈值时，会同步到视频评论区；发送仍使用投稿账号，可独立于“发送 SC”开启。')" aria-label="查看礼物评论说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
+                                    <el-switch v-model="room.sendGiftReply" active-color="var(--mobile-teal)"></el-switch>
                                 </div>
                                 <div class="switch-card" v-if="room.sendGiftReply">
                                     <span class="switch-label">礼物阈值</span>
@@ -868,13 +640,10 @@
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">高能投稿</span>
-                                    <el-tooltip effect="dark" placement="top">
-                                        <div slot="content">
-                                            投稿完成后根据弹幕热度生成高能剪辑；需要有可解析的弹幕数据，因子越高筛选越严格。
-                                        </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
-                                    </el-tooltip>
-                                    <el-switch v-model="room.highEnergyCut" active-color="#10b981"></el-switch>
+                                    <button type="button" class="mobile-config-help-trigger" @click="showMobileConfigHelp('高能投稿', '投稿完成后根据弹幕热度生成高能剪辑；需要有可解析的弹幕数据，因子越高筛选越严格。')" aria-label="查看高能投稿说明">
+                                        <i class="el-icon-question"></i>
+                                    </button>
+                                    <el-switch v-model="room.highEnergyCut" active-color="var(--mobile-teal)"></el-switch>
                                 </div>
                                 <div class="switch-card" v-if="room.highEnergyCut">
                                     <span class="switch-label">高能因子</span>
@@ -885,7 +654,7 @@
                     </div>
 
                     <!-- 推送设置 -->
-                    <div class="config-card">
+                    <div id="mobile-room-config-notify" class="config-card mobile-config-section-card">
                         <div class="card-header">
                             <i class="el-icon-bell"></i>
                             <span>推送设置</span>
@@ -900,13 +669,13 @@
                                 <el-input v-model="room.serverChanSendKey" :type="privacySecretInputType()" placeholder="SCTxxxxxxxxxxxxxxxx">
                                     <el-button slot="append" icon="el-icon-link" @click="window.open('https://sc3.ft07.com/sendkey', '_blank')"></el-button>
                                 </el-input>
-                                <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 6px;">
+                                <div class="config-field-hint">
                                     未填写则不发送 Server酱3 通知；点击右侧按钮可前往官网创建并复制 SendKey。
                                 </div>
                             </el-form-item>
                             <el-form-item label="Server酱3 Tags(可选)">
                                 <el-input v-model="room.serverChanChannel" placeholder="例如：服务器报警|录播通知"></el-input>
-                                <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 6px;">
+                                <div class="config-field-hint">
                                     标签将作为 tags 参数发送，多个标签请使用 | 分隔；不填则不传 tags。
                                 </div>
                             </el-form-item>
@@ -917,8 +686,8 @@
                                         {{ tag.label }}
                                     </el-checkbox>
                                 </el-checkbox-group>
-                                <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 10px;">
-                                    💡 选择启用的推送类型，系统将在对应事件发生时向已配置的渠道发送通知。未选择任何选项时不会发送推送。
+                                <div class="config-field-hint">
+                                    选择启用的推送类型，系统将在对应事件发生时向已配置的渠道发送通知。未选择任何选项时不会发送推送。
                                 </div>
                             </el-form-item>
                         </div>
@@ -926,6 +695,23 @@
                 </div>
             </div>
         </el-form>
+
+        <transition name="mobile-config-help">
+            <div v-if="mobileConfigHelpVisible" class="mobile-config-help-layer" @click.self="closeMobileConfigHelp">
+                <section class="mobile-config-help-panel" role="dialog" aria-modal="true" :aria-label="mobileConfigHelpTitle">
+                    <div class="mobile-config-help-icon">
+                        <i class="el-icon-question"></i>
+                    </div>
+                    <h3>{{ mobileConfigHelpTitle }}</h3>
+                    <div class="mobile-config-help-copy">
+                        <p v-for="(line, index) in mobileConfigHelpLines" :key="index">{{ line }}</p>
+                    </div>
+                    <button type="button" class="mobile-config-help-confirm" @click="closeMobileConfigHelp">
+                        我知道了
+                    </button>
+                </section>
+            </div>
+        </transition>
 
         <div slot="footer" class="dialog-footer-modern">
             <div class="footer-actions-left">
@@ -961,7 +747,74 @@
         </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="detailDialogVisible" title="详细信息" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog-modern">
+
+    <transition name="mobile-room-fade">
+        <div v-if="isMobile && detailDialogVisible && currentDetail" class="mobile-room-detail-backdrop" @click="closeMobileRoomDetail"></div>
+    </transition>
+
+    <transition name="mobile-room-detail">
+        <aside v-if="isMobile && detailDialogVisible && currentDetail" class="mobile-room-detail-sheet" role="dialog" aria-label="房间详情">
+            <div class="mobile-room-sheet-handle"></div>
+            <div class="mobile-room-detail-head">
+                <div class="mobile-room-detail-avatar">
+                    <img v-if="!privacyMode && currentDetail.userCover" :src="buildAvatarProxyUrl(currentDetail.userCover)" referrerpolicy="no-referrer">
+                    <span v-else>{{ privacyMode ? '*' : (currentDetail.uname || 'R').charAt(0).toUpperCase() }}</span>
+                    <em v-if="currentDetail.streaming"></em>
+                </div>
+                <div class="mobile-room-detail-title">
+                    <span class="mobile-room-state" :class="roomPrimaryStateClass(currentDetail)">{{ roomPrimaryStateLabel(currentDetail) }}</span>
+                    <h3>{{ maskText(currentDetail.uname) }}</h3>
+                    <p>#{{ maskText(currentDetail.roomId) }} · {{ maskText(currentDetail.title || '暂无直播标题') }}</p>
+                </div>
+                <button type="button" class="mobile-room-detail-close" @click="closeMobileRoomDetail" aria-label="关闭房间详情"><i class="el-icon-close"></i></button>
+            </div>
+            <div class="mobile-room-detail-body">
+                <div class="mobile-room-detail-status">
+                    <div><span>录制</span><strong :class="{ 'is-on': currentDetail.recording }">{{ currentDetail.recording ? '录制中' : '空闲' }}</strong></div>
+                    <div><span>上传</span><strong :class="{ 'is-on': currentDetail.upload }">{{ currentDetail.upload ? '自动' : '关闭' }}</strong></div>
+                    <div><span>弹幕</span><strong :class="{ 'is-on': currentDetail.sendDm || currentDetail.sendSc }">{{ currentDetail.sendDm || currentDetail.sendSc ? '开启' : '关闭' }}</strong></div>
+                </div>
+                <div class="mobile-room-detail-grid">
+                    <div><span>投稿分区</span><strong>{{ getTypeName(currentDetail.tid) || '--' }}</strong></div>
+                    <div><span>投稿账号</span><strong>{{ getUploadUserName(currentDetail.uploadUserId) }}</strong></div>
+                    <div><span>版权</span><strong>{{ currentDetail.copyright == 1 ? '自制' : '转载' }}</strong></div>
+                    <div><span>可见性</span><strong>{{ currentDetail.isOnlySelf == 1 ? '仅自己' : '公开' }}</strong></div>
+                </div>
+                <div class="mobile-room-detail-path"><span>文件后处理</span><strong>{{ formatDelete(currentDetail) }}</strong></div>
+                <div class="mobile-room-detail-group">
+                    <div class="mobile-room-detail-group-title">
+                        <i class="el-icon-setting"></i>
+                        <span>录制与封面</span>
+                    </div>
+                    <div class="mobile-room-detail-grid">
+                        <div><span>录制线路</span><strong>{{ currentDetail.line || '--' }}</strong></div>
+                        <div><span>封面策略</span><strong>{{ getCoverTypeLabel(currentDetail.coverType) }}</strong></div>
+                        <div><span>大小限制</span><strong>{{ currentDetail.fileSizeLimit || '--' }} MB</strong></div>
+                        <div><span>时长限制</span><strong>{{ currentDetail.durationLimit || '--' }} 秒</strong></div>
+                    </div>
+                    <div v-if="currentDetail.moveDir" class="mobile-room-detail-path"><span>移动目录</span><strong>{{ currentDetail.moveDir }}</strong></div>
+                </div>
+                <div class="mobile-room-detail-group">
+                    <div class="mobile-room-detail-group-title">
+                        <i class="el-icon-document"></i>
+                        <span>投稿模板</span>
+                    </div>
+                    <div class="mobile-room-template-list">
+                        <div><span>标题模板</span><p>{{ currentDetail.titleTemplate || '--' }}</p></div>
+                        <div><span>分P标题</span><p>{{ currentDetail.partTitleTemplate || '--' }}</p></div>
+                        <div><span>简介模板</span><p>{{ currentDetail.descriptionTemplate || '--' }}</p></div>
+                        <div><span>动态模板</span><p>{{ currentDetail.dynamicTemplate || '--' }}</p></div>
+                    </div>
+                </div>
+            </div>
+            <div class="mobile-room-detail-actions">
+                <button type="button" class="is-primary" @click="openMobileEditRoom(currentDetail)"><i class="el-icon-edit"></i><span>编辑配置</span></button>
+                <button type="button" @click="openMobileDanmakuRoom(currentDetail)"><i class="el-icon-chat-line-round"></i><span>弹幕规则</span></button>
+            </div>
+        </aside>
+    </transition>
+
+    <el-dialog v-if="!isMobile" :visible.sync="detailDialogVisible" title="详细信息" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body custom-class="detail-dialog-modern">
         <div class="detail-content-modern" v-if="currentDetail.id">
             <!-- 基本信息卡片 -->
             <div class="detail-card">
@@ -1343,6 +1196,6 @@
         </div>
     </el-dialog>
 </div>
-<script src="../js/pages/room.js"></script>
+<script src="../../js/pages/room.js"></script>
 </body>
 </html>

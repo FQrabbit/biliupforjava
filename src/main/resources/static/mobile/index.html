@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="录播姬上传插件 - 自动化直播录制上传解决方案">
+    <meta name="theme-color" content="#5b6cff">
+    <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
+    <title>录播姬上传插件 - 手机端</title>
+    <link href="../css/element-ui.css" rel="stylesheet">
+    <link href="../css/base/variables.css" rel="stylesheet">
+    <link href="../css/base/reset.css" rel="stylesheet">
+    <link href="../css/base/element-override.css" rel="stylesheet">
+    <link href="../css/base/shared-components.css" rel="stylesheet">
+    <link href="../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../css/animations/transitions.css" rel="stylesheet">
+    <link href="../css/animations/effects.css" rel="stylesheet">
+    <link href="../css/pages/home.css" rel="stylesheet">
+    <link href="../css/user.css" rel="stylesheet">
+    <link href="../css/global-preview-player.css" rel="stylesheet">
+    <link href="css/mobile-shell.css" rel="stylesheet">
+    <link href="css/mobile-home.css" rel="stylesheet">
+    <link href="css/mobile-user.css" rel="stylesheet">
+    <link href="css/mobile-log.css" rel="stylesheet">
+    <script src="../js/jquery-3.3.1.min.js"></script>
+    <script src="../js/vue.min.js"></script>
+    <script src="../js/element-ui.js"></script>
+    <script src="../js/version.js"></script>
+    <script src="../js/theme-tokens.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/api/system-api.js"></script>
+    <script src="../js/api/log-api.js"></script>
+    <script src="../js/api/user-api.js"></script>
+    <script src="../js/frontend-cache-refresh.js"></script>
+    <script src="../js/mixins.js"></script>
+    <script src="../js/privacy.js"></script>
+    <script src="../js/global-preview-player.js"></script>
+    <script src="../js/pages/user.js"></script>
+</head>
+<body>
+<div id="app" class="app-container mobile-shell" :class="{ 'is-iframe-workspace': iframeWorkspaceMode || iframeModalOpen }">
+    <!-- 顶部导航栏 -->
+    <header class="app-header" :class="{ 'is-compact': headerCompact }">
+        <div class="header-top">
+            <div class="header-brand">
+                <div class="logo-wrapper">
+                    <el-popover placement="bottom-start"
+                                width="300"
+                                trigger="click"
+                                popper-class="workspace-status-popover"
+                                @show="fetchWorkspaceUsageStatus">
+                        <div class="workspace-status-panel">
+                            <div class="workspace-status-title">工作空间状态</div>
+                            <div class="workspace-status-item is-usage">
+                                <div class="workspace-status-item-head">
+                                    <span class="workspace-status-label">工作区磁盘占用率</span>
+                                    <span class="workspace-status-value" :class="workspaceUsageValueClass">{{ workspaceUsageDisplayPercent }}</span>
+                                </div>
+                                <div class="workspace-status-progress-track">
+                                    <div class="workspace-status-progress-fill"
+                                         :class="'is-' + workspaceUsageLevel"
+                                         :style="{ width: workspaceUsageProgressWidth }"></div>
+                                </div>
+                                <div class="workspace-status-usage-meta">
+                                    <span>剩余 {{ workspaceFreeSpaceDisplay }}</span>
+                                </div>
+                            </div>
+                            <div class="workspace-status-item"
+                                 :title="workspaceDatabaseSizeTitle">
+                                <span class="workspace-status-label">数据库大小</span>
+                                <span class="workspace-status-value">{{ workspaceStatus.databaseDisplaySize || '--' }}</span>
+                            </div>
+                            <div class="workspace-status-item"
+                                 :title="workspaceUploadStatusTitle">
+                                <span class="workspace-status-label">上传任务</span>
+                                <span class="workspace-status-value">{{ workspaceUploadStatusDisplay }}</span>
+                            </div>
+                            <div class="workspace-status-item">
+                                <span class="workspace-status-label">检查时间</span>
+                                <span class="workspace-status-value">{{ workspaceStatus.updatedAt || '--' }}</span>
+                            </div>
+                            <div v-if="workspaceStatusLoading" class="workspace-status-hint">正在刷新状态...</div>
+                            <div v-else-if="workspaceStatus.valid === false" class="workspace-status-hint is-error">{{ workspaceStatus.error || '状态不可用' }}</div>
+                            <div v-else class="workspace-status-hint">后续会增加更多其他状态信息。</div>
+                        </div>
+                        <img slot="reference"
+                             src="../img/icon.svg"
+                             alt="Logo"
+                             class="brand-logo workspace-logo-trigger"
+                             :class="{ 'has-alert': workspaceUsageAlert }"
+                             :title="workspaceUsageAlert ? ('工作区磁盘占用已接近上限: ' + workspaceUsageDisplayPercent) : ('工作区磁盘占用: ' + workspaceUsageDisplayPercent)">
+                    </el-popover>
+                     <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
+                         <i class="el-icon-warning connection-alert mobile-only-alert"></i>
+                     </el-tooltip>
+                     <a v-if="hasNewVersion" :href="releaseUrl" target="_blank" class="mobile-new-badge" title="发现新版本">NEW</a>
+                 </div>
+                <div class="brand-info">
+                    <div class="brand-title-wrapper">
+                        <h1 class="brand-title">录播姬上传插件</h1>
+                        <el-tooltip v-if="connectionLost" content="可能与进程失去连接" placement="right" effect="dark">
+                            <i class="el-icon-warning connection-alert"></i>
+                        </el-tooltip>
+                    </div>
+                    <a v-if="hasNewVersion" 
+                       :href="releaseUrl" 
+                       target="_blank" 
+                       class="brand-version link-type"
+                       title="发现新版本，点击查看">
+                        {{ currentVersion }}
+                        <span class="new-badge">NEW</span>
+                    </a>
+                    <span v-else class="brand-version">{{ currentVersion }}</span>
+                </div>
+            </div>
+            <nav class="header-nav" ref="headerNav">
+                <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
+                <div class="nav-item" ref="navRoom"
+                     :class="{ 'is-active': activeName === 'room', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '直播间'"
+                     @click="switchTab('room')">
+                    <i class="el-icon-video-camera"></i>
+                    <span>直播间</span>
+                </div>
+                <div class="nav-item" ref="navUser"
+                     :class="{ 'is-active': activeName === 'user', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '用户'"
+                     @click="switchTab('user')">
+                    <i class="el-icon-user"></i>
+                    <span>用户</span>
+                </div>
+                <div class="nav-item" ref="navHistory"
+                     :class="{ 'is-active': activeName === 'history', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '录制历史'"
+                     @click="switchTab('history')">
+                    <i class="el-icon-time"></i>
+                    <span>录制历史</span>
+                </div>
+                <div class="nav-item" ref="navStats"
+                     :class="{ 'is-active': activeName === 'stats', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '统计'"
+                     @click="switchTab('stats')">
+                    <i class="el-icon-data-analysis"></i>
+                    <span>统计</span>
+                </div>
+                <div class="nav-item" ref="navLog"
+                     :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts, 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '日志'"
+                     @click="switchTab('log')">
+                    <i class="el-icon-monitor"></i>
+                    <span>日志</span>
+                    <span v-if="hasAlerts" class="alert-badge"></span>
+                </div>
+                <div class="nav-item" ref="navHome"
+                     :class="{ 'is-active': activeName === 'home', 'is-disabled': iframeOperating }"
+                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '更新日志'"
+                     @click="switchTab('home')">
+                    <i class="el-icon-document"></i>
+                    <span>更新日志</span>
+                </div>
+            </nav>
+
+            <div class="header-actions">
+                <div class="privacy-toggle" :class="{ 'is-active': privacyMode }" @click="toggleGlobalPrivacyMode" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
+                    <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
+                </div>
+                <div class="theme-popover-wrap">
+                    <div class="theme-toggle" id="themeToggleBtn" :class="{ 'is-open': showThemePanel }" @click.stop="toggleThemePanel" title="主题设置">
+                        <i class="el-icon-magic-stick"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="header-subnav" v-if="activeName !== 'home'">
+            <div class="module-meta">
+                <span class="module-meta-title">{{ currentModuleMeta.title }}</span>
+                <span class="module-meta-desc">{{ currentModuleMeta.desc }}</span>
+            </div>
+            <div class="subnav-placeholder"></div>
+        </div>
+    </header>
+    <transition name="fade">
+        <div v-if="showThemePanel" class="theme-popover-backdrop" @click="showThemePanel = false"></div>
+    </transition>
+    <transition name="theme-pop">
+        <div v-if="showThemePanel" class="theme-popover-panel" :style="themePanelStyle" @click.stop>
+            <div class="theme-popover-title">主题外观</div>
+            <div class="theme-popover-row">
+                <span class="theme-popover-label">日夜模式</span>
+                <div class="theme-switch-container">
+                    <el-switch v-model="theme" active-value="dark" inactive-value="light" @change="applyTheme" class="theme-switch">
+                        <template slot="activeText"><i class="el-icon-moon"></i></template>
+                        <template slot="inactiveText"><i class="el-icon-sunny"></i></template>
+                    </el-switch>
+                </div>
+            </div>
+            <div class="theme-popover-row">
+                <span class="theme-popover-label">主题配色</span>
+                <el-select v-model="themePalette" size="mini" class="theme-palette-select" @change="applyThemePalette" :popper-append-to-body="false" placeholder="主题配色">
+                    <el-option v-for="item in themePaletteOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+                </el-select>
+            </div>
+        </div>
+    </transition>
+    
+    <!-- 主内容区域 -->
+    <main class="app-main">
+        <transition name="fade-slide">
+            <!-- 更新日志页面 -->
+            <div v-if="activeName === 'home'" class="changelog-container" key="home">
+                <div class="mobile-status-area">
+                    <section class="mobile-status-strip">
+                        <button type="button"
+                                class="mobile-status-card is-workspace"
+                                :class="{ 'is-open': showWorkspaceUsagePanel }"
+                                :style="{ '--workspace-fill': workspaceUsageProgressWidth }"
+                                :aria-expanded="showWorkspaceUsagePanel ? 'true' : 'false'"
+                                aria-label="查看工作区存储空间详情"
+                                @click="handleMobileWorkspaceTap">
+                            <span class="mobile-workspace-water" aria-hidden="true">
+                                <span class="mobile-workspace-wave"></span>
+                                <span class="mobile-workspace-shine"></span>
+                            </span>
+                            <span class="mobile-workspace-content">
+                                <em>工作区</em>
+                                <strong>{{ workspaceUsageDisplayPercent }}</strong>
+                            </span>
+                        </button>
+                        <button type="button"
+                                class="mobile-status-card"
+                                :class="{ 'is-open': configExpanded }"
+                                :aria-expanded="configExpanded ? 'true' : 'false'"
+                                aria-label="打开或关闭系统配置"
+                                @click="toggleMobileConfigPanel">
+                            <span class="mobile-status-icon"><i class="el-icon-setting"></i></span>
+                            <span>
+                                <em>系统配置</em>
+                                <strong>{{ hasConfigChanges ? '待保存' : '已同步' }}</strong>
+                            </span>
+                        </button>
+                        <button type="button"
+                                class="mobile-status-card"
+                                :class="{ 'is-open': showMobileLogPanel, 'has-alert': hasAlerts }"
+                                :aria-expanded="showMobileLogPanel ? 'true' : 'false'"
+                                aria-label="打开或关闭日志告警状态"
+                                @click="toggleMobileLogPanel">
+                            <span class="mobile-status-icon"><i class="el-icon-bell"></i></span>
+                            <span>
+                                <em>日志告警</em>
+                                <strong>{{ hasAlerts ? '有异常' : '正常' }}</strong>
+                            </span>
+                        </button>
+                    </section>
+                    <transition name="mobile-workspace-pop">
+                        <div v-if="showWorkspaceUsagePanel" class="mobile-workspace-popover" @click.stop>
+                            <div class="mobile-workspace-popover-head">
+                                <div>
+                                    <span>存储空间</span>
+                                    <strong>{{ workspaceUsageDisplayPercent }}</strong>
+                                </div>
+                                <button type="button" @click="showWorkspaceUsagePanel = false" aria-label="关闭工作区存储详情">
+                                    <i class="el-icon-close"></i>
+                                </button>
+                            </div>
+                            <div class="mobile-workspace-popover-track">
+                                <span :style="{ width: workspaceUsageProgressWidth }"></span>
+                            </div>
+                            <div class="mobile-workspace-popover-grid">
+                                <div>
+                                    <em>已使用</em>
+                                    <strong>{{ workspaceUsedSpaceDisplay }}</strong>
+                                </div>
+                                <div>
+                                    <em>总大小</em>
+                                    <strong>{{ workspaceTotalSpaceDisplay }}</strong>
+                                </div>
+                                <div>
+                                    <em>剩余</em>
+                                    <strong>{{ workspaceFreeSpaceDisplay }}</strong>
+                                </div>
+                                <div>
+                                    <em>数据库</em>
+                                    <strong>{{ workspaceStatus.databaseDisplaySize || '--' }}</strong>
+                                </div>
+                            </div>
+                            <div class="mobile-workspace-popover-foot" :class="{ 'is-error': workspaceStatus.valid === false }">
+                                <i :class="workspaceStatusLoading ? 'el-icon-loading' : (workspaceStatus.valid === false ? 'el-icon-warning-outline' : 'el-icon-time')"></i>
+                                <span>{{ workspaceStatusLoading ? '正在刷新状态...' : (workspaceStatus.valid === false ? (workspaceStatus.error || '状态不可用') : (workspaceStatus.updatedAt || '等待刷新')) }}</span>
+                            </div>
+                        </div>
+                    </transition>
+                    <transition name="mobile-workspace-pop">
+                        <div v-if="showMobileLogPanel" class="mobile-workspace-popover mobile-log-popover" @click.stop>
+                            <div class="mobile-workspace-popover-head">
+                                <div>
+                                    <span>日志告警</span>
+                                    <strong>{{ hasAlerts ? alertCount + ' 条异常' : '运行正常' }}</strong>
+                                </div>
+                                <button type="button" @click="showMobileLogPanel = false" aria-label="关闭日志告警状态">
+                                    <i class="el-icon-close"></i>
+                                </button>
+                            </div>
+                            <div class="mobile-log-popover-body" :class="{ 'has-alert': hasAlerts }">
+                                <i :class="hasAlerts ? 'el-icon-warning-outline' : 'el-icon-circle-check'"></i>
+                                <span>{{ hasAlerts ? '检测到异常记录，建议进入日志页查看上下文。' : '当前没有检测到异常告警。' }}</span>
+                            </div>
+                            <button type="button" class="mobile-log-popover-action" @click="openMobileLogPage">
+                                <i class="el-icon-monitor"></i>
+                                进入日志
+                            </button>
+                        </div>
+                    </transition>
+                </div>
+
+                <section class="mobile-release-feed">
+                    <div class="mobile-section-heading">
+                        <div>
+                            <span>Release Feed</span>
+                            <h3>版本记录</h3>
+                        </div>
+                        <button type="button" @click="goToRelease">GitHub</button>
+                    </div>
+                    <div v-for="(version, versionIndex) in sortedVersions" 
+                         :key="version.version + '-' + version.time" 
+                         class="mobile-release-card"
+                         :class="{ 'is-latest': versionIndex === 0 }">
+                        <div class="mobile-release-card-head">
+                            <div>
+                                <span class="mobile-release-tag">{{ versionIndex === 0 ? 'Latest' : 'Release' }}</span>
+                                <strong>v{{ version.version }}</strong>
+                            </div>
+                            <time>{{ version.time }}</time>
+                        </div>
+                        <p>{{ version.content }}</p>
+                    </div>
+                    <div v-if="sortedVersions.length === 0" class="mobile-release-empty">
+                        <i class="el-icon-document"></i>
+                        <span>暂无更新记录</span>
+                    </div>
+                </section>
+
+                <transition name="mobile-sheet-fade">
+                    <div v-if="configExpanded" class="mobile-config-backdrop" @click="closeMobileConfigPanel"></div>
+                </transition>
+                <transition name="mobile-config-sheet">
+                    <aside v-if="configExpanded" class="mobile-config-sheet" role="dialog" aria-label="系统配置" @click.stop>
+                        <div class="mobile-sheet-handle"></div>
+                        <div class="mobile-sheet-header">
+                            <div>
+                                <span>Settings</span>
+                                <h3>系统配置</h3>
+                            </div>
+                            <button type="button" class="mobile-sheet-close" @click="closeMobileConfigPanel" aria-label="关闭系统配置">
+                                <i class="el-icon-close"></i>
+                            </button>
+                        </div>
+                        <div class="mobile-sheet-content">
+                            <section class="mobile-config-group">
+                                <div class="mobile-config-group-title">
+                                    <i class="el-icon-s-promotion"></i>
+                                    <span>请求与上传</span>
+                                </div>
+                                <div class="mobile-config-field">
+                                    <div class="mobile-config-row">
+                                        <div class="mobile-config-label">
+                                            <span>API 请求限速</span>
+                                            <em>QPS</em>
+                                        </div>
+                                        <div class="mobile-config-control">
+                                            <el-input v-model="systemConfig.apiQps" @input="validateNumber($event, 'apiQps', true)" size="small" class="mobile-config-input"></el-input>
+                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'apiQps' }" @click="toggleConfigHint('apiQps')" aria-label="查看 API 请求限速说明">
+                                                <i class="el-icon-info"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <transition name="mobile-config-hint">
+                                        <div v-if="activeConfigHint === 'apiQps'" class="mobile-config-hint">
+                                            限制每秒请求 B 站 API 的次数，防止风控。系统已对各项请求增加合理延迟，此项是全局兜底，无需设置过低。
+                                        </div>
+                                    </transition>
+                                </div>
+                                <div class="mobile-config-field">
+                                    <div class="mobile-config-row">
+                                        <div class="mobile-config-label">
+                                            <span>上传带宽限速</span>
+                                            <em>MB/s</em>
+                                        </div>
+                                        <div class="mobile-config-control">
+                                            <el-input v-model="systemConfig.uploadMb" @input="validateNumber($event, 'uploadMb', true)" size="small" class="mobile-config-input"></el-input>
+                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'uploadMb' }" @click="toggleConfigHint('uploadMb')" aria-label="查看上传带宽限速说明">
+                                                <i class="el-icon-info"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <transition name="mobile-config-hint">
+                                        <div v-if="activeConfigHint === 'uploadMb'" class="mobile-config-hint">
+                                            限制上传视频时的最大带宽，0 为不限速。限速只保证最高值不超过设定值，非必要不建议开启，避免影响上传效率。
+                                        </div>
+                                    </transition>
+                                </div>
+                                <div class="mobile-config-field">
+                                    <div class="mobile-config-row">
+                                        <div class="mobile-config-label">
+                                            <span>短时间开播合并</span>
+                                            <em>分钟</em>
+                                        </div>
+                                        <div class="mobile-config-control">
+                                            <el-input v-model="systemConfig.mergeIntervalMinutes" @input="validateNumber($event, 'mergeIntervalMinutes', false)" size="small" class="mobile-config-input"></el-input>
+                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'mergeIntervalMinutes' }" @click="toggleConfigHint('mergeIntervalMinutes')" aria-label="查看短时间开播合并说明">
+                                                <i class="el-icon-info"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <transition name="mobile-config-hint">
+                                        <div v-if="activeConfigHint === 'mergeIntervalMinutes'" class="mobile-config-hint">
+                                            下播后等待多长时间再投稿，同时间隔内再次开播会算作同一次直播，避免短时间开播下播拆分稿件。
+                                        </div>
+                                    </transition>
+                                </div>
+                                <div class="mobile-config-field">
+                                    <div class="mobile-config-row">
+                                        <div class="mobile-config-label">
+                                            <span>上传并发连接</span>
+                                            <em>个</em>
+                                        </div>
+                                        <div class="mobile-config-control">
+                                            <el-input v-model="systemConfig.maxConnections" @input="validateNumber($event, 'maxConnections', false)" size="small" class="mobile-config-input"></el-input>
+                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'maxConnections' }" @click="toggleConfigHint('maxConnections')" aria-label="查看上传并发连接说明">
+                                                <i class="el-icon-info"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <transition name="mobile-config-hint">
+                                        <div v-if="activeConfigHint === 'maxConnections'" class="mobile-config-hint">
+                                            限制同时进行的上传连接数，值越小对网络占用越少。多账号同时上传时建议保持较低值，避免网络拥塞影响其他应用。
+                                        </div>
+                                    </transition>
+                                </div>
+                            </section>
+
+                            <section class="mobile-config-group">
+                                <div class="mobile-config-group-title">
+                                    <i class="el-icon-chat-dot-round"></i>
+                                    <span>弹幕节流</span>
+                                </div>
+                                <div class="mobile-config-field">
+                                    <div class="mobile-config-row">
+                                        <div class="mobile-config-label">
+                                            <span>弹幕发送间隔</span>
+                                            <em>秒</em>
+                                        </div>
+                                        <div class="mobile-config-control">
+                                            <el-input v-model="systemConfig.normalDanmakuIntervalSeconds" @input="validateNumber($event, 'normalDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
+                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'normalDanmakuIntervalSeconds' }" @click="toggleConfigHint('normalDanmakuIntervalSeconds')" aria-label="查看弹幕发送间隔说明">
+                                                <i class="el-icon-info"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <transition name="mobile-config-hint">
+                                        <div v-if="activeConfigHint === 'normalDanmakuIntervalSeconds'" class="mobile-config-hint">
+                                            普通弹幕与 SC/上舰高级弹幕共用的全局发送间隔，默认 25 秒。数值过低可能更容易触发风控。
+                                        </div>
+                                    </transition>
+                                </div>
+                                <div class="mobile-config-field">
+                                    <div class="mobile-config-row">
+                                        <div class="mobile-config-label">
+                                            <span>评论发送间隔</span>
+                                            <em>秒</em>
+                                        </div>
+                                        <div class="mobile-config-control">
+                                            <el-input v-model="systemConfig.highLevelDanmakuIntervalSeconds" @input="validateNumber($event, 'highLevelDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
+                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'highLevelDanmakuIntervalSeconds' }" @click="toggleConfigHint('highLevelDanmakuIntervalSeconds')" aria-label="查看评论发送间隔说明">
+                                                <i class="el-icon-info"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <transition name="mobile-config-hint">
+                                        <div v-if="activeConfigHint === 'highLevelDanmakuIntervalSeconds'" class="mobile-config-hint">
+                                            SC/上舰列表评论与礼物评论共用的全局发送间隔，默认 25 秒。
+                                        </div>
+                                    </transition>
+                                </div>
+                            </section>
+
+                            <section class="mobile-config-group">
+                                <div class="mobile-config-group-title">
+                                    <i class="el-icon-guide"></i>
+                                    <span>实验功能</span>
+                                </div>
+                                <div class="mobile-upload-flow-card" :class="{ 'is-active': systemConfig.newUploadFlowEnabled }">
+                                    <div class="mobile-upload-flow-main"
+                                         role="button"
+                                         tabindex="0"
+                                         @click="toggleNewUploadFlow"
+                                         @keydown.enter.prevent="toggleNewUploadFlow"
+                                         @keydown.space.prevent="toggleNewUploadFlow"
+                                         aria-label="切换新版上传流程">
+                                        <span class="mobile-upload-flow-icon">
+                                            <i class="el-icon-guide"></i>
+                                        </span>
+                                        <span class="mobile-upload-flow-copy">
+                                            <strong>新版上传流程</strong>
+                                            <span>{{ systemConfig.newUploadFlowEnabled ? '优先使用浏览器 multipart 链路' : '当前保持旧流程稳定链路' }}</span>
+                                        </span>
+                                        <span class="mobile-upload-flow-state">{{ systemConfig.newUploadFlowEnabled ? '新流程' : '旧流程' }}</span>
+                                        <el-switch v-model="systemConfig.newUploadFlowEnabled" @click.native.stop="noop" @change="checkConfigChanges"></el-switch>
+                                    </div>
+                                    <button type="button" class="mobile-upload-flow-info" :class="{ 'is-active': activeConfigHint === 'newUploadFlowEnabled' }" @click="toggleConfigHint('newUploadFlowEnabled')">
+                                        {{ activeConfigHint === 'newUploadFlowEnabled' ? '收起说明' : '查看说明' }}
+                                    </button>
+                                </div>
+                                <transition name="mobile-config-hint">
+                                    <div v-if="activeConfigHint === 'newUploadFlowEnabled'" class="mobile-config-hint mobile-upload-flow-hint">
+                                        默认使用旧上传流程。开启后优先使用浏览器 multipart 上传链路，支持分 P 暂停、继续上传，以及进程意外关闭后的分片级断点续传；遇到异常会自动回退旧流程，并在录制历史中标记回退状态。
+                                    </div>
+                                </transition>
+                            </section>
+                        </div>
+                        <div class="mobile-sheet-actions">
+                            <button type="button" class="mobile-secondary-action" @click="resetConfig" :disabled="!hasConfigChanges">
+                                <i class="el-icon-refresh-left"></i>
+                                重置
+                            </button>
+                            <button type="button" class="mobile-primary-action" @click="saveSystemConfig" :disabled="configLoading">
+                                <i :class="configLoading ? 'el-icon-loading' : 'el-icon-check'"></i>
+                                保存配置
+                            </button>
+                            <button type="button" class="mobile-full-action" @click="openSetupWizard">
+                                <i class="el-icon-setting"></i>
+                                向导参数配置
+                            </button>
+                        </div>
+                    </aside>
+                </transition>
+            </div>
+            
+            <!-- 组件化页面：user -->
+            <user-page v-else-if="activeName === 'user'"
+                       @connection-status="setConnectionStatus"
+                       key="user">
+            </user-page>
+
+            <!-- 组件化页面：log -->
+            <log-page v-else-if="activeName === 'log'"
+                      @connection-status="setConnectionStatus"
+                      @page-ready="setPageReady"
+                      key="log">
+            </log-page>
+
+            <!-- iframe 子页面（尚未组件化的页面） -->
+            <iframe v-else :src="tabSrc" class="tab-frame" :class="{'is-ready': isIframeReady}" frameborder="0" :key="activeName" @load="onIframeLoad"></iframe>
+        </transition>
+
+        <!-- 全局加载与连接失败遮罩层 -->
+        <transition name="fade">
+            <div v-if="connectionError || (pageLoading && showLoadingAfterDelay)" class="global-overlay">
+                <div class="overlay-content">
+                    <!-- 加载中动画 -->
+                    <div v-if="!connectionError" class="loading-wrapper">
+                        <div class="modern-spinner"></div>
+                        <p class="loading-text">正在连接到进程...</p>
+                    </div>
+
+                    <!-- 连接失败状态 -->
+                    <div v-else class="error-wrapper">
+                        <i class="el-icon-warning-outline error-icon"></i>
+                        <h3 class="error-title">无法连接到进程</h3>
+                        <p class="error-desc">服务器响应超时或进程已断开，请检查后台运行状态。</p>
+                        
+                        <div class="retry-box">
+                            <span class="retry-timer">{{ retryCountdown }}s</span>
+                            <p class="retry-text">后将自动尝试重连</p>
+                        </div>
+
+                        <div class="error-actions">
+                            <el-button type="primary" size="medium" @click="manualRetry" icon="el-icon-refresh">立即重试</el-button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <transition name="el-fade-in">
+            <button v-if="showBackToTop && activeName !== 'log' && !iframeModalOpen" class="back-top-fab" @click="scrollToTopCurrent" title="回到顶部">
+                <i class="el-icon-arrow-up"></i>
+            </button>
+        </transition>
+    </main>
+</div>
+
+<!-- ========== 用户管理页面模板 ========== -->
+<script type="text/x-template" id="user-template">
+<div class="user-container mobile-user-container">
+    <section class="mobile-user-hero">
+        <div class="mobile-user-hero-copy">
+            <span>ACCOUNT CENTER</span>
+            <h2>用户账号</h2>
+            <p>{{ mobileUserHeroText }}</p>
+        </div>
+        <button type="button" class="mobile-user-hero-action" @click="openMobileLogin" aria-label="添加账号">
+            <i class="el-icon-plus"></i>
+        </button>
+    </section>
+
+    <section class="mobile-user-summary" aria-label="用户状态概览">
+        <div class="mobile-user-summary-item is-total">
+            <span>总账号</span>
+            <strong>{{ totalUserCount }}</strong>
+        </div>
+        <div class="mobile-user-summary-item is-login">
+            <span>已登录</span>
+            <strong>{{ loggedInUserCount }}</strong>
+        </div>
+        <div class="mobile-user-summary-item is-enable">
+            <span>分摊中</span>
+            <strong>{{ enabledUserCount }}</strong>
+        </div>
+        <div class="mobile-user-summary-item is-expired">
+            <span>待处理</span>
+            <strong>{{ expiredUserCount }}</strong>
+        </div>
+    </section>
+
+    <section class="mobile-user-command-row">
+        <button type="button" class="mobile-user-command is-primary" @click="openMobileLogin">
+            <i class="el-icon-plus"></i>
+            <span>添加账号</span>
+        </button>
+        <button type="button" class="mobile-user-command" @click="fetchUserList">
+            <i :class="loading ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+            <span>刷新列表</span>
+        </button>
+    </section>
+
+    <transition name="fade-transform" mode="out-in">
+        <div v-if="loading && totalUserCount === 0" class="mobile-user-empty is-loading" key="loading">
+            <i class="el-icon-loading"></i>
+            <h3>正在同步账号</h3>
+            <p>请稍候</p>
+        </div>
+
+        <div v-else-if="totalUserCount === 0" class="mobile-user-empty" key="empty">
+            <i class="el-icon-user"></i>
+            <h3>暂无关联账号</h3>
+            <p>添加 Bilibili 账号后，程序会使用账号参与弹幕发送与互动。</p>
+            <button type="button" class="mobile-user-empty-action" @click="openMobileLogin">
+                <i class="el-icon-plus"></i>
+                <span>立即添加</span>
+            </button>
+        </div>
+
+        <transition-group v-else name="mobile-user-card" tag="div" class="mobile-user-list" key="list">
+            <article class="mobile-user-card"
+                     v-for="item in tableData"
+                     :key="mobileUserKey(item) || item.uid || item.uname"
+                     :class="[mobileUserStateClass(item), { 'is-open': mobileUserActionsVisible && mobileUserKey(mobileActionUser) === mobileUserKey(item) }]"
+                     @click="toggleMobileUserActions(item)">
+                <div class="mobile-user-card-main">
+                    <div class="mobile-user-avatar">
+                        <img v-if="shouldShowAvatar(item)"
+                             :src="buildAvatarProxyUrl(item.face)"
+                             :alt="maskText(item.uname || '用户头像')"
+                             referrerpolicy="no-referrer"
+                             @error="handleAvatarError(item)">
+                        <span v-else>{{ mobileUserInitial(item) }}</span>
+                        <em :class="mobileUserStateClass(item)"></em>
+                    </div>
+                    <div class="mobile-user-card-copy">
+                        <div class="mobile-user-card-line">
+                            <span class="mobile-user-state" :class="mobileUserStateClass(item)">
+                                {{ mobileUserStateLabel(item) }}
+                            </span>
+                            <span class="mobile-user-id">UID: {{ maskText(item.uid) || '--' }}</span>
+                        </div>
+                        <h3>{{ maskText(item.uname || '未命名用户') }}</h3>
+                        <p>{{ item.enable ? '普通弹幕分摊已开启' : '普通弹幕分摊未开启' }}</p>
+                    </div>
+                    <button type="button" class="mobile-user-card-more" @click.stop="toggleMobileUserActions(item)" aria-label="账号操作">
+                        <i class="el-icon-more"></i>
+                    </button>
+                </div>
+
+                <div class="mobile-user-status-grid">
+                    <div>
+                        <span>登录</span>
+                        <strong :class="item.login ? 'is-on' : 'is-off'">{{ item.login ? '有效' : '失效' }}</strong>
+                    </div>
+                    <div>
+                        <span>弹幕</span>
+                        <strong :class="item.enable ? 'is-on' : 'is-off'">{{ item.enable ? '开启' : '关闭' }}</strong>
+                    </div>
+                    <div>
+                        <span>更新</span>
+                        <strong>{{ mobileUserTimeText(item) }}</strong>
+                    </div>
+                </div>
+            </article>
+        </transition-group>
+    </transition>
+
+    <transition name="mobile-user-sheet-fade">
+        <div v-if="mobileUserActionsVisible" class="mobile-user-sheet-backdrop" @click="closeMobileUserActions"></div>
+    </transition>
+
+    <transition name="mobile-user-sheet">
+        <aside v-if="mobileUserActionsVisible && mobileActionUser"
+               class="mobile-user-action-sheet"
+               role="dialog"
+               aria-label="账号操作"
+               @click.stop>
+            <div class="mobile-user-sheet-handle"></div>
+            <div class="mobile-user-sheet-head">
+                <div class="mobile-user-sheet-avatar">
+                    <img v-if="shouldShowAvatar(mobileActionUser)"
+                         :src="buildAvatarProxyUrl(mobileActionUser.face)"
+                         :alt="maskText(mobileActionUser.uname || '用户头像')"
+                         referrerpolicy="no-referrer"
+                         @error="handleAvatarError(mobileActionUser)">
+                    <span v-else>{{ mobileUserInitial(mobileActionUser) }}</span>
+                </div>
+                <div class="mobile-user-sheet-title">
+                    <span>ACCOUNT</span>
+                    <h3>{{ maskText(mobileActionUser.uname || '未命名用户') }}</h3>
+                    <p>UID: {{ maskText(mobileActionUser.uid) || '--' }}</p>
+                </div>
+                <button type="button" @click="closeMobileUserActions" aria-label="关闭账号操作">
+                    <i class="el-icon-close"></i>
+                </button>
+            </div>
+            <div class="mobile-user-sheet-summary">
+                <div>
+                    <span>登录状态</span>
+                    <strong :class="mobileActionUser.login ? 'is-on' : 'is-off'">{{ mobileActionUser.login ? '已登录' : '未登录' }}</strong>
+                </div>
+                <div>
+                    <span>弹幕分摊</span>
+                    <strong :class="mobileActionUser.enable ? 'is-on' : 'is-off'">{{ mobileActionUser.enable ? '已开启' : '已关闭' }}</strong>
+                </div>
+            </div>
+            <div class="mobile-user-sheet-actions">
+                <button type="button" class="is-primary" @click="openMobileUserEdit(mobileActionUser)">
+                    <i class="el-icon-setting"></i>
+                    <span>账号设置</span>
+                </button>
+                <button type="button" @click="refreshMobileUserProfile(mobileActionUser)">
+                    <i class="el-icon-refresh"></i>
+                    <span>刷新资料</span>
+                </button>
+                <button type="button" @click="openMobileLogin">
+                    <i class="el-icon-mobile-phone"></i>
+                    <span>重新扫码</span>
+                </button>
+                <button type="button" class="is-danger" :disabled="!mobileActionUser.id" @click="deleteMobileUser(mobileActionUser)">
+                    <i class="el-icon-delete"></i>
+                    <span>移除账号</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+
+    <!-- 登录弹窗 -->
+    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="false" :modal-append-to-body="false" @close="cancelLogin" title="扫码登录" center custom-class="login-dialog mobile-user-login-dialog" width="420px">
+        <div class="login-qr-wrapper mobile-user-login-wrapper">
+            <div class="login-tips mobile-user-login-tips">
+                <i class="el-icon-mobile-phone"></i>
+                <span>哔哩哔哩 APP 扫码登录</span>
+            </div>
+            <div class="login-status mobile-user-login-status" :style="{color: loginStatusColor}">
+                <i :class="loginStatusIcon"></i>
+                <span>{{ loginStatusText }}</span>
+            </div>
+            <div class="qr-container mobile-user-qr-container">
+                <el-image v-if="image" :src="'data:image/png;base64,' + image" fit="contain"></el-image>
+                <div v-else class="mobile-user-qr-placeholder">
+                    <i :class="loginLoading ? 'el-icon-loading' : 'el-icon-picture-outline'"></i>
+                </div>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer mobile-user-dialog-footer">
+            <el-button @click="getLoginImage();" type="primary" icon="el-icon-refresh" :loading="loginLoading">刷新二维码</el-button>
+            <el-button @click="cancelLogin">关闭</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 编辑弹窗 -->
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="false" :modal-append-to-body="false" title="账号设置" custom-class="mobile-user-settings-dialog" width="500px">
+        <el-form :model="user" label-position="top" class="mobile-user-settings-form">
+            <div class="mobile-user-settings-account">
+                <div class="mobile-user-settings-avatar">{{ mobileUserInitial(user) }}</div>
+                <div>
+                    <h3>{{ maskText(user.uname || '未命名用户') }}</h3>
+                    <p>UID: {{ maskText(user.uid) || '--' }}</p>
+                </div>
+            </div>
+            <el-form-item label="弹幕分摊">
+                <div class="mobile-user-switch-row">
+                    <div>
+                        <strong>{{ user.enable ? '已开启' : '已关闭' }}</strong>
+                        <span>普通弹幕任务分摊</span>
+                    </div>
+                    <el-switch v-model="user.enable"></el-switch>
+                </div>
+                <div class="mobile-user-settings-hint">
+                    <i class="el-icon-info"></i>
+                    <span>不会发送 SC、上舰等高级弹幕。</span>
+                </div>
+            </el-form-item>
+        </el-form>
+        <div class="dialog-footer mobile-user-dialog-footer" slot="footer">
+            <el-button @click="dialogFormVisible = false">取消</el-button>
+            <el-button @click="updateUser()" type="primary" :loading="saveLoading">保存设置</el-button>
+        </div>
+    </el-dialog>
+</div>
+</script>
+
+<!-- ========== 日志控制台页面模板 ========== -->
+<script type="text/x-template" id="log-template">
+<div class="app-container log-page mobile-log-page">
+    <div class="mobile-log-scroll" ref="console" v-loading="rendering"
+         element-loading-text="正在整理日志"
+         element-loading-spinner="el-icon-loading"
+         element-loading-background="rgba(0, 0, 0, 0.28)">
+        <section class="mobile-log-hero">
+            <div class="mobile-log-hero-copy">
+                <span>LOG STREAM</span>
+                <h2>运行日志</h2>
+                <p>{{ filteredLogs.length }} 条匹配日志 · 保留 {{ getHistoryLines() }} 条</p>
+            </div>
+            <button type="button"
+                    class="mobile-log-status"
+                    :class="'is-' + statusTagType"
+                    @click="settingsDrawerVisible = true"
+                    aria-label="日志连接状态">
+                <i :class="realtime ? 'el-icon-connection' : 'el-icon-video-pause'"></i>
+                <span>{{ statusText }}</span>
+            </button>
+        </section>
+
+        <section class="mobile-log-actions" aria-label="日志操作">
+            <button type="button" class="is-primary" @click="mobileFilterVisible = true">
+                <i class="el-icon-search"></i>
+                <span>筛选</span>
+            </button>
+            <button type="button" @click="settingsDrawerVisible = true">
+                <i class="el-icon-setting"></i>
+                <span>设置</span>
+            </button>
+            <button type="button" class="is-danger" @click="clearLogs">
+                <i class="el-icon-delete"></i>
+                <span>清空</span>
+            </button>
+        </section>
+
+        <section class="mobile-log-stat-grid" aria-label="日志级别统计">
+            <button type="button"
+                    class="mobile-log-stat is-info"
+                    :class="{ 'is-inactive': !visibleLevels.includes('INFO') }"
+                    @click="toggleLevel('INFO')">
+                <span>INFO</span>
+                <strong>{{ logStats.INFO }}</strong>
+                <i class="el-icon-info"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-warn"
+                    :class="{ 'is-inactive': !visibleLevels.includes('WARN') }"
+                    @click="toggleLevel('WARN')">
+                <span>WARN</span>
+                <strong>{{ logStats.WARN }}</strong>
+                <i class="el-icon-warning-outline"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-error"
+                    :class="{ 'is-inactive': !visibleLevels.includes('ERROR') }"
+                    @click="toggleLevel('ERROR')">
+                <span>ERROR</span>
+                <strong>{{ logStats.ERROR }}</strong>
+                <i class="el-icon-circle-close"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-debug"
+                    :class="{ 'is-inactive': !visibleLevels.includes('DEBUG') }"
+                    @click="toggleLevel('DEBUG')">
+                <span>DEBUG</span>
+                <strong>{{ logStats.DEBUG }}</strong>
+                <i class="el-icon-cpu"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-alert"
+                    :class="{ 'is-inactive': alerts.length === 0 }"
+                    :disabled="alerts.length === 0"
+                    @click="showAllAlertDetails">
+                <span>告警</span>
+                <strong>{{ alerts.length }}</strong>
+                <i class="el-icon-bell"></i>
+            </button>
+        </section>
+
+        <section class="mobile-log-frequency" aria-label="日志频率">
+            <div class="mobile-log-section-head">
+                <div>
+                    <span>RECENT ACTIVITY</span>
+                    <h3>近 {{ freqRangeLabel }}</h3>
+                </div>
+                <div class="mobile-log-range">
+                    <button v-for="opt in freqRangeOptions"
+                            :key="opt.value"
+                            type="button"
+                            :class="{ 'is-active': freqRange === opt.value }"
+                            @click.stop="freqRange = opt.value; hoveredFreqIdx = -1">
+                        {{ opt.label }}
+                    </button>
+                </div>
+            </div>
+            <div class="mobile-log-bars">
+                <button v-for="(bar, idx) in logFrequency"
+                        :key="idx"
+                        type="button"
+                        class="mobile-log-bar"
+                        :class="{
+                            'is-error': bar.hasError,
+                            'is-warn': bar.hasWarn && !bar.hasError,
+                            'is-empty': bar.count === 0,
+                            'is-active': hoveredFreqIdx === idx
+                        }"
+                        :style="{ '--bar-height': bar.height }"
+                        :aria-label="bar.fullLabel"
+                        @click="hoveredFreqIdx = hoveredFreqIdx === idx ? -1 : idx">
+                </button>
+            </div>
+            <p class="mobile-log-bar-tip">
+                {{ hoveredFreqIdx >= 0 && logFrequency[hoveredFreqIdx] ? logFrequency[hoveredFreqIdx].fullLabel : '共 ' + logs.length + ' 条日志' }}
+            </p>
+        </section>
+
+        <transition name="mobile-log-card">
+            <section v-if="alerts.length > 0" class="mobile-log-alert-card" @click="showAllAlertDetails">
+                <div>
+                    <span>ALERT INBOX</span>
+                    <h3>{{ alerts.length }} 条异常记录</h3>
+                    <p>{{ getBriefMessage(alerts[0].message) }}</p>
+                </div>
+                <i class="el-icon-arrow-right"></i>
+            </section>
+        </transition>
+
+        <section class="mobile-log-list" aria-label="日志列表">
+            <div class="mobile-log-section-head">
+                <div>
+                    <span>LIVE FEED</span>
+                    <h3>日志流</h3>
+                </div>
+                <button type="button" class="mobile-log-ghost" @click="loadHistory">
+                    <i :class="loadingHistory ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+                    <span>刷新</span>
+                </button>
+            </div>
+
+            <div v-if="displayedLogs.length === 0" class="mobile-log-empty">
+                <i :class="loadingHistory ? 'el-icon-loading' : 'el-icon-document'"></i>
+                <h3>{{ loadingHistory ? '正在加载日志' : '暂无匹配日志' }}</h3>
+                <p>{{ searchKeyword ? '调整筛选条件后再查看' : '实时连接建立后会自动显示' }}</p>
+            </div>
+
+            <article v-for="(log, index) in displayedLogs"
+                     :key="log.__id"
+                     class="log-line mobile-log-row"
+                     :class="{
+                         'nowrap': !autoWrap,
+                         'selection-mode': selectionMode,
+                         'selected': isSelected(log),
+                         'line-warn': log.level === 'WARN',
+                         'line-error': log.level === 'ERROR',
+                         'line-debug': log.level === 'DEBUG'
+                     }"
+                     :data-log-id="log.__id"
+                     @click="handleMobileLogTap(log)">
+                <div class="mobile-log-row-meta">
+                    <span class="mobile-log-level" :class="'is-' + log.level">{{ log.level }}</span>
+                    <time>{{ log.timestamp || '--' }}</time>
+                    <em v-if="log.thread">{{ log.thread }}</em>
+                </div>
+                <div class="mobile-log-message" v-html="getFormattedMessage(log)"></div>
+                <i class="el-icon-arrow-right"></i>
+            </article>
+        </section>
+    </div>
+
+    <transition name="mobile-log-backtop">
+        <button v-if="showMobileBackTop"
+                type="button"
+                class="mobile-log-backtop"
+                @click="scrollMobileLogTop"
+                aria-label="返回日志顶部"
+                title="返回顶部">
+            <i class="el-icon-arrow-up"></i>
+        </button>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="mobileFilterVisible"
+             class="mobile-log-overlay"
+             @click="mobileFilterVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="mobileFilterVisible"
+               class="mobile-log-sheet mobile-log-filter-sheet"
+               role="dialog"
+               aria-label="日志筛选"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>FILTER</span>
+                    <h3>筛选日志</h3>
+                </div>
+                <button type="button" @click="mobileFilterVisible = false" aria-label="关闭筛选">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <label class="mobile-log-search-field">
+                <i class="el-icon-search"></i>
+                <input v-model="searchKeyword"
+                       type="search"
+                       placeholder="搜索内容、时间或线程"
+                       @input="onSearchInput">
+            </label>
+            <div class="mobile-log-filter-group">
+                <span>级别</span>
+                <div class="mobile-log-level-grid">
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('INFO') }" @click="toggleLevel('INFO')">INFO</button>
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('WARN') }" @click="toggleLevel('WARN')">WARN</button>
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('ERROR') }" @click="toggleLevel('ERROR')">ERROR</button>
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('DEBUG') }" @click="toggleLevel('DEBUG')">DEBUG</button>
+                </div>
+            </div>
+            <div class="mobile-log-sheet-actions">
+                <button type="button" @click="resetMobileFilters">
+                    <i class="el-icon-refresh-left"></i>
+                    <span>重置</span>
+                </button>
+                <button type="button" class="is-primary" @click="mobileFilterVisible = false">
+                    <i class="el-icon-check"></i>
+                    <span>完成</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="settingsDrawerVisible"
+             class="mobile-log-overlay"
+             @click="settingsDrawerVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="settingsDrawerVisible"
+               class="mobile-log-sheet mobile-log-settings-sheet"
+               role="dialog"
+               aria-label="日志设置"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>SETTINGS</span>
+                    <h3>日志设置</h3>
+                </div>
+                <button type="button" @click="settingsDrawerVisible = false" aria-label="关闭设置">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <div class="mobile-log-setting-list">
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>实时推送</strong>
+                        <em>通过 WebSocket 接收新日志</em>
+                    </span>
+                    <el-switch v-model="realtime" @change="toggleRealtime"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>自动滚动</strong>
+                        <em>新日志到来时停在最新位置</em>
+                    </span>
+                    <el-switch v-model="autoScroll"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>自动换行</strong>
+                        <em>关闭后保留单行日志形态</em>
+                    </span>
+                    <el-switch v-model="autoWrap"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>详细模式</strong>
+                        <em>最多保留 2000 条历史日志</em>
+                    </span>
+                    <el-switch v-model="detailedMode" @change="handleDetailedModeChange"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>多选复制</strong>
+                        <em>点按日志后自动复制已选内容</em>
+                    </span>
+                    <el-switch v-model="selectionMode" @change="handleSelectionModeChange"></el-switch>
+                </label>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="detailDialogVisible"
+             class="mobile-log-overlay"
+             @click="detailDialogVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="detailDialogVisible"
+               class="mobile-log-sheet mobile-log-detail-sheet"
+               role="dialog"
+               aria-label="日志详情"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>DETAIL</span>
+                    <h3>日志详情</h3>
+                </div>
+                <button type="button" @click="detailDialogVisible = false" aria-label="关闭详情">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <pre class="mobile-log-pre" v-html="formatLogMessage(currentDetail)"></pre>
+            <div class="mobile-log-sheet-actions">
+                <button type="button" @click="copyDetail">
+                    <i class="el-icon-document-copy"></i>
+                    <span>复制内容</span>
+                </button>
+                <button type="button" class="is-primary" @click="detailDialogVisible = false">
+                    <i class="el-icon-check"></i>
+                    <span>我知道了</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="contextDialogVisible"
+             class="mobile-log-overlay"
+             @click="contextDialogVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="contextDialogVisible"
+               class="mobile-log-sheet mobile-log-context-sheet"
+               role="dialog"
+               aria-label="日志上下文"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>CONTEXT</span>
+                    <h3>上下文日志</h3>
+                </div>
+                <button type="button" @click="contextDialogVisible = false" aria-label="关闭上下文">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <div class="mobile-log-context-list" v-loading="loadingContext">
+                <div v-if="contextLogs.length === 0 && !loadingContext" class="mobile-log-empty is-compact">
+                    <i class="el-icon-document"></i>
+                    <h3>暂无上下文数据</h3>
+                </div>
+                <div v-for="(line, index) in contextLogs"
+                     :key="index"
+                     class="mobile-log-context-line"
+                     :class="{ 'is-target': isTargetLine(line) }"
+                     v-html="formatLogMessage(line)">
+                </div>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="allDetailsDialogVisible"
+             class="mobile-log-overlay"
+             @click="allDetailsDialogVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="allDetailsDialogVisible"
+               class="mobile-log-sheet mobile-log-alert-sheet"
+               role="dialog"
+               aria-label="告警详情"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>ALERTS</span>
+                    <h3>告警详情</h3>
+                    <p>{{ filteredAllDetails.length }} / {{ alerts.length }} 条</p>
+                </div>
+                <button type="button" @click="allDetailsDialogVisible = false" aria-label="关闭告警详情">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <label class="mobile-log-search-field">
+                <i class="el-icon-search"></i>
+                <input v-model="detailsSearch" type="search" placeholder="搜索告警">
+            </label>
+            <div class="mobile-log-alert-tabs">
+                <button type="button" :class="{ 'is-active': detailsFilter === '' }" @click="detailsFilter = ''">全部</button>
+                <button type="button" :class="{ 'is-active': detailsFilter === 'ERROR' }" @click="detailsFilter = 'ERROR'">ERROR</button>
+                <button type="button" :class="{ 'is-active': detailsFilter === 'WARN' }" @click="detailsFilter = 'WARN'">WARN</button>
+            </div>
+            <div class="mobile-log-alert-list">
+                <article v-for="(alert, idx) in filteredAllDetails" :key="idx" class="mobile-log-alert-item">
+                    <div class="mobile-log-alert-meta">
+                        <span :class="'is-' + getAlertType(alert.type)">{{ alert.type }}</span>
+                        <em v-if="alert.count > 1">×{{ alert.count }}</em>
+                        <time>{{ formatDate(alert.lastTime || alert.timestamp) }}</time>
+                    </div>
+                    <p>{{ getBriefMessage(alert.message) }}</p>
+                    <div class="mobile-log-alert-actions">
+                        <button type="button" @click="showContext(alert)">上下文</button>
+                        <button type="button" @click="showDetailContent(alert.message)">详情</button>
+                    </div>
+                </article>
+            </div>
+            <div class="mobile-log-sheet-actions">
+                <button type="button" @click="copyAllDetails" :disabled="alerts.length === 0">
+                    <i class="el-icon-document-copy"></i>
+                    <span>复制</span>
+                </button>
+                <button type="button" class="is-danger" @click="clearAlerts" :disabled="alerts.length === 0">
+                    <i class="el-icon-delete"></i>
+                    <span>清除</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+</div>
+</script>
+
+</body>
+<script src="../js/pages/log.js"></script>
+<script src="../js/app/shell.js"></script>
+
+<!-- 配置面板样式已移至 css/index.css -->
+</html>
+
+

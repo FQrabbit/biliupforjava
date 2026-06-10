@@ -4995,13 +4995,15 @@
 
 .config-layout {
 
-    display: grid;
+    display: block;
 
-    grid-template-columns: 1fr 1fr;
+    column-count: 2;
 
-    gap: 24px;
+    column-gap: 24px;
 
-    align-items: start;
+    orphans: 1;
+
+    widows: 1;
 
 }
 
@@ -5009,11 +5011,23 @@
 
 .config-column {
 
-    display: flex;
+    display: contents;
 
-    flex-direction: column;
+}
 
-    gap: 24px;
+.config-layout .config-card {
+
+    break-inside: avoid;
+
+    page-break-inside: avoid;
+
+    margin-bottom: 24px;
+
+}
+
+.config-layout .config-card:last-child {
+
+    margin-bottom: 0;
 
 }
 
@@ -5215,7 +5229,7 @@
 
     .config-layout {
 
-        grid-template-columns: 1fr;
+        column-count: 1;
 
     }
 
@@ -6422,7 +6436,6 @@
 .config-progress-detail {
     margin-top: 8px;
 }
-
 
 
 

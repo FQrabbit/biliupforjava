@@ -32,6 +32,7 @@ var answer = new Vue({
         },
         configLoading: false,
         configExpanded: false,
+        activeConfigHint: '',
         hasConfigChanges: false,
         connectionLost: false,
         // 增强的连接状态追踪
@@ -72,16 +73,21 @@ var answer = new Vue({
         isScrollingToTop: false,  // 标记正在回顶的状态，此期间禁用冷却时间
         scrollToTopTimer: null,   // 回顶动画完成后清除标志
         iframeWorkspaceMode: false,
+        iframeModalOpen: false,
         // user、log 是组件页，别再塞进 iframe 啦 (｡•̀ᴗ-)✧
         componentPages: ['user', 'log'],
         // iframe 子页面批量操作状态
         iframeOperating: false,
         iframeOperatingMessage: '',
         workspaceStatusLoading: false,
+        showWorkspaceUsagePanel: false,
+        showMobileLogPanel: false,
         workspaceUsageTimer: null,
         cacheVersionTimer: null,
         workspaceStatus: {
             valid: true,
+            totalBytes: -1,
+            usedBytes: -1,
             usedPercent: 0,
             alertThresholdPercent: 95,
             alert: false,
@@ -96,6 +102,7 @@ var answer = new Vue({
             updatedAt: '',
             error: ''
         },
+        alertCount: 0,
         needCacheRefresh: false
     },
     computed: {
@@ -149,6 +156,31 @@ var answer = new Vue({
         },
         workspaceFreeSpaceDisplay: function() {
             return this.formatBytes(this.workspaceStatus.freeBytes);
+        },
+        workspaceTotalBytesNumber: function() {
+            var total = Number(this.workspaceStatus.totalBytes);
+            if (!isFinite(total) || total < 0) {
+                return null;
+            }
+            return total;
+        },
+        workspaceUsedBytesNumber: function() {
+            var used = Number(this.workspaceStatus.usedBytes);
+            if (isFinite(used) && used >= 0) {
+                return used;
+            }
+            var total = this.workspaceTotalBytesNumber;
+            var free = Number(this.workspaceStatus.freeBytes);
+            if (total !== null && isFinite(free) && free >= 0) {
+                return Math.max(0, total - free);
+            }
+            return null;
+        },
+        workspaceUsedSpaceDisplay: function() {
+            return this.formatBytes(this.workspaceUsedBytesNumber === null ? -1 : this.workspaceUsedBytesNumber);
+        },
+        workspaceTotalSpaceDisplay: function() {
+            return this.formatBytes(this.workspaceTotalBytesNumber === null ? -1 : this.workspaceTotalBytesNumber);
         },
         workspaceUsageLevel: function() {
             if (this.workspaceUsagePercentNumber === null) {
@@ -249,12 +281,24 @@ var answer = new Vue({
                     self.lastHeaderToggleAt = Date.now();
                 }
             }
+
+            if (event.data && event.data.type === 'iframeModalState') {
+                self.iframeModalOpen = !!event.data.active;
+                if (self.iframeModalOpen) {
+                    self.showBackToTop = false;
+                }
+            }
         });
     },
     watch: {
         activeName: function() {
             var self = this;
+            this.showWorkspaceUsagePanel = false;
+            this.showMobileLogPanel = false;
+            this.configExpanded = false;
+            this.activeConfigHint = '';
             this.iframeWorkspaceMode = false;
+            this.iframeModalOpen = false;
             this.headerCompact = false;
             this.showBackToTop = false;
             this.lastScrollTop = 0;
@@ -266,6 +310,11 @@ var answer = new Vue({
                 self.bindScrollObserver();
                 self.startScrollStateMonitor();
             });
+        },
+        configExpanded: function(open) {
+            if (!open) {
+                this.activeConfigHint = '';
+            }
         }
     },
     beforeDestroy: function() {
@@ -306,6 +355,51 @@ var answer = new Vue({
                 self.workspaceStatus.valid = false;
                 self.workspaceStatus.error = '状态获取失败' + (xhr && xhr.status ? (' (HTTP ' + xhr.status + ')') : '');
             });
+        },
+        handleMobileWorkspaceTap: function() {
+            if (this.showWorkspaceUsagePanel) {
+                this.showWorkspaceUsagePanel = false;
+                return;
+            }
+            this.showMobileLogPanel = false;
+            this.configExpanded = false;
+            this.showWorkspaceUsagePanel = true;
+            this.fetchWorkspaceUsageStatus();
+        },
+        toggleMobileConfigPanel: function() {
+            if (this.configExpanded) {
+                this.closeMobileConfigPanel();
+                return;
+            }
+            this.showWorkspaceUsagePanel = false;
+            this.showMobileLogPanel = false;
+            this.configExpanded = true;
+        },
+        closeMobileConfigPanel: function() {
+            this.configExpanded = false;
+            this.activeConfigHint = '';
+        },
+        toggleConfigHint: function(key) {
+            this.activeConfigHint = this.activeConfigHint === key ? '' : key;
+        },
+        noop: function() {},
+        toggleNewUploadFlow: function() {
+            this.systemConfig.newUploadFlowEnabled = !this.systemConfig.newUploadFlowEnabled;
+            this.checkConfigChanges();
+        },
+        toggleMobileLogPanel: function() {
+            if (this.showMobileLogPanel) {
+                this.showMobileLogPanel = false;
+                return;
+            }
+            this.showWorkspaceUsagePanel = false;
+            this.configExpanded = false;
+            this.showMobileLogPanel = true;
+            this.checkAlerts();
+        },
+        openMobileLogPage: function() {
+            this.showMobileLogPanel = false;
+            this.switchTab('log');
         },
         toggleThemePanel: function() {
             if (!this.showThemePanel) {
@@ -410,7 +504,7 @@ var answer = new Vue({
             }
 
             this.scrollStateTimer = setInterval(function() {
-                if (self.iframeWorkspaceMode) {
+                if (self.iframeWorkspaceMode || self.iframeModalOpen) {
                     self.headerCompact = true;
                     self.showBackToTop = false;
                     return;
@@ -743,7 +837,8 @@ var answer = new Vue({
         },
         checkAlerts: function() {
             LogApi.alerts((data) => {
-                this.hasAlerts = data && data.length > 0;
+                this.alertCount = data && data.length ? data.length : 0;
+                this.hasAlerts = this.alertCount > 0;
             });
         },
         onIframeLoad: function() {
@@ -1339,6 +1434,9 @@ var answer = new Vue({
         },
         switchTab: function(tab) {
             this.showThemePanel = false;
+            this.showWorkspaceUsagePanel = false;
+            this.showMobileLogPanel = false;
+            this.configExpanded = false;
             if (this.activeName === tab) {
                 return;
             }

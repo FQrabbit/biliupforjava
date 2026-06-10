@@ -19,10 +19,36 @@ Vue.component('user-page', {
             loading: false,
             isMobile: window.innerWidth <= 768,
             viewMode: 'card',
-            avatarErrors: {}
+            avatarErrors: {},
+            mobileUserActionsVisible: false,
+            mobileActionUser: null
         };
     },
     computed: {
+        totalUserCount: function () {
+            return this.tableData.length;
+        },
+        loggedInUserCount: function () {
+            return this.tableData.filter(function (item) {
+                return item && item.login;
+            }).length;
+        },
+        enabledUserCount: function () {
+            return this.tableData.filter(function (item) {
+                return item && item.login && item.enable;
+            }).length;
+        },
+        expiredUserCount: function () {
+            return this.tableData.filter(function (item) {
+                return item && !item.login;
+            }).length;
+        },
+        mobileUserHeroText: function () {
+            if (this.totalUserCount === 0) {
+                return '还没有关联账号';
+            }
+            return this.loggedInUserCount + ' 个账号可用，' + this.enabledUserCount + ' 个参与弹幕分摊';
+        },
         loginStatusText: function () {
             switch (this.loginStatus) {
                 case 'pending': return '等待扫码，二维码有效期5分钟';
@@ -67,7 +93,18 @@ Vue.component('user-page', {
             var self = this;
             self.loading = true;
             UserApi.list(function (data) {
-                self.tableData = data;
+                self.tableData = Array.isArray(data) ? data : [];
+                if (self.mobileActionUser) {
+                    var actionKey = self.mobileUserKey(self.mobileActionUser);
+                    var matched = self.tableData.filter(function (item) {
+                        return self.mobileUserKey(item) === actionKey;
+                    })[0];
+                    if (matched) {
+                        self.mobileActionUser = matched;
+                    } else {
+                        self.closeMobileUserActions();
+                    }
+                }
                 self.loading = false;
                 self.$nextTick(function () {
                     self.$emit('connection-status', false);
@@ -138,6 +175,75 @@ Vue.component('user-page', {
         handleEdit: function (index, row) {
             this.user = JSON.parse(JSON.stringify(row));
             this.dialogFormVisible = true;
+        },
+        openMobileLogin: function () {
+            this.closeMobileUserActions();
+            this.getLoginImage();
+            this.dialogLoginVisible = true;
+        },
+        mobileUserKey: function (item) {
+            if (!item) return '';
+            if (item.id !== undefined && item.id !== null) return 'id:' + item.id;
+            if (item.uid !== undefined && item.uid !== null) return 'uid:' + item.uid;
+            return '';
+        },
+        toggleMobileUserActions: function (item) {
+            if (!item) return;
+            var nextKey = this.mobileUserKey(item);
+            var currentKey = this.mobileUserKey(this.mobileActionUser);
+            if (this.mobileUserActionsVisible && nextKey && nextKey === currentKey) {
+                this.closeMobileUserActions();
+                return;
+            }
+            this.mobileActionUser = item;
+            this.mobileUserActionsVisible = true;
+        },
+        closeMobileUserActions: function () {
+            this.mobileUserActionsVisible = false;
+            this.mobileActionUser = null;
+        },
+        openMobileUserEdit: function (item) {
+            if (!item) return;
+            this.closeMobileUserActions();
+            this.handleEdit(0, item);
+        },
+        refreshMobileUserProfile: function (item) {
+            if (!item) return;
+            this.closeMobileUserActions();
+            this.refreshUserProfile(item);
+        },
+        deleteMobileUser: function (item) {
+            var self = this;
+            if (!item || !item.id) return;
+            var name = self.maskText(item.uname || '该账号');
+            self.$confirm('确定移除账号「' + name + '」吗？', '移除账号', {
+                confirmButtonText: '移除',
+                cancelButtonText: '取消',
+                type: 'warning',
+                confirmButtonClass: 'el-button--danger'
+            }).then(function () {
+                self.closeMobileUserActions();
+                self.deleteUser(item.id);
+            }).catch(function () {});
+        },
+        mobileUserInitial: function (item) {
+            if (this.privacyMode) return '*';
+            var name = item && item.uname ? String(item.uname) : 'U';
+            return name.charAt(0).toUpperCase();
+        },
+        mobileUserStateClass: function (item) {
+            if (!item || !item.login) return 'is-danger';
+            if (item.enable) return 'is-success';
+            return 'is-muted';
+        },
+        mobileUserStateLabel: function (item) {
+            if (!item || !item.login) return '未登录';
+            if (item.enable) return '已启用';
+            return '已登录';
+        },
+        mobileUserTimeText: function (item) {
+            if (!item || !item.updateTime) return '暂无记录';
+            return item.updateTime;
         },
         buildAvatarProxyUrl: function (url) {
             if (!url) return '';

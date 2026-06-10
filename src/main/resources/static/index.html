@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="录播姬上传插件 - 自动化直播录制上传解决方案">
     <meta name="theme-color" content="#5b6cff">
+    <script src="js/app/mobile-redirect.js"></script>
     <link rel="icon" href="img/icon.svg" type="image/svg+xml">
     <title>录播姬上传插件</title>
     <link href="css/element-ui.css" rel="stylesheet">
@@ -296,7 +297,7 @@
                                 <div class="config-item">
                                     <label class="config-label">
                                         <i class="el-icon-chat-dot-round"></i>
-                                        普通弹幕发送间隔
+                                        弹幕发送间隔
                                         <span class="config-unit">秒</span>
                                     </label>
                                     <el-input
@@ -306,13 +307,13 @@
                                         size="small"
                                         class="config-input">
                                     </el-input>
-                                    <div class="config-help">普通弹幕成功发送后等待多久再继续发送，默认 25 秒。数值过低可能更容易触发风控</div>
+                                    <div class="config-help">普通弹幕与 SC/上舰高级弹幕共用的全局发送间隔，默认 25 秒。数值过低可能更容易触发风控</div>
                                 </div>
 
                                 <div class="config-item">
                                     <label class="config-label">
                                         <i class="el-icon-medal"></i>
-                                        高级弹幕发送间隔
+                                        评论发送间隔
                                         <span class="config-unit">秒</span>
                                     </label>
                                     <el-input
@@ -322,7 +323,7 @@
                                         size="small"
                                         class="config-input">
                                     </el-input>
-                                    <div class="config-help">SC、上舰、礼物等高级弹幕成功发送后等待多久再继续发送，默认 25 秒</div>
+                                    <div class="config-help">SC/上舰列表评论与礼物评论共用的全局发送间隔，默认 25 秒</div>
                                 </div>
 
                                 <div class="config-item">
@@ -436,7 +437,7 @@
         </transition>
 
         <transition name="el-fade-in">
-            <button v-if="showBackToTop && activeName !== 'log'" class="back-top-fab" @click="scrollToTopCurrent" title="回到顶部">
+            <button v-if="showBackToTop && activeName !== 'log' && !iframeModalOpen" class="back-top-fab" @click="scrollToTopCurrent" title="回到顶部">
                 <i class="el-icon-arrow-up"></i>
             </button>
         </transition>

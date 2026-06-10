@@ -89,7 +89,13 @@ new Vue({
         currentPartitionParent: null,
         partitionTransitionName: 'slide-left',
         detailDialogVisible: false,
-        currentDetail: {}
+        currentDetail: {},
+        mobileRoomActionsVisible: false,
+        mobileRoomCardActionsVisible: false,
+        mobileActionRoom: null,
+        mobileConfigHelpVisible: false,
+        mobileConfigHelpTitle: '',
+        mobileConfigHelpLines: []
     },
     computed: {
         uploadConfigHeaders: function () {
@@ -117,7 +123,120 @@ new Vue({
             this.currentDetail = item;
             this.detailDialogVisible = true;
         },
+        closeMobileRoomDetail: function () {
+            this.detailDialogVisible = false;
+        },
+        notifyParentIframeModal: function (active) {
+            if (!this.isMobile || !window.parent || window.parent === window) {
+                return;
+            }
+            try {
+                window.parent.postMessage({
+                    type: 'iframeModalState',
+                    source: 'room-detail',
+                    active: !!active
+                }, window.location.origin);
+            } catch (e) {}
+        },
+        openMobileRoomActions: function () {
+            this.mobileRoomCardActionsVisible = false;
+            this.mobileActionRoom = null;
+            this.mobileRoomActionsVisible = !this.mobileRoomActionsVisible;
+        },
+        closeMobileRoomSheets: function () {
+            this.mobileRoomActionsVisible = false;
+            this.mobileRoomCardActionsVisible = false;
+            this.mobileActionRoom = null;
+        },
+        scrollMobileConfigSection: function (id) {
+            if (!this.isMobile || !id) {
+                return;
+            }
+            this.closeMobileConfigHelp();
+            this.$nextTick(function () {
+                var target = document.getElementById(id);
+                if (!target || !target.scrollIntoView) {
+                    return;
+                }
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            });
+        },
+        openMobileRoomCardActions: function (item) {
+            this.mobileRoomActionsVisible = false;
+            this.mobileActionRoom = item;
+            this.mobileRoomCardActionsVisible = true;
+        },
+        openMobileDetail: function (item) {
+            this.closeMobileRoomSheets();
+            this.showDetail(item);
+        },
+        openMobileAddRoom: function () {
+            this.closeMobileRoomSheets();
+            this.addRoomDialog = true;
+        },
+        openMobileExportConfig: function () {
+            this.closeMobileRoomSheets();
+            this.exportConfigDialog = true;
+        },
+        openMobileEditRoom: function (item) {
+            if (!item || !item.id) {
+                return;
+            }
+            this.closeMobileRoomSheets();
+            this.detailDialogVisible = false;
+            this.handleEdit(0, item);
+        },
+        openMobileDanmakuRoom: function (item) {
+            if (!item || !item.id) {
+                return;
+            }
+            this.closeMobileRoomSheets();
+            this.detailDialogVisible = false;
+            this.handleEeditLiveMsg(0, item);
+        },
+        deleteMobileActionRoom: function () {
+            if (!this.mobileActionRoom || !this.mobileActionRoom.id) {
+                return;
+            }
+            var id = this.mobileActionRoom.id;
+            this.closeMobileRoomSheets();
+            this.deleteRoom(id);
+        },
+        roomPrimaryStateClass: function (row) {
+            if (row && row.recording) {
+                return 'is-recording';
+            }
+            if (row && row.streaming) {
+                return 'is-live';
+            }
+            return 'is-offline';
+        },
+        roomPrimaryStateLabel: function (row) {
+            if (row && row.recording) {
+                return '录制中';
+            }
+            if (row && row.streaming) {
+                return '直播中';
+            }
+            return '未直播';
+        },
+        getCoverTypeLabel: function (type) {
+            if (type === 'live') {
+                return '直播封面';
+            }
+            if (type === 'diy') {
+                return '自定义';
+            }
+            return '默认';
+        },
+        getUploadUserName: function (id) {
+            return this.maskText(this.resolveUser(id));
+        },
         handleClose(done) {
+            this.closeMobileConfigHelp();
             this.$confirm('是否放弃修改？', '提示', {
                 confirmButtonText: '放弃',
                 cancelButtonText: '取消',
@@ -136,11 +255,42 @@ new Vue({
             .catch(_ => {});
         },
         cancelEdit() {
+            this.closeMobileConfigHelp();
             this.$message({
                 message: '修改未保存',
                 type: 'warning'
             });
             this.dialogFormVisible = false;
+        },
+        showMobileConfigHelp: function (title, content) {
+            this.mobileConfigHelpTitle = title || '说明';
+            if (Array.isArray(content)) {
+                this.mobileConfigHelpLines = content;
+            } else if (content) {
+                this.mobileConfigHelpLines = [content];
+            } else {
+                this.mobileConfigHelpLines = [];
+            }
+            this.mobileConfigHelpVisible = true;
+        },
+        showMobileTemplateHelp: function (title) {
+            this.showMobileConfigHelp(title, [
+                '可用变量：',
+                '${uname} - 主播昵称',
+                '${title} - 直播标题',
+                '${areaName} - 直播分区',
+                '${yyyy} - 年',
+                '${MM} - 月',
+                '${dd} - 日',
+                '${HH} - 时',
+                '${mm} - 分',
+                '${ss} - 秒'
+            ]);
+        },
+        closeMobileConfigHelp: function () {
+            this.mobileConfigHelpVisible = false;
+            this.mobileConfigHelpTitle = '';
+            this.mobileConfigHelpLines = [];
         },
         copyConfig() {
             // 复制当前房间配置到剪贴板（排除id和roomId等唯一标识以及合集、小节参数）
@@ -348,6 +498,9 @@ new Vue({
                 this.$message.warning('请先切换到全部房间再调整顺序');
                 return;
             }
+            this.viewMode = 'card';
+            this.closeMobileRoomSheets();
+            this.detailDialogVisible = false;
             this.sortSnapshot = this.tableData.map(function (item) { return item.id; });
             this.isSortMode = true;
         },
@@ -366,6 +519,22 @@ new Vue({
             this.isSortMode = false;
             this.draggingRoomId = null;
             this.dragOverRoomId = null;
+        },
+        moveRoomInSort: function (item, direction) {
+            if (!this.isSortMode || !item || this.roomFilter !== 'all') {
+                return;
+            }
+            var fromIndex = this.tableData.findIndex(function (room) {
+                return room.id === item.id;
+            });
+            var toIndex = fromIndex + direction;
+            if (fromIndex < 0 || toIndex < 0 || toIndex >= this.tableData.length) {
+                return;
+            }
+            var next = this.tableData.slice();
+            var moved = next.splice(fromIndex, 1)[0];
+            next.splice(toIndex, 0, moved);
+            this.tableData = next;
         },
         resetSortOrder: function () {
             this.tableData = this.tableData.slice().sort(function (a, b) {
@@ -461,9 +630,6 @@ new Vue({
             this.editLiveMsgSettingVisible = true;
         },
         handleSendScChange: function (enabled) {
-            if (!enabled) {
-                this.room.sendGiftReply = false;
-            }
             this.normalizeGiftReplyRoom(this.room);
         },
         normalizeGiftReplyRoom: function (room) {
@@ -471,7 +637,7 @@ new Vue({
                 return;
             }
             room.sendSc = !!room.sendSc;
-            room.sendGiftReply = room.sendSc && !!room.sendGiftReply;
+            room.sendGiftReply = !!room.sendGiftReply;
             room.giftReplyMinPriceCny = this.normalizeGiftReplyPriceValue(room.giftReplyMinPriceCny);
         },
         normalizeGiftReplyPriceInput: function (value) {
@@ -1247,8 +1413,12 @@ new Vue({
         },
         dialogFormVisible: function (val) {
             if (!val) {
+                this.closeMobileConfigHelp();
                 this.revokeAllImageObjectUrls();
             }
+        },
+        detailDialogVisible: function (val) {
+            this.notifyParentIframeModal(!!val);
         },
         'room.coverUrl': function () {
             this.refreshRoomCoverPreview();
@@ -1265,6 +1435,7 @@ new Vue({
     beforeDestroy: function () {
         this.stopPolling();
         window.removeEventListener('resize', this.handleResize);
+        this.notifyParentIframeModal(false);
         this.revokeAllImageObjectUrls();
     }
 });

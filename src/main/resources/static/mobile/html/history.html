@@ -4,34 +4,433 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>录制历史 - Bili Live Recorder</title>
-    <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
-    <link href="../css/element-ui.css" rel="stylesheet">
-    <link href="../css/base/variables.css" rel="stylesheet">
-    <link href="../css/base/reset.css" rel="stylesheet">
-    <link href="../css/base/element-override.css" rel="stylesheet">
-    <link href="../css/base/shared-components.css" rel="stylesheet">
-    <link href="../css/base/dark-overrides.css" rel="stylesheet">
-    <link href="../css/animations/transitions.css" rel="stylesheet">
-    <link href="../css/animations/effects.css" rel="stylesheet">
-    <link href="../css/history.css" rel="stylesheet">
-    <script src="../js/jquery-3.3.1.min.js"></script>
-    <script src="../js/vue.min.js"></script>
-    <script src="../js/element-ui.js"></script>
-    <script src="../js/api.js"></script>
-    <script src="../js/api/history-api.js"></script>
-    <script src="../js/api/part-api.js"></script>
-    <script src="../js/api/preview-api.js"></script>
-    <script src="../js/api/room-api.js"></script>
-    <script src="../js/frontend-cache-refresh.js"></script>
-    <script src="../js/theme-tokens.js"></script>
-    <script src="../js/mixins.js"></script>
-    <script src="../js/privacy.js"></script>
-    <script src="../js/app/page-bootstrap.js"></script>
+    <link rel="icon" href="../../img/icon.svg" type="image/svg+xml">
+    <link href="../../css/element-ui.css" rel="stylesheet">
+    <link href="../../css/base/variables.css" rel="stylesheet">
+    <link href="../../css/base/reset.css" rel="stylesheet">
+    <link href="../../css/base/element-override.css" rel="stylesheet">
+    <link href="../../css/base/shared-components.css" rel="stylesheet">
+    <link href="../../css/base/dark-overrides.css" rel="stylesheet">
+    <link href="../../css/animations/transitions.css" rel="stylesheet">
+    <link href="../../css/animations/effects.css" rel="stylesheet">
+    <link href="../../css/history.css" rel="stylesheet">
+    <link href="../css/mobile-pages.css" rel="stylesheet">
+    <link href="../css/mobile-history.css" rel="stylesheet">
+    <script src="../../js/jquery-3.3.1.min.js"></script>
+    <script src="../../js/vue.min.js"></script>
+    <script src="../../js/element-ui.js"></script>
+    <script src="../../js/api.js"></script>
+    <script src="../../js/api/history-api.js"></script>
+    <script src="../../js/api/part-api.js"></script>
+    <script src="../../js/api/preview-api.js"></script>
+    <script src="../../js/api/room-api.js"></script>
+    <script src="../../js/frontend-cache-refresh.js"></script>
+    <script src="../../js/theme-tokens.js"></script>
+    <script src="../../js/mixins.js"></script>
+    <script src="../../js/privacy.js"></script>
+    <script src="../../js/app/page-bootstrap.js"></script>
 </head>
 <body>
-<div class="history-container" id="historyApp">
+<div class="history-container mobile-history-container" id="historyApp">
+    <section class="mobile-history-page" aria-label="移动端录制历史">
+        <header class="mobile-history-hero">
+            <div class="mobile-history-hero-copy">
+                <span>{{ form.viewType === 'working' ? 'TASK FLOW' : 'ARCHIVE LIBRARY' }}</span>
+                <h1>{{ form.viewType === 'working' ? '稿件任务流' : '稿件资料库' }}</h1>
+                <p>{{ getMobileHistorySubtitle() }}</p>
+            </div>
+            <button type="button"
+                    class="mobile-history-icon-btn"
+                    :class="{ 'is-active': loading }"
+                    title="刷新"
+                    :disabled="loading || isMultiSelectMode"
+                    @click="initTable">
+                <i class="el-icon-refresh"></i>
+            </button>
+        </header>
+
+        <section class="mobile-history-overview" aria-label="录制历史概览">
+            <button type="button"
+                    class="mobile-history-mode"
+                    :class="{ 'is-active': form.viewType === 'working' }"
+                    :disabled="isMultiSelectMode || batchVisibilityRunning"
+                    @click="switchMobileHistoryView('working')">
+                <span>工作中</span>
+                <strong>{{ workingCount }}</strong>
+            </button>
+            <button type="button"
+                    class="mobile-history-mode"
+                    :class="{ 'is-active': form.viewType === 'archived' }"
+                    :disabled="isMultiSelectMode || batchVisibilityRunning"
+                    @click="switchMobileHistoryView('archived')">
+                <span>已归档</span>
+                <strong>{{ archivedCount }}</strong>
+            </button>
+            <button type="button"
+                    class="mobile-history-mode is-filter"
+                    :class="{ 'is-active': activeFilterCount > 0 || filterExpanded }"
+                    :disabled="isMultiSelectMode"
+                    @click="filterExpanded = true">
+                <span>筛选</span>
+                <strong>{{ activeFilterCount || '全部' }}</strong>
+            </button>
+        </section>
+
+        <nav class="mobile-history-quick" :class="{ 'is-disabled': isMultiSelectMode || batchVisibilityRunning }" aria-label="快速状态筛选">
+            <button type="button" :class="{ 'is-active': quickFilter === 'recording' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('recording')">
+                <i class="el-icon-video-camera"></i>
+                <span>录制中</span>
+            </button>
+            <button type="button" :class="{ 'is-active': quickFilter === 'success' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('success')">
+                <i class="el-icon-circle-check"></i>
+                <span>已通过</span>
+            </button>
+            <button type="button" :class="{ 'is-active': quickFilter === 'self' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('self')">
+                <i class="el-icon-view"></i>
+                <span>仅自己可见</span>
+            </button>
+            <button type="button" :class="{ 'is-active': quickFilter === 'fail' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('fail')">
+                <i class="el-icon-warning-outline"></i>
+                <span>异常</span>
+            </button>
+        </nav>
+
+        <section class="mobile-history-toolbar">
+            <button type="button"
+                    class="mobile-history-command is-primary"
+                    :disabled="isMultiSelectMode"
+                    @click="filterExpanded = true">
+                <i class="el-icon-search"></i>
+                <span>{{ getMobileFilterSummary() }}</span>
+            </button>
+            <button type="button"
+                    class="mobile-history-command"
+                    :class="{ 'is-active': isMultiSelectMode }"
+                    :disabled="batchVisibilityRunning"
+                    @click="toggleBatchMode">
+                <i class="el-icon-files"></i>
+                <span>{{ isMultiSelectMode ? '退出管理' : '批量管理' }}</span>
+            </button>
+        </section>
+
+        <transition name="mobile-history-rise">
+            <section v-if="isMultiSelectMode" class="mobile-history-selection-panel">
+                <div>
+                    <span>批量管理</span>
+                    <strong>已选择 {{ selectedItems.length }} 项</strong>
+                </div>
+                <label class="mobile-history-check">
+                    <el-checkbox v-model="isAllSelected" :indeterminate="isIndeterminate">全选本页</el-checkbox>
+                </label>
+                <div class="mobile-history-batch-options">
+                    <el-checkbox v-model="batchDeleteOptions.deleteVideo" :disabled="batchVisibilityRunning">视频</el-checkbox>
+                    <el-checkbox v-model="batchDeleteOptions.deleteDanmaku" :disabled="batchVisibilityRunning">弹幕</el-checkbox>
+                    <el-checkbox v-model="batchDeleteOptions.deleteCover" :disabled="batchVisibilityRunning">封面</el-checkbox>
+                </div>
+                <div class="mobile-history-batch-actions">
+                    <button type="button" class="is-success" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected" @click="handleBatchVisibility(0)">
+                        <i class="el-icon-unlock"></i>
+                        <span>公开</span>
+                    </button>
+                    <button type="button" class="is-warning" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected" @click="handleBatchVisibility(1)">
+                        <i class="el-icon-lock"></i>
+                        <span>仅自己</span>
+                    </button>
+                    <button type="button" class="is-danger" :disabled="selectedItems.length === 0 || batchVisibilityRunning" @click="handleBatchDelete">
+                        <i class="el-icon-delete"></i>
+                        <span>删除</span>
+                    </button>
+                    <button type="button" @click="toggleBatchMode" :disabled="batchVisibilityRunning">
+                        <i class="el-icon-close"></i>
+                        <span>取消</span>
+                    </button>
+                </div>
+            </section>
+        </transition>
+
+        <transition name="mobile-history-rise">
+            <div v-if="batchVisibilityRunning" class="mobile-history-progress">
+                <div class="mobile-history-progress-head">
+                    <span>批量可见性</span>
+                    <strong>{{ batchVisibilityDone }}/{{ batchVisibilityTotal }}</strong>
+                </div>
+                <div class="mobile-history-progress-track">
+                    <div :style="{ width: batchVisibilityPercent + '%' }"></div>
+                </div>
+                <p>{{ batchVisibilityTargetText }} · 成功 {{ batchVisibilitySuccess }} / 失败 {{ batchVisibilityFail }}</p>
+            </div>
+        </transition>
+
+        <section class="mobile-history-feed-head">
+            <div>
+                <span>{{ form.viewType === 'working' ? 'LIVE WORKBOARD' : 'RECORD ARCHIVE' }}</span>
+                <h2>{{ form.viewType === 'working' ? '当前稿件' : '历史稿件' }}</h2>
+            </div>
+            <strong>{{ total }} 项</strong>
+        </section>
+
+        <transition :name="transitionName">
+            <section v-if="!loading && tableData.length === 0" key="mobile-empty" class="mobile-history-empty">
+                <i :class="activeFilterCount > 0 ? 'el-icon-search' : 'el-icon-folder-opened'"></i>
+                <h3>{{ activeFilterCount > 0 ? '没有符合条件的稿件' : '暂无录制历史' }}</h3>
+                <p>{{ activeFilterCount > 0 ? '可以调整筛选条件，或回到全部状态。' : '录制结束后会显示在这里。' }}</p>
+                <button v-if="activeFilterCount > 0" type="button" @click="resetFilters">
+                    <i class="el-icon-refresh-left"></i>
+                    <span>重置筛选</span>
+                </button>
+            </section>
+
+            <section v-else key="mobile-list"
+                     class="mobile-history-list data-card-grid"
+                     :class="{ 'is-multi-select-mode': isMultiSelectMode, 'is-archive': form.viewType === 'archived' }"
+                     v-loading="loading"
+                     element-loading-text="加载中...">
+                <template v-for="(item, index) in tableData">
+                    <div v-if="getMobileDateGroup(item, index)" :key="'group-' + item.id" class="mobile-history-date-group">
+                        {{ getMobileDateGroup(item, index) }}
+                    </div>
+                    <article class="mobile-history-card data-card"
+                             :key="item.id"
+                             :data-id="item.id"
+                             :class="[
+                                getMobileHistoryPhaseClass(item),
+                                {
+                                    'is-selected': isMultiSelectMode && isSelected(item),
+                                    'press-anim': pressedCardId === item.id
+                                }
+                             ]"
+                             :style="{ animationDelay: (index * 34) + 'ms' }"
+                             @click="handleMobileCardTap(item)">
+                        <div class="mobile-history-select-mark" :class="{ 'is-on': isMultiSelectMode && isSelected(item) }">
+                            <i :class="isSelected(item) ? 'el-icon-check' : 'el-icon-plus'"></i>
+                        </div>
+                        <div class="mobile-history-card-top">
+                            <div class="mobile-history-title-block">
+                                <span class="mobile-history-room">{{ maskText(item.roomName || item.roomId || '未知房间') }}</span>
+                                <h3>{{ maskText(item.title || '无标题稿件') }}</h3>
+                            </div>
+                            <span class="mobile-history-phase" :class="getMobileHistoryPhaseClass(item)">
+                                {{ getMobileHistoryPhaseText(item) }}
+                            </span>
+                        </div>
+                        <div class="mobile-history-subline">
+                            <span v-if="item.bvId">{{ maskText(item.bvId) }}</span>
+                            <span v-else>未生成 BV</span>
+                            <span>{{ formatDateTime(item.startTime) || '--' }}</span>
+                        </div>
+                        <div class="mobile-history-pipeline" aria-label="稿件状态">
+                            <span :class="{ 'is-on': isActuallyRecording(item), 'is-warning': hasRecordingMismatch(item) }">录</span>
+                            <span :class="{ 'is-on': item.upload }">传</span>
+                            <span :class="{ 'is-on': item.publish }">发</span>
+                            <span :class="getAuditStatusClass(item)">审</span>
+                            <span :class="getDanmakuStatusClass(item)">幕</span>
+                        </div>
+                        <div class="mobile-history-progress-line">
+                            <div>
+                                <span>分P进度</span>
+                                <strong>{{ item.uploadPartCount || 0 }}/{{ item.partCount || 0 }}</strong>
+                            </div>
+                            <div class="mobile-history-progress-track">
+                                <div :style="{ width: getMobileUploadPercent(item) + '%' }"></div>
+                            </div>
+                        </div>
+                        <div class="mobile-history-metrics">
+                            <span><i class="el-icon-coin"></i>{{ formatFileSize(item.fileSize) }}</span>
+                            <span><i class="el-icon-time"></i>{{ formatDuration(item.partDuration) }}</span>
+                            <button type="button" class="mobile-history-metric-button is-danmaku" @click.stop="openMobileDanmakuStats(item)" aria-label="查看弹幕数据">
+                                <i class="el-icon-chat-dot-round"></i>
+                                <span>{{ item.successMsgCount || 0 }}/{{ item.msgCount || 0 }}</span>
+                                <i class="el-icon-arrow-up"></i>
+                            </button>
+                        </div>
+                        <div class="mobile-history-alerts" v-if="abnormalPartCount(item) > 0 || skippedOnlyCount(item) > 0 || uploadFlowFallbackCount(item) > 0 || item.code === -50">
+                            <span v-if="item.code === -50" class="is-private"><i class="el-icon-view"></i>仅自己可见</span>
+                            <span v-if="abnormalPartCount(item) > 0" class="is-danger"><i class="el-icon-warning"></i>异常分P {{ abnormalPartCount(item) }}</span>
+                            <span v-if="skippedOnlyCount(item) > 0" class="is-warning"><i class="el-icon-remove-outline"></i>跳过 {{ skippedOnlyCount(item) }}</span>
+                            <span v-if="uploadFlowFallbackCount(item) > 0" class="is-warning"><i class="el-icon-refresh-left"></i>上传回退 {{ uploadFlowFallbackCount(item) }}</span>
+                        </div>
+                    </article>
+                </template>
+            </section>
+        </transition>
+
+        <div class="mobile-history-pagination">
+            <button type="button"
+                    :disabled="isMultiSelectMode || form.current <= 1"
+                    @click="handleCurrentChange(form.current - 1)">
+                <i class="el-icon-arrow-left"></i>
+                <span>上一页</span>
+            </button>
+            <strong>{{ form.current }} / {{ Math.max(1, Math.ceil(total / (form.pageSize || 10))) }}</strong>
+            <button type="button"
+                    :disabled="isMultiSelectMode || form.current * (form.pageSize || 10) >= total"
+                    @click="handleCurrentChange(form.current + 1)">
+                <span>下一页</span>
+                <i class="el-icon-arrow-right"></i>
+            </button>
+        </div>
+
+        <transition name="mobile-history-sheet">
+            <div v-if="filterExpanded" class="mobile-history-filter-backdrop" @click="filterExpanded = false"></div>
+        </transition>
+        <transition name="mobile-history-sheet">
+            <aside v-if="filterExpanded" class="mobile-history-filter-sheet" role="dialog" aria-modal="true" aria-label="筛选录制历史">
+                <div class="mobile-history-sheet-grabber"></div>
+                <header class="mobile-history-sheet-head">
+                    <div>
+                        <span>FILTER</span>
+                        <h3>筛选稿件</h3>
+                    </div>
+                    <button type="button" title="关闭" @click="filterExpanded = false">
+                        <i class="el-icon-close"></i>
+                    </button>
+                </header>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">快捷状态</span>
+                    <div class="mobile-history-filter-pills">
+                        <button type="button" :class="{ 'is-active': quickFilter === 'recording' }" @click="setQuickFilter('recording')">录制中</button>
+                        <button type="button" :class="{ 'is-active': quickFilter === 'success' }" @click="setQuickFilter('success')">已通过</button>
+                        <button type="button" :class="{ 'is-active': quickFilter === 'self' }" @click="setQuickFilter('self')">仅自己可见</button>
+                        <button type="button" :class="{ 'is-active': quickFilter === 'fail' }" @click="setQuickFilter('fail')">异常/不通过</button>
+                    </div>
+                </section>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">基础信息</span>
+                    <div class="mobile-history-filter-form">
+                        <label>
+                            <span>房间</span>
+                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option
+                                        v-for="room in roomList"
+                                        :key="room.roomId"
+                                        :label="privacyMode ? '***' : (room.roomId + ' - ' + room.uname)"
+                                        :value="room.roomId">
+                                    <span style="float: left">{{ maskText(room.uname) }}</span>
+                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ maskText(room.roomId) }}</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>BV 号</span>
+                            <el-input v-model="form.bvId" clearable placeholder="输入 BV 号" size="small" @clear="onFilterChange"></el-input>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">状态</span>
+                    <div class="mobile-history-filter-grid">
+                        <label>
+                            <span>录制</span>
+                            <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option label="录制中" :value="true">
+                                    <i class="mobile-history-option-icon is-warning el-icon-video-camera"></i>
+                                    <span>录制中</span>
+                                </el-option>
+                                <el-option label="已结束" :value="false">
+                                    <i class="mobile-history-option-icon is-muted el-icon-video-pause"></i>
+                                    <span>已结束</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>上传</span>
+                            <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option label="已上传" :value="true">
+                                    <i class="mobile-history-option-icon is-success el-icon-circle-check"></i>
+                                    <span>已上传</span>
+                                </el-option>
+                                <el-option label="未上传" :value="false">
+                                    <i class="mobile-history-option-icon is-danger el-icon-circle-close"></i>
+                                    <span>未上传</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>发布</span>
+                            <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode" popper-class="mobile-history-filter-popper">
+                                <el-option label="已发布" :value="true">
+                                    <i class="mobile-history-option-icon is-success el-icon-circle-check"></i>
+                                    <span>已发布</span>
+                                </el-option>
+                                <el-option label="未发布" :value="false">
+                                    <i class="mobile-history-option-icon is-muted el-icon-circle-close"></i>
+                                    <span>未发布</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>审核</span>
+                            <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option label="未审核" :value="-999">
+                                    <i class="mobile-history-option-icon is-muted el-icon-remove-outline"></i>
+                                    <span>未审核</span>
+                                </el-option>
+                                <el-option label="通过" :value="0">
+                                    <i class="mobile-history-option-icon is-success el-icon-success"></i>
+                                    <span>通过</span>
+                                </el-option>
+                                <el-option label="仅自己可见" :value="-50">
+                                    <i class="mobile-history-option-icon is-success el-icon-view"></i>
+                                    <span>仅自己可见</span>
+                                </el-option>
+                                <el-option label="不通过" :value="1">
+                                    <i class="mobile-history-option-icon is-danger el-icon-circle-close"></i>
+                                    <span>不通过</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">结束时间</span>
+                    <div class="mobile-history-date-shortcuts">
+                        <button type="button" @click="setDateRange(0)">今天</button>
+                        <button type="button" @click="setDateRange(1)">24h</button>
+                        <button type="button" @click="setDateRange(3)">3天</button>
+                        <button type="button" @click="setDateRange(7)">7天</button>
+                    </div>
+                    <div class="mobile-history-date-fields">
+                        <el-date-picker
+                                v-model="form.from"
+                                type="datetime"
+                                placeholder="开始时间"
+                                value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                size="small"
+                                popper-class="mobile-history-filter-popper"
+                                @change="onFilterChange">
+                        </el-date-picker>
+                        <el-date-picker
+                                v-model="form.to"
+                                type="datetime"
+                                placeholder="结束时间"
+                                value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                size="small"
+                                popper-class="mobile-history-filter-popper"
+                                @change="onFilterChange">
+                        </el-date-picker>
+                    </div>
+                </section>
+
+                <footer class="mobile-history-sheet-actions">
+                    <button type="button" @click="resetFilters">
+                        <i class="el-icon-refresh-left"></i>
+                        <span>重置</span>
+                    </button>
+                    <button type="button" class="is-primary" :disabled="loading" @click="filterExpanded = false; initTable()">
+                        <i class="el-icon-check"></i>
+                        <span>应用筛选</span>
+                    </button>
+                </footer>
+            </aside>
+        </transition>
+    </section>
+
     <!-- 顶部导航栏 -->
-    <header class="history-header">
+    <header v-if="!isMobile" class="history-header">
         <div class="header-left">
             <h1 class="page-title">
                 <i class="el-icon-time"></i>
@@ -88,7 +487,7 @@
     </header>
 
     <!-- 主内容区域 -->
-    <main class="history-main">
+    <main v-if="!isMobile" class="history-main">
         
         <!-- 分类标签页 -->
         <div class="category-tabs-container" :class="{ 'is-disabled': isMultiSelectMode || batchVisibilityRunning }">
@@ -327,10 +726,7 @@
                  @mousedown.prevent="onSelectDragStart"
                  @mousemove.prevent="onSelectDragMove"
                  @mouseup.prevent="onSelectDragEnd"
-                 @mouseleave.prevent="onSelectDragEnd"
-                 @touchstart="onSelectTouchStart"
-                 @touchmove="onSelectTouchMove"
-                 @touchend="onSelectTouchEnd">
+                 @mouseleave.prevent="onSelectDragEnd">
                 <div class="data-card"
                      :class="{
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
@@ -554,8 +950,354 @@
     </main>
 
     <!-- 详情弹窗 -->
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body :custom-class="'detail-dialog' + (editPartsEditing ? ' detail-dialog--parts-editing' : '')" :before-close="beforeCloseDetailDialog" @closed="onDetailClosed">
-        <div class="detail-content-modern" ref="detailContent" v-if="currentDetail.id" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body :custom-class="'detail-dialog' + (isMobile ? ' mobile-history-detail-dialog' : '') + (editPartsEditing ? ' detail-dialog--parts-editing' : '')" :before-close="beforeCloseDetailDialog" @closed="onDetailClosed">
+        <section v-if="currentDetail.id && isMobile && !editPartsEditing" class="mobile-history-detail-workbench" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
+            <div class="mobile-history-detail-grabber"></div>
+            <header class="mobile-history-detail-hero">
+                <div class="mobile-history-detail-title">
+                    <span>{{ getMobileHistoryPhaseText(currentDetail) }}</span>
+                    <h2>{{ maskText(currentDetail.title || '无标题稿件') }}</h2>
+                    <p>{{ maskText(currentDetail.roomName || currentDetail.roomId || '未知房间') }} · {{ formatDateTime(currentDetail.startTime) || '--' }}</p>
+                </div>
+                <button type="button" title="关闭详情" @click="requestCloseDetailDialog">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+
+            <section class="mobile-history-detail-toolbar" aria-label="详情操作">
+                <button type="button" @click="handleEdit(0, currentDetail)" :disabled="currentDetail.forceArchived">
+                    <i class="el-icon-edit"></i>
+                    <span>编辑</span>
+                </button>
+                <button type="button" @click="refreshStatus(currentDetail.id)">
+                    <i class="el-icon-refresh"></i>
+                    <span>刷新</span>
+                </button>
+                <button v-if="currentDetail.waitingForPublish && !currentDetail.forceArchived" type="button" class="is-emphasis" @click="touchPublish(currentDetail.id)">
+                    <i class="el-icon-s-release"></i>
+                    <span>投稿</span>
+                </button>
+                <button type="button" @click="showMoreActions = true">
+                    <i class="el-icon-more"></i>
+                    <span>更多</span>
+                </button>
+            </section>
+
+            <section class="mobile-history-detail-id">
+                <div>
+                    <span>稿件 ID</span>
+                    <strong>#{{ currentDetail.id }}</strong>
+                </div>
+                <a v-if="currentDetail.bvId" :href="'https://www.bilibili.com/video/' + currentDetail.bvId" target="_blank">
+                    {{ maskText(currentDetail.bvId) }}
+                    <i class="el-icon-link"></i>
+                </a>
+                <span v-else class="is-empty">未生成 BV</span>
+            </section>
+
+            <section class="mobile-history-detail-pipeline" aria-label="稿件状态流程">
+                <div :class="{ 'is-on': isActuallyRecording(currentDetail), 'is-warning': hasRecordingMismatch(currentDetail) }">
+                    <i class="el-icon-video-camera"></i>
+                    <span>录制</span>
+                    <strong>{{ isActuallyRecording(currentDetail) ? '进行中' : '已结束' }}</strong>
+                </div>
+                <div :class="{ 'is-on': currentDetail.upload }">
+                    <i class="el-icon-upload2"></i>
+                    <span>上传</span>
+                    <strong>{{ currentDetail.upload ? '开启' : '关闭' }}</strong>
+                </div>
+                <div :class="{ 'is-on': currentDetail.publish }">
+                    <i class="el-icon-s-release"></i>
+                    <span>发布</span>
+                    <strong>{{ currentDetail.publish ? '已发布' : '未发布' }}</strong>
+                </div>
+                <div :class="getAuditStatusClass(currentDetail)" @click="canShowAuditRejectInfo ? openAuditRejectDetail() : null">
+                    <i class="el-icon-s-check"></i>
+                    <span>审核</span>
+                    <strong>{{ getAuditStatusText(currentDetail) }}</strong>
+                </div>
+                <div :class="getDanmakuStatusClass(currentDetail)">
+                    <i class="el-icon-chat-dot-round"></i>
+                    <span>弹幕</span>
+                    <strong>{{ getDanmakuStatusText(currentDetail) }}</strong>
+                </div>
+            </section>
+
+            <section v-if="hasUploadConfigMismatch" class="mobile-history-detail-notice">
+                <i class="el-icon-info"></i>
+                <div>
+                    <strong>直播间上传配置已变更</strong>
+                    <p>该稿件沿用创建时的上传配置；当前直播间上传开关为{{ currentDetail.roomUpload ? '开启' : '关闭' }}。</p>
+                </div>
+            </section>
+
+            <section class="mobile-history-detail-stats">
+                <div>
+                    <span>文件大小</span>
+                    <strong>{{ formatFileSize(currentDetail.fileSize) }}</strong>
+                </div>
+                <div>
+                    <span>总时长</span>
+                    <strong>{{ formatDuration(currentDetail.partDuration) }}</strong>
+                </div>
+                <div>
+                    <span>分P</span>
+                    <strong>{{ currentDetail.uploadPartCount || 0 }}/{{ currentDetail.partCount || 0 }}</strong>
+                </div>
+                <button type="button" class="mobile-history-detail-stat-button is-danmaku" @click="openMobileDanmakuStats(currentDetail)">
+                    <span>弹幕</span>
+                    <strong>{{ currentDetail.successMsgCount || 0 }}/{{ currentDetail.msgCount || 0 }}</strong>
+                    <small>点按查看分类</small>
+                </button>
+            </section>
+
+            <section v-if="abnormalPartCount(currentDetail) > 0 || skippedOnlyCount(currentDetail) > 0 || uploadFlowFallbackCount(currentDetail) > 0 || canShowAuditRejectInfo" class="mobile-history-detail-alerts">
+                <button v-if="canShowAuditRejectInfo" type="button" class="is-danger" @click="openAuditRejectDetail">
+                    <i class="el-icon-warning-outline"></i>
+                    <span>{{ auditRejectSummaryText }}</span>
+                </button>
+                <div v-if="abnormalPartCount(currentDetail) > 0" class="is-danger">
+                    <i class="el-icon-warning"></i>
+                    <span>存在 {{ abnormalPartCount(currentDetail) }} 个异常分P</span>
+                </div>
+                <div v-if="skippedOnlyCount(currentDetail) > 0" class="is-warning">
+                    <i class="el-icon-remove-outline"></i>
+                    <span>已跳过 {{ skippedOnlyCount(currentDetail) }} 个低于阈值的分P</span>
+                </div>
+                <div v-if="uploadFlowFallbackCount(currentDetail) > 0" class="is-warning">
+                    <i class="el-icon-refresh-left"></i>
+                    <span>上传流程回退 {{ uploadFlowFallbackCount(currentDetail) }} 次</span>
+                </div>
+            </section>
+
+            <section class="mobile-history-detail-upload">
+                <header>
+                    <div>
+                        <span>UPLOAD</span>
+                        <h3>上传进度</h3>
+                    </div>
+                    <strong>{{ calcOverallUploadPercent() }}%</strong>
+                </header>
+                <div class="mobile-history-detail-progress-track">
+                    <div :style="{ width: calcOverallUploadPercent() + '%' }"></div>
+                </div>
+                <p>{{ calcOverallUploadText() }}</p>
+                <div v-if="isWaitingForUpload" class="mobile-history-detail-hint">
+                    <i class="el-icon-info"></i>
+                    <span>正在等待其他稿件分P上传。</span>
+                </div>
+                <div v-if="partListMeta && partListMeta.hasBlockingIssues" class="mobile-history-detail-hint is-warning">
+                    <i class="el-icon-warning"></i>
+                    <span>存在 {{ partListMeta.blockingIssueCount }} 个阻塞分P，需要处理后继续。</span>
+                </div>
+                <div class="mobile-history-detail-inline-actions">
+                    <button v-if="canShowHistoryPauseButton" type="button" class="is-warning" :disabled="uploadPauseLoading || isHistoryUploadPauseSettling()" @click="pauseHistoryUpload">
+                        <i class="el-icon-video-pause"></i>
+                        <span>暂停上传</span>
+                    </button>
+                    <button v-if="canShowHistoryResumeButton" type="button" class="is-success" :disabled="uploadPauseLoading || isHistoryUploadPauseSettling()" @click="resumeHistoryUpload">
+                        <i class="el-icon-video-play"></i>
+                        <span>继续上传</span>
+                    </button>
+                    <button v-if="canEditPublishedParts()" type="button" @click="startEditParts">
+                        <i class="el-icon-edit"></i>
+                        <span>编辑分P</span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="mobile-history-detail-parts" v-if="mergedParts.length > 0">
+                <button type="button" class="mobile-history-detail-section-toggle" @click="toggleParts">
+                    <span>{{ showAllParts ? '收起分P进度' : '查看分P进度' }}</span>
+                    <strong>{{ mergedParts.length }}</strong>
+                    <i :class="showAllParts ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                </button>
+                <transition name="mobile-history-rise">
+                    <div v-show="showAllParts" class="mobile-history-detail-part-list">
+                        <article v-for="(p, idx) in mergedParts" :key="p.partId || idx" class="mobile-history-detail-part">
+                            <div class="mobile-history-detail-part-head">
+                                <span>P{{ p.page }}</span>
+                                <strong>{{ formatProgressState(p.state) }}</strong>
+                            </div>
+                            <div class="mobile-history-detail-progress-track">
+                                <div :style="{ width: (p.state === 'SKIPPED' ? 0 : (p.percent || 0)) + '%' }"></div>
+                            </div>
+                            <p>
+                                <span v-if="p.fileSize">{{ formatSize(p.fileSize) }}</span>
+                                <span v-if="p.stateMsg || p.issueMessage">{{ p.stateMsg || p.issueMessage }}</span>
+                            </p>
+                            <div class="mobile-history-detail-part-actions" v-if="canPreviewPart(p) || (p.actions && p.actions.length > 0)">
+                                <button v-if="canPreviewPart(p)" type="button" @click.stop="openPartPreview(p)">
+                                    <i class="el-icon-video-play"></i>
+                                    <span>预览</span>
+                                </button>
+                                <button v-if="p.actions && p.actions.indexOf('PAUSE_UPLOAD') !== -1" type="button" class="is-warning" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="pausePartUpload(p)">暂停</button>
+                                <button v-if="p.actions && p.actions.indexOf('RESUME_UPLOAD') !== -1" type="button" class="is-success" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="resumePartUpload(p)">继续</button>
+                                <button v-if="p.actions && p.actions.indexOf('BIND_FILE') !== -1" type="button" @click.stop="openBindFileDialog(p)">补全</button>
+                                <button v-if="p.actions && p.actions.indexOf('MARK_FINISHED') !== -1" type="button" class="is-warning" @click.stop="confirmMarkFinished(p)">结束</button>
+                                <button v-if="p.actions && p.actions.indexOf('RESCAN') !== -1" type="button" @click.stop="rescanPart(p)">重试</button>
+                            </div>
+                        </article>
+                    </div>
+                </transition>
+            </section>
+            <transition name="fade">
+                <div class="mobile-history-detail-actions-backdrop" v-show="showMoreActions && !editPartsEditing" @click="showMoreActions = false"></div>
+            </transition>
+            <transition name="mobile-history-actions">
+                <aside class="mobile-history-detail-actions-sheet" v-show="showMoreActions && !editPartsEditing" @click.stop>
+                    <div class="mobile-history-detail-actions-handle"></div>
+                    <header>
+                        <div>
+                            <span>ACTIONS</span>
+                            <strong>更多操作</strong>
+                        </div>
+                        <button type="button" @click="showMoreActions = false" aria-label="关闭更多操作">
+                            <i class="el-icon-close"></i>
+                        </button>
+                    </header>
+                    <section>
+                        <span>发布管理</span>
+                        <button v-if="!currentDetail.forceArchived" type="button" @click="rePublish(currentDetail.id)"><i class="el-icon-refresh"></i>转码修复</button>
+                        <button v-if="!currentDetail.forceArchived" type="button" @click="highEnergyCutPublish(currentDetail.id)"><i class="el-icon-video-play"></i>高能片段</button>
+                        <button v-if="!currentDetail.forceArchived && currentDetail.upload && !currentDetail.publish && currentDetail.partCount > 0 && currentDetail.uploadPartCount === currentDetail.partCount" type="button" @click="retryPublishOnly(currentDetail.id)"><i class="el-icon-refresh"></i>重试发布</button>
+                        <button v-if="!currentDetail.forceArchived" type="button" @click="touchPublish(currentDetail.id)"><i class="el-icon-s-promotion"></i>触发发布</button>
+                        <button v-if="!currentDetail.forceArchived" type="button" @click="updatePublishStatus(currentDetail.id)"><i class="el-icon-refresh-left"></i>重置状态</button>
+                        <button v-if="currentDetail.forceArchived" type="button" class="is-success" @click="restoreForceArchive(currentDetail.id)"><i class="el-icon-video-play"></i>恢复处理</button>
+                    </section>
+                    <section>
+                        <span>录制与数据</span>
+                        <button v-if="!currentDetail.forceArchived" type="button" @click="updatePartStatus(currentDetail.id)"><i class="el-icon-video-pause"></i>结束录制</button>
+                        <button v-if="!currentDetail.forceArchived" type="button" class="is-warning" @click="forceArchive(currentDetail.id)"><i class="el-icon-switch-button"></i>强制归档</button>
+                        <button v-if="!currentDetail.forceArchived" type="button" @click="reloadHistoryMsg(currentDetail.id)"><i class="el-icon-chat-dot-round"></i>重载弹幕</button>
+                        <button type="button" class="is-danger" @click="deleteHistoryMsg(currentDetail.id)"><i class="el-icon-delete"></i>删除弹幕</button>
+                    </section>
+                    <section>
+                        <span>危险操作</span>
+                        <button type="button" class="is-danger" @click="deleteHistory(currentDetail.id)"><i class="el-icon-delete"></i>删除记录</button>
+                    </section>
+                </aside>
+            </transition>
+        </section>
+
+        <section v-if="currentDetail.id && isMobile && editPartsEditing" class="mobile-edit-parts-workbench">
+            <div class="mobile-history-detail-grabber"></div>
+            <header class="mobile-edit-parts-hero">
+                <div>
+                    <span>PARTS EDITOR</span>
+                    <h2>编辑分P</h2>
+                    <p>{{ maskText(currentDetail.title || '未命名稿件') }}</p>
+                </div>
+                <button type="button" @click="requestCloseDetailDialog" aria-label="关闭编辑分P">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+
+            <section class="mobile-edit-parts-command-bar">
+                <div>
+                    <span>DRAFT</span>
+                    <strong>{{ getMobileEditPartsSummary() }}</strong>
+                </div>
+                <div>
+                    <button type="button" class="is-secondary" :disabled="editPartsSaving" @click="cancelEditParts">
+                        <i class="el-icon-close"></i>
+                        <span>取消</span>
+                    </button>
+                    <button type="button" class="is-primary" :disabled="editPartsSaving" @click="confirmSaveEditParts">
+                        <i class="el-icon-check"></i>
+                        <span>{{ editPartsSaving ? '保存中' : '保存' }}</span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="mobile-edit-parts-add-panel">
+                <div>
+                    <span>ADD PART</span>
+                    <strong>添加分P</strong>
+                </div>
+                <div>
+                    <button type="button" @click="openEditPartFileDialog(null, 'add')">
+                        <i class="el-icon-folder-add"></i>
+                        <span>工作目录</span>
+                    </button>
+                    <el-upload
+                            :action="'/history/' + currentDetail.id + '/edit-parts/local-upload'"
+                            :data="{ sessionId: editPartsSessionId }"
+                            :http-request="uploadAddLocalEditPart"
+                            :show-file-list="false"
+                            :on-success="handleAddLocalEditPartSuccess"
+                            :on-error="handleEditPartUploadError"
+                            accept=".flv,.mp4,.ts,.mkv,.mov,.m4v">
+                        <button type="button">
+                            <i class="el-icon-upload"></i>
+                            <span>本地文件</span>
+                        </button>
+                    </el-upload>
+                </div>
+            </section>
+
+            <section class="mobile-edit-parts-list" v-loading="editPartsLoading" element-loading-text="加载分P...">
+                <article v-for="(p, idx) in editPartsDraft"
+                         :key="p.localKey"
+                         class="mobile-edit-part-card"
+                         :class="{ 'is-deleted': p.deleted, 'is-new': p.source === 'local' || p.source === 'workdir', 'is-changed': isEditPartChanged(p, idx) }">
+                    <div class="mobile-edit-part-head">
+                        <span>P{{ calcEditPartPage(idx) }}</span>
+                        <div>
+                            <strong>{{ p.deleted ? '待删除' : editPartSourceText(p) }}</strong>
+                            <em v-if="isEditPartChanged(p, idx)">已修改</em>
+                        </div>
+                        <div class="mobile-edit-part-sort">
+                            <button type="button" :disabled="idx === 0 || p.deleted" @click="moveEditPart(idx, -1)" aria-label="上移分P">
+                                <i class="el-icon-arrow-up"></i>
+                            </button>
+                            <button type="button" :disabled="idx === editPartsDraft.length - 1 || p.deleted" @click="moveEditPart(idx, 1)" aria-label="下移分P">
+                                <i class="el-icon-arrow-down"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <label class="mobile-edit-part-title">
+                        <span>标题</span>
+                        <el-input size="small" v-model="p.title" :disabled="p.deleted" placeholder="分P标题"></el-input>
+                    </label>
+                    <div class="mobile-edit-part-meta">
+                        <span v-if="p.name">{{ maskText(p.name) }}</span>
+                        <span v-if="editPartDisplaySize(p)">{{ formatSize(editPartDisplaySize(p)) }}</span>
+                        <span v-if="p.filePath || p.fileRef">{{ p.source === 'workdir' ? '工作目录' : '本地暂存' }}</span>
+                    </div>
+                    <div class="mobile-edit-part-actions">
+                        <button type="button" :disabled="p.deleted" @click="openEditPartFileDialog(idx, 'replace')">
+                            <i class="el-icon-folder-opened"></i>
+                            <span>目录替换</span>
+                        </button>
+                        <el-upload
+                                :action="'/history/' + currentDetail.id + '/edit-parts/local-upload'"
+                                :data="{ sessionId: editPartsSessionId }"
+                                :http-request="function(option){ uploadReplaceLocalEditPart(idx, option); }"
+                                :disabled="p.deleted"
+                                :show-file-list="false"
+                                :on-success="function(resp){ handleReplaceLocalEditPartSuccess(idx, resp); }"
+                                :on-error="handleEditPartUploadError"
+                                accept=".flv,.mp4,.ts,.mkv,.mov,.m4v">
+                            <button type="button" :disabled="p.deleted">
+                                <i class="el-icon-upload"></i>
+                                <span>本地替换</span>
+                            </button>
+                        </el-upload>
+                        <button v-if="!p.deleted" type="button" class="is-danger" @click="markEditPartDeleted(idx)">
+                            <i class="el-icon-delete"></i>
+                            <span>删除</span>
+                        </button>
+                        <button v-else type="button" class="is-warning" @click="undoEditPartDeleted(idx)">
+                            <i class="el-icon-refresh-left"></i>
+                            <span>撤销</span>
+                        </button>
+                    </div>
+                </article>
+            </section>
+        </section>
+
+        <div class="detail-content-modern" ref="detailContent" v-if="currentDetail.id && !isMobile" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
             <!-- 头部信息 -->
             <div class="detail-header-modern">
                 <div class="detail-header-main">
@@ -682,48 +1424,16 @@
                         <span class="stat-sub">录:{{currentDetail.recordPartCount}} / 传:{{currentDetail.uploadPartCount}}</span>
                     </div>
                 </div>
-                <div class="stat-card stat-card--danmaku">
+                <div class="stat-card">
                     <div class="stat-label">弹幕数量</div>
-                    <div class="stat-value stat-value--danmaku">
-                        <span>{{ currentDetail.msgCount }}</span>
-                        <el-popover placement="top" width="260" trigger="click" popper-class="danmaku-stat-popover">
-                            <div class="danmaku-stat-popover-content">
-                                <div class="danmaku-stat-popover-title">弹幕明细</div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>全部弹幕</span>
-                                    <strong>{{ currentDetail.msgCount || 0 }}</strong>
-                                </div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>成功发送</span>
-                                    <strong>{{ currentDetail.successMsgCount || 0 }}</strong>
-                                </div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>普通弹幕</span>
-                                    <strong>{{ currentDetail.normalMsgCount || 0 }}</strong>
-                                </div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>SC</span>
-                                    <strong>{{ currentDetail.scMsgCount || 0 }}</strong>
-                                </div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>上舰</span>
-                                    <strong>{{ currentDetail.guardMsgCount || 0 }}</strong>
-                                </div>
-                                <div class="danmaku-stat-popover-row is-queue">
-                                    <span>队列中</span>
-                                    <strong>{{ getDanmakuQueueCount(currentDetail) }}</strong>
-                                </div>
-                            </div>
-                            <button slot="reference" type="button" class="stat-detail-trigger" aria-label="查看弹幕明细">
-                                <i class="el-icon-pie-chart"></i>
-                                <span>明细</span>
-                            </button>
-                        </el-popover>
-                    </div>
-                    <div class="stat-breakdown stat-breakdown--danmaku">
-                        <span>普通 {{currentDetail.normalMsgCount || 0}}</span>
-                        <span>SC {{currentDetail.scMsgCount || 0}}</span>
-                        <span>舰 {{currentDetail.guardMsgCount || 0}}</span>
+                    <div class="stat-value">
+                        {{ currentDetail.msgCount }}
+                        <div class="stat-breakdown stat-breakdown--danmaku">
+                            <span>普通 {{currentDetail.normalMsgCount || 0}}</span>
+                            <span>SC {{currentDetail.scMsgCount || 0}}</span>
+                            <span>舰 {{currentDetail.guardMsgCount || 0}}</span>
+                            <span v-if="getDanmakuQueueCount(currentDetail) > 0" class="stat-queue">队列 {{ getDanmakuQueueCount(currentDetail) }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -928,7 +1638,7 @@
                 </template>
             </div>
         </div>
-        <div slot="footer" class="detail-footer" ref="detailFooter">
+        <div slot="footer" class="detail-footer" ref="detailFooter" v-if="!isMobile">
             <div class="detail-footer-actions" v-if="currentDetail.id">
                 <!-- 常用操作 -->
                 <div class="action-group-primary">
@@ -980,6 +1690,63 @@
         </div>
     </el-dialog>
 
+    <transition name="fade">
+        <div v-if="mobileDanmakuStatsVisible" class="mobile-history-danmaku-backdrop" @click="closeMobileDanmakuStats"></div>
+    </transition>
+    <transition name="mobile-history-danmaku-sheet">
+        <aside v-if="mobileDanmakuStatsVisible" class="mobile-history-danmaku-sheet" role="dialog" aria-modal="true" aria-label="弹幕数据" @click.stop>
+            <div class="mobile-history-sheet-grabber"></div>
+            <header class="mobile-history-danmaku-head">
+                <div>
+                    <span>DANMAKU</span>
+                    <h3>弹幕数据</h3>
+                    <p>{{ getMobileDanmakuStatsTitle() }}</p>
+                </div>
+                <button type="button" @click="closeMobileDanmakuStats" aria-label="关闭弹幕数据">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <section class="mobile-history-danmaku-summary">
+                <div>
+                    <span>发送进度</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('successMsgCount')) }}/{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('msgCount')) }}</strong>
+                </div>
+                <div class="mobile-history-danmaku-progress">
+                    <div :style="{ width: getMobileDanmakuSuccessPercent() + '%' }"></div>
+                </div>
+            </section>
+            <section class="mobile-history-danmaku-grid">
+                <div class="mobile-history-danmaku-stat">
+                    <span>全部弹幕</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('msgCount')) }}</strong>
+                </div>
+                <div class="mobile-history-danmaku-stat is-success">
+                    <span>成功发送</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('successMsgCount')) }}</strong>
+                </div>
+                <div class="mobile-history-danmaku-stat">
+                    <span>普通弹幕</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('normalMsgCount')) }}</strong>
+                </div>
+                <div class="mobile-history-danmaku-stat is-sc">
+                    <span>SC</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('scMsgCount')) }}</strong>
+                </div>
+                <div class="mobile-history-danmaku-stat is-guard">
+                    <span>上舰</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('guardMsgCount')) }}</strong>
+                </div>
+                <div class="mobile-history-danmaku-stat">
+                    <span>队列中</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuQueueCount()) }}</strong>
+                </div>
+            </section>
+            <footer class="mobile-history-danmaku-actions">
+                <button type="button" @click="closeMobileDanmakuStats">我知道了</button>
+            </footer>
+        </aside>
+    </transition>
+
     <transition name="edit-upload-float">
         <div v-if="editPartUploadQueue.length > 0" class="edit-upload-float">
             <div class="edit-upload-float-head">
@@ -1011,7 +1778,7 @@
     </transition>
 
     <!-- 编辑弹窗 -->
-    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="编辑记录" custom-class="edit-dialog">
+    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="编辑记录" custom-class="edit-dialog mobile-history-form-dialog">
         <el-form :model="history" label-width="100px">
             <el-form-item label="是否上传">
                 <el-select placeholder="请选择" v-model="history.upload">
@@ -1064,7 +1831,7 @@
     </el-dialog>
 
     <!-- 重载弹幕确认弹窗 -->
-    <el-dialog title="重载弹幕确认" :visible.sync="reloadDialogVisible" width="500px" append-to-body>
+    <el-dialog title="重载弹幕确认" :visible.sync="reloadDialogVisible" width="500px" append-to-body custom-class="mobile-history-confirm-dialog">
         <div style="margin-bottom: 20px;">
             <p style="margin-bottom: 15px;">此操作将重新解析并加载弹幕文件到数据库。</p>
             <div style="background-color: #fef0f0; color: #f56c6c; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
@@ -1087,7 +1854,7 @@
         </div>
     </el-dialog>
 
-    <el-dialog title="补全分P文件" :visible.sync="bindFileDialogVisible" width="600px" append-to-body>
+    <el-dialog title="补全分P文件" :visible.sync="bindFileDialogVisible" width="600px" append-to-body custom-class="mobile-history-file-dialog">
         <div v-if="bindTargetPart">
             <div style="font-size: 13px; color: #606266; margin-bottom: 10px;">
                 P{{ bindTargetPart.page }} / partId={{ bindTargetPart.partId }}
@@ -1121,7 +1888,7 @@
         </div>
     </el-dialog>
 
-    <el-dialog title="预览视频" :visible.sync="previewDialogVisible" width="860px" append-to-body custom-class="part-preview-dialog" :before-close="beforeClosePartPreviewDialog" @closed="onPartPreviewDialogClosed">
+    <el-dialog title="预览视频" :visible.sync="previewDialogVisible" width="860px" append-to-body custom-class="part-preview-dialog mobile-history-preview-dialog" :before-close="beforeClosePartPreviewDialog" @closed="onPartPreviewDialogClosed">
         <div class="part-preview-panel">
             <div class="part-preview-header">
                 <div>
@@ -1184,7 +1951,7 @@
         </div>
     </transition>
 
-    <el-dialog :title="editPartFileDialogMode === 'add' ? '从工作目录添加分P' : '从工作目录替换分P'" :visible.sync="editPartFileDialogVisible" width="640px" append-to-body>
+    <el-dialog :title="editPartFileDialogMode === 'add' ? '从工作目录添加分P' : '从工作目录替换分P'" :visible.sync="editPartFileDialogVisible" width="640px" append-to-body custom-class="mobile-history-file-dialog">
         <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
             <el-input v-model="editCandidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）" style="flex: 1;"></el-input>
             <el-button size="small" @click="loadEditCandidateFiles" :loading="editCandidateFilesLoading">刷新列表</el-button>
@@ -1205,7 +1972,7 @@
     </el-dialog>
 
     <!-- 单条删除确认弹窗 -->
-    <el-dialog title="删除记录确认" :visible.sync="singleDeleteDialogVisible" width="420px" append-to-body :close-on-click-modal="false">
+    <el-dialog title="删除记录确认" :visible.sync="singleDeleteDialogVisible" width="420px" append-to-body :close-on-click-modal="false" custom-class="mobile-history-confirm-dialog mobile-history-danger-dialog">
         <div style="padding: 0 4px;">
             <div style="display:flex; align-items:flex-start; margin-bottom:16px;">
                 <i class="el-icon-warning" style="font-size:22px; color:#E6A23C; margin-right:10px; margin-top:2px; flex-shrink:0;"></i>
@@ -1222,19 +1989,21 @@
                 ⚠ 勾选的本地文件将被永久删除，无法恢复！
             </div>
         </div>
-        <div slot="footer">
+        <div slot="footer" class="dialog-footer">
             <el-button @click="singleDeleteDialogVisible = false">取 消</el-button>
             <el-button type="danger" @click="confirmDeleteHistory">确认删除</el-button>
         </div>
     </el-dialog>
 </div>
-<script src="../js/pages/history/common-methods.js"></script>
-<script src="../js/pages/history/batch-methods.js"></script>
-<script src="../js/pages/history/detail-methods.js"></script>
-<script src="../js/pages/history/edit-parts-methods.js"></script>
-<script src="../js/pages/history/preview-methods.js"></script>
-<script src="../js/pages/history/upload-methods.js"></script>
-<script src="../js/pages/history/record-methods.js"></script>
-<script src="../js/pages/history.js"></script>
+<script src="../../js/pages/history/common-methods.js"></script>
+<script src="../../js/pages/history/batch-methods.js"></script>
+<script src="../../js/pages/history/detail-methods.js"></script>
+<script src="../../js/pages/history/edit-parts-methods.js"></script>
+<script src="../../js/pages/history/preview-methods.js"></script>
+<script src="../../js/pages/history/upload-methods.js"></script>
+<script src="../../js/pages/history/record-methods.js"></script>
+<script src="../../js/pages/history.js"></script>
 </body>
 </html>
+
+

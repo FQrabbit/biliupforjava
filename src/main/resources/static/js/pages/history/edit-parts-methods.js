@@ -14,6 +14,7 @@
         startEditParts: function() {
             if (!this.currentDetail || !this.currentDetail.id) return;
             const _this = this;
+            _this.showMoreActions = false;
             _this.editPartsEditing = true;
             _this.editPartsLoading = true;
             _this.showAllParts = true;
@@ -455,6 +456,17 @@
             return (this.editPartsDraft || []).filter(function(p) {
                 return p && !p.deleted && p.source === 'local' && (p.filePath || p.fileRef);
             }).length;
+        },
+        getMobileEditPartsSummary: function() {
+            if (this.editPartsLoading) return '加载中';
+            const draft = this.editPartsDraft || [];
+            const active = draft.filter(function(p) { return p && !p.deleted; }).length;
+            const changed = draft.filter((p, idx) => this.isEditPartChanged(p, idx)).length;
+            const deleted = draft.filter(function(p) { return p && p.deleted; }).length;
+            const parts = [active + ' 个分P'];
+            if (changed > 0) parts.push(changed + ' 处变更');
+            if (deleted > 0) parts.push(deleted + ' 个待删除');
+            return parts.join(' · ');
         },
         confirmDiscardUnsavedLocalEditParts: function(onConfirm) {
             if (!this.hasUnsavedLocalEditPartFiles()) {

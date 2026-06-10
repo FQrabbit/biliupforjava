@@ -30,6 +30,21 @@
     var BUFFER_NUDGE_MIN_AHEAD = 1.2;
     var BUFFER_GAP_JUMP_MAX_SECONDS = 6;
 
+    function getStaticJsUrl(fileName) {
+        var path = (window.location && window.location.pathname) || '/';
+        var markers = ['/mobile/html/', '/html/', '/mobile/'];
+        fileName = String(fileName || '').replace(/^\/+/, '');
+        for (var i = 0; i < markers.length; i++) {
+            var index = path.indexOf(markers[i]);
+            if (index >= 0) {
+                return path.slice(0, index) + '/js/' + fileName;
+            }
+        }
+        var lastSlash = path.lastIndexOf('/');
+        var base = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : '/';
+        return base + 'js/' + fileName;
+    }
+
     function loadScript(src) {
         return new Promise(function(resolve, reject) {
             var existing = document.querySelector('script[src="' + src + '"]');
@@ -129,19 +144,19 @@
 
     function loadArtPlayer() {
         if (window.Artplayer) return Promise.resolve();
-        if (!state.artLoader) state.artLoader = loadScript('js/artplayer.min.js');
+        if (!state.artLoader) state.artLoader = loadScript(getStaticJsUrl('artplayer.min.js'));
         return state.artLoader;
     }
 
     function loadMpegts() {
         if (window.mpegts) return Promise.resolve();
-        if (!state.mpegtsLoader) state.mpegtsLoader = loadScript('js/mpegts.min.js');
+        if (!state.mpegtsLoader) state.mpegtsLoader = loadScript(getStaticJsUrl('mpegts.min.js'));
         return state.mpegtsLoader;
     }
 
     function loadDanmuku() {
         if (window.artplayerPluginDanmuku) return Promise.resolve();
-        if (!state.danmukuLoader) state.danmukuLoader = loadScript('js/artplayer-plugin-danmuku.min.js');
+        if (!state.danmukuLoader) state.danmukuLoader = loadScript(getStaticJsUrl('artplayer-plugin-danmuku.min.js'));
         return state.danmukuLoader;
     }
 

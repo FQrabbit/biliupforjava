@@ -62,14 +62,20 @@ new Vue({
             return this.coverage.pendingItems || [];
         },
         activeHourBuckets: function () {
-            return this.selectedRoomId && this.detail.hourBuckets ? this.detail.hourBuckets : (this.overview.hourBuckets || []);
+            if (this.selectedRoomId) {
+                return this.detail.hourBuckets || [];
+            }
+            return this.overview.hourBuckets || [];
         },
         activeDailyTrend: function () {
-            return this.selectedRoomId && this.detail.dailyTrend ? this.detail.dailyTrend : (this.overview.dailyTrend || []);
+            if (this.selectedRoomId) {
+                return this.detail.dailyTrend || [];
+            }
+            return this.overview.dailyTrend || [];
         },
         metricSource: function () {
-            if (this.selectedRoomId && this.detail.summary) {
-                return this.detail.summary;
+            if (this.selectedRoomId) {
+                return this.detail.summary || {};
             }
             return this.overview || {};
         },
@@ -152,6 +158,28 @@ new Vue({
             return this.giftTopMode === 'count'
                 ? (this.selectedSessionDetail.topGiftUsersByCount || this.selectedSessionDetail.topGiftUsers || [])
                 : (this.selectedSessionDetail.topGiftUsersByAmount || this.selectedSessionDetail.topGiftUsers || []);
+        },
+        mobileCoveragePercent: function () {
+            var total = Number(this.coverage.totalHistoryCount || 0);
+            if (total <= 0) {
+                return 100;
+            }
+            var done = Number(this.coverage.statsSessionCount || 0);
+            return Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+        },
+        mobileTopRooms: function () {
+            return (this.rooms || []).slice().sort(function (a, b) {
+                return Number(b.liveCount || 0) - Number(a.liveCount || 0);
+            }).slice(0, 8);
+        },
+        mobileRecentSessions: function () {
+            return (this.sessionOptions || []).slice(0, 8);
+        },
+        mobileTopDanmuUsers: function () {
+            return ((this.selectedSessionDetail && this.selectedSessionDetail.topDanmuUsers) || []).slice(0, 10);
+        },
+        mobileTopGiftUsers: function () {
+            return (this.activeGiftUsers || []).slice(0, 10);
         }
     },
     methods: {
@@ -876,6 +904,9 @@ new Vue({
         prefersReducedMotion: function () {
             return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
         },
+        isMobileStatsSurface: function () {
+            return !!document.querySelector('.mobile-stats-container') || window.innerWidth <= 768;
+        },
         chartMotionOption: function () {
             if (this.prefersReducedMotion()) {
                 return {
@@ -969,15 +1000,16 @@ new Vue({
                 this.renderTrendOption(chart, this.activeDailyTrend, { splitMsgAxis: true });
                 return;
             }
+            var mobile = this.isMobileStatsSurface();
             var buckets = this.activeHourBuckets || [];
             this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: '{b}:00<br/>开播 {c} 场' },
-                grid: { left: 42, right: 16, top: 24, bottom: 32 },
+                grid: mobile ? { left: 34, right: 8, top: 20, bottom: 28 } : { left: 42, right: 16, top: 24, bottom: 32 },
                 xAxis: this.categoryAxis(this.rangeLabels(24), { axisTick: { show: false } }),
                 yAxis: this.valueAxis({ minInterval: 1 }),
                 visualMap: { show: false, min: 0, max: Math.max.apply(null, buckets.concat([1])), inRange: { color: [this.chartSoftColor(), this.chartPrimaryColor(), this.chartSuccessColor()] } },
-                series: [{ type: 'bar', data: buckets, barMaxWidth: 26, itemStyle: { borderRadius: [4, 4, 0, 0] } }]
+                series: [{ type: 'bar', data: buckets, barMaxWidth: mobile ? 18 : 26, itemStyle: { borderRadius: [4, 4, 0, 0] } }]
             });
         },
         renderPublishChart: function () {
@@ -999,20 +1031,22 @@ new Vue({
         renderDurationChart: function () {
             var chart = this.chart('durationChart');
             if (!chart) return;
+            var mobile = this.isMobileStatsSurface();
             var data = this.overview.durationDistribution || [];
             this.applyChartOption(chart, {
                 textStyle: this.chartTextStyle(),
                 tooltip: { trigger: 'axis', formatter: '{b}<br/>{c} 场' },
-                grid: { left: 36, right: 12, top: 20, bottom: 30 },
+                grid: mobile ? { left: 30, right: 8, top: 16, bottom: 28 } : { left: 36, right: 12, top: 20, bottom: 30 },
                 xAxis: this.categoryAxis(data.map(function (item) { return item.name; }), { axisTick: { show: false } }),
                 yAxis: this.valueAxis({ minInterval: 1 }),
-                series: [{ type: 'bar', data: data.map(function (item) { return item.value; }), barMaxWidth: 34, itemStyle: { borderRadius: [4, 4, 0, 0], color: this.chartPrimaryColor() } }]
+                series: [{ type: 'bar', data: data.map(function (item) { return item.value; }), barMaxWidth: mobile ? 24 : 34, itemStyle: { borderRadius: [4, 4, 0, 0], color: this.chartPrimaryColor() } }]
             });
         },
         renderRoomCompareChart: function () {
             var chart = this.chart('roomCompareChart');
             if (!chart) return;
             var self = this;
+            var mobile = this.isMobileStatsSurface();
             var metric = this.comparisonMetric;
             var data = this.rooms.slice().sort(function (a, b) { return Number(b[metric] || 0) - Number(a[metric] || 0); }).slice(0, 10).reverse();
             this.applyChartOption(chart, {
@@ -1022,9 +1056,9 @@ new Vue({
                     var item = items[0];
                     return item.name + '<br/>' + item.marker + self.compareMetricName(metric) + ' ' + self.compareExactValue(metric, item.value);
                 } },
-                grid: { left: 96, right: 24, top: 16, bottom: 20 },
+                grid: mobile ? { left: 76, right: 18, top: 12, bottom: 18 } : { left: 96, right: 24, top: 16, bottom: 20 },
                 xAxis: this.valueAxis({ axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compareShortValue(metric, value); } } }),
-                yAxis: this.categoryAxis(data.map(function (item) { return item.uname || item.roomId; })),
+                yAxis: this.categoryAxis(data.map(function (item) { return item.uname || item.roomId; }), mobile ? { axisLabel: { color: this.chartTextColor(), width: 66, overflow: 'truncate' } } : undefined),
                 series: [{
                     type: 'bar',
                     data: data.map(function (item) { return Number(item[metric] || 0); }),
@@ -1041,6 +1075,7 @@ new Vue({
         renderTrendOption: function (chart, rows, showDualAxis) {
             rows = rows || [];
             var self = this;
+            var mobile = this.isMobileStatsSurface();
             var splitMsgAxis = !!(showDualAxis && showDualAxis.splitMsgAxis);
             if (showDualAxis && typeof showDualAxis === 'object') {
                 showDualAxis = !!showDualAxis.dualAxis || splitMsgAxis;
@@ -1067,7 +1102,7 @@ new Vue({
                     return lines.join('<br/>');
                 } },
                 legend: this.legend({ top: 0, data: ['场次', '总时长(h)', '弹幕'] }),
-                grid: { left: 42, right: useDualAxis ? 54 : 18, top: 36, bottom: 30 },
+                grid: mobile ? { left: 34, right: useDualAxis ? 42 : 10, top: 38, bottom: 28 } : { left: 42, right: useDualAxis ? 54 : 18, top: 36, bottom: 30 },
                 xAxis: this.categoryAxis(rows.map(function (item) { return String(item.liveDate || '').slice(5); })),
                 yAxis: useDualAxis ? [
                     this.valueAxis({ name: splitMsgAxis ? '场次 / 小时' : '', minInterval: 1, axisLabel: { color: this.chartTextColor(), formatter: function (value) { return self.compactNumber(value); } } }),
@@ -1083,6 +1118,7 @@ new Vue({
         renderBucketChart: function () {
             var chart = this.chart('bucketChart');
             if (!chart) return;
+            var mobile = this.isMobileStatsSurface();
             var rows = this.bucketData || [];
             var bucketByIndex = {};
             var maxBucketIndex = 0;
@@ -1111,7 +1147,7 @@ new Vue({
                     return lines.join('<br/>');
                 }},
                 legend: this.legend({ top: 0, data: ['弹幕', '礼物', 'SC', '舰长'] }),
-                grid: { left: 42, right: 54, top: 36, bottom: 30 },
+                grid: mobile ? { left: 34, right: 42, top: 38, bottom: 28 } : { left: 42, right: 54, top: 36, bottom: 30 },
                 xAxis: this.categoryAxis(timeline),
                 yAxis: [
                     this.valueAxis({ name: '弹幕', minInterval: 1 }),
@@ -1207,6 +1243,9 @@ new Vue({
             };
         },
         pieLabel: function (formatter) {
+            if (this.isMobileStatsSurface()) {
+                return { show: false };
+            }
             return Object.assign({ formatter: formatter }, this.chartLabelStyle());
         },
         legend: function (extra) {
