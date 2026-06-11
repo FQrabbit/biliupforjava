@@ -640,13 +640,21 @@ public class RecordBiliPublishService {
             result.put("message", "稿件不存在");
             return result;
         }
+        RecordHistory history = historyOptional.get();
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        EditAuthContext auth = resolveEditAuth(history, room);
+        if (!auth.canEdit || auth.user == null) {
+            result.put("accepted", false);
+            result.put("message", auth.message);
+            return result;
+        }
         EditPartsTaskStatus status = new EditPartsTaskStatus();
         status.status = "QUEUED";
         status.message = "等待处理";
         status.historyId = historyId;
         status.startTime = LocalDateTime.now();
         status.sessionId = request == null ? null : stringValue(request.get("sessionId"));
-        markHistoryWorkingForEdit(historyOptional.get(), status);
+        markHistoryWorkingForEdit(history, status);
         editPartsTaskMap.put(historyId, status);
         Thread worker = new Thread(() -> runEditPartsSubmit(historyId, request, status), "edit-parts-" + historyId);
         worker.setDaemon(true);
@@ -824,7 +832,7 @@ public class RecordBiliPublishService {
             return;
         }
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
-        EditAuthContext auth = resolveEditAuth(history, room);
+        EditAuthContext auth = resolveEditAuth(history, room, status);
         if (!auth.canEdit || auth.user == null) {
             markEditPartsTaskFailed(status, auth.message);
             return;
@@ -866,6 +874,7 @@ public class RecordBiliPublishService {
             }
             List<EditPartSubmitItem> items = parseEditPartSubmitItems(request == null ? null : request.get("items"));
             List<SingleVideoDto> videos = new ArrayList<>();
+            Set<Long> submittedPartIds = new HashSet<>();
             int page = 1;
             for (EditPartSubmitItem item : items) {
                 if (item.deleted) {
@@ -897,7 +906,11 @@ public class RecordBiliPublishService {
                         dto.setCid(part.getCid());
                     }
                     String persistedFilePath = "local".equalsIgnoreCase(item.source) ? null : part.getFilePath();
-                    syncEditUploadResult(history, item, part, page, dto.getTitle(), persistedFilePath, dto.getFilename(), dto.getCid());
+                    RecordHistoryPart synced = syncEditUploadResult(history, item, part, page, dto.getTitle(),
+                            persistedFilePath, dto.getFilename(), dto.getCid(), part.getFileSize());
+                    if (synced != null && synced.getId() != null) {
+                        submittedPartIds.add(synced.getId());
+                    }
                 } else {
                     BiliVideoPartInfoResponse.Video online = findOnlineVideoForSubmitItem(item, onlineByPage, onlineByTitle, onlineByFilename, onlineByCid);
                     if (online == null) {
@@ -912,7 +925,10 @@ public class RecordBiliPublishService {
                     if (online.getCid() > 0) {
                         dto.setCid(online.getCid());
                     }
-                    syncExistingOnlinePart(history, item, page, dto);
+                    RecordHistoryPart synced = syncExistingOnlinePart(history, item, page, dto);
+                    if (synced != null && synced.getId() != null) {
+                        submittedPartIds.add(synced.getId());
+                    }
                 }
                 videos.add(dto);
                 page++;
@@ -936,6 +952,7 @@ public class RecordBiliPublishService {
                 }
                 markHistoryPendingReviewAfterEdit(history);
                 historyRepository.save(history);
+                cleanupStaleEditPartLocalState(history, submittedPartIds);
                 syncEditHistoryStatusImmediately(history.getId());
                 cleanupEditPartTempFiles(historyId, status.sessionId);
                 status.historyCode = history.getCode();
@@ -2527,6 +2544,10 @@ public class RecordBiliPublishService {
     }
 
     private EditAuthContext resolveEditAuth(RecordHistory history, RecordRoom room) {
+        return resolveEditAuth(history, room, null);
+    }
+
+    private EditAuthContext resolveEditAuth(RecordHistory history, RecordRoom room, EditPartsTaskStatus status) {
         EditAuthContext ctx = new EditAuthContext();
         if (history == null) {
             ctx.message = "稿件不存在";
@@ -2536,7 +2557,7 @@ public class RecordBiliPublishService {
             ctx.message = "稿件未投稿或缺少 avId/bvId";
             return ctx;
         }
-        if (!(history.getCode() == 0 || history.getCode() == -50 || history.getCode() == -2)) {
+        if (!isEditablePublishedCode(effectiveEditAuthCode(history, status))) {
             ctx.message = "仅审核通过或被退回的稿件支持编辑分P";
             return ctx;
         }
@@ -2553,6 +2574,21 @@ public class RecordBiliPublishService {
         ctx.message = "ok";
         ctx.user = userOptional.get();
         return ctx;
+    }
+
+    private boolean isEditablePublishedCode(int code) {
+        return code == 0 || code == -50 || code == -2;
+    }
+
+    private int effectiveEditAuthCode(RecordHistory history, EditPartsTaskStatus status) {
+        if (history != null
+                && status != null
+                && status.historyMarkedWorking
+                && history.getCode() == -1
+                && status.previousCode != null) {
+            return status.previousCode;
+        }
+        return history == null ? -1 : history.getCode();
     }
 
     private List<EditPartSubmitItem> parseEditPartSubmitItems(Object raw) {
@@ -2672,8 +2708,8 @@ public class RecordBiliPublishService {
         return partRepository.save(part);
     }
 
-    private void syncEditUploadResult(RecordHistory history, EditPartSubmitItem item, RecordHistoryPart uploadPart,
-                                      int page, String title, String filePath, String fileName, Long cid) {
+    private RecordHistoryPart syncEditUploadResult(RecordHistory history, EditPartSubmitItem item, RecordHistoryPart uploadPart,
+                                                   int page, String title, String filePath, String fileName, Long cid, Long fileSize) {
         RecordHistoryPart target = null;
         if (item.partId != null) {
             target = partRepository.findById(item.partId).orElse(null);
@@ -2688,7 +2724,7 @@ public class RecordBiliPublishService {
         if (StringUtils.isBlank(filePath) && uploadPart != null && uploadPart.getId() != null && uploadPart.getId().equals(target.getId())) {
             target.setFilePath(null);
         }
-        syncEditPartLocalState(target, page, title, filePath, fileName, cid);
+        target = syncEditPartLocalState(target, page, title, filePath, fileName, cid, fileSize);
         if (uploadPart != null && uploadPart.getId() != null && !uploadPart.getId().equals(target.getId())) {
             try {
                 partRepository.delete(uploadPart);
@@ -2699,9 +2735,14 @@ public class RecordBiliPublishService {
                         .addIfNotBlank("err", e.getMessage()));
             }
         }
+        return target;
     }
 
-    private void syncEditPartLocalState(RecordHistoryPart part, int page, String title, String filePath, String fileName, Long cid) {
+    private RecordHistoryPart syncEditPartLocalState(RecordHistoryPart part, int page, String title, String filePath, String fileName, Long cid) {
+        return syncEditPartLocalState(part, page, title, filePath, fileName, cid, null);
+    }
+
+    private RecordHistoryPart syncEditPartLocalState(RecordHistoryPart part, int page, String title, String filePath, String fileName, Long cid, Long fileSize) {
         part.setPage(page);
         part.setTitle(title);
         if (StringUtils.isNotBlank(filePath)) {
@@ -2710,6 +2751,8 @@ public class RecordBiliPublishService {
             if (file.exists() && file.isFile()) {
                 part.setFileSize(file.length());
             }
+        } else if (fileSize != null && fileSize >= 0) {
+            part.setFileSize(fileSize);
         }
         part.setFileName(fileName);
         if (cid != null && cid > 0) {
@@ -2719,10 +2762,10 @@ public class RecordBiliPublishService {
         part.setUploadRetryCount(0);
         part.setDeleteFailType(null);
         part.setDeleteFailReason(null);
-        partRepository.save(part);
+        return partRepository.save(part);
     }
 
-    private void syncExistingOnlinePart(RecordHistory history, EditPartSubmitItem item, int page, SingleVideoDto dto) {
+    private RecordHistoryPart syncExistingOnlinePart(RecordHistory history, EditPartSubmitItem item, int page, SingleVideoDto dto) {
         RecordHistoryPart part = item.partId == null ? null : partRepository.findById(item.partId).orElse(null);
         if (part == null && item.onlinePage > 0) {
             List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
@@ -2742,7 +2785,27 @@ public class RecordBiliPublishService {
             part.setRecording(false);
             part.setSourceType("ONLINE_PART");
         }
-        syncEditPartLocalState(part, page, dto.getTitle(), part.getFilePath(), dto.getFilename(), dto.getCid());
+        return syncEditPartLocalState(part, page, dto.getTitle(), part.getFilePath(), dto.getFilename(), dto.getCid());
+    }
+
+    private void cleanupStaleEditPartLocalState(RecordHistory history, Set<Long> submittedPartIds) {
+        if (history == null || history.getId() == null || submittedPartIds == null || submittedPartIds.isEmpty()) {
+            return;
+        }
+        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        for (RecordHistoryPart part : parts) {
+            if (part == null || part.getId() == null || submittedPartIds.contains(part.getId())) {
+                continue;
+            }
+            try {
+                partRepository.delete(part);
+            } catch (Exception e) {
+                log.debug("[BLR] {}", LogKvs.event("Publish.EditParts.StalePartDeleteFailed")
+                        .add("historyId", history.getId())
+                        .add("partId", part.getId())
+                        .addIfNotBlank("err", e.getMessage()));
+            }
+        }
     }
 
     private void markEditPartsTaskFailed(EditPartsTaskStatus status, String message) {
