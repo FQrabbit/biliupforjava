@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.BiliVideoInfoResponse;
+import top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -19,7 +20,14 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -85,8 +93,341 @@ public class videoSyncJob {
      * 仅同步稿件状态/基础信息，不触发弹幕重解析与文件处理。
      * 用于前端“刷新状态”按钮，避免误删已有弹幕数据。
      */
-    public void syncStatusOnly(RecordHistory next) {
-        syncOneInternal(next, false);
+    public SyncStatusResult syncStatusOnly(RecordHistory next) {
+        return syncStatusOnlyForced(next);
+    }
+
+    private SyncStatusResult syncStatusOnlyForced(RecordHistory history) {
+        SyncStatusResult result = new SyncStatusResult(history == null ? null : history.getId());
+        if (history == null) {
+            result.success = false;
+            result.type = "warning";
+            result.msg = "稿件不存在";
+            return result;
+        }
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        if (room == null) {
+            result.success = false;
+            result.type = "warning";
+            result.msg = "房间不存在";
+            return result;
+        }
+        BiliBiliUser user = null;
+        if (room.getUploadUserId() != null) {
+            user = userRepository.findById(room.getUploadUserId()).orElse(null);
+        }
+        if (StringUtils.isBlank(history.getBvId())) {
+            result.success = false;
+            result.type = "warning";
+            result.msg = "稿件缺少 BV 号，无法刷新线上状态";
+            return result;
+        }
+
+        BiliVideoInfoResponse videoInfoResponse = null;
+        try {
+            videoInfoResponse = BiliApi.getVideoInfo(user, history.getBvId());
+        } catch (Exception e) {
+            result.success = false;
+            result.type = "error";
+            result.msg = "刷新稿件状态失败: " + e.getMessage();
+            log.warn("[BLR] {}", LogKvs.event("VideoSync.ManualRefresh.VideoInfoFailed")
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+            return result;
+        }
+
+        result.videoInfoCode = videoInfoResponse == null ? null : videoInfoResponse.getCode();
+        result.videoInfoMessage = videoInfoResponse == null ? "null-response" : videoInfoResponse.getMessage();
+        if (videoInfoResponse != null && videoInfoResponse.getCode() == 0 && videoInfoResponse.getData() != null) {
+            BiliVideoInfoResponse.BiliVideoInfo data = videoInfoResponse.getData();
+            result.oldArchiveCode = history.getCode();
+            result.archiveCode = data.getState();
+            history.setCode(data.getState());
+            history.setAvId(data.getAid());
+            history.setBvId(data.getBvid());
+            history.setCoverUrl(data.getPic());
+            history.setUpdateTime(LocalDateTime.now());
+            history = historyRepository.save(history);
+            result.statusSynced = true;
+        } else if (videoInfoResponse != null && videoInfoResponse.getCode() == 62002) {
+            result.oldArchiveCode = history.getCode();
+            result.archiveCode = videoInfoResponse.getCode();
+            history.setCode(videoInfoResponse.getCode());
+            history.setUpdateTime(LocalDateTime.now());
+            historyRepository.save(history);
+            result.statusSynced = true;
+        }
+
+        List<OnlinePartSnapshot> onlineParts = loadOnlinePartSnapshotsForManualRefresh(user, history, videoInfoResponse, result);
+        SyncStatusResult orderResult = syncOnlinePartOrder(history, onlineParts);
+        result.mergePartOrder(orderResult);
+        result.success = result.statusSynced || result.partOrderSynced;
+        if (result.partOrderAnomaly) {
+            result.type = "warning";
+            result.msg = "状态已刷新，但部分线上分P无法与本地记录完全匹配，分P顺序可能存在异常";
+        } else if (result.partOrderChanged) {
+            result.type = "success";
+            result.msg = "状态已刷新，分P顺序已同步";
+        } else if (result.statusSynced) {
+            result.type = "success";
+            result.msg = "状态已刷新";
+        } else {
+            result.type = "warning";
+            result.msg = "未获取到可更新的稿件状态";
+        }
+        return result;
+    }
+
+    private List<OnlinePartSnapshot> loadOnlinePartSnapshotsForManualRefresh(BiliBiliUser user,
+                                                                             RecordHistory history,
+                                                                             BiliVideoInfoResponse videoInfoResponse,
+                                                                             SyncStatusResult result) {
+        List<OnlinePartSnapshot> onlineParts = new ArrayList<>();
+        if (user != null && StringUtils.isNotBlank(history.getBvId())) {
+            try {
+                BiliVideoPartInfoResponse partInfo = BiliApi.getVideoPartInfo(user, history.getBvId());
+                result.memberPartInfoCode = partInfo == null ? null : partInfo.getCode();
+                result.memberPartInfoMessage = partInfo == null ? "null-response" : partInfo.getMessage();
+                if (partInfo != null && partInfo.getCode() == 0 && partInfo.getData() != null && partInfo.getData().getVideos() != null) {
+                    int fallbackPage = 1;
+                    for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+                        if (video == null) {
+                            continue;
+                        }
+                        int page = video.getPage() > 0 ? video.getPage() : fallbackPage;
+                        onlineParts.add(new OnlinePartSnapshot(page,
+                                StringUtils.defaultIfBlank(video.getTitle(), video.getPart()),
+                                video.getFilename(),
+                                video.getCid(),
+                                video.getDuration(),
+                                "member"));
+                        fallbackPage++;
+                    }
+                }
+            } catch (Exception e) {
+                result.memberPartInfoMessage = e.getMessage();
+                log.debug("[BLR] {}", LogKvs.event("VideoSync.ManualRefresh.PartInfoFailed")
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("bvid", history.getBvId())
+                        .addIfNotBlank("err", e.getMessage())
+                        .add("ex", e.getClass().getSimpleName()));
+            }
+        }
+        if (!onlineParts.isEmpty()) {
+            onlineParts.sort((a, b) -> Integer.compare(a.page, b.page));
+            return onlineParts;
+        }
+        if (videoInfoResponse != null && videoInfoResponse.getCode() == 0
+                && videoInfoResponse.getData() != null && videoInfoResponse.getData().getPages() != null) {
+            int fallbackPage = 1;
+            for (BiliVideoInfoResponse.BiliVideoInfoPart page : videoInfoResponse.getData().getPages()) {
+                if (page == null) {
+                    continue;
+                }
+                int pageNo = page.getPage() > 0 ? page.getPage() : fallbackPage;
+                onlineParts.add(new OnlinePartSnapshot(pageNo, page.getPart(), null, page.getCid(), page.getDuration(), "public"));
+                fallbackPage++;
+            }
+            onlineParts.sort((a, b) -> Integer.compare(a.page, b.page));
+        }
+        return onlineParts;
+    }
+
+    private SyncStatusResult syncOnlinePartOrder(RecordHistory history, List<OnlinePartSnapshot> onlineParts) {
+        SyncStatusResult result = new SyncStatusResult(history == null ? null : history.getId());
+        if (history == null || onlineParts == null || onlineParts.isEmpty()) {
+            result.partOrderSynced = false;
+            return result;
+        }
+        List<RecordHistoryPart> localParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        result.onlinePartCount = onlineParts.size();
+        if (localParts == null || localParts.isEmpty()) {
+            result.partOrderAnomaly = true;
+            result.unmatchedOnlineCount = onlineParts.size();
+            for (OnlinePartSnapshot online : onlineParts) {
+                result.unmatchedOnlineParts.add(online.label());
+            }
+            return result;
+        }
+
+        List<RecordHistoryPart> matchableLocalParts = new ArrayList<>();
+        for (RecordHistoryPart part : localParts) {
+            if (part != null && !isSkippedPart(part)) {
+                matchableLocalParts.add(part);
+            }
+        }
+        if (matchableLocalParts.isEmpty()) {
+            result.partOrderAnomaly = true;
+            result.unmatchedOnlineCount = onlineParts.size();
+            for (OnlinePartSnapshot online : onlineParts) {
+                result.unmatchedOnlineParts.add(online.label());
+            }
+            moveSkippedPartsAfterOnlineOrder(localParts, onlineParts.size(), result);
+            return result;
+        }
+
+        Map<String, List<RecordHistoryPart>> byCid = new HashMap<>();
+        Map<String, List<RecordHistoryPart>> byFileName = new HashMap<>();
+        Map<String, List<RecordHistoryPart>> byTitle = new HashMap<>();
+        for (RecordHistoryPart part : matchableLocalParts) {
+            if (part.getCid() != null && part.getCid() > 0) {
+                addLocalPart(byCid, String.valueOf(part.getCid()), part);
+            }
+            if (StringUtils.isNotBlank(part.getFileName())) {
+                addLocalPart(byFileName, normalizeKey(part.getFileName()), part);
+            }
+            if (StringUtils.isNotBlank(part.getTitle())) {
+                addLocalPart(byTitle, normalizeKey(part.getTitle()), part);
+            }
+        }
+
+        Set<Long> usedPartIds = new HashSet<>();
+        for (OnlinePartSnapshot online : onlineParts) {
+            RecordHistoryPart part = matchLocalPart(online, byCid, byFileName, byTitle, usedPartIds);
+            if (part == null && onlineParts.size() == 1 && matchableLocalParts.size() == 1) {
+                part = matchableLocalParts.get(0);
+            }
+            if (part == null) {
+                result.partOrderAnomaly = true;
+                result.unmatchedOnlineCount++;
+                result.unmatchedOnlineParts.add(online.label());
+                continue;
+            }
+            usedPartIds.add(part.getId());
+            result.matchedPartCount++;
+            if (isOnlineSourceMismatch(part, online)) {
+                result.partOrderAnomaly = true;
+                result.sourceMismatchCount++;
+                result.sourceMismatchParts.add(online.label());
+            }
+            boolean changed = !Integer.valueOf(online.page).equals(part.getPartOrder()) || part.getPage() != online.page;
+            part.setPage(online.page);
+            part.setPartOrder(online.page);
+            if (StringUtils.isNotBlank(online.title)) {
+                part.setTitle(online.title);
+            }
+            if (StringUtils.isNotBlank(online.fileName)) {
+                part.setFileName(online.fileName);
+            }
+            if (online.cid > 0) {
+                part.setCid(online.cid);
+            }
+            if (online.duration > 0) {
+                part.setDuration(online.duration);
+            }
+            if (part.getCid() != null && part.getCid() > 0) {
+                part.setUpload(true);
+                if (part.getUploadRetryCount() >= 9999) {
+                    part.setUploadRetryCount(0);
+                }
+                part.setDeleteFailType(null);
+                part.setDeleteFailReason(null);
+            }
+            partRepository.save(part);
+            if (changed) {
+                result.partOrderChanged = true;
+            }
+        }
+
+        for (RecordHistoryPart part : localParts) {
+            if (part == null || part.getId() == null || usedPartIds.contains(part.getId()) || isSkippedPart(part)) {
+                continue;
+            }
+            if (part.isUpload() || part.getCid() != null && part.getCid() > 0 || StringUtils.isNotBlank(part.getFileName())) {
+                result.unmatchedLocalCount++;
+            }
+        }
+        result.partOrderSynced = result.matchedPartCount > 0 || result.onlinePartCount == 0;
+        if (result.unmatchedLocalCount > 0 && result.onlinePartCount > 0) {
+            result.partOrderAnomaly = true;
+        }
+        moveSkippedPartsAfterOnlineOrder(localParts, onlineParts.size(), result);
+        return result;
+    }
+
+    private void moveSkippedPartsAfterOnlineOrder(List<RecordHistoryPart> localParts, int onlinePartCount, SyncStatusResult result) {
+        if (localParts == null || localParts.isEmpty()) {
+            return;
+        }
+        int nextOrder = Math.max(onlinePartCount, 0) + 1;
+        for (RecordHistoryPart part : localParts) {
+            if (!isSkippedPart(part)) {
+                continue;
+            }
+            boolean changed = part.getPartOrder() == null || part.getPartOrder() != nextOrder || part.getPage() != 0;
+            part.setPartOrder(nextOrder);
+            part.setPage(0);
+            partRepository.save(part);
+            if (changed && result != null) {
+                result.partOrderChanged = true;
+            }
+            nextOrder++;
+        }
+    }
+
+    private RecordHistoryPart matchLocalPart(OnlinePartSnapshot online,
+                                             Map<String, List<RecordHistoryPart>> byCid,
+                                             Map<String, List<RecordHistoryPart>> byFileName,
+                                             Map<String, List<RecordHistoryPart>> byTitle,
+                                             Set<Long> usedPartIds) {
+        if (online.cid > 0) {
+            RecordHistoryPart part = uniqueUnused(byCid.get(String.valueOf(online.cid)), usedPartIds);
+            if (part != null) {
+                return part;
+            }
+        }
+        if (StringUtils.isNotBlank(online.fileName)) {
+            RecordHistoryPart part = uniqueUnused(byFileName.get(normalizeKey(online.fileName)), usedPartIds);
+            if (part != null) {
+                return part;
+            }
+        }
+        if (StringUtils.isNotBlank(online.title)) {
+            return uniqueUnused(byTitle.get(normalizeKey(online.title)), usedPartIds);
+        }
+        return null;
+    }
+
+    private boolean isOnlineSourceMismatch(RecordHistoryPart part, OnlinePartSnapshot online) {
+        if (part == null || online == null) {
+            return false;
+        }
+        if (part.getCid() != null && part.getCid() > 0 && online.cid > 0 && !part.getCid().equals(online.cid)) {
+            return true;
+        }
+        return StringUtils.isNotBlank(part.getFileName())
+                && StringUtils.isNotBlank(online.fileName)
+                && !normalizeKey(part.getFileName()).equals(normalizeKey(online.fileName));
+    }
+
+    private RecordHistoryPart uniqueUnused(List<RecordHistoryPart> parts, Set<Long> usedPartIds) {
+        if (parts == null || parts.isEmpty()) {
+            return null;
+        }
+        RecordHistoryPart match = null;
+        for (RecordHistoryPart part : parts) {
+            if (part == null || part.getId() == null || usedPartIds.contains(part.getId())) {
+                continue;
+            }
+            if (match != null) {
+                return null;
+            }
+            match = part;
+        }
+        return match;
+    }
+
+    private void addLocalPart(Map<String, List<RecordHistoryPart>> map, String key, RecordHistoryPart part) {
+        if (StringUtils.isBlank(key)) {
+            return;
+        }
+        map.computeIfAbsent(key, k -> new ArrayList<>()).add(part);
+    }
+
+    private String normalizeKey(String value) {
+        return StringUtils.defaultString(value).trim().toLowerCase(Locale.ROOT);
     }
 
     private void syncOneInternal(RecordHistory next, boolean doPostPublishProcessing) {
@@ -267,6 +608,30 @@ public class videoSyncJob {
         
         RecordRoom recordRoom = room;
         List<BiliVideoInfoResponse.BiliVideoInfoPart> pages = videoInfoResponseData.getPages();
+        if (pages == null) {
+            return;
+        }
+        List<OnlinePartSnapshot> onlineParts = new ArrayList<>();
+        int fallbackPage = 1;
+        for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
+            if (page == null) {
+                continue;
+            }
+            int pageNo = page.getPage() > 0 ? page.getPage() : fallbackPage;
+            onlineParts.add(new OnlinePartSnapshot(pageNo, page.getPart(), null, page.getCid(), page.getDuration(), "public"));
+            fallbackPage++;
+        }
+        SyncStatusResult orderResult = syncOnlinePartOrder(next, onlineParts);
+        if (orderResult.partOrderAnomaly) {
+            log.warn("[BLR] {}", LogKvs.event("VideoSync.PartOrder.Anomaly")
+                    .add("historyId", next.getId())
+                    .add("roomId", room.getRoomId())
+                    .addIfNotBlank("bvid", next.getBvId())
+                    .add("onlinePartCount", orderResult.onlinePartCount)
+                    .add("matchedPartCount", orderResult.matchedPartCount)
+                    .add("unmatchedOnlineCount", orderResult.unmatchedOnlineCount)
+                    .add("unmatchedLocalCount", orderResult.unmatchedLocalCount));
+        }
         for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
             RecordHistoryPart part = partRepository.findByHistoryIdAndTitle(next.getId(), page.getPart());
             if (part != null) {
@@ -275,6 +640,7 @@ public class videoSyncJob {
 
                 part.setCid(page.getCid());
                 part.setPage(page.getPage());
+                part.setPartOrder(page.getPage());
                 part.setDuration(page.getDuration());
 
                 // 如果CID已恢复，且之前标记为异常，则清除异常状态
@@ -427,5 +793,111 @@ public class videoSyncJob {
             return false;
         }
         return Duration.between(history.getUpdateTime(), LocalDateTime.now()).toMinutes() < 120;
+    }
+
+    private boolean isSkippedPart(RecordHistoryPart part) {
+        if (part == null || StringUtils.isBlank(part.getDeleteFailType())) {
+            return false;
+        }
+        String type = part.getDeleteFailType();
+        return "SKIPPED_THRESHOLD".equals(type) || "MANUAL_SKIP".equals(type);
+    }
+
+    private static class OnlinePartSnapshot {
+        private final int page;
+        private final String title;
+        private final String fileName;
+        private final long cid;
+        private final int duration;
+        private final String source;
+
+        private OnlinePartSnapshot(int page, String title, String fileName, long cid, int duration, String source) {
+            this.page = page;
+            this.title = title;
+            this.fileName = fileName;
+            this.cid = cid;
+            this.duration = duration;
+            this.source = source;
+        }
+
+        private String label() {
+            String titleText = StringUtils.defaultIfBlank(title, fileName);
+            if (StringUtils.isBlank(titleText)) {
+                return "P" + page;
+            }
+            return "P" + page + " " + titleText;
+        }
+    }
+
+    public static class SyncStatusResult {
+        private final Long historyId;
+        private boolean success;
+        private String type = "info";
+        private String msg = "";
+        private boolean statusSynced;
+        private boolean partOrderSynced;
+        private boolean partOrderChanged;
+        private boolean partOrderAnomaly;
+        private Integer oldArchiveCode;
+        private Integer archiveCode;
+        private Integer videoInfoCode;
+        private Integer memberPartInfoCode;
+        private String videoInfoMessage;
+        private String memberPartInfoMessage;
+        private int onlinePartCount;
+        private int matchedPartCount;
+        private int unmatchedOnlineCount;
+        private int unmatchedLocalCount;
+        private int sourceMismatchCount;
+        private final List<String> unmatchedOnlineParts = new ArrayList<>();
+        private final List<String> sourceMismatchParts = new ArrayList<>();
+
+        private SyncStatusResult(Long historyId) {
+            this.historyId = historyId;
+        }
+
+        private void mergePartOrder(SyncStatusResult other) {
+            if (other == null) {
+                return;
+            }
+            this.partOrderSynced = other.partOrderSynced;
+            this.partOrderChanged = other.partOrderChanged;
+            this.partOrderAnomaly = other.partOrderAnomaly;
+            this.onlinePartCount = other.onlinePartCount;
+            this.matchedPartCount = other.matchedPartCount;
+            this.unmatchedOnlineCount = other.unmatchedOnlineCount;
+            this.unmatchedLocalCount = other.unmatchedLocalCount;
+            this.sourceMismatchCount = other.sourceMismatchCount;
+            this.unmatchedOnlineParts.clear();
+            this.unmatchedOnlineParts.addAll(other.unmatchedOnlineParts);
+            this.sourceMismatchParts.clear();
+            this.sourceMismatchParts.addAll(other.sourceMismatchParts);
+        }
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("historyId", historyId);
+            data.put("success", success);
+            data.put("type", type);
+            data.put("msg", msg);
+            data.put("statusSynced", statusSynced);
+            data.put("partOrderSynced", partOrderSynced);
+            data.put("partOrderChanged", partOrderChanged);
+            data.put("partOrderAnomaly", partOrderAnomaly);
+            data.put("oldArchiveCode", oldArchiveCode);
+            data.put("archiveCode", archiveCode);
+            data.put("videoInfoCode", videoInfoCode);
+            data.put("videoInfoMessage", videoInfoMessage);
+            data.put("memberPartInfoCode", memberPartInfoCode);
+            data.put("memberPartInfoMessage", memberPartInfoMessage);
+            data.put("onlinePartCount", onlinePartCount);
+            data.put("matchedPartCount", matchedPartCount);
+            data.put("unmatchedOnlineCount", unmatchedOnlineCount);
+            data.put("unmatchedLocalCount", unmatchedLocalCount);
+            data.put("sourceMismatchCount", sourceMismatchCount);
+            data.put("unmatchedOnlineParts", new ArrayList<>(unmatchedOnlineParts));
+            data.put("sourceMismatchParts", new ArrayList<>(sourceMismatchParts));
+            return data;
+        }
     }
 }

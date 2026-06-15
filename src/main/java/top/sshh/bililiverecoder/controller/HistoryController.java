@@ -189,11 +189,29 @@ public class HistoryController {
     }
 
     @PostMapping("/refreshStatus")
-    public void refreshStatus(@RequestBody RecordHistoryDTO request) {
+    public Map<String, Object> refreshStatus(@RequestBody RecordHistoryDTO request) {
+        if (request == null || request.getId() == null) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", false);
+            result.put("type", "warning");
+            result.put("msg", "稿件不存在");
+            result.put("statusSynced", false);
+            result.put("partOrderSynced", false);
+            result.put("partOrderAnomaly", false);
+            return result;
+        }
         Optional<RecordHistory> historyOptional = historyRepository.findById(request.getId());
         if (historyOptional.isPresent()) {
-            videoSyncJob.syncStatusOnly(historyOptional.get());
+            return videoSyncJob.syncStatusOnly(historyOptional.get()).toMap();
         }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", false);
+        result.put("type", "warning");
+        result.put("msg", "稿件不存在");
+        result.put("statusSynced", false);
+        result.put("partOrderSynced", false);
+        result.put("partOrderAnomaly", false);
+        return result;
     }
 
     @GetMapping("/{id}/candidate-files")

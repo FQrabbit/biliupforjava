@@ -168,7 +168,7 @@
         },
         refreshStatus: function (id) {
             let _this = this;
-            this.$confirm('此操作将立即从B站API获取最新的稿件状态（如审核通过、被退回、锁定等）并更新到本地数据库。<br/><br/>确定要刷新状态吗？', '刷新状态确认', {
+            this.$confirm('此操作将立即从B站API获取最新的稿件状态（如审核通过、被退回、锁定等），并同步线上分P顺序到本地数据库。<br/><br/>确定要刷新状态吗？', '刷新状态确认', {
                 dangerouslyUseHTMLString: true,
                 confirmButtonText: '刷新',
                 cancelButtonText: '取消',
@@ -180,14 +180,21 @@
                     spinner: 'el-icon-loading',
                     background: 'rgba(0, 0, 0, 0.7)'
                 });
-                HistoryApi.refreshStatus(id, function () {
+                HistoryApi.refreshStatus(id, function (data) {
                         loading.close();
+                        data = data || {};
                         _this.$message({
-                            message: '状态刷新成功',
-                            type: 'success'
+                            message: data.msg || '状态刷新成功',
+                            type: data.type || 'success',
+                            duration: data.partOrderAnomaly ? 6000 : 3000
                         });
-                        _this.detailDialogVisible = false;
-                        _this.initTable();
+                        if (_this.currentDetail && _this.currentDetail.id === id && data.archiveCode !== undefined && data.archiveCode !== null) {
+                            _this.$set(_this.currentDetail, 'code', Number(data.archiveCode));
+                        }
+                        _this.initTable(true);
+                        if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === id) {
+                            _this.fetchPartList(id, function () {}, { forceRefreshReview: true });
+                        }
                     }, function() {
                         loading.close();
                         _this.$message({

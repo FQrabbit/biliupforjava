@@ -15,6 +15,27 @@
         list: function(historyId, data, callback, errorCallback) {
             ApiUtil.post('/part/list2/' + encodeURIComponent(historyId), data, callback, errorCallback);
         },
+        archiveProgress: function(historyId, force, callback, errorCallback, options) {
+            var query = force ? '?force=true' : '';
+            return $.ajax({
+                url: '/part/archiveProgress/' + encodeURIComponent(historyId) + query,
+                type: 'GET',
+                dataType: 'json',
+                timeout: options && options.timeout ? options.timeout : 0,
+                success: callback,
+                error: function(xhr, status, error) {
+                    if (xhr.status === 401) {
+                        ApiUtil.redirectToLogin();
+                        return;
+                    }
+                    if (errorCallback) {
+                        errorCallback(xhr, status, error);
+                    } else {
+                        console.error('Request failed:', error);
+                    }
+                }
+            });
+        },
         uploadEditor: function(partId, callback, errorCallback) {
             ApiUtil.get('/part/uploadEditor/' + encodeURIComponent(partId), callback, errorCallback);
         },

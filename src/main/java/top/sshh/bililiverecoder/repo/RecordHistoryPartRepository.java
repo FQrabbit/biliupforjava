@@ -26,10 +26,32 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     RecordHistoryPart findByFilePathStartingWith(String path);
 
+    @Query("""
+            select p from RecordHistoryPart p
+            where p.historyId = ?1
+            order by
+              case when p.partOrder is null or p.partOrder <= 0 then 1 else 0 end asc,
+              p.partOrder asc,
+              case when p.page <= 0 then 1 else 0 end asc,
+              p.page asc,
+              p.startTime asc,
+              p.id asc
+            """)
     List<RecordHistoryPart> findByHistoryId(Long historyId);
 
     RecordHistoryPart findByHistoryIdAndTitle(Long historyId, String title);
 
+    @Query("""
+            select p from RecordHistoryPart p
+            where p.historyId = ?1
+            order by
+              case when p.partOrder is null or p.partOrder <= 0 then 1 else 0 end asc,
+              p.partOrder asc,
+              case when p.page <= 0 then 1 else 0 end asc,
+              p.page asc,
+              p.startTime asc,
+              p.id asc
+            """)
     List<RecordHistoryPart> findByHistoryIdOrderByStartTimeAsc(Long historyId);
 
     @Query("""
@@ -38,7 +60,13 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
               and p.uploadRetryCount < 9999
               and p.cid is not null
               and p.cid <> 0
-            order by p.startTime asc
+            order by
+              case when p.partOrder is null or p.partOrder <= 0 then 1 else 0 end asc,
+              p.partOrder asc,
+              case when p.page <= 0 then 1 else 0 end asc,
+              p.page asc,
+              p.startTime asc,
+              p.id asc
             """)
     List<RecordHistoryPart> findDispatchablePartsByHistoryId(Long historyId);
 

@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 @Table(uniqueConstraints = @UniqueConstraint(columnNames = {"eventId", "filePath"}),
        indexes = {
            @Index(name = "idx_history_id", columnList = "historyId"),
+           @Index(name = "idx_history_part_order", columnList = "historyId,part_order"),
            @Index(name = "idx_record_history_part_room_id", columnList = "roomId"),
            @Index(name = "idx_part_compensate_scan", columnList = "roomId,recording,upload,uploadRetryCount,endTime"),
            @Index(name = "idx_part_orphan_cleanup", columnList = "upload,uploadRetryCount,historyId")
@@ -39,6 +40,9 @@ public class RecordHistoryPart {
     private String filePath;
 
     private int page;
+
+    @Column(name = "part_order")
+    private Integer partOrder;
 
     private float duration;
 
@@ -170,6 +174,14 @@ public class RecordHistoryPart {
 
     public void setPage(int page) {
         this.page = page;
+    }
+
+    public Integer getPartOrder() {
+        return partOrder;
+    }
+
+    public void setPartOrder(Integer partOrder) {
+        this.partOrder = partOrder;
     }
 
     public float getDuration() {

@@ -32,8 +32,28 @@ public class BiliVideoAuditDetailResponse {
         private String problem_description;
         private String problem_description_title;
         private Long reject_reason_id;
+        private List<PictureData> picture_data;
+        private RejectVideoExplain reject_video_explain;
         private Integer index;
         private String violation_time;
         private String violation_position;
+    }
+
+    @Data
+    public static class PictureData {
+        private String time;
+        private String url;
+    }
+
+    @Data
+    public static class RejectVideoExplain {
+        private String title;
+        private RejectVideoLink link;
+    }
+
+    @Data
+    public static class RejectVideoLink {
+        private String web;
+        private String app;
     }
 }

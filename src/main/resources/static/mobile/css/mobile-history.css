@@ -1255,6 +1255,16 @@
     background: color-mix(in srgb, #f56c6c 10%, var(--mobile-page-surface-strong));
 }
 
+.mobile-history-detail-pipeline .is-clickable {
+    cursor: pointer;
+    border-color: color-mix(in srgb, var(--mobile-blue) 34%, var(--mobile-page-border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--mobile-blue) 14%, transparent);
+}
+
+.mobile-history-detail-pipeline .is-clickable:active {
+    transform: scale(0.98);
+}
+
 .mobile-history-detail-notice {
     display: grid;
     grid-template-columns: 36px minmax(0, 1fr);

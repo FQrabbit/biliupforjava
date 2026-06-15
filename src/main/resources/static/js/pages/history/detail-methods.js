@@ -164,6 +164,781 @@
             if (!Number.isFinite(n) || n <= 0) return '0';
             return Math.floor(n).toLocaleString('zh-CN');
         },
+        escapeAuditHtml: function(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+        openAuditStatusDetail: function(skipFallbackRetry, keepLoadingBox) {
+            if (!this.canOpenAuditStatusDetail) return;
+            var _this = this;
+            var shouldFallbackRetry = !skipFallbackRetry
+                && this.isAuditRejected
+                && this.currentDetail
+                && this.currentDetail.id
+                && this.auditRejectPrimaryDetails.length === 0
+                && this.auditRejectDetails.length === 0
+                && (!Array.isArray(this.currentDetailParts) || this.currentDetailParts.length === 0)
+                && (
+                    !this.auditRejectRetryGuard
+                    || this.auditRejectRetryGuard.historyId !== this.currentDetail.id
+                    || this.auditRejectRetryGuard.tried !== true
+                );
+            if (shouldFallbackRetry) {
+                var retryToken = Date.now() + '-audit-' + Math.random();
+                this.auditRejectRetryGuard = {
+                    historyId: this.currentDetail.id,
+                    tried: true
+                };
+                this.archiveProgressLoading = true;
+                this.archiveProgressRequestToken = retryToken;
+                this.showAuditStatusLoadingBox(
+                    '正在重新读取审核结果',
+                    '当前详情里还没有退回原因，正在补读本地分P记录，并由后端尝试刷新B站审核详情。',
+                    'warning'
+                );
+                this.fetchPartList(this.currentDetail.id, function () {
+                    if (_this.archiveProgressRequestToken !== retryToken) return;
+                    _this.updateAuditStatusLoadingBox(
+                        '审核信息读取完成',
+                        '本地分P记录和审核退回信息已刷新，继续请求转码进度。',
+                        'success'
+                    );
+                    _this.openAuditStatusDetail(true, true);
+                }, {
+                    retryOnError: 1,
+                    retryDelayMs: 800
+                });
+                return;
+            }
+            if (!this.canQueryArchiveProgress) {
+                this.finishAuditStatusLoadingOnly();
+                this.openAuditRejectDetail(true);
+                return;
+            }
+            if (this.archiveProgressLoading && !keepLoadingBox) return;
+            this.archiveProgressLoading = true;
+            var timeoutMs = 20000;
+            var token = Date.now() + '-' + Math.random();
+            this.archiveProgressRequestToken = token;
+            this.showAuditStatusLoadingBox(
+                '正在请求转码进度',
+                '正在向 B 站查询当前稿件的转码进度。',
+                'info'
+            );
+            this.archiveProgressSlowTimer = setTimeout(function() {
+                if (_this.archiveProgressRequestToken !== token) return;
+                _this.updateAuditStatusLoadingBox(
+                    '仍在等待 B 站返回结果',
+                    '查询时间比预期更长。如果超过20秒仍未返回，本次等待会自动停止。',
+                    'warning'
+                );
+            }, 6000);
+            this.archiveProgressLoadingTimer = setTimeout(function() {
+                _this.abortArchiveProgressLoading(token, '请求B站转码进度超过20秒，已停止等待。本地审核状态仍可查看，稍后可重新点击获取。', 'timeout');
+            }, timeoutMs);
+            this.archiveProgressRequest = PartApi.archiveProgress(this.currentDetail.id, false, function(resp) {
+                if (_this.archiveProgressRequestToken !== token) return;
+                _this.archiveProgressRequestToken = null;
+                _this.finishArchiveProgressLoading(resp || {});
+            }, function(xhr, status) {
+                if (_this.archiveProgressRequestToken !== token) return;
+                _this.archiveProgressRequestToken = null;
+                var isTimeout = status === 'timeout' || (xhr && xhr.statusText === 'timeout');
+                var msg = isTimeout
+                    ? '请求B站转码进度超过20秒，已停止等待。本地审核状态仍可查看，稍后可重新点击获取。'
+                    : '获取稿件进度失败，请稍后重试。本地审核状态仍可查看。';
+                _this.finishArchiveProgressLoading(_this.buildArchiveProgressFailureResponse(msg, isTimeout ? 'timeout' : 'error'));
+            }, {
+                timeout: timeoutMs
+            });
+        },
+        showAuditStatusLoadingBox: function(stage, detail, type) {
+            var _this = this;
+            if (this.archiveProgressLoadingBoxOpen) {
+                this.updateAuditStatusLoadingBox(stage, detail, type);
+                return;
+            }
+            this.archiveProgressLoadingBoxOpen = true;
+            this.archiveProgressLoadingBoxClosing = false;
+            this.$msgbox({
+                title: '稿件状态详情',
+                message: this.buildAuditStatusLoadingHtml(stage, detail, type),
+                dangerouslyUseHTMLString: true,
+                showConfirmButton: false,
+                showCancelButton: true,
+                cancelButtonText: '停止等待',
+                closeOnClickModal: false,
+                closeOnPressEscape: false,
+                distinguishCancelAndClose: true,
+                type: type === 'warning' ? 'warning' : 'info',
+                customClass: 'audit-status-message-box archive-progress-message-box archive-progress-loading-message-box',
+                callback: function(action) {
+                    if (_this.archiveProgressLoadingBoxClosing) return;
+                    if (action === 'cancel' || action === 'close') {
+                        _this.abortArchiveProgressLoading(
+                            _this.archiveProgressRequestToken,
+                            '已停止等待转码进度返回。本地审核状态仍可查看，稍后可重新点击获取。',
+                            'abort'
+                        );
+                    }
+                }
+            });
+        },
+        updateAuditStatusLoadingBox: function(stage, detail, type) {
+            var html = this.buildAuditStatusLoadingHtml(stage, detail, type);
+            var target = document.querySelector('.archive-status-loading-content');
+            if (target) {
+                target.outerHTML = html;
+            }
+        },
+        buildAuditStatusLoadingHtml: function(stage, detail, type) {
+            var esc = this.escapeAuditHtml;
+            var current = this.currentDetail || {};
+            var rejectCount = this.auditRejectPrimaryDetails.length + this.auditRejectDetails.length;
+            var rejectText = this.canShowAuditRejectInfo
+                ? (rejectCount > 0 ? ('已读取 ' + rejectCount + ' 条退回信息') : '本地暂无退回详情，必要时会刷新')
+                : '当前审核状态不需要退回原因';
+            var partCount = Array.isArray(this.currentDetailParts) ? this.currentDetailParts.length : 0;
+            var tone = type === 'warning' ? 'is-warning' : (type === 'success' ? 'is-success' : 'is-info');
+            var stageText = String(stage || '');
+            var progressText = stageText.indexOf('转码') >= 0 || stageText.indexOf('B站') >= 0
+                ? '正在等待 B 站返回转码进度。'
+                : '尚未请求转码进度，正在先处理审核结果和本地分P信息。';
+            return ''
+                + '<div class="archive-status-loading-content ' + tone + '">'
+                + '<div class="archive-status-loading-head">'
+                + '<i class="' + (type === 'success' ? 'el-icon-success' : 'el-icon-loading') + '"></i>'
+                + '<div><strong>' + esc(stage || '正在加载稿件状态') + '</strong>'
+                + '<span>' + esc(detail || '正在等待请求返回。') + '</span></div>'
+                + '</div>'
+                + '<div class="archive-status-loading-grid">'
+                + '<div><span>本地录制记录</span><strong>' + esc(current.id ? ('已读取 #' + current.id) : '未读取') + '</strong></div>'
+                + '<div><span>审核状态</span><strong>' + esc(this.getAuditStatusText(current)) + '</strong></div>'
+                + '<div><span>本地分P信息</span><strong>' + esc(partCount > 0 ? ('已读取 ' + partCount + ' 个分P') : '暂无分P缓存') + '</strong></div>'
+                + '<div><span>退回原因</span><strong>' + esc(rejectText) + '</strong></div>'
+                + '<div class="full"><span>转码进度</span><strong>' + esc(progressText) + '</strong></div>'
+                + '</div>'
+                + '<div class="archive-status-loading-note">如果 B 站长时间无响应，本次等待会自动中断并显示超时原因。</div>'
+                + '</div>';
+        },
+        abortArchiveProgressLoading: function(token, message, reason) {
+            if (token && token !== this.archiveProgressRequestToken) return;
+            this.archiveProgressRequestToken = null;
+            if (this.archiveProgressRequest && this.archiveProgressRequest.readyState !== 4) {
+                try {
+                    this.archiveProgressRequest.abort();
+                } catch (e) {
+                }
+            }
+            this.finishArchiveProgressLoading(this.buildArchiveProgressFailureResponse(message, reason || 'abort'));
+        },
+        finishArchiveProgressLoading: function(progressResp) {
+            var _this = this;
+            this.clearArchiveProgressLoadingTimers();
+            this.archiveProgressRequest = null;
+            this.archiveProgressLoading = false;
+            this.closeAuditStatusLoadingBox();
+            this.archiveProgressDetail = progressResp || null;
+            setTimeout(function() {
+                _this.showAuditStatusDetailBox(progressResp || {});
+            }, 80);
+        },
+        finishAuditStatusLoadingOnly: function() {
+            this.clearArchiveProgressLoadingTimers();
+            this.archiveProgressRequest = null;
+            this.archiveProgressRequestToken = null;
+            this.archiveProgressLoading = false;
+            this.closeAuditStatusLoadingBox();
+        },
+        clearArchiveProgressLoadingTimers: function() {
+            if (this.archiveProgressLoadingTimer) {
+                clearTimeout(this.archiveProgressLoadingTimer);
+                this.archiveProgressLoadingTimer = null;
+            }
+            if (this.archiveProgressSlowTimer) {
+                clearTimeout(this.archiveProgressSlowTimer);
+                this.archiveProgressSlowTimer = null;
+            }
+        },
+        closeAuditStatusLoadingBox: function() {
+            if (!this.archiveProgressLoadingBoxOpen) return;
+            var _this = this;
+            this.archiveProgressLoadingBoxClosing = true;
+            this.archiveProgressLoadingBoxOpen = false;
+            if (this.$msgbox && this.$msgbox.close) {
+                this.$msgbox.close();
+            }
+            setTimeout(function() {
+                _this.archiveProgressLoadingBoxClosing = false;
+            }, 120);
+        },
+        cancelAuditStatusLoadingRequest: function() {
+            this.archiveProgressRequestToken = null;
+            if (this.archiveProgressRequest && this.archiveProgressRequest.readyState !== 4) {
+                try {
+                    this.archiveProgressRequest.abort();
+                } catch (e) {
+                }
+            }
+            this.finishAuditStatusLoadingOnly();
+        },
+        buildArchiveProgressFailureResponse: function(message, reason) {
+            return {
+                success: false,
+                allowQuery: true,
+                type: 'warning',
+                msg: message || '获取稿件进度失败，请稍后重试',
+                bvid: this.currentDetail && this.currentDetail.bvId,
+                code: this.currentDetail && this.currentDetail.code,
+                fetchedAtMs: Date.now(),
+                cached: false,
+                interrupted: true,
+                interruptReason: reason || 'error'
+            };
+        },
+        showAuditStatusDetailBox: function(progressResp) {
+            const esc = this.escapeAuditHtml;
+            let html = '<div class="archive-progress-dialog">';
+            if (this.canShowAuditRejectInfo) {
+                html += this.buildAuditRejectCompactHtml(esc);
+            }
+            html += this.buildArchiveProgressHtml(progressResp || {}, esc);
+            html += '</div>';
+            this.$alert(html, '稿件状态详情', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: '我知道了',
+                type: this.canShowAuditRejectInfo ? 'warning' : 'info',
+                customClass: 'audit-status-message-box archive-progress-message-box'
+            });
+        },
+        buildArchiveProgressHtml: function(progressResp, esc) {
+            const bvid = progressResp && progressResp.bvid ? progressResp.bvid : (this.currentDetail && this.currentDetail.bvId);
+            const fetchedAt = progressResp && progressResp.fetchedAtMs ? this.formatArchiveProgressTime(progressResp.fetchedAtMs) : '-';
+            const cached = progressResp && progressResp.cached ? '缓存' : '实时';
+            const msg = progressResp && progressResp.msg ? progressResp.msg : '暂未获取到稿件进度';
+            const rows = this.extractArchiveProgressItems(progressResp || {});
+            const archiveData = this.getBiliPayloadData(progressResp && progressResp.archive);
+            const archiveFallback = rows.length === 0 ? this.buildArchiveProgressFallbackItem(archiveData) : null;
+            let html = ''
+                + '<section class="archive-progress-section">'
+                + '<div class="archive-progress-section-title"><i class="el-icon-data-line"></i><span>转码进度</span></div>'
+                + '<div class="archive-progress-summary">'
+                + '<div><span>BV号</span><strong>' + esc(bvid || '-') + '</strong></div>'
+                + '<div><span>审核状态</span><strong>' + esc(this.getAuditStatusText(this.currentDetail || {})) + '</strong></div>'
+                + '<div><span>数据来源</span><strong>' + esc(cached) + '</strong></div>'
+                + '<div><span>获取时间</span><strong>' + esc(fetchedAt) + '</strong></div>'
+                + '</div>';
+            if (progressResp && progressResp.allowQuery === false) {
+                html += '<div class="archive-progress-empty"><i class="el-icon-info"></i><span>' + esc(msg) + '</span></div>';
+            } else if (rows.length > 0) {
+                html += '<div class="archive-progress-list">';
+                rows.forEach(row => {
+                    const percentText = row.percent === null || row.percent === undefined ? '-' : (row.percent + '%');
+                    const hasQualityItems = Array.isArray(row.qualityItems) && row.qualityItems.length > 0;
+                    const rowInner = ''
+                        + '<div class="archive-progress-row-main">'
+                        + '<div class="archive-progress-row-title">' + esc(row.label || row.source || '稿件进度') + '</div>'
+                        + '<div class="archive-progress-row-meta">'
+                        + '<span>' + esc(row.source || 'B站进度') + '</span>'
+                        + '<span>' + esc(row.stateText || '状态待确认') + '</span>'
+                        + (row.message ? '<span>' + esc(row.message) + '</span>' : '')
+                        + (hasQualityItems ? '<span class="archive-progress-row-expand"><i class="el-icon-arrow-down"></i>清晰度详情</span>' : '')
+                        + '</div>'
+                        + '</div>'
+                        + '<div class="archive-progress-row-bar">'
+                        + '<div class="archive-progress-track"><div style="width:' + esc(row.percent == null ? 0 : row.percent) + '%;"></div></div>'
+                        + '<strong>' + esc(percentText) + '</strong>'
+                        + '</div>';
+                    if (hasQualityItems) {
+                        html += ''
+                            + '<details class="archive-progress-row-wrap">'
+                            + '<summary class="archive-progress-row">' + rowInner + '</summary>'
+                            + this.buildArchiveQualityProgressHtml(row.qualityItems, esc)
+                            + '</details>';
+                    } else {
+                        html += '<div class="archive-progress-row">' + rowInner + '</div>';
+                    }
+                });
+                html += '</div>';
+            } else if (archiveFallback) {
+                html += '<div class="archive-progress-list">';
+                const row = archiveFallback;
+                const percentText = row.percent === null || row.percent === undefined ? '-' : (row.percent + '%');
+                html += ''
+                    + '<div class="archive-progress-row">'
+                    + '<div class="archive-progress-row-main">'
+                    + '<div class="archive-progress-row-title">' + esc(row.label) + '</div>'
+                    + '<div class="archive-progress-row-meta">'
+                    + '<span>' + esc(row.source) + '</span>'
+                    + '<span>' + esc(row.stateText) + '</span>'
+                    + (row.message ? '<span>' + esc(row.message) + '</span>' : '')
+                    + '</div>'
+                    + '</div>'
+                    + '<div class="archive-progress-row-bar">'
+                    + '<div class="archive-progress-track"><div style="width:' + esc(row.percent == null ? 0 : row.percent) + '%;"></div></div>'
+                    + '<strong>' + esc(percentText) + '</strong>'
+                    + '</div>'
+                    + '</div>';
+                html += '</div>';
+            } else {
+                html += '<div class="archive-progress-empty"><i class="el-icon-info"></i><span>' + esc(msg) + '。平台当前未返回可直接识别的转码百分比，可能是稿件已完成或该接口不再提供处理中数据，可展开原始返回排查。</span></div>';
+            }
+            if (archiveData && (archiveData.pubtime || archiveData.dtime || archiveData.issue_content)) {
+                html += '<div class="archive-progress-meta-grid">';
+                if (archiveData.pubtime) html += '<div><span>发布时间</span><strong>' + esc(this.formatArchiveProgressUnixTime(archiveData.pubtime)) + '</strong></div>';
+                if (archiveData.dtime) html += '<div><span>定时时间</span><strong>' + esc(this.formatArchiveProgressUnixTime(archiveData.dtime)) + '</strong></div>';
+                if (archiveData.issue_content) html += '<div class="full"><span>平台提示</span><strong>' + esc(archiveData.issue_content) + '</strong></div>';
+                html += '</div>';
+            }
+            html += this.buildArchiveProgressDebugHtml(progressResp || {}, esc);
+            html += '</section>';
+            return html;
+        },
+        buildArchiveProgressFallbackItem: function(archiveData) {
+            if (!archiveData || typeof archiveData !== 'object') return null;
+            const code = Number(this.currentDetail && this.currentDetail.code);
+            const openState = this.pickArchiveNumber(archiveData, ['open_state', 'openState']);
+            const hasOpenState = openState !== null && openState !== undefined;
+            if (code !== 0 && code !== -50 && !hasOpenState) return null;
+            const stateText = code === 0
+                ? '审核通过'
+                : (code === -50 ? '仅自己可见' : (hasOpenState ? ('开放状态 ' + openState) : '稿件已提交'));
+            const done = code === 0 || code === -50 || openState === 3;
+            return {
+                source: '稿件状态接口',
+                label: '平台处理结果',
+                percent: done ? 100 : null,
+                stateText: stateText,
+                message: done ? '平台未返回独立转码百分比，按当前审核状态视为处理完成' : '平台未返回独立转码百分比'
+            };
+        },
+        buildArchiveQualityProgressHtml: function(qualityItems, esc) {
+            if (!Array.isArray(qualityItems) || qualityItems.length === 0) return '';
+            let html = '<div class="archive-quality-list">';
+            qualityItems.forEach(item => {
+                const percent = item && item.percent !== null && item.percent !== undefined ? Number(item.percent) : null;
+                const safePercent = isFinite(percent) ? Math.max(0, Math.min(100, Math.round(percent))) : 0;
+                const percentText = isFinite(percent) ? (safePercent + '%') : '-';
+                const stateClass = item && item.failed ? ' is-failed' : (safePercent >= 100 ? ' is-done' : (safePercent > 0 ? ' is-running' : ''));
+                html += ''
+                    + '<div class="archive-quality-item' + stateClass + '">'
+                    + '<div class="archive-quality-head">'
+                    + '<strong>' + esc(item && item.resolution ? item.resolution : '清晰度') + '</strong>'
+                    + '<span>' + esc(percentText) + '</span>'
+                    + '</div>'
+                    + '<div class="archive-quality-track"><div style="width:' + esc(safePercent) + '%;"></div></div>'
+                    + '<div class="archive-quality-state">' + esc(item && item.stateText ? item.stateText : '状态待确认') + '</div>'
+                    + (item && item.message ? '<div class="archive-quality-message">' + esc(item.message) + '</div>' : '')
+                    + '</div>';
+            });
+            html += '</div>';
+            return html;
+        },
+        buildArchiveProgressDebugHtml: function(progressResp, esc) {
+            const debug = progressResp && progressResp.debug ? progressResp.debug : {};
+            const raw = {
+                videos: progressResp && progressResp.videos ? progressResp.videos : null,
+                videoParts: progressResp && progressResp.videoParts ? progressResp.videoParts : null,
+                xcode: progressResp && progressResp.xcode ? progressResp.xcode : null,
+                xcodeParts: progressResp && progressResp.xcodeParts ? progressResp.xcodeParts : null,
+                archive: progressResp && progressResp.archive ? progressResp.archive : null,
+                debug: debug
+            };
+            return ''
+                + '<details class="archive-progress-debug">'
+                + '<summary>查看原始进度返回</summary>'
+                + '<pre>' + esc(this.safeArchiveJsonStringify(raw)) + '</pre>'
+                + '</details>';
+        },
+        buildAuditRejectCompactHtml: function(esc) {
+            let html = '<section class="audit-reject-compact">';
+            html += '<div class="archive-progress-section-title is-danger"><i class="el-icon-warning"></i><span>审核不通过原因</span></div>';
+            if (this.isAuditInvisibleLikelyDeleted) {
+                html += '<div class="audit-reject-empty">当前稿件返回 62002（稿件不可见），可能已在 B 站后台被删除、转为不可见或被系统回收。</div>';
+                html += '</section>';
+                return html;
+            }
+            if (this.auditRejectPrimaryDetails.length > 0) {
+                html += '<div class="audit-reject-list">';
+                this.auditRejectPrimaryDetails.forEach((item, idx) => {
+                    html += '<div class="audit-reject-item">';
+                    html += '<div class="audit-reject-item-icon"><i class="el-icon-warning"></i></div>';
+                    html += '<div class="audit-reject-item-body">';
+                    html += '<div class="audit-reject-item-title">原因 ' + (idx + 1) + (item.rejectReason ? '：' + esc(item.rejectReason) : '') + '</div>';
+                    if (item.modifyAdvise) html += '<div class="audit-reject-text"><strong>修改建议：</strong>' + esc(item.modifyAdvise) + '</div>';
+                    if (item.violationPosition || item.violationTime) {
+                        html += this.buildAuditViolationCompactHtml(item, esc);
+                    }
+                    if (Array.isArray(item.pictureData) && item.pictureData.length > 0) {
+                        html += this.buildAuditPictureCompactHtml(item.pictureData, esc);
+                    }
+                    if (item.problemDescription) {
+                        html += '<div class="audit-reject-text"><strong>' + esc(item.problemDescriptionTitle || '规则说明') + '：</strong>' + esc(item.problemDescription) + '</div>';
+                    }
+                    html += '</div></div>';
+                });
+                html += '</div>';
+            } else if (this.auditRejectDetails.length > 0) {
+                html += '<div class="audit-reject-list">';
+                this.auditRejectDetails.forEach(item => {
+                    html += '<div class="audit-reject-item">';
+                    html += '<div class="audit-reject-item-icon"><i class="el-icon-warning"></i></div>';
+                    html += '<div class="audit-reject-item-body">';
+                    html += '<div class="audit-reject-item-title">P' + esc(item.page) + '：' + esc(item.title || '') + '</div>';
+                    html += '<div class="audit-reject-text">' + esc(item.detail || '') + '</div>';
+                    html += '</div></div>';
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="audit-reject-empty">该稿件当前已显示为审核退回，但暂未拿到详细退回文案。</div>';
+            }
+            html += '</section>';
+            return html;
+        },
+        buildAuditViolationCompactHtml: function(item, esc) {
+            let html = '<div class="audit-violation-box">';
+            if (item.violationPosition) {
+                html += '<div><strong>违规位置：</strong>' + esc(item.violationPosition) + '</div>';
+            }
+            const raw = String(item.violationTime || '').trim();
+            const matched = raw ? (raw.match(/P\d+\([^)]+\)/g) || []) : [];
+            if (matched.length > 0) {
+                html += '<div><strong>违规时段：</strong></div><div class="audit-violation-segments">';
+                matched.forEach(seg => {
+                    const m = seg.match(/^P(\d+)\((.+)\)$/);
+                    html += '<span>' + (m ? ('P' + esc(m[1]) + ' ' + esc(m[2])) : esc(seg)) + '</span>';
+                });
+                html += '</div>';
+            } else if (raw) {
+                html += '<div><strong>违规时段：</strong>' + esc(raw) + '</div>';
+            }
+            html += '</div>';
+            return html;
+        },
+        buildAuditPictureCompactHtml: function(pictures, esc) {
+            const rows = pictures.map((pic, idx) => {
+                const url = String(pic && pic.url ? pic.url : '').trim();
+                if (!url) return '';
+                const proxyUrl = this.buildReasonImageProxyUrl(url);
+                const title = String(pic && pic.time ? pic.time : ('违规画面 ' + (idx + 1))).trim();
+                return ''
+                    + '<a href="' + esc(proxyUrl) + '" target="_blank" rel="noopener noreferrer">'
+                    + '<img src="' + esc(proxyUrl) + '" alt="' + esc(title) + '" loading="lazy">'
+                    + '<span>' + esc(title) + '</span>'
+                    + '</a>';
+            }).filter(Boolean);
+            if (rows.length === 0) return '';
+            return '<div class="audit-picture-block"><div class="audit-picture-title">违规画面</div><div class="audit-picture-grid">' + rows.join('') + '</div></div>';
+        },
+        buildReasonImageProxyUrl: function(url) {
+            let proxyUrl = '/room/image-proxy?kind=reason&url=' + encodeURIComponent(url);
+            try {
+                const token = localStorage.getItem('biliup_auth');
+                if (token) {
+                    proxyUrl += '&auth=' + encodeURIComponent(token);
+                }
+            } catch (e) {
+            }
+            return proxyUrl;
+        },
+        getBiliPayloadData: function(resp) {
+            if (!resp || typeof resp !== 'object') return null;
+            if (resp.data !== undefined && resp.data !== null) return resp.data;
+            return resp;
+        },
+        extractArchiveProgressItems: function(progressResp) {
+            const structured = this.extractStructuredXcodePartItems(progressResp);
+            if (structured.length > 0) {
+                return structured;
+            }
+            const items = [];
+            this.collectArchiveProgressItems(this.getBiliPayloadData(progressResp.xcode), '转码接口', items, 0);
+            this.collectArchiveProgressItems(this.getBiliPayloadData(progressResp.videos), '分P接口', items, 0);
+            const seen = {};
+            return items.filter(item => {
+                const key = [item.source, item.label, item.stateText, item.percent].join('|');
+                if (seen[key]) return false;
+                seen[key] = true;
+                return true;
+            }).slice(0, 12);
+        },
+        extractStructuredXcodePartItems: function(progressResp) {
+            const parts = progressResp && Array.isArray(progressResp.xcodeParts) ? progressResp.xcodeParts : [];
+            if (parts.length === 0) return [];
+            return parts.map((part, idx) => this.normalizeXcodePartProgress(part, idx)).filter(Boolean);
+        },
+        normalizeXcodePartProgress: function(part, idx) {
+            if (!part || typeof part !== 'object') return null;
+            const xcodeResp = part.xcode && typeof part.xcode === 'object' ? part.xcode : null;
+            const payload = this.getBiliPayloadData(xcodeResp);
+            const list = payload && Array.isArray(payload.transcode_list) ? payload.transcode_list : [];
+            const stats = this.getTranscodeListStats(list);
+            const index = part.index || (idx + 1);
+            const title = part.title ? String(part.title) : '';
+            const cid = part.cid || (payload && payload.cid);
+            const label = title ? ('P' + index + '：' + title) : ('P' + index + (cid ? (' / CID ' + cid) : ''));
+            const code = xcodeResp && xcodeResp.code !== undefined ? Number(xcodeResp.code) : null;
+            const tip = payload ? (payload.fail_tip || payload.xcode_tip || '') : '';
+            if (part.error || part.exception || (code !== null && code !== 0)) {
+                return {
+                    source: '转码详情',
+                    label: label,
+                    percent: null,
+                    stateText: '获取失败',
+                    message: part.error || (xcodeResp && (xcodeResp.message || xcodeResp.msg)) || tip || ''
+                };
+            }
+            if (stats.total > 0) {
+                const qualityItems = this.normalizeTranscodeQualityItems(list);
+                const qualityPercent = qualityItems.length > 0
+                    ? Math.round(qualityItems.reduce((sum, item) => sum + (Number(item.percent) || 0), 0) / qualityItems.length)
+                    : Math.round(stats.done * 100 / stats.total);
+                return {
+                    source: '转码详情',
+                    label: label,
+                    percent: qualityPercent,
+                    stateText: this.formatTranscodeListState(stats),
+                    message: this.buildTranscodeListMessage(stats, tip),
+                    qualityItems: qualityItems
+                };
+            }
+            if (payload && (payload.xcode_state !== undefined || payload.xcodeState !== undefined || tip)) {
+                const stateValue = this.pickArchiveValue(payload, ['xcode_state', 'xcodeState', 'state', 'status']);
+                return {
+                    source: '转码详情',
+                    label: label,
+                    percent: null,
+                    stateText: this.formatArchiveProgressState(stateValue, payload),
+                    message: tip
+                };
+            }
+            return null;
+        },
+        getTranscodeListStats: function(list) {
+            const stats = {
+                total: 0,
+                done: 0,
+                failed: 0,
+                running: 0,
+                waiting: 0,
+                unknown: 0,
+                failedNames: [],
+                failureReasons: []
+            };
+            if (!Array.isArray(list)) return stats;
+            list.forEach(item => {
+                if (!item || typeof item !== 'object') return;
+                stats.total += 1;
+                const status = String(item.status || '').toLowerCase();
+                const resolution = item.resolution ? String(item.resolution) : '';
+                if (status.indexOf('success') >= 0 || status.indexOf('complete') >= 0 || status.indexOf('finish') >= 0 || status === 'done') {
+                    stats.done += 1;
+                } else if (status.indexOf('fail') >= 0 || status.indexOf('error') >= 0) {
+                    stats.failed += 1;
+                    if (resolution) stats.failedNames.push(resolution);
+                } else if (status.indexOf('process') >= 0 || status.indexOf('running') >= 0 || status.indexOf('doing') >= 0) {
+                    stats.running += 1;
+                } else if (status.indexOf('wait') >= 0 || status.indexOf('queue') >= 0 || status.indexOf('pending') >= 0) {
+                    stats.waiting += 1;
+                } else {
+                    stats.unknown += 1;
+                }
+                if (item.failure_reason) {
+                    stats.failureReasons.push(String(item.failure_reason));
+                }
+            });
+            return stats;
+        },
+        normalizeTranscodeQualityItems: function(list) {
+            if (!Array.isArray(list)) return [];
+            return list.map(item => {
+                if (!item || typeof item !== 'object') return null;
+                const percent = this.calculateTranscodeQualityPercent(item);
+                const status = String(item.status || '').toLowerCase();
+                const failed = status.indexOf('fail') >= 0 || status.indexOf('error') >= 0;
+                const message = item.failure_reason
+                    ? String(item.failure_reason)
+                    : this.formatTranscodeQualityEstimate(item, percent);
+                return {
+                    resolution: item.resolution ? String(item.resolution) : '清晰度',
+                    percent: percent,
+                    failed: failed,
+                    stateText: this.formatTranscodeQualityState(item),
+                    message: message
+                };
+            }).filter(Boolean);
+        },
+        calculateTranscodeQualityPercent: function(item) {
+            const direct = this.pickArchiveNumber(item, ['progress', 'percent', 'rate', 'xcode_progress', 'xcodeProgress']);
+            if (direct !== null && direct !== undefined) {
+                let p = Number(direct);
+                if (isFinite(p) && p > 0 && p <= 1) p = p * 100;
+                if (isFinite(p)) return Math.max(0, Math.min(100, Math.round(p)));
+            }
+            const status = String(item && item.status ? item.status : '').toLowerCase();
+            if (status.indexOf('success') >= 0 || status.indexOf('complete') >= 0 || status.indexOf('finish') >= 0 || status === 'done') {
+                return 100;
+            }
+            if (status.indexOf('fail') >= 0 || status.indexOf('error') >= 0) {
+                return 0;
+            }
+            const completedAt = this.pickArchiveNumber(item, ['completed_at', 'completedAt']);
+            if (completedAt && completedAt > 0) {
+                return 100;
+            }
+            const estimated = this.pickArchiveNumber(item, ['estimated_time', 'estimatedTime']);
+            const start = this.pickArchiveNumber(item, ['start_time', 'startTime']);
+            const now = this.pickArchiveNumber(item, ['time_now', 'timeNow']);
+            if (estimated && estimated > 0 && start && start > 0 && now && now > start) {
+                return Math.max(0, Math.min(99, Math.round(((now - start) * 100) / estimated)));
+            }
+            return 0;
+        },
+        formatTranscodeQualityState: function(item) {
+            const status = String(item && item.status ? item.status : '').toLowerCase();
+            if (status.indexOf('success') >= 0 || status.indexOf('complete') >= 0 || status.indexOf('finish') >= 0 || status === 'done') return '转码完成';
+            if (status.indexOf('fail') >= 0 || status.indexOf('error') >= 0) return '转码失败';
+            if (status.indexOf('process') >= 0 || status.indexOf('running') >= 0 || status.indexOf('doing') >= 0) return '转码中';
+            if (status.indexOf('wait') >= 0 || status.indexOf('queue') >= 0 || status.indexOf('pending') >= 0) return '等待转码';
+            return item && item.status ? String(item.status) : '状态待确认';
+        },
+        formatTranscodeQualityEstimate: function(item, percent) {
+            const estimated = this.pickArchiveNumber(item, ['estimated_time', 'estimatedTime']);
+            if (estimated && estimated > 0 && percent < 100) {
+                return '预计约 ' + Math.ceil(estimated / 60) + ' 分钟';
+            }
+            return '';
+        },
+        formatTranscodeListState: function(stats) {
+            if (!stats || stats.total <= 0) return '状态待确认';
+            if (stats.failed > 0) return '转码失败';
+            if (stats.done >= stats.total) return '转码完成';
+            if (stats.running > 0 || stats.done > 0) return '转码中';
+            if (stats.waiting > 0) return '等待转码';
+            return '状态待确认';
+        },
+        buildTranscodeListMessage: function(stats, tip) {
+            const parts = [];
+            if (stats && stats.total > 0) {
+                parts.push(stats.done + '/' + stats.total + ' 个清晰度完成');
+                if (stats.failed > 0) {
+                    parts.push(stats.failedNames.length > 0 ? (stats.failedNames.join('、') + ' 失败') : (stats.failed + ' 个失败'));
+                }
+                if (stats.running > 0) parts.push(stats.running + ' 个处理中');
+                if (stats.waiting > 0) parts.push(stats.waiting + ' 个等待');
+            }
+            if (stats && stats.failureReasons.length > 0) {
+                parts.push(stats.failureReasons[0]);
+            } else if (tip) {
+                parts.push(String(tip));
+            }
+            return parts.join('；');
+        },
+        collectArchiveProgressItems: function(value, source, items, depth) {
+            if (depth > 5 || value === null || value === undefined) return;
+            if (Array.isArray(value)) {
+                value.forEach(v => this.collectArchiveProgressItems(v, source, items, depth + 1));
+                return;
+            }
+            if (typeof value !== 'object') return;
+            if (this.looksLikeArchiveProgressItem(value)) {
+                items.push(this.normalizeArchiveProgressItem(value, source));
+            }
+            Object.keys(value).forEach(key => {
+                const child = value[key];
+                if (Array.isArray(child) || (child && typeof child === 'object')) {
+                    this.collectArchiveProgressItems(child, source, items, depth + 1);
+                }
+            });
+        },
+        looksLikeArchiveProgressItem: function(obj) {
+            const keys = Object.keys(obj || {}).map(k => k.toLowerCase());
+            if (keys.length === 0) return false;
+            const markers = ['progress', 'percent', 'rate', 'xcode', 'state', 'status', 'stage', 'cid', 'page', 'title', 'part', 'filename'];
+            return keys.some(k => markers.some(m => k.indexOf(m) >= 0));
+        },
+        normalizeArchiveProgressItem: function(obj, source) {
+            const label = this.pickArchiveValue(obj, ['title', 'part', 'name', 'filename'])
+                || (this.pickArchiveValue(obj, ['page']) ? ('P' + this.pickArchiveValue(obj, ['page'])) : '')
+                || (this.pickArchiveValue(obj, ['cid']) ? ('CID ' + this.pickArchiveValue(obj, ['cid'])) : '')
+                || source;
+            const percentRaw = this.pickArchiveNumber(obj, ['progress', 'percent', 'rate', 'xcode_progress', 'xcodeProgress']);
+            let percent = null;
+            if (percentRaw !== null && percentRaw !== undefined) {
+                percent = Number(percentRaw);
+                if (isFinite(percent) && percent > 0 && percent <= 1) percent = percent * 100;
+                percent = Math.max(0, Math.min(100, Math.round(percent)));
+            }
+            const stateValue = this.pickArchiveValue(obj, ['xcode_state', 'xcodeState', 'state', 'status', 'stage']);
+            const message = this.pickArchiveValue(obj, ['failDesc', 'fail_desc', 'message', 'msg', 'desc', 'remark']);
+            return {
+                source: source,
+                label: String(label || source),
+                percent: percent,
+                stateText: this.formatArchiveProgressState(stateValue, obj),
+                message: message ? String(message) : ''
+            };
+        },
+        pickArchiveValue: function(obj, keys) {
+            if (!obj) return null;
+            for (let i = 0; i < keys.length; i++) {
+                const key = keys[i];
+                if (obj[key] !== undefined && obj[key] !== null && String(obj[key]).trim() !== '') {
+                    return obj[key];
+                }
+            }
+            return null;
+        },
+        pickArchiveNumber: function(obj, keys) {
+            const value = this.pickArchiveValue(obj, keys);
+            if (value === null || value === undefined) return null;
+            const n = Number(value);
+            return isFinite(n) ? n : null;
+        },
+        formatArchiveProgressState: function(value, obj) {
+            if (value === null || value === undefined || value === '') {
+                return this.getAuditStatusText(this.currentDetail || {});
+            }
+            const n = Number(value);
+            if (isFinite(n)) {
+                if (n === 1) return '转码失败';
+                if (n === 2) return '转码中';
+                if (n === 3) return '转码失败';
+                if (n === 4 || n === 100) return '已完成';
+                if (n === 0) {
+                    const failCode = this.pickArchiveNumber(obj, ['failCode', 'fail_code']);
+                    if (failCode && failCode !== 0) return '处理失败';
+                    return '等待处理';
+                }
+                return '状态 ' + n;
+            }
+            return String(value);
+        },
+        formatArchiveProgressTime: function(ms) {
+            const n = Number(ms);
+            if (!isFinite(n) || n <= 0) return '-';
+            return this.formatArchiveProgressDate(new Date(n));
+        },
+        formatArchiveProgressUnixTime: function(sec) {
+            const n = Number(sec);
+            if (!isFinite(n) || n <= 0) return '-';
+            return this.formatArchiveProgressDate(new Date(n * 1000));
+        },
+        formatArchiveProgressDate: function(date) {
+            const pad = function(v) { return String(v).padStart(2, '0'); };
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+        },
+        safeArchiveJsonStringify: function(value) {
+            try {
+                return JSON.stringify(value, null, 2);
+            } catch (e) {
+                return String(value == null ? '' : value);
+            }
+        },
         openAuditRejectDetail: function(skipFallbackRetry) {
             if (!this.canShowAuditRejectInfo) return;
             var _this = this;
@@ -209,7 +984,8 @@
                 this.$alert(html62002, '稿件不可见说明', {
                     dangerouslyUseHTMLString: true,
                     confirmButtonText: '我知道了',
-                    type: 'warning'
+                    type: 'warning',
+                    customClass: 'audit-status-message-box'
                 });
                 return;
             }
@@ -268,6 +1044,33 @@
                 }
                 return '<div style="margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));border:1px solid var(--warning-border,#faad14);color:var(--text-secondary,#a0a0a0);">' + rows.join('') + '</div>';
             };
+            const buildPictureDataBlock = function(pictures) {
+                if (!Array.isArray(pictures) || pictures.length === 0) return '';
+                const rows = pictures.map(function(pic, idx) {
+                    const url = String(pic && pic.url ? pic.url : '').trim();
+                    if (!url) return '';
+                    const proxyUrl = _this.buildReasonImageProxyUrl(url);
+                    const time = String(pic && pic.time ? pic.time : '').trim();
+                    const title = time || ('违规画面 ' + (idx + 1));
+                    return ''
+                        + '<a href="' + esc(proxyUrl) + '" target="_blank" rel="noopener noreferrer" '
+                        + 'style="display:block;text-decoration:none;color:inherit;border:1px solid var(--border-color,#3f3f46);border-radius:6px;overflow:hidden;background:var(--bg-primary,#18181b);">'
+                        + '<img src="' + esc(proxyUrl) + '" alt="' + esc(title) + '" loading="lazy" '
+                        + 'style="display:block;width:100%;height:96px;object-fit:cover;background:var(--bg-tertiary,#27272a);">'
+                        + '<div style="padding:5px 7px;font-size:12px;color:var(--text-secondary,#a0a0a0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+                        + esc(title)
+                        + '</div>'
+                        + '</a>';
+                }).filter(Boolean);
+                if (rows.length === 0) return '';
+                return ''
+                    + '<div style="margin-top:8px;">'
+                    + '<div style="margin-bottom:6px;color:var(--text-secondary,#a0a0a0);font-size:12px;"><strong>违规画面：</strong>点击缩略图打开原图</div>'
+                    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:8px;">'
+                    + rows.join('')
+                    + '</div>'
+                    + '</div>';
+            };
             let html = '<div style="max-height:52vh;overflow:auto;line-height:1.7;">';
             if (this.auditRejectPrimaryDetails.length > 0) {
                 html += '<div style="margin-bottom:8px;color:var(--text-secondary,#a0a0a0);font-size:12px;">稿件级审核退回说明：</div>';
@@ -277,6 +1080,7 @@
                     if (item.rejectReason) html += '<div style="color:var(--text-primary,#e8e8e8);"><strong>退回原因：</strong>' + esc(item.rejectReason) + '</div>';
                     if (item.modifyAdvise) html += '<div style="color:var(--text-secondary,#a0a0a0);margin-top:2px;"><strong>修改建议：</strong>' + esc(item.modifyAdvise) + '</div>';
                     html += buildViolationTimeBlock(item.violationPosition, item.violationTime);
+                    html += buildPictureDataBlock(item.pictureData);
                     html += buildFoldableText(item.problemDescriptionTitle || '规则说明', item.problemDescription || '', 120);
                     if (item.type || item.rejectReasonId) {
                         html += '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;margin-top:2px;">';
@@ -349,7 +1153,8 @@
                     showCancelButton: true,
                     distinguishCancelAndClose: true,
                     closeOnClickModal: false,
-                    type: 'warning'
+                    type: 'warning',
+                    customClass: 'audit-status-message-box'
                 }).then(function () {
                 }).catch(function (action) {
                     if (action === 'cancel') {
@@ -361,7 +1166,8 @@
             this.$alert(html, '审核退回详情', {
                 dangerouslyUseHTMLString: true,
                 confirmButtonText: '我知道了',
-                type: 'warning'
+                type: 'warning',
+                customClass: 'audit-status-message-box'
             });
         },
         manualRefreshAuditRejectReason: function() {
@@ -705,6 +1511,7 @@
             // 窗口关闭动画结束后，清理数据以释放内存并重置状态
             this.clearPartsAutoScrollTimer();
             this.stopProgressPolling();
+            this.cancelAuditStatusLoadingRequest();
             this.cancelEditParts(true);
             this.historyUploadProgress = null;
             this.currentDetail = {};

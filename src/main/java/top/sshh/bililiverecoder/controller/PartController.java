@@ -1,6 +1,8 @@
 package top.sshh.bililiverecoder.controller;
 
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import jakarta.annotation.Resource;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +53,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PartController {
     private static final long REVIEW_INFO_SUCCESS_COOLDOWN_MS = 8000L;
     private static final long REVIEW_INFO_FAIL_COOLDOWN_MS = 1200L;
+    private static final long ARCHIVE_PROGRESS_SUCCESS_COOLDOWN_MS = 5000L;
+    private static final long ARCHIVE_PROGRESS_FAIL_COOLDOWN_MS = 1500L;
+    private static final int ARCHIVE_PROGRESS_XCODE_PART_LIMIT = 50;
 
     @Value("${record.work-path}")
     private String workPath;
@@ -78,6 +83,8 @@ public class PartController {
     private RecordPartUploadService editPartUploadService;
     private final Map<Long, ReviewInfoCacheEntry> reviewInfoCache = new ConcurrentHashMap<>();
     private final Map<Long, Object> reviewInfoLocks = new ConcurrentHashMap<>();
+    private final Map<Long, ArchiveProgressCacheEntry> archiveProgressCache = new ConcurrentHashMap<>();
+    private final Map<Long, Object> archiveProgressLocks = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void initWorkPath() {
@@ -187,6 +194,7 @@ public class PartController {
             m.put("roomId", p.getRoomId());
             m.put("historyId", p.getHistoryId());
             m.put("page", p.getPage());
+            m.put("partOrder", p.getPartOrder());
             m.put("title", p.getTitle());
             m.put("fileName", p.getFileName());
             m.put("filePath", p.getFilePath());
@@ -322,6 +330,63 @@ public class PartController {
         resp.put("problemDetail", reviewProblemDetails);
         resp.put("reviewDebug", reviewDebug);
         return resp;
+    }
+
+    @GetMapping("/archiveProgress/{id}")
+    public Map<String, Object> archiveProgress(@PathVariable("id") Long id,
+                                               @RequestParam(value = "force", defaultValue = "false") boolean force) {
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("historyId", id);
+        resp.put("allowQuery", false);
+        resp.put("success", false);
+        if (id == null) {
+            resp.put("type", "warning");
+            resp.put("msg", "稿件不存在");
+            return resp;
+        }
+        Optional<RecordHistory> histOpt = historyRepository.findById(id);
+        if (histOpt.isEmpty()) {
+            resp.put("type", "warning");
+            resp.put("msg", "稿件不存在");
+            return resp;
+        }
+        RecordHistory history = histOpt.get();
+        resp.put("publish", history.isPublish());
+        resp.put("bvid", history.getBvId());
+        resp.put("code", history.getCode());
+        if (!history.isPublish() || isBlank(history.getBvId())) {
+            resp.put("type", "info");
+            resp.put("msg", "稿件提交后才能查看转码进度");
+            return resp;
+        }
+        resp.put("allowQuery", true);
+        try {
+            RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+            ReviewAuthContext reviewAuth = resolveReviewAuthContext(history, room);
+            resp.put("authSource", reviewAuth.source);
+            resp.put("authUserId", reviewAuth.user == null ? null : reviewAuth.user.getId());
+            resp.put("authUid", reviewAuth.user == null ? null : reviewAuth.user.getUid());
+            resp.put("authUname", reviewAuth.user == null ? null : reviewAuth.user.getUname());
+            if (reviewAuth.user == null) {
+                resp.put("type", "warning");
+                resp.put("msg", "无法确定可用的投稿账号登录态，暂时不能查询稿件进度");
+                resp.put("authBlocked", true);
+                resp.put("authBlockedReason", reviewAuth.source);
+                return resp;
+            }
+            Map<String, Object> progress = loadArchiveProgressInfo(history.getId(), history.getBvId(), reviewAuth.user, force);
+            resp.putAll(progress);
+            return resp;
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("Part.ArchiveProgress.FetchFailed")
+                    .add("historyId", id)
+                    .add("bvid", history.getBvId())
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+            resp.put("type", "warning");
+            resp.put("msg", "获取稿件进度失败：" + e.getMessage());
+            return resp;
+        }
     }
 
     private List<RecordHistoryPart> filterVisibleParts(List<RecordHistoryPart> parts) {
@@ -582,6 +647,189 @@ public class PartController {
         return null;
     }
 
+    private Map<String, Object> loadArchiveProgressInfo(Long historyId, String bvId, BiliBiliUser reviewAuthUser, boolean forceRefresh) {
+        long now = System.currentTimeMillis();
+        ArchiveProgressCacheEntry cached = archiveProgressCache.get(historyId);
+        if (!forceRefresh && isArchiveProgressCacheFresh(cached, now)) {
+            return copyArchiveProgress(cached);
+        }
+        Object lock = archiveProgressLocks.computeIfAbsent(historyId, k -> new Object());
+        synchronized (lock) {
+            now = System.currentTimeMillis();
+            cached = archiveProgressCache.get(historyId);
+            if (!forceRefresh && isArchiveProgressCacheFresh(cached, now)) {
+                return copyArchiveProgress(cached);
+            }
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            Map<String, Object> debug = new LinkedHashMap<>();
+            data.put("success", false);
+            data.put("type", "warning");
+            data.put("msg", "暂未获取到稿件进度");
+            data.put("bvid", bvId);
+            data.put("fetchedAtMs", now);
+            data.put("cached", false);
+            data.put("debug", debug);
+
+            int successCount = 0;
+            BiliApi.ApiDebugResponse<JSONObject> videosResp = putArchiveProgressApiResponse(data, debug, "videos",
+                    () -> BiliApi.getArchiveProcessVideosDebug(reviewAuthUser, bvId, 1, 500, 1));
+            successCount += countArchiveProgressSuccess(videosResp);
+
+            List<Map<String, Object>> videoParts = extractArchiveProgressVideoParts(videosResp == null ? null : videosResp.getParsed());
+            data.put("videoParts", videoParts);
+            int xcodeSuccessCount = putArchiveProgressXcodeParts(data, debug, reviewAuthUser, bvId, videoParts);
+            successCount += xcodeSuccessCount;
+
+            if (videoParts.isEmpty()) {
+                successCount += putArchiveProgressApi(data, debug, "xcode", () -> BiliApi.getArchiveProcessXcodeDebug(reviewAuthUser, bvId));
+            }
+            successCount += putArchiveProgressApi(data, debug, "archive", () -> BiliApi.getArchiveProcessArchiveDebug(reviewAuthUser, bvId));
+
+            boolean success = successCount > 0;
+            data.put("success", success);
+            data.put("type", success ? "success" : "warning");
+            data.put("msg", success ? "已获取稿件进度" : "B站暂未返回可用的稿件进度");
+            data.put("apiSuccessCount", successCount);
+
+            ArchiveProgressCacheEntry entry = new ArchiveProgressCacheEntry(now, success, data);
+            archiveProgressCache.put(historyId, entry);
+            Map<String, Object> result = copyArchiveProgress(entry);
+            result.put("cached", false);
+            return result;
+        }
+    }
+
+    private int putArchiveProgressApi(Map<String, Object> data,
+                                      Map<String, Object> debug,
+                                      String key,
+                                      ArchiveProgressApiLoader loader) {
+        return countArchiveProgressSuccess(putArchiveProgressApiResponse(data, debug, key, loader));
+    }
+
+    private BiliApi.ApiDebugResponse<JSONObject> putArchiveProgressApiResponse(Map<String, Object> data,
+                                                                               Map<String, Object> debug,
+                                                                               String key,
+                                                                               ArchiveProgressApiLoader loader) {
+        try {
+            BiliApi.ApiDebugResponse<JSONObject> apiResp = loader.load();
+            JSONObject parsed = apiResp == null ? null : apiResp.getParsed();
+            Integer code = parsed == null ? null : parsed.getInteger("code");
+            String message = parsed == null ? null : parsed.getString("message");
+            data.put(key, parsed);
+            debug.put(key + "Code", code);
+            debug.put(key + "Message", message);
+            debug.put(key + "RequestUrl", apiResp == null ? null : apiResp.getRequestUrl());
+            debug.put(key + "Raw", apiResp == null ? null : apiResp.getRaw());
+            return apiResp;
+        } catch (Exception e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            error.put("exception", e.getClass().getSimpleName());
+            data.put(key, error);
+            debug.put(key + "Error", e.getMessage());
+            debug.put(key + "Exception", e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private int countArchiveProgressSuccess(BiliApi.ApiDebugResponse<JSONObject> apiResp) {
+        JSONObject parsed = apiResp == null ? null : apiResp.getParsed();
+        return parsed != null && Integer.valueOf(0).equals(parsed.getInteger("code")) ? 1 : 0;
+    }
+
+    private List<Map<String, Object>> extractArchiveProgressVideoParts(JSONObject videosResp) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        JSONObject data = videosResp == null ? null : videosResp.getJSONObject("data");
+        JSONArray videos = data == null ? null : data.getJSONArray("videos");
+        if (videos == null || videos.isEmpty()) {
+            return result;
+        }
+        for (int i = 0; i < videos.size() && result.size() < ARCHIVE_PROGRESS_XCODE_PART_LIMIT; i++) {
+            JSONObject video = videos.getJSONObject(i);
+            if (video == null) {
+                continue;
+            }
+            String cid = video.getString("cid");
+            if (isBlank(cid)) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("cid", cid);
+            item.put("index", video.getInteger("index"));
+            item.put("title", video.getString("title"));
+            item.put("xcodeState", video.getInteger("xcode_state"));
+            result.add(item);
+        }
+        return result;
+    }
+
+    private int putArchiveProgressXcodeParts(Map<String, Object> data,
+                                             Map<String, Object> debug,
+                                             BiliBiliUser reviewAuthUser,
+                                             String bvId,
+                                             List<Map<String, Object>> videoParts) {
+        List<Map<String, Object>> xcodeParts = new ArrayList<>();
+        List<Map<String, Object>> xcodeDebug = new ArrayList<>();
+        int successCount = 0;
+        if (videoParts == null || videoParts.isEmpty()) {
+            data.put("xcodeParts", xcodeParts);
+            debug.put("xcodeParts", xcodeDebug);
+            debug.put("xcodePartSuccessCount", successCount);
+            return successCount;
+        }
+
+        for (Map<String, Object> videoPart : videoParts) {
+            String cid = String.valueOf(videoPart.getOrDefault("cid", ""));
+            Map<String, Object> xcodePart = new LinkedHashMap<>(videoPart);
+            Map<String, Object> debugItem = new LinkedHashMap<>();
+            debugItem.put("cid", cid);
+            debugItem.put("index", videoPart.get("index"));
+            try {
+                BiliApi.ApiDebugResponse<JSONObject> apiResp = BiliApi.getArchiveProcessXcodeDebug(reviewAuthUser, bvId, cid);
+                JSONObject parsed = apiResp == null ? null : apiResp.getParsed();
+                Integer code = parsed == null ? null : parsed.getInteger("code");
+                String message = parsed == null ? null : parsed.getString("message");
+                xcodePart.put("xcode", parsed);
+                debugItem.put("code", code);
+                debugItem.put("message", message);
+                debugItem.put("requestUrl", apiResp == null ? null : apiResp.getRequestUrl());
+                debugItem.put("raw", apiResp == null ? null : apiResp.getRaw());
+                if (!data.containsKey("xcode")) {
+                    data.put("xcode", parsed);
+                }
+                if (Integer.valueOf(0).equals(code)) {
+                    successCount++;
+                }
+            } catch (Exception e) {
+                xcodePart.put("error", e.getMessage());
+                xcodePart.put("exception", e.getClass().getSimpleName());
+                debugItem.put("error", e.getMessage());
+                debugItem.put("exception", e.getClass().getSimpleName());
+            }
+            xcodeParts.add(xcodePart);
+            xcodeDebug.add(debugItem);
+        }
+        data.put("xcodeParts", xcodeParts);
+        debug.put("xcodeParts", xcodeDebug);
+        debug.put("xcodePartSuccessCount", successCount);
+        return successCount;
+    }
+
+    private boolean isArchiveProgressCacheFresh(ArchiveProgressCacheEntry cached, long now) {
+        if (cached == null) {
+            return false;
+        }
+        long cooldown = cached.success ? ARCHIVE_PROGRESS_SUCCESS_COOLDOWN_MS : ARCHIVE_PROGRESS_FAIL_COOLDOWN_MS;
+        return (now - cached.fetchAtMs) < cooldown;
+    }
+
+    private Map<String, Object> copyArchiveProgress(ArchiveProgressCacheEntry source) {
+        Map<String, Object> data = new LinkedHashMap<>(source.data);
+        data.put("cached", true);
+        return data;
+    }
+
     private ReviewAuthContext resolveReviewAuthContext(RecordHistory history, RecordRoom room) {
         Long publishUserId = history == null ? null : history.getPublishUserId();
         if (publishUserId != null) {
@@ -764,6 +1012,22 @@ public class PartController {
                 source.videoPartInfoRaw,
                 source.auditDetailRaw
         );
+    }
+
+    private interface ArchiveProgressApiLoader {
+        BiliApi.ApiDebugResponse<JSONObject> load();
+    }
+
+    private static class ArchiveProgressCacheEntry {
+        private final long fetchAtMs;
+        private final boolean success;
+        private final Map<String, Object> data;
+
+        private ArchiveProgressCacheEntry(long fetchAtMs, boolean success, Map<String, Object> data) {
+            this.fetchAtMs = fetchAtMs;
+            this.success = success;
+            this.data = data;
+        }
     }
 
     private static class ReviewAuthContext {

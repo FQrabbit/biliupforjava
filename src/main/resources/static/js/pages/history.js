@@ -60,6 +60,14 @@ new Vue({
         },
         auditRejectManualRefreshing: false,
         auditRejectReviewDebug: null,
+        archiveProgressLoading: false,
+        archiveProgressDetail: null,
+        archiveProgressRequest: null,
+        archiveProgressRequestToken: null,
+        archiveProgressLoadingTimer: null,
+        archiveProgressSlowTimer: null,
+        archiveProgressLoadingBoxOpen: false,
+        archiveProgressLoadingBoxClosing: false,
         detailFooterOffset: 120,
         partsAutoScrollTimer: null,
         dialogResizeHandler: null,
@@ -295,8 +303,8 @@ new Vue({
                 }
                 return {
                     partId: p.id,
-                    // 如果 page 无效 (<=0)，则使用 index + 1 作为备选
-                    page: (p.page && p.page > 0) ? p.page : (index + 1),
+                    // 如果线上顺序无效 (<=0)，则使用 index + 1 作为备选
+                    page: (p.partOrder && p.partOrder > 0) ? p.partOrder : ((p.page && p.page > 0) ? p.page : (index + 1)),
                     title: p.title,
                     fileName: p.fileName,
                     upload: p.upload,
@@ -387,7 +395,15 @@ new Vue({
                 const violationPosition = item && item.violation_position ? String(item.violation_position).trim() : '';
                 const rejectReasonId = (item && item.reject_reason_id !== undefined && item.reject_reason_id !== null) ? String(item.reject_reason_id).trim() : '';
                 const rejectReasonUrl = item && item.reject_reason_url ? String(item.reject_reason_url).trim() : '';
-                const hasDetail = !!(rejectReason || modifyAdvise || problemDescription || violationTime || violationPosition);
+                const pictureData = Array.isArray(item && item.picture_data)
+                    ? item.picture_data.map(pic => {
+                        return {
+                            time: pic && pic.time ? String(pic.time).trim() : '',
+                            url: pic && pic.url ? String(pic.url).trim() : ''
+                        };
+                    }).filter(pic => pic.url)
+                    : [];
+                const hasDetail = !!(rejectReason || modifyAdvise || problemDescription || violationTime || violationPosition || pictureData.length > 0);
                 return {
                     index: (item && item.index !== undefined && item.index !== null) ? Number(item.index) : idx,
                     type: type,
@@ -399,6 +415,7 @@ new Vue({
                     violationPosition: violationPosition,
                     rejectReasonId: rejectReasonId,
                     rejectReasonUrl: rejectReasonUrl,
+                    pictureData: pictureData,
                     hasDetail: hasDetail
                 };
             }).filter(item => item.hasDetail).sort((a, b) => a.index - b.index);
@@ -436,6 +453,26 @@ new Vue({
         },
         canShowAuditRejectInfo: function() {
             return this.isAuditRejected || this.isAuditInvisibleLikelyDeleted;
+        },
+        canQueryArchiveProgress: function() {
+            return !!(this.currentDetail && this.currentDetail.publish && this.currentDetail.bvId);
+        },
+        canOpenAuditStatusDetail: function() {
+            return this.canQueryArchiveProgress || this.canShowAuditRejectInfo;
+        },
+        auditStatusActionText: function() {
+            if (this.canQueryArchiveProgress && this.canShowAuditRejectInfo) return '进度/原因';
+            if (this.canShowAuditRejectInfo) return '查看详情';
+            return '';
+        },
+        auditStatusTooltipText: function() {
+            if (this.canQueryArchiveProgress && this.canShowAuditRejectInfo) {
+                return '查看当前转码进度和审核不通过原因';
+            }
+            if (this.canQueryArchiveProgress) {
+                return '查看当前转码进度';
+            }
+            return this.auditRejectSummaryText;
         },
         shouldHighlightAuditReject: function() {
             return this.canShowAuditRejectInfo;

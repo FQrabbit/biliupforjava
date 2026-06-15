@@ -177,6 +177,7 @@ public class RecordEventFileClosedService implements RecordEventService {
                 part.setHistoryId(history.getId());
                 part.setFilePath(filePath);
                 part.setFileSize(0L);
+                part.setPartOrder(historyPartRepository.countByHistoryId(history.getId()) + 1);
                 part.setSessionId(sessionId);
                 part.setRecording(eventData.isRecording());
                 // startTime 优先使用 fileOpenTime（blrec 也可能提供），避免 duration=0 时 startTime=now 导致计算结果为 0

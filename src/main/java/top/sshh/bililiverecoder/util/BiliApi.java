@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.util;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.TypeReference;
 import lombok.Data;
 import lombok.ToString;
@@ -515,6 +516,76 @@ public class BiliApi {
         String requestUrl = uriBuilder.toUriString();
         String response = HttpClientUtil.get(requestUrl, headers);
         BiliVideoAuditDetailResponse parsed = JSON.parseObject(response, BiliVideoAuditDetailResponse.class);
+        return new ApiDebugResponse<>(parsed, response, requestUrl);
+    }
+
+    public static ApiDebugResponse<JSONObject> getArchiveProcessVideosDebug(BiliBiliUser user, String bvid, int mode) {
+        return getArchiveProcessVideosDebug(user, bvid, mode, null, null);
+    }
+
+    public static ApiDebugResponse<JSONObject> getArchiveProcessVideosDebug(BiliBiliUser user, String bvid, int mode, Integer ps, Integer pn) {
+        String url = "https://member.bilibili.com/x/web/detail/videos";
+        Map<String, String> params = new TreeMap<>();
+        params.put("mode", String.valueOf(mode));
+        params.put("bvid", bvid);
+        if (ps != null) {
+            params.put("ps", String.valueOf(ps));
+        }
+        if (pn != null) {
+            params.put("pn", String.valueOf(pn));
+        }
+        params.put("web_location", "0.0");
+        return getArchiveProcessJsonDebug(user, bvid, url, params);
+    }
+
+    public static ApiDebugResponse<JSONObject> getArchiveProcessXcodeDebug(BiliBiliUser user, String bvid) {
+        return getArchiveProcessXcodeDebug(user, bvid, null);
+    }
+
+    public static ApiDebugResponse<JSONObject> getArchiveProcessXcodeDebug(BiliBiliUser user, String bvid, String cid) {
+        String url = "https://member.bilibili.com/x/web/detail/xcode";
+        Map<String, String> params = new TreeMap<>();
+        params.put("bvid", bvid);
+        if (StringUtils.isNotBlank(cid)) {
+            params.put("cid", cid);
+        }
+        params.put("web_location", "0.0");
+        return getArchiveProcessJsonDebug(user, bvid, url, params);
+    }
+
+    public static ApiDebugResponse<JSONObject> getArchiveProcessArchiveDebug(BiliBiliUser user, String bvid) {
+        String url = "https://member.bilibili.com/x/web/detail/archive";
+        Map<String, String> params = new TreeMap<>();
+        params.put("bvid", bvid);
+        params.put("web_location", "0.0");
+        return getArchiveProcessJsonDebug(user, bvid, url, params);
+    }
+
+    private static ApiDebugResponse<JSONObject> getArchiveProcessJsonDebug(BiliBiliUser user, String bvid, String url, Map<String, String> params) {
+        Map<String, String> headers = getCommonHeaders();
+        headers.put("accept", "*/*");
+        headers.put("accept-language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6");
+        headers.put("cache-control", "no-cache");
+        headers.put("pragma", "no-cache");
+        headers.put("referer", "https://member.bilibili.com/platform/upload-manager/archive-process?bvid=" + bvid);
+        headers.put("sec-fetch-site", "same-origin");
+        headers.put("sec-fetch-mode", "cors");
+        headers.put("sec-fetch-dest", "empty");
+        WebCookie cookie = Cookie.parse(user.getCookies());
+        headers.put("cookie", cookie.getCookie());
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(url);
+        params.forEach(uriBuilder::queryParam);
+        String requestUrl = uriBuilder.toUriString();
+        String response = HttpClientUtil.get(requestUrl, headers);
+        JSONObject parsed;
+        try {
+            parsed = JSON.parseObject(response);
+        } catch (Exception e) {
+            parsed = new JSONObject();
+            parsed.put("code", -1);
+            parsed.put("message", "接口未返回可解析的 JSON：" + e.getMessage());
+            parsed.put("parseError", true);
+        }
         return new ApiDebugResponse<>(parsed, response, requestUrl);
     }
 

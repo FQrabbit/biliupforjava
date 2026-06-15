@@ -749,6 +749,7 @@ public class RecordBiliPublishService {
                 created++;
             }
             part.setPage(video.getPage());
+            part.setPartOrder(video.getPage());
             part.setTitle(StringUtils.defaultIfBlank(video.getTitle(), StringUtils.defaultIfBlank(video.getPart(), part.getTitle())));
             part.setFileName(video.getFilename());
             if (video.getCid() > 0) {
@@ -2694,6 +2695,7 @@ public class RecordBiliPublishService {
         part.setRoomId(history.getRoomId());
         part.setHistoryId(history.getId());
         part.setPage(page);
+        part.setPartOrder(page);
         part.setTitle(StringUtils.defaultIfBlank(item.title, "P" + page));
         part.setLiveTitle(StringUtils.defaultIfBlank(history.getTitle(), part.getTitle()));
         part.setFilePath(path);
@@ -2744,6 +2746,7 @@ public class RecordBiliPublishService {
 
     private RecordHistoryPart syncEditPartLocalState(RecordHistoryPart part, int page, String title, String filePath, String fileName, Long cid, Long fileSize) {
         part.setPage(page);
+        part.setPartOrder(page);
         part.setTitle(title);
         if (StringUtils.isNotBlank(filePath)) {
             part.setFilePath(filePath);

@@ -164,6 +164,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                 part.setHistoryId(history.getId());
                 part.setFilePath(filePath);
                 part.setFileSize(0L);
+                part.setPartOrder(partCount + 1);
                 part.setSessionId(incomingSessionId);
                 part.setRecording(true);
                 part.setStartTime(LocalDateTime.now());

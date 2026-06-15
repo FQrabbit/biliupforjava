@@ -17,13 +17,15 @@ BEGIN
     BEGIN
         BLOCK "080404b0" // Simplified Chinese, Unicode
         BEGIN
-            VALUE "CompanyName",      "biliupforjava"
-            VALUE "FileDescription",  "biliupforjava (1.4.1-beta7.6)"
-            VALUE "FileVersion",      "1.4.1.76"
-            VALUE "InternalName",     "biliupforjava"
-            VALUE "OriginalFilename", "biliupforjava.exe"
-            VALUE "ProductName",      "biliupforjava"
-            VALUE "ProductVersion",   "1.4.1.76"
+            VALUE "CompanyName",      "FQrabbit"                                           // 作者或发布者名称，资源管理器通常会显示“公司”
+            VALUE "FileDescription",  "B站录播自动投稿工具biliupforjava (1.4.1-beta7.6)"                                // 软件的一句话说明，资源管理器通常会显示“文件说明”
+            VALUE "FileVersion",      "1.4.1.76"                                           // 文件版本，资源管理器通常会显示“文件版本”
+            VALUE "InternalName",     "biliupforjava"                                      // 程序内部名称，有些工具会读取，资源管理器不一定显示
+            VALUE "OriginalFilename", "biliupforjava.exe"                                  // 原始文件名，资源管理器通常会显示“原始文件名”
+            VALUE "ProductName",      "BiliUpForJava"                                      // 产品名称，资源管理器通常会显示“产品名称”
+            VALUE "ProductVersion",   "1.4.1.76"                                           // 产品版本，资源管理器通常会显示“产品版本”
+            VALUE "Comments",         "开源地址: https://github.com/FQrabbit/biliupforjava" // 补充说明，资源管理器通常会显示“备注”
+            VALUE "LegalCopyright",   "Copyright (C) FQrabbit. Licensed under Apache-2.0." // 版权和许可证说明，资源管理器通常会显示“版权”
         END
     END
     BLOCK "VarFileInfo"

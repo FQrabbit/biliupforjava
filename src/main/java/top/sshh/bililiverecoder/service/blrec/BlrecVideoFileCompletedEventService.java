@@ -73,6 +73,7 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
         part.setFilePath(filePath);
         part.setTitle(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM月dd日HH点mm分ss秒")));
         part.setLiveTitle(history.getTitle());
+        part.setPartOrder(partRepository.countByHistoryId(history.getId()) + 1);
         part.setStartTime(history.getStartTime()); // 简单起见，暂用主历史的开始时间
         part.setEndTime(LocalDateTime.now());
         part.setRecording(false); // 文件已完成

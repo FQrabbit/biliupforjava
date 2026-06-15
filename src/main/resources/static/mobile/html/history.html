@@ -1011,7 +1011,7 @@
                     <span>发布</span>
                     <strong>{{ currentDetail.publish ? '已发布' : '未发布' }}</strong>
                 </div>
-                <div :class="getAuditStatusClass(currentDetail)" @click="canShowAuditRejectInfo ? openAuditRejectDetail() : null">
+                <div :class="[getAuditStatusClass(currentDetail), { 'is-clickable': canOpenAuditStatusDetail }]" @click="canOpenAuditStatusDetail ? openAuditStatusDetail() : null">
                     <i class="el-icon-s-check"></i>
                     <span>审核</span>
                     <strong>{{ getAuditStatusText(currentDetail) }}</strong>
@@ -1362,19 +1362,19 @@
                 </div>
                 <div class="status-connector" :class="getAuditStatusClass(currentDetail)"></div>
                 <el-tooltip
-                        v-if="canShowAuditRejectInfo"
+                        v-if="canOpenAuditStatusDetail"
                         effect="dark"
                         placement="top"
-                        :content="auditRejectSummaryText">
+                        :content="auditStatusTooltipText">
                     <div class="status-item-modern"
-                         :class="[getAuditStatusClass(currentDetail), {'audit-clickable': canShowAuditRejectInfo, 'audit-breathing': shouldHighlightAuditReject}]"
-                         @click="openAuditRejectDetail">
+                         :class="[getAuditStatusClass(currentDetail), {'audit-clickable': canOpenAuditStatusDetail, 'audit-breathing': shouldHighlightAuditReject}]"
+                         @click="openAuditStatusDetail">
                         <div class="status-icon"><i class="el-icon-s-check"></i></div>
                         <div class="status-info">
                             <div class="status-label">审核状态</div>
                             <div class="status-value">
                                 {{ getAuditStatusText(currentDetail) }}
-                                <span class="status-badge-mini" v-if="canShowAuditRejectInfo">查看详情</span>
+                                <span class="status-badge-mini" v-if="auditStatusActionText">{{ auditStatusActionText }}</span>
                             </div>
                         </div>
                     </div>
