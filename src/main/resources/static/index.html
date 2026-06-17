@@ -476,6 +476,143 @@
         </div>
     </div>
 
+    <!-- 录播姬 Cookie 同步设置 -->
+    <div class="config-panel brec-config-panel" :class="{ 'is-expanded': brecConfigExpanded }">
+        <div class="config-header" @click="toggleBrecConfig">
+            <div class="config-title">
+                <i class="el-icon-video-camera"></i>
+                <span>录播姬 WebApi 设置</span>
+                <el-tag v-if="brecConfig.enabled" size="mini" type="success" effect="plain" style="margin-left: 8px;">已启用</el-tag>
+            </div>
+            <div class="config-actions">
+                <i :class="brecConfigExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="expand-icon"></i>
+            </div>
+        </div>
+
+        <transition name="filter-slide">
+            <div class="config-body" v-show="brecConfigExpanded" v-loading="brecConfigLoading">
+                <div class="config-help" style="margin-bottom: 16px;">
+                    开启后，程序会每小时把所选账号的最新 Cookie 自动推送到录播姬，使录播姬保持有效登录态。只需填写地址与端口，接口路径由程序自动拼接。
+                </div>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-switch-button"></i>
+                            启用自动同步
+                        </label>
+                        <el-switch
+                            v-model="brecConfig.enabled"
+                            active-text="开启"
+                            inactive-text="关闭">
+                        </el-switch>
+                        <div class="config-help">关闭后定时任务不会向录播姬推送 Cookie</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-connection"></i>
+                            连接协议
+                        </label>
+                        <el-radio-group v-model="brecConfig.https" size="small">
+                            <el-radio-button :label="false">HTTP</el-radio-button>
+                            <el-radio-button :label="true">HTTPS</el-radio-button>
+                        </el-radio-group>
+                        <div class="config-help">录播姬若配置了 HTTPS 才选 HTTPS，一般为 HTTP</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-monitor"></i>
+                            录播姬地址
+                        </label>
+                        <el-input
+                            v-model="brecConfig.host"
+                            placeholder="IP 或域名，如 192.168.1.10"
+                            size="small"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">只填地址，不要带 http:// 和端口</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-position"></i>
+                            端口
+                        </label>
+                        <el-input
+                            v-model="brecConfig.port"
+                            placeholder="默认 2356"
+                            size="small"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">录播姬 WebApi 监听端口，默认 2356</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-user"></i>
+                            提供 Cookie 的账号
+                        </label>
+                        <el-select
+                            v-model="brecConfig.uid"
+                            placeholder="选择账号"
+                            size="small"
+                            filterable
+                            class="config-input">
+                            <el-option
+                                v-for="item in tableData"
+                                :key="item.uid"
+                                :label="(item.uname || '未命名') + ' (UID:' + item.uid + ')'"
+                                :value="String(item.uid)">
+                            </el-option>
+                        </el-select>
+                        <div class="config-help">将使用该账号的登录 Cookie 推送到录播姬</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-key"></i>
+                            认证用户名
+                            <span class="config-unit">可选</span>
+                        </label>
+                        <el-input
+                            v-model="brecConfig.username"
+                            placeholder="录播姬未开启认证时留空"
+                            size="small"
+                            autocomplete="off"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">录播姬开启 Basic 认证时填写</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-lock"></i>
+                            认证密码
+                            <span class="config-unit">可选</span>
+                        </label>
+                        <el-input
+                            v-model="brecConfig.password"
+                            placeholder="留空表示不修改"
+                            size="small"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">与用户名一起用于 Basic 认证。出于安全考虑密码不会回显，留空保存即保持原密码不变</div>
+                    </div>
+                </div>
+
+                <div class="config-footer">
+                    <el-button class="modern-btn" type="primary" @click="saveBrecConfig" :loading="brecConfigSaving" icon="el-icon-check" size="small">
+                        保存设置
+                    </el-button>
+                </div>
+            </div>
+        </transition>
+    </div>
+
     <!-- 内容区域 -->
     <transition name="fade-transform">
         <!-- 空状态 -->
@@ -628,6 +765,31 @@
         <div class="dialog-footer" slot="footer">
             <el-button @click="dialogFormVisible = false">取消</el-button>
             <el-button @click="updateUser()" type="primary" :loading="saveLoading">保存设置</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 录播姬同步结果悬浮窗 -->
+    <el-dialog
+        :visible.sync="brecSyncResultVisible"
+        :fullscreen="isMobile"
+        :title="brecSyncResult.success ? '同步成功' : '同步失败'"
+        center
+        custom-class="brec-sync-dialog"
+        width="460px">
+        <div class="brec-sync-result" :class="brecSyncResult.success ? 'is-success' : 'is-error'">
+            <div class="brec-sync-result-icon">
+                <i :class="brecSyncResult.success ? 'el-icon-circle-check' : 'el-icon-circle-close'"></i>
+            </div>
+            <div class="brec-sync-result-body">
+                <div class="brec-sync-result-status" v-if="!brecSyncResult.success">
+                    {{ brecSyncStatusLabel(brecSyncResult.status) }}
+                    <span v-if="brecSyncResult.httpCode" class="brec-sync-result-code">HTTP {{ brecSyncResult.httpCode }}</span>
+                </div>
+                <div class="brec-sync-result-message">{{ brecSyncResult.message }}</div>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button type="primary" @click="brecSyncResultVisible = false">我知道了</el-button>
         </div>
     </el-dialog>
 </div>

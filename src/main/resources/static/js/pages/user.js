@@ -21,7 +21,26 @@ Vue.component('user-page', {
             viewMode: 'card',
             avatarErrors: {},
             mobileUserActionsVisible: false,
-            mobileActionUser: null
+            mobileActionUser: null,
+            brecConfigExpanded: false,
+            brecConfigLoading: false,
+            brecConfigSaving: false,
+            brecConfig: {
+                enabled: false,
+                host: '',
+                port: '2356',
+                https: false,
+                username: '',
+                password: '',
+                uid: ''
+            },
+            brecSyncResultVisible: false,
+            brecSyncResult: {
+                success: false,
+                status: '',
+                message: '',
+                httpCode: null
+            }
         };
     },
     computed: {
@@ -303,10 +322,119 @@ Vue.component('user-page', {
             }, function () {
                 self.$message.error('移除用户失败');
             });
+        },
+        toggleBrecConfig: function () {
+            this.brecConfigExpanded = !this.brecConfigExpanded;
+        },
+        fetchBrecConfig: function () {
+            var self = this;
+            self.brecConfigLoading = true;
+            SystemApi.listConfig(function (data) {
+                self.brecConfigLoading = false;
+                if (!Array.isArray(data)) {
+                    return;
+                }
+                var map = {};
+                data.forEach(function (item) {
+                    map[item.configKey] = item.configValue;
+                });
+                var toBool = function (v) {
+                    return v === 'true' || v === '1' || v === true;
+                };
+                if ('brec.cookie-sync.enabled' in map) self.brecConfig.enabled = toBool(map['brec.cookie-sync.enabled']);
+                if ('brec.cookie-sync.host' in map) self.brecConfig.host = map['brec.cookie-sync.host'] || '';
+                if ('brec.cookie-sync.port' in map) self.brecConfig.port = map['brec.cookie-sync.port'] || '';
+                if ('brec.cookie-sync.https' in map) self.brecConfig.https = toBool(map['brec.cookie-sync.https']);
+                if ('brec.cookie-sync.username' in map) self.brecConfig.username = map['brec.cookie-sync.username'] || '';
+                if ('brec.cookie-sync.password' in map) self.brecConfig.password = map['brec.cookie-sync.password'] || '';
+                if ('brec.cookie-sync.uid' in map) self.brecConfig.uid = map['brec.cookie-sync.uid'] || '';
+            }, function () {
+                self.brecConfigLoading = false;
+            });
+        },
+        saveBrecConfig: function () {
+            var self = this;
+            if (self.brecConfig.enabled && (!self.brecConfig.host || !String(self.brecConfig.host).trim())) {
+                self.$message.warning('请填写录播姬地址');
+                return;
+            }
+            if (self.brecConfig.enabled && (!self.brecConfig.uid || !String(self.brecConfig.uid).trim())) {
+                self.$message.warning('请选择提供 Cookie 的账号');
+                return;
+            }
+            self.brecConfigSaving = true;
+            // 单个事务批量保存，避免任意一项失败造成半保存的脏配置
+            var payload = {
+                'brec.cookie-sync.enabled': String(self.brecConfig.enabled),
+                'brec.cookie-sync.host': String(self.brecConfig.host || '').trim(),
+                'brec.cookie-sync.port': String(self.brecConfig.port || '').trim(),
+                'brec.cookie-sync.https': String(self.brecConfig.https),
+                'brec.cookie-sync.username': String(self.brecConfig.username || ''),
+                'brec.cookie-sync.uid': String(self.brecConfig.uid || '').trim()
+            };
+            // 密码框留空表示不修改：只有用户输入了新密码才提交，后端对空值同样跳过
+            var pwd = String(self.brecConfig.password || '');
+            if (pwd.length > 0) {
+                payload['brec.cookie-sync.password'] = pwd;
+            }
+
+            // 未启用时只保存、不触发同步
+            if (!self.brecConfig.enabled) {
+                SystemApi.updateConfigBatch(payload, function () {
+                    self.brecConfigSaving = false;
+                    self.$message.success('录播姬同步设置已保存');
+                }, function () {
+                    self.brecConfigSaving = false;
+                    self.$message.error('保存录播姬同步设置失败');
+                });
+                return;
+            }
+
+            // 已启用：保存配置并立即推送一次 Cookie，根据结果反馈成功/失败
+            SystemApi.brecSyncNow(payload, function (data) {
+                self.brecConfigSaving = false;
+                self.fetchBrecConfig();
+                var result = data || {};
+                if (result.success) {
+                    self.$message.success(result.message || 'Cookie 已成功推送到录播姬');
+                } else {
+                    self.showBrecSyncFailure(result);
+                }
+            }, function () {
+                self.brecConfigSaving = false;
+                self.showBrecSyncFailure({
+                    success: false,
+                    status: 'REQUEST_FAILED',
+                    message: '请求失败：无法连接到本程序后端，请检查网络或稍后重试'
+                });
+            });
+        },
+        showBrecSyncFailure: function (result) {
+            this.brecSyncResult = {
+                success: false,
+                status: result.status || 'UNKNOWN',
+                message: result.message || '同步失败，原因未知',
+                httpCode: result.httpCode != null ? result.httpCode : null
+            };
+            this.brecSyncResultVisible = true;
+        },
+        brecSyncStatusLabel: function (status) {
+            var map = {
+                CONFIG_INCOMPLETE: '配置不完整',
+                NO_COOKIE: '账号无可用 Cookie',
+                UNREACHABLE: '无法访问录播姬',
+                AUTH_FAILED: '认证失败',
+                HTTP_ERROR: '录播姬返回错误',
+                SAVE_FAILED: '保存配置失败',
+                REQUEST_FAILED: '请求失败',
+                UNKNOWN: '未知错误'
+            };
+            return map[status] || '同步失败';
         }
     },
     created: function () {
         this.fetchUserList();
+        this.fetchBrecConfig();
         this.handleResize();
         window.addEventListener('resize', this.handleResize);
         var cached = localStorage.getItem('user-view-mode');

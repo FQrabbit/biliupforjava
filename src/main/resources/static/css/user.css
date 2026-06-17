@@ -1254,7 +1254,57 @@
 
 }
 
+/* 录播姬同步结果悬浮窗 */
+.brec-sync-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 4px 4px 8px;
+}
 
+.brec-sync-result-icon {
+    flex: 0 0 auto;
+    font-size: 44px;
+    line-height: 1;
+}
 
+.brec-sync-result.is-success .brec-sync-result-icon {
+    color: #67c23a;
+}
 
+.brec-sync-result.is-error .brec-sync-result-icon {
+    color: #f56c6c;
+}
+
+.brec-sync-result-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-top: 2px;
+}
+
+.brec-sync-result-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.brec-sync-result-code {
+    font-size: 12px;
+    font-weight: 600;
+    color: #f56c6c;
+    border: 1px solid rgba(245, 108, 108, 0.4);
+    border-radius: 8px;
+    padding: 1px 7px;
+}
+
+.brec-sync-result-message {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    word-break: break-word;
+}
 

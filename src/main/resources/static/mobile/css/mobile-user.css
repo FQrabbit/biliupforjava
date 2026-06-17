@@ -802,3 +802,159 @@
         transition-duration: 1ms !important;
     }
 }
+
+/* 录播姬 Cookie 同步设置面板 */
+.mobile-shell .mobile-brec-panel {
+    margin-top: 12px;
+    border: 1px solid var(--mobile-border);
+    background: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-soft);
+    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.26);
+    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.26);
+    border-radius: 22px;
+    overflow: hidden;
+}
+
+.mobile-shell .mobile-brec-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 17px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 720;
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-brec-header-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.mobile-shell .mobile-brec-header-title > i {
+    color: var(--mobile-accent, #00a1d6);
+    font-size: 18px;
+}
+
+.mobile-shell .mobile-brec-badge {
+    font-style: normal;
+    font-size: 11px;
+    font-weight: 700;
+    color: #67c23a;
+    border: 1px solid rgba(103, 194, 58, 0.4);
+    border-radius: 10px;
+    padding: 1px 7px;
+}
+
+.mobile-shell .mobile-brec-body {
+    padding: 4px 17px 18px;
+}
+
+.mobile-shell .mobile-brec-intro {
+    margin: 0 0 14px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.mobile-shell .mobile-brec-field {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.mobile-shell .mobile-brec-field > label {
+    color: var(--text-primary);
+    font-size: 13.5px;
+    font-weight: 680;
+}
+
+.mobile-shell .mobile-brec-field > small {
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    line-height: 1.4;
+}
+
+.mobile-shell .mobile-brec-field .el-input,
+.mobile-shell .mobile-brec-field .el-select {
+    width: 100%;
+}
+
+.mobile-shell .mobile-brec-save {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 16px;
+    background: var(--mobile-accent, #00a1d6);
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 740;
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-brec-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 录播姬同步结果悬浮窗（移动端，全屏展示） */
+.mobile-brec-sync-result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+    padding: 24px 12px 8px;
+}
+
+.mobile-brec-sync-result-icon {
+    font-size: 64px;
+    line-height: 1;
+}
+
+.mobile-brec-sync-result.is-success .mobile-brec-sync-result-icon {
+    color: #67c23a;
+}
+
+.mobile-brec-sync-result.is-error .mobile-brec-sync-result-icon {
+    color: #f56c6c;
+}
+
+.mobile-brec-sync-result-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 17px;
+    font-weight: 740;
+    color: var(--text-primary);
+}
+
+.mobile-brec-sync-result-code {
+    font-size: 12px;
+    font-weight: 600;
+    color: #f56c6c;
+    border: 1px solid rgba(245, 108, 108, 0.4);
+    border-radius: 8px;
+    padding: 1px 8px;
+}
+
+.mobile-brec-sync-result-message {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    max-width: 460px;
+    word-break: break-word;
+}

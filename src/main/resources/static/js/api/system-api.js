@@ -11,6 +11,12 @@
         updateConfig: function(data, callback, errorCallback) {
             ApiUtil.post('/system-config/update', data, callback, errorCallback);
         },
+        updateConfigBatch: function(data, callback, errorCallback) {
+            ApiUtil.post('/system-config/update-batch', data, callback, errorCallback);
+        },
+        brecSyncNow: function(data, callback, errorCallback) {
+            ApiUtil.post('/system-config/brec/sync-now', data, callback, errorCallback);
+        },
         listConfigWithAuth: function(token) {
             return fetch('/system-config/list', {
                 method: 'GET',

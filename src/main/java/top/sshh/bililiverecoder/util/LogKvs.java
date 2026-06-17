@@ -338,6 +338,16 @@ public final class LogKvs {
         EVENT_ZH.put("RefreshTokenJob.SleepInterrupted", "定时任务：刷新token-等待被中断");
         EVENT_ZH.put("RefreshTokenJob.RefreshFailed", "定时任务：刷新token失败");
 
+        EVENT_ZH.put("BrecCookieSync.SkipIncompleteConfig", "定时任务：录播姬Cookie同步-配置不完整，跳过");
+        EVENT_ZH.put("BrecCookieSync.InvalidUid", "定时任务：录播姬Cookie同步-UID格式无效");
+        EVENT_ZH.put("BrecCookieSync.NoUsableCookie", "定时任务：录播姬Cookie同步-未找到可用账号或Cookie");
+        EVENT_ZH.put("BrecCookieSync.EmptyCookieAfterConvert", "定时任务：录播姬Cookie同步-Cookie转换后为空");
+        EVENT_ZH.put("BrecCookieSync.HttpError", "定时任务：录播姬Cookie同步-录播姬返回错误状态");
+        EVENT_ZH.put("BrecCookieSync.AuthFailed", "定时任务：录播姬Cookie同步-认证失败");
+        EVENT_ZH.put("BrecCookieSync.Unreachable", "定时任务：录播姬Cookie同步-无法访问录播姬");
+        EVENT_ZH.put("BrecCookieSync.RequestFailed", "定时任务：录播姬Cookie同步-请求录播姬失败");
+        EVENT_ZH.put("BrecCookieSync.Success", "定时任务：录播姬Cookie同步成功");
+
         EVENT_ZH.put("RoomStatusSyncJob.Start", "定时任务：直播间状态同步开始(兜底机制)");
         EVENT_ZH.put("RoomStatusSyncJob.StreamingChanged", "定时任务：直播间直播状态发生变化");
         EVENT_ZH.put("RoomStatusSyncJob.ForceResetRecording", "定时任务：直播结束，强制重置录制状态");
