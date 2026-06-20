@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <link rel="icon" href="../../img/icon.svg" type="image/svg+xml">
     <link href="../../css/element-ui.css" rel="stylesheet">
     <link href="../../css/base/variables.css" rel="stylesheet">
@@ -15,6 +15,7 @@
     <link href="../../css/room.css" rel="stylesheet">
     <link href="../css/mobile-pages.css" rel="stylesheet">
     <link href="../css/mobile-room.css" rel="stylesheet">
+    <script src="../../js/app/mobile-viewport.js"></script>
     <style>
         .season-cover-tooltip.el-tooltip__popper {
             padding: 0 !important;
@@ -261,7 +262,7 @@
             </div>
         </aside>
     </transition>
-    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" :before-close="handleClose" :close-on-click-modal="false" custom-class="room-config-dialog">
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" :before-close="handleClose" :close-on-click-modal="false" append-to-body custom-class="room-config-dialog">
         <div slot="title" class="dialog-header-modern">
             <div class="header-title-group">
                 <div class="header-icon-box">
@@ -305,9 +306,9 @@
                                 </el-col>
                                 <el-col :span="12">
                                     <el-form-item label="投稿账号">
-                                        <el-select v-model="room.uploadUserId" placeholder="选择账号" style="width: 100%">
+                                        <el-select v-model="room.uploadUserId" placeholder="选择账号" class="mobile-room-full-field" popper-class="mobile-room-config-popper" :popper-append-to-body="true" @visible-change="onMobileConfigDropdownVisibleChange">
                                             <el-option :key="item.id" :label="privacyMode ? '***' : item.uname" :value="item.id" v-for="item in users">
-                                                <span style="float: left">{{ maskText(item.uname) }}</span>
+                                                <span class="mobile-room-option-row">{{ maskText(item.uname) }}</span>
                                             </el-option>
                                         </el-select>
                                     </el-form-item>
@@ -323,7 +324,7 @@
                                 <el-input v-model="room.tags" placeholder="多个标签用逗号分隔"></el-input>
                             </el-form-item>
                             <el-form-item label="加入合集">
-                                <el-select v-model="room.seasonId" placeholder="选择合集" style="width: 100%" clearable filterable @change="changeSeason" @visible-change="onSeasonDropdownVisibleChange">
+                                <el-select v-model="room.seasonId" placeholder="选择合集" class="mobile-room-full-field" clearable popper-class="mobile-room-config-popper" :popper-append-to-body="true" @change="changeSeason" @visible-change="onSeasonDropdownVisibleChange">
                                     <el-option :key="item.season.id" :label="item.season.title" :value="item.season.id" v-for="item in seasonsList">
                                         <el-tooltip
                                                 :disabled="!getSeasonCoverUrl(item)"
@@ -348,9 +349,9 @@
                                 </div>
                             </el-form-item>
                             <el-form-item label="小节">
-                                <el-select v-model="room.sectionId" placeholder="选择小节" style="width: 100%" clearable filterable>
+                                <el-select v-model="room.sectionId" placeholder="选择小节" class="mobile-room-full-field" clearable popper-class="mobile-room-config-popper" :popper-append-to-body="true" @visible-change="onMobileConfigDropdownVisibleChange">
                                     <el-option :key="item.id" :label="item.title" :value="item.id" v-for="item in sectionsList">
-                                        <span style="float: left">{{ item.title }}</span>
+                                        <span class="mobile-room-option-row">{{ item.title }}</span>
                                     </el-option>
                                 </el-select>
                             </el-form-item>
@@ -396,9 +397,9 @@
                         </div>
                         <div class="card-body">
                             <el-form-item label="上传线路">
-                                <el-select v-model="room.line" placeholder="选择线路" style="width: 100%">
+                                <el-select v-model="room.line" placeholder="选择线路" class="mobile-room-full-field" popper-class="mobile-room-config-popper" :popper-append-to-body="true" @visible-change="onMobileConfigDropdownVisibleChange">
                                     <el-option :label="item" :value="item" v-for="item in lines">
-                                        <span style="float: left">{{ item }}</span>
+                                        <span class="mobile-room-option-row is-line">{{ item }}</span>
                                         <span class="mobile-config-line-meta" v-if="lineStats[item]">
                                             <i :class="getLineStatusIcon(lineStats[item])" :style="{color: getLineStatusColor(lineStats[item])}"></i>
                                             {{ lineStats[item] }}
@@ -435,7 +436,7 @@
                                 </div>
                             </div>
 
-                            <el-form-item label="版权类型" class="option-card-form-item" style="margin-top: 15px;">
+                            <el-form-item label="版权类型" class="option-card-form-item mobile-room-section-offset">
                                 <div class="option-card-grid option-card-grid-two" :class="{ 'is-disabled': room.copyrightDisabled }">
                                     <button
                                         type="button"
@@ -539,12 +540,12 @@
                             <el-row :gutter="10">
                                 <el-col :span="12">
                                     <el-form-item label="忽略大小(MB)">
-                                        <el-input type="number" v-model="room.fileSizeLimit"></el-input>
+                                        <el-input type="number" inputmode="numeric" v-model="room.fileSizeLimit"></el-input>
                                     </el-form-item>
                                 </el-col>
                                 <el-col :span="12">
                                     <el-form-item label="忽略时长(秒)">
-                                        <el-input type="number" v-model="room.durationLimit"></el-input>
+                                        <el-input type="number" inputmode="numeric" v-model="room.durationLimit"></el-input>
                                     </el-form-item>
                                 </el-col>
                             </el-row>
@@ -553,7 +554,7 @@
                             </div>
 
                             <el-form-item label="文件后处理">
-                                <el-select v-model="room.deleteType" placeholder="选择处理方式" style="width: 100%">
+                                <el-select v-model="room.deleteType" placeholder="选择处理方式" class="mobile-room-full-field" popper-class="mobile-room-config-popper" :popper-append-to-body="true" @visible-change="onMobileConfigDropdownVisibleChange">
                                     <el-option-group label="保留">
                                         <el-option label="不删除" :value="0"></el-option>
                                     </el-option-group>
@@ -574,7 +575,7 @@
                             </el-form-item>
                             
                             <el-form-item v-if="room.deleteType == 3" label="删除天数">
-                                <el-input type="number" v-model="room.deleteDay" placeholder="请输入天数"></el-input>
+                                <el-input type="number" inputmode="numeric" v-model="room.deleteDay" placeholder="请输入天数"></el-input>
                                 <el-alert
                                         class="delete-policy-hint"
                                         type="warning"
@@ -647,7 +648,7 @@
                                 </div>
                                 <div class="switch-card" v-if="room.highEnergyCut">
                                     <span class="switch-label">高能因子</span>
-                                    <el-input type="number" v-model="room.percentileRank" :min="0.5" :max="0.99" :step="0.01" size="mini" style="width: 90px"></el-input>
+                                    <el-input class="high-energy-factor-input" type="number" inputmode="decimal" v-model="room.percentileRank" :min="0.5" :max="0.99" :step="0.01" size="mini"></el-input>
                                 </div>
                             </div>
                         </div>
@@ -679,10 +680,10 @@
                                     标签将作为 tags 参数发送，多个标签请使用 | 分隔；不填则不传 tags。
                                 </div>
                             </el-form-item>
-                            <el-divider style="margin: 12px 0;"></el-divider>
+                            <el-divider class="mobile-room-divider"></el-divider>
                             <el-form-item label="推送触发条件">
-                                <el-checkbox-group v-model="pushMsgTagsArray" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; margin-top: 8px;">
-                                    <el-checkbox v-for="tag in pushMsgTagsOptions" :key="tag.value" :label="tag.value" style="margin: 0;">
+                                <el-checkbox-group v-model="pushMsgTagsArray" class="mobile-room-push-tags">
+                                    <el-checkbox v-for="tag in pushMsgTagsOptions" :key="tag.value" :label="tag.value" class="mobile-room-push-tag">
                                         {{ tag.label }}
                                     </el-checkbox>
                                 </el-checkbox-group>
@@ -989,7 +990,7 @@
                             <i class="el-icon-reading"></i>
                             <span>描述模板</span>
                         </div>
-                        <div class="detail-item-value template-text" style="white-space: pre-wrap;">{{ currentDetail.descriptionTemplate }}</div>
+                        <div class="detail-item-value template-text is-pre-wrap">{{ currentDetail.descriptionTemplate }}</div>
                     </div>
                     <div class="detail-item-modern full">
                         <div class="detail-item-label">
@@ -1007,10 +1008,10 @@
         </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="addRoomDialog" :fullscreen="isMobile" title="添加房间">
+    <el-dialog :visible.sync="addRoomDialog" :fullscreen="isMobile" title="添加房间" append-to-body custom-class="mobile-room-simple-dialog">
         <el-form :model="addRoom">
             <el-form-item :label-width="formLabelWidth" label="房间号(长号)">
-                <el-input autocomplete="off" type="number" v-model="addRoom.roomId"></el-input>
+                <el-input autocomplete="off" type="number" inputmode="numeric" v-model="addRoom.roomId"></el-input>
             </el-form-item>
         </el-form>
         <div class="dialog-footer" slot="footer">
@@ -1018,7 +1019,7 @@
             <el-button @click="addRoomF()" type="primary">保 存</el-button>
         </div>
     </el-dialog>
-    <el-dialog :visible.sync="exportConfigDialog" :fullscreen="isMobile" title="导出配置" custom-class="export-config-dialog">
+    <el-dialog :visible.sync="exportConfigDialog" :fullscreen="isMobile" title="导出配置" append-to-body custom-class="export-config-dialog mobile-room-simple-dialog">
         <el-form :model="exportConfig">
             <el-form-item :label-width="formLabelWidth" label="导出选项">
                 <el-checkbox v-model="exportConfig.exportRoom">导出房间信息</el-checkbox>
@@ -1038,7 +1039,7 @@
     </el-dialog>
     
     <!-- 弹幕过滤设置对话框 -->
-    <el-dialog :visible.sync="editLiveMsgSettingVisible" :fullscreen="isMobile" custom-class="danmaku-filter-dialog">
+    <el-dialog :visible.sync="editLiveMsgSettingVisible" :fullscreen="isMobile" append-to-body custom-class="danmaku-filter-dialog mobile-room-simple-dialog">
         <div slot="title" class="dialog-header">
             <div class="dialog-title-wrapper">
                 <i class="el-icon-chat-line-round"></i>
@@ -1151,23 +1152,23 @@
         </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="wxDialogVisible" title="扫码获取UID" width="300px" append-to-body center>
-        <div style="text-align: center;">
+    <el-dialog :visible.sync="wxDialogVisible" title="扫码获取UID" width="300px" append-to-body center custom-class="mobile-room-qr-dialog">
+        <div class="mobile-room-qr-body">
             <el-image
                     src="https://wxpusher.zjiecode.com/api/qrcode/gg2nIKVGMMp1paStVFVtFWrdoQFWHCymwGVXXTStk5c4k8Dp4DSQFNRJAKwtLZ7G.jpg"
                     fit="fill"
-                    style="width: 250px; height: 250px"></el-image>
+                    class="mobile-room-qr-image"></el-image>
         </div>
         <div class="dialog-footer" slot="footer">
             <el-button @click="wxDialogVisible = false" type="primary">关 闭</el-button>
         </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="manualPasteDialogVisible" :fullscreen="isMobile" title="手动粘贴配置" append-to-body>
-        <div style="margin-bottom: 15px;">
+    <el-dialog :visible.sync="manualPasteDialogVisible" :fullscreen="isMobile" title="手动粘贴配置" append-to-body custom-class="mobile-room-simple-dialog mobile-room-paste-dialog">
+        <div class="mobile-room-paste-help">
             <p>由于浏览器安全限制，无法自动读取剪贴板。</p>
             <p>请手动将配置内容粘贴到下方的文本框中，然后点击“应用”。</p>
-            <el-link type="primary" @click="showPasteHelp" style="margin-top: 5px;">为什么无法自动粘贴？</el-link>
+            <el-link type="primary" @click="showPasteHelp" class="mobile-room-paste-link">为什么无法自动粘贴？</el-link>
         </div>
         <el-input
             type="textarea"
@@ -1181,11 +1182,11 @@
         </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="pasteConfirmDialogVisible" title="确认粘贴配置" width="400px" append-to-body>
-        <div style="margin-bottom: 20px;">
-            <div style="color: #606266; line-height: 1.6;">
+    <el-dialog :visible.sync="pasteConfirmDialogVisible" :fullscreen="isMobile" title="确认粘贴配置" append-to-body custom-class="mobile-room-simple-dialog mobile-room-paste-dialog">
+        <div class="mobile-room-paste-confirm">
+            <div class="mobile-room-paste-confirm-copy">
                 <p>粘贴将会覆盖当前配置的大部分参数。</p>
-                <p style="color: #909399; font-size: 12px; margin-top: 10px;">
+                <p class="mobile-room-paste-confirm-tip">
                     💡 提示：某些参数（如房间ID、直播间ID等）将被保留，不会被覆盖。
                 </p>
             </div>

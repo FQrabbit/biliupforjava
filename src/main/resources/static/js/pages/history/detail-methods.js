@@ -175,6 +175,7 @@
         openAuditStatusDetail: function(skipFallbackRetry, keepLoadingBox) {
             if (!this.canOpenAuditStatusDetail) return;
             var _this = this;
+            this.clearArchiveProgressDetailBoxTimer();
             var shouldFallbackRetry = !skipFallbackRetry
                 && this.isAuditRejected
                 && this.currentDetail
@@ -204,14 +205,20 @@
                     if (_this.archiveProgressRequestToken !== retryToken) return;
                     _this.updateAuditStatusLoadingBox(
                         '审核信息读取完成',
-                        '本地分P记录和审核退回信息已刷新，继续请求转码进度。',
+                        '本地分P记录和审核退回信息已刷新，正在打开退回原因。',
                         'success'
                     );
-                    _this.openAuditStatusDetail(true, true);
+                    _this.finishAuditStatusLoadingOnly();
+                    _this.openAuditRejectDetail(true);
                 }, {
                     retryOnError: 1,
                     retryDelayMs: 800
                 });
+                return;
+            }
+            if (this.canShowAuditRejectInfo) {
+                this.finishAuditStatusLoadingOnly();
+                this.openAuditRejectDetail(true);
                 return;
             }
             if (!this.canQueryArchiveProgress) {
@@ -337,18 +344,16 @@
             this.finishArchiveProgressLoading(this.buildArchiveProgressFailureResponse(message, reason || 'abort'));
         },
         finishArchiveProgressLoading: function(progressResp) {
-            var _this = this;
             this.clearArchiveProgressLoadingTimers();
             this.archiveProgressRequest = null;
             this.archiveProgressLoading = false;
             this.closeAuditStatusLoadingBox();
             this.archiveProgressDetail = progressResp || null;
-            setTimeout(function() {
-                _this.showAuditStatusDetailBox(progressResp || {});
-            }, 80);
+            this.queueArchiveProgressDetailBox(progressResp || {});
         },
         finishAuditStatusLoadingOnly: function() {
             this.clearArchiveProgressLoadingTimers();
+            this.clearArchiveProgressDetailBoxTimer();
             this.archiveProgressRequest = null;
             this.archiveProgressRequestToken = null;
             this.archiveProgressLoading = false;
@@ -364,17 +369,70 @@
                 this.archiveProgressSlowTimer = null;
             }
         },
-        closeAuditStatusLoadingBox: function() {
-            if (!this.archiveProgressLoadingBoxOpen) return;
+        clearArchiveProgressDetailBoxTimer: function() {
+            if (this.archiveProgressDetailBoxTimer) {
+                clearTimeout(this.archiveProgressDetailBoxTimer);
+                this.archiveProgressDetailBoxTimer = null;
+            }
+            this.archiveProgressDetailBoxToken = null;
+        },
+        queueArchiveProgressDetailBox: function(progressResp) {
             var _this = this;
+            var token = Date.now() + '-archive-detail-' + Math.random();
+            this.clearArchiveProgressDetailBoxTimer();
+            this.archiveProgressDetailBoxToken = token;
+            var attemptOpen = function() {
+                if (_this.archiveProgressDetailBoxToken !== token) return;
+                if (_this.archiveProgressLoadingBoxClosing) {
+                    _this.archiveProgressDetailBoxTimer = setTimeout(attemptOpen, 40);
+                    return;
+                }
+                _this.archiveProgressDetailBoxTimer = null;
+                _this.archiveProgressDetailBoxToken = null;
+                _this.showAuditStatusDetailBox(progressResp || {});
+            };
+            this.archiveProgressDetailBoxTimer = setTimeout(attemptOpen, 0);
+        },
+        closeAuditStatusLoadingBox: function() {
+            var _this = this;
+            if (!this.archiveProgressLoadingBoxOpen && !document.querySelector('.archive-progress-loading-message-box')) return;
             this.archiveProgressLoadingBoxClosing = true;
             this.archiveProgressLoadingBoxOpen = false;
-            if (this.$msgbox && this.$msgbox.close) {
-                this.$msgbox.close();
-            }
+            this.requestCloseAuditStatusLoadingBox();
             setTimeout(function() {
+                _this.forceRemoveAuditStatusLoadingBoxIfNeeded();
                 _this.archiveProgressLoadingBoxClosing = false;
-            }, 120);
+            }, 160);
+        },
+        requestCloseAuditStatusLoadingBox: function() {
+            try {
+                if (window.ELEMENT && window.ELEMENT.MessageBox && window.ELEMENT.MessageBox.close) {
+                    window.ELEMENT.MessageBox.close();
+                    return;
+                }
+            } catch (e) {
+            }
+            try {
+                if (this.$msgbox && this.$msgbox.close) {
+                    this.$msgbox.close();
+                }
+            } catch (e) {
+            }
+        },
+        forceRemoveAuditStatusLoadingBoxIfNeeded: function() {
+            var box = document.querySelector('.archive-progress-loading-message-box');
+            if (!box) return;
+            var wrapper = box.closest ? box.closest('.el-message-box__wrapper') : null;
+            if (wrapper && wrapper.parentNode) {
+                wrapper.parentNode.removeChild(wrapper);
+            }
+            var modals = document.querySelectorAll('.v-modal');
+            if (modals.length > 0) {
+                var modal = modals[modals.length - 1];
+                if (modal && modal.parentNode) {
+                    modal.parentNode.removeChild(modal);
+                }
+            }
         },
         cancelAuditStatusLoadingRequest: function() {
             this.archiveProgressRequestToken = null;
@@ -401,19 +459,39 @@
             };
         },
         showAuditStatusDetailBox: function(progressResp) {
-            const esc = this.escapeAuditHtml;
-            let html = '<div class="archive-progress-dialog">';
-            if (this.canShowAuditRejectInfo) {
-                html += this.buildAuditRejectCompactHtml(esc);
+            if (this.archiveProgressLoadingBoxClosing) {
+                this.queueArchiveProgressDetailBox(progressResp || {});
+                return;
             }
-            html += this.buildArchiveProgressHtml(progressResp || {}, esc);
-            html += '</div>';
-            this.$alert(html, '稿件状态详情', {
-                dangerouslyUseHTMLString: true,
-                confirmButtonText: '我知道了',
-                type: this.canShowAuditRejectInfo ? 'warning' : 'info',
-                customClass: 'audit-status-message-box archive-progress-message-box'
-            });
+            try {
+                const esc = this.escapeAuditHtml;
+                let html = '<div class="archive-progress-dialog">';
+                if (this.canShowAuditRejectInfo) {
+                    html += this.buildAuditRejectCompactHtml(esc);
+                }
+                html += this.buildArchiveProgressHtml(progressResp || {}, esc);
+                html += '</div>';
+                this.$alert(html, '稿件状态详情', {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '我知道了',
+                    type: this.canShowAuditRejectInfo ? 'warning' : 'info',
+                    customClass: 'audit-status-message-box archive-progress-message-box'
+                });
+            } catch (err) {
+                if (window.console && console.error) {
+                    console.error('Failed to render archive progress detail box:', err);
+                }
+                this.$alert(
+                    '<div class="archive-progress-dialog"><div class="archive-progress-empty"><i class="el-icon-warning"></i><span>' + this.escapeAuditHtml((progressResp && progressResp.msg) || 'Archive progress display failed.') + '</span></div></div>',
+                    'Archive progress',
+                    {
+                        dangerouslyUseHTMLString: true,
+                        confirmButtonText: 'OK',
+                        type: 'warning',
+                        customClass: 'audit-status-message-box archive-progress-message-box'
+                    }
+                );
+            }
         },
         buildArchiveProgressHtml: function(progressResp, esc) {
             const bvid = progressResp && progressResp.bvid ? progressResp.bvid : (this.currentDetail && this.currentDetail.bvId);
@@ -1293,6 +1371,7 @@
             return item.recording === true && recordPartCount === 0 && !!item.endTime;
         },
         handleCommand: function(command, row) {
+            this.showMoreActions = false;
             switch(command) {
                 case 'rePublish': this.rePublish(row.id); break;
                 case 'highEnergyCutPublish': this.highEnergyCutPublish(row.id); break;
@@ -1557,8 +1636,15 @@
         },
         syncParentWorkspaceMode: function() {
             this.notifyParentWorkspaceMode(!!(this.isMobile && (this.detailDialogVisible || this.editPartsEditing)));
+            if (typeof this.syncParentIframeModalState === 'function') {
+                this.syncParentIframeModalState();
+            }
         },
         notifyParentWorkspaceMode: function(active) {
+            if (window.PageBootstrap && typeof window.PageBootstrap.setIframeWorkspaceMode === 'function') {
+                window.PageBootstrap.setIframeWorkspaceMode(!!active, 'history-detail');
+                return;
+            }
             try {
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({
@@ -1568,6 +1654,35 @@
                     }, window.location.origin);
                 }
             } catch (e) {}
+        },
+        notifyParentIframeModal: function(active, source) {
+            if (window.PageBootstrap && typeof window.PageBootstrap.setIframeModalState === 'function') {
+                window.PageBootstrap.setIframeModalState(!!active, source || 'history');
+                return;
+            }
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'iframeModalState',
+                        active: !!active,
+                        source: source || 'history'
+                    }, window.location.origin);
+                }
+            } catch (e) {}
+        },
+        syncParentIframeModalState: function() {
+            var active = !!(this.isMobile && (
+                this.filterExpanded ||
+                (this.showMoreActions && !this.editPartsEditing) ||
+                this.mobileDanmakuStatsVisible ||
+                this.editDialogFormVisible ||
+                this.reloadDialogVisible ||
+                this.bindFileDialogVisible ||
+                this.previewDialogVisible ||
+                this.editPartFileDialogVisible ||
+                this.singleDeleteDialogVisible
+            ));
+            this.notifyParentIframeModal(active, 'history');
         },
         updateDetailFooterOffset: function() {
             if (!this.detailDialogVisible) return;

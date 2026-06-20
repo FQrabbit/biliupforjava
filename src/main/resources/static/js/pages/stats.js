@@ -19,6 +19,7 @@ new Vue({
             statsTaskPoller: null,
             activeStatsTaskId: null,
             operationProgressTimer: null,
+            resizeHandler: null,
             pendingCoverageExpanded: false,
             operationProgress: {
                 visible: false,
@@ -297,6 +298,24 @@ new Vue({
         toggleMoreActions: function () {
             this.moreActionsVisible = !this.moreActionsVisible;
         },
+        notifyParentIframeModal: function (active, source) {
+            if (window.PageBootstrap && typeof window.PageBootstrap.setIframeModalState === 'function') {
+                window.PageBootstrap.setIframeModalState(!!active, source || 'stats');
+                return;
+            }
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'iframeModalState',
+                        active: !!active,
+                        source: source || 'stats'
+                    }, window.location.origin);
+                }
+            } catch (e) {}
+        },
+        syncParentIframeModalState: function () {
+            this.notifyParentIframeModal(!!(this.moreActionsVisible || this.xmlRepairDialogVisible), 'stats');
+        },
         chooseXmlRepairFile: function () {
             var self = this;
             this.moreActionsVisible = false;
@@ -527,6 +546,7 @@ new Vue({
         },
         rebuildStats: function () {
             var self = this;
+            this.moreActionsVisible = false;
             this.$confirm('非必要不建议重建。重建会清空统计缓存并重新生成，耗时取决于历史和弹幕数量；如果部分录播 XML 源文件已经缺失，对应场次的弹幕/用户等统计可能无法完整恢复。一般优先使用“补全未统计”。', '重建统计', {
                 confirmButtonText: '开始重建',
                 cancelButtonText: '取消',
@@ -551,6 +571,7 @@ new Vue({
         },
         cleanupStats: function () {
             var self = this;
+            this.moreActionsVisible = false;
             this.$confirm('清理会删除统计中心生成的缓存/汇总表，并同步置空事件表中遗留的原始JSON文本；不会删除录制历史、分P、原始弹幕或已解析出的统计字段。', '清理缓存', {
                 confirmButtonText: '确认清理',
                 cancelButtonText: '取消',
@@ -576,6 +597,7 @@ new Vue({
         },
         cleanupStaleRecordingStates: function () {
             var self = this;
+            this.moreActionsVisible = false;
             this.$confirm('将只清理已经投稿或已有 BV、且结束超过 6 小时的旧稿件录制状态残留：把卡住的“正在录制/直播中”和分P缺失结束时间修正。不会处理当前新近录制的稿件。', '清理旧录制状态', {
                 confirmButtonText: '开始清理',
                 cancelButtonText: '取消',
@@ -736,6 +758,7 @@ new Vue({
         },
         compactDatabase: function () {
             var self = this;
+            this.moreActionsVisible = false;
             this.$confirm('数据库压缩需要一定时间，期间可能影响正在上传、投稿、统计或处理中的稿件任务；开始前会自动备份数据库。建议在没有重要任务运行时执行。', '压缩数据库', {
                 confirmButtonText: '开始压缩',
                 cancelButtonText: '取消',
@@ -1430,6 +1453,14 @@ new Vue({
             return labels;
         }
     },
+    watch: {
+        moreActionsVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        xmlRepairDialogVisible: function () {
+            this.syncParentIframeModalState();
+        }
+    },
     created: function () {
         this.reload();
     },
@@ -1437,12 +1468,20 @@ new Vue({
         var self = this;
         this.recoverStatsTaskStatus();
         this.recoverMaintenanceStatus();
-        window.addEventListener('resize', function () {
+        this.resizeHandler = function () {
             Object.keys(self.charts).forEach(function (key) {
                 if (self.charts[key]) {
                     self.charts[key].resize();
                 }
             });
-        });
+        };
+        window.addEventListener('resize', this.resizeHandler);
+    },
+    beforeDestroy: function () {
+        if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+            this.resizeHandler = null;
+        }
+        this.notifyParentIframeModal(false, 'stats-reset');
     }
 });

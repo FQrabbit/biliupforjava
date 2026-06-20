@@ -68,6 +68,8 @@ new Vue({
         archiveProgressSlowTimer: null,
         archiveProgressLoadingBoxOpen: false,
         archiveProgressLoadingBoxClosing: false,
+        archiveProgressDetailBoxTimer: null,
+        archiveProgressDetailBoxToken: null,
         detailFooterOffset: 120,
         partsAutoScrollTimer: null,
         dialogResizeHandler: null,
@@ -461,13 +463,12 @@ new Vue({
             return this.canQueryArchiveProgress || this.canShowAuditRejectInfo;
         },
         auditStatusActionText: function() {
-            if (this.canQueryArchiveProgress && this.canShowAuditRejectInfo) return '进度/原因';
-            if (this.canShowAuditRejectInfo) return '查看详情';
+            if (this.canShowAuditRejectInfo) return '查看原因';
             return '';
         },
         auditStatusTooltipText: function() {
-            if (this.canQueryArchiveProgress && this.canShowAuditRejectInfo) {
-                return '查看当前转码进度和审核不通过原因';
+            if (this.canShowAuditRejectInfo) {
+                return this.auditRejectSummaryText;
             }
             if (this.canQueryArchiveProgress) {
                 return '查看当前转码进度';
@@ -580,6 +581,33 @@ new Vue({
                 this.updateDetailFooterOffset();
             });
         },
+        filterExpanded: function() {
+            this.syncParentIframeModalState();
+        },
+        showMoreActions: function() {
+            this.syncParentIframeModalState();
+        },
+        mobileDanmakuStatsVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        editDialogFormVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        reloadDialogVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        bindFileDialogVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        previewDialogVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        editPartFileDialogVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        singleDeleteDialogVisible: function() {
+            this.syncParentIframeModalState();
+        },
         viewMode: function (val) {
             localStorage.setItem('history-view-mode', val);
         }
@@ -658,6 +686,7 @@ new Vue({
         this.editPartUploadQueue = [];
         this.editPartUploadRunning = false;
         this.notifyParentWorkspaceMode(false);
+        this.notifyParentIframeModal(false, 'history-reset');
         this.notifyParentOperationStatus();
     }
 });

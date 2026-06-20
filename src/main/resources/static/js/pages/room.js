@@ -95,7 +95,8 @@ new Vue({
         mobileActionRoom: null,
         mobileConfigHelpVisible: false,
         mobileConfigHelpTitle: '',
-        mobileConfigHelpLines: []
+        mobileConfigHelpLines: [],
+        mobileDialogLayerTimer: null
     },
     computed: {
         uploadConfigHeaders: function () {
@@ -126,17 +127,148 @@ new Vue({
         closeMobileRoomDetail: function () {
             this.detailDialogVisible = false;
         },
-        notifyParentIframeModal: function (active) {
-            if (!this.isMobile || !window.parent || window.parent === window) {
+        notifyParentIframeModal: function (active, source) {
+            if (!this.isMobile) {
+                return;
+            }
+            if (window.PageBootstrap && typeof window.PageBootstrap.setIframeModalState === 'function') {
+                window.PageBootstrap.setIframeModalState(!!active, source || 'room');
+                return;
+            }
+            if (!window.parent || window.parent === window) {
                 return;
             }
             try {
                 window.parent.postMessage({
                     type: 'iframeModalState',
-                    source: 'room-detail',
+                    source: source || 'room',
                     active: !!active
                 }, window.location.origin);
             } catch (e) {}
+        },
+        updateMobileDialogWrappers: function () {
+            if (!document || !document.querySelectorAll) {
+                return;
+            }
+            var wrappers = document.querySelectorAll('body > .el-dialog__wrapper');
+            if (!this.isMobile) {
+                Array.prototype.forEach.call(wrappers, function (wrapper) {
+                    wrapper.classList.remove('mobile-room-config-wrapper', 'mobile-room-dialog-wrapper');
+                    if (wrapper && wrapper.style) {
+                        wrapper.style.removeProperty('z-index');
+                    }
+                });
+                return;
+            }
+            Array.prototype.forEach.call(wrappers, function (wrapper) {
+                var dialog = wrapper.querySelector('.el-dialog');
+                var hasRoomConfig = !!(dialog && dialog.classList && dialog.classList.contains('room-config-dialog'));
+                wrapper.classList.toggle('mobile-room-config-wrapper', hasRoomConfig);
+                wrapper.classList.toggle('mobile-room-dialog-wrapper', !!dialog);
+                if (hasRoomConfig) {
+                    wrapper.style.zIndex = '4200';
+                } else if (dialog && this.dialogFormVisible) {
+                    wrapper.style.zIndex = '4310';
+                }
+            }, this);
+            if (this.dialogFormVisible) {
+                var backdrops = document.querySelectorAll('body > .v-modal');
+                Array.prototype.forEach.call(backdrops, function (backdrop) {
+                    if (backdrop && backdrop.style) {
+                        backdrop.style.zIndex = '3000';
+                    }
+                });
+                var messageBoxes = document.querySelectorAll('body > .el-message-box__wrapper');
+                Array.prototype.forEach.call(messageBoxes, function (wrapper) {
+                    if (wrapper && wrapper.style) {
+                        wrapper.style.zIndex = '4310';
+                    }
+                });
+            }
+        },
+        scheduleMobileDialogLayerSync: function (immediate) {
+            if (!this.isMobile) {
+                return;
+            }
+            if (immediate) {
+                this.updateMobileDialogWrappers();
+            }
+            if (this.mobileDialogLayerTimer) {
+                clearTimeout(this.mobileDialogLayerTimer);
+                this.mobileDialogLayerTimer = null;
+            }
+            var self = this;
+            this.mobileDialogLayerTimer = setTimeout(function () {
+                self.mobileDialogLayerTimer = null;
+                self.updateMobileDialogWrappers();
+            }, immediate ? 80 : 160);
+        },
+        stopMobileDialogLayerSync: function () {
+            if (this.mobileDialogLayerTimer) {
+                clearTimeout(this.mobileDialogLayerTimer);
+                this.mobileDialogLayerTimer = null;
+            }
+            if (!document || !document.querySelectorAll) {
+                return;
+            }
+            var wrappers = document.querySelectorAll('body > .el-dialog__wrapper');
+            Array.prototype.forEach.call(wrappers, function (wrapper) {
+                wrapper.classList.remove('mobile-room-config-wrapper', 'mobile-room-dialog-wrapper');
+                if (wrapper && wrapper.style) {
+                    wrapper.style.removeProperty('z-index');
+                }
+            });
+            var backdrops = document.querySelectorAll('body > .v-modal');
+            Array.prototype.forEach.call(backdrops, function (backdrop) {
+                if (backdrop && backdrop.style) {
+                    backdrop.style.removeProperty('z-index');
+                }
+            });
+            var messageBoxes = document.querySelectorAll('body > .el-message-box__wrapper');
+            Array.prototype.forEach.call(messageBoxes, function (wrapper) {
+                if (wrapper && wrapper.style) {
+                    wrapper.style.removeProperty('z-index');
+                }
+            });
+        },
+        syncParentIframeModalState: function () {
+            var active = !!(
+                this.mobileRoomActionsVisible ||
+                this.mobileRoomCardActionsVisible ||
+                this.detailDialogVisible ||
+                this.dialogFormVisible ||
+                this.partitionDialogVisible ||
+                this.addRoomDialog ||
+                this.exportConfigDialog ||
+                this.editLiveMsgSettingVisible ||
+                this.wxDialogVisible ||
+                this.manualPasteDialogVisible ||
+                this.pasteConfirmDialogVisible ||
+                this.mobileConfigHelpVisible
+            );
+            this.notifyParentIframeModal(active, 'room');
+            if (this.isMobile && document && document.body && document.body.classList) {
+                document.body.classList.toggle('mobile-room-overlay-open', active);
+                document.body.classList.toggle('mobile-room-edit-open', !!this.dialogFormVisible);
+            }
+            this.scheduleMobileDialogLayerSync(active);
+        },
+        closeAllMobileOverlays: function () {
+            this.closeMobileRoomSheets();
+            this.closeMobileConfigHelp();
+            this.detailDialogVisible = false;
+            this.partitionDialogVisible = false;
+            this.addRoomDialog = false;
+            this.exportConfigDialog = false;
+            this.editLiveMsgSettingVisible = false;
+            this.wxDialogVisible = false;
+            this.manualPasteDialogVisible = false;
+            this.pasteConfirmDialogVisible = false;
+            this.notifyParentIframeModal(false, 'room-reset');
+            if (document && document.body && document.body.classList) {
+                document.body.classList.remove('mobile-room-overlay-open', 'mobile-room-edit-open');
+            }
+            this.stopMobileDialogLayerSync();
         },
         openMobileRoomActions: function () {
             this.mobileRoomCardActionsVisible = false;
@@ -385,7 +517,7 @@ new Vue({
                  `, '无法自动粘贴', {
                 dangerouslyUseHTMLString: true,
                 confirmButtonText: '知道了',
-                width: '600px'
+                customClass: 'mobile-room-paste-help-message'
             });
         },
         showPasteConfirmation(text) {
@@ -791,7 +923,11 @@ new Vue({
             let _this = this;
             RoomApi.seasons(roomId, function (data) {
                     _this.seasonsList = data.data.seasons;
-                    _this.onSeasonDropdownVisibleChange(true);
+                    var list = _this.seasonsList || [];
+                    var max = Math.min(list.length, 8);
+                    for (var i = 0; i < max; i++) {
+                        _this.enqueueSeasonCoverPreload(list[i], false);
+                    }
                     _this.ensureSectionBelongsSeason(true);
                 });
         },
@@ -933,12 +1069,19 @@ new Vue({
             this.enqueueSeasonCoverPreload(item, true);
         },
         onSeasonDropdownVisibleChange: function(visible) {
+            this.onMobileConfigDropdownVisibleChange(visible);
             if (!visible) return;
             var list = this.seasonsList || [];
             var max = Math.min(list.length, 8);
             for (var i = 0; i < max; i++) {
                 this.enqueueSeasonCoverPreload(list[i], false);
             }
+        },
+        onMobileConfigDropdownVisibleChange: function(visible) {
+            if (!this.isMobile || !document || !document.body || !document.body.classList) {
+                return;
+            }
+            document.body.classList.toggle('mobile-room-config-select-open', !!visible);
         },
         refreshRoomCoverPreview: function() {
             var _this = this;
@@ -1412,13 +1555,49 @@ new Vue({
             }
         },
         dialogFormVisible: function (val) {
+            this.syncParentIframeModalState();
             if (!val) {
                 this.closeMobileConfigHelp();
+                this.partitionDialogVisible = false;
+                this.wxDialogVisible = false;
+                this.manualPasteDialogVisible = false;
+                this.pasteConfirmDialogVisible = false;
                 this.revokeAllImageObjectUrls();
+                this.stopMobileDialogLayerSync();
             }
         },
         detailDialogVisible: function (val) {
-            this.notifyParentIframeModal(!!val);
+            this.syncParentIframeModalState();
+        },
+        mobileRoomActionsVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        mobileRoomCardActionsVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        partitionDialogVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        addRoomDialog: function () {
+            this.syncParentIframeModalState();
+        },
+        exportConfigDialog: function () {
+            this.syncParentIframeModalState();
+        },
+        editLiveMsgSettingVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        wxDialogVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        manualPasteDialogVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        pasteConfirmDialogVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        mobileConfigHelpVisible: function () {
+            this.syncParentIframeModalState();
         },
         'room.coverUrl': function () {
             this.refreshRoomCoverPreview();
@@ -1435,7 +1614,8 @@ new Vue({
     beforeDestroy: function () {
         this.stopPolling();
         window.removeEventListener('resize', this.handleResize);
-        this.notifyParentIframeModal(false);
+        this.closeAllMobileOverlays();
+        this.stopMobileDialogLayerSync();
         this.revokeAllImageObjectUrls();
     }
 });

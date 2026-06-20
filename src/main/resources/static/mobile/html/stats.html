@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>统计中心 - Bili Live Recorder</title>
     <link rel="icon" href="../../img/icon.svg" type="image/svg+xml">
     <link href="../../css/element-ui.css" rel="stylesheet">
@@ -15,6 +15,7 @@
     <link href="../../css/animations/effects.css" rel="stylesheet">
     <link href="../css/mobile-pages.css" rel="stylesheet">
     <link href="../css/mobile-stats.css" rel="stylesheet">
+    <script src="../../js/app/mobile-viewport.js"></script>
     <script src="../../js/jquery-3.3.1.min.js"></script>
     <script src="../../js/vue.min.js"></script>
     <script src="../../js/element-ui.js"></script>
@@ -46,7 +47,7 @@
         <section class="mobile-stats-scope-card">
             <div class="mobile-stats-field">
                 <span>统计范围</span>
-                <el-select v-model="selectedRoomId" size="small" clearable filterable placeholder="全部房间" @change="loadRoomDetail" :popper-append-to-body="false">
+                <el-select v-model="selectedRoomId" size="small" clearable filterable placeholder="全部房间" @change="loadRoomDetail" popper-class="mobile-stats-popper">
                     <el-option v-for="room in rooms" :key="room.roomId" :label="roomLabel(room)" :value="room.roomId"></el-option>
                 </el-select>
             </div>
@@ -60,7 +61,7 @@
                             value-format="yyyy-MM-dd"
                             placeholder="不限"
                             :clearable="true"
-                            :popper-append-to-body="false"
+                            popper-class="mobile-stats-popper"
                             @change="handleDateRangeChange">
                     </el-date-picker>
                 </label>
@@ -73,7 +74,7 @@
                             value-format="yyyy-MM-dd"
                             placeholder="不限"
                             :clearable="true"
-                            :popper-append-to-body="false"
+                            popper-class="mobile-stats-popper"
                             @change="handleDateRangeChange">
                     </el-date-picker>
                 </label>
@@ -256,7 +257,7 @@
                         <span>ROOMS</span>
                         <h2>房间对比</h2>
                     </div>
-                    <el-select v-model="comparisonMetric" size="mini" @change="renderCharts" :popper-append-to-body="false">
+                    <el-select v-model="comparisonMetric" size="mini" @change="renderCharts" popper-class="mobile-stats-popper">
                         <el-option label="场次" value="liveCount"></el-option>
                         <el-option label="总时长" value="totalDurationSeconds"></el-option>
                         <el-option label="总弹幕" value="totalMsgCount"></el-option>
@@ -425,6 +426,7 @@
             title="XML 文件简单修复工具"
             :visible.sync="xmlRepairDialogVisible"
             width="520px"
+            append-to-body
             custom-class="mobile-stats-xml-dialog">
         <div v-if="xmlRepairResult" class="mobile-stats-xml-result" :class="{ 'is-error': !xmlRepairResult.success }">
             <div class="mobile-stats-xml-title">

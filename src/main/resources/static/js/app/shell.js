@@ -56,6 +56,7 @@ var answer = new Vue({
         hasAlerts: false,
         versions: window.BILIUPFORJAVA_CHANGELOG || [],
         navIndicatorStyle: { left: '0px', width: '0px', opacity: 0 },
+        pressedNavTab: '',
         headerCompact: false,
         showBackToTop: false,
         lastScrollTop: 0,
@@ -70,6 +71,8 @@ var answer = new Vue({
         scrollBindRetryTimer: null,
         scrollBindRetryCount: 0,
         scrollStateTimer: null,
+        resizeHandler: null,
+        mobileInputFocused: false,
         isScrollingToTop: false,  // 标记正在回顶的状态，此期间禁用冷却时间
         scrollToTopTimer: null,   // 回顶动画完成后清除标志
         iframeWorkspaceMode: false,
@@ -84,6 +87,7 @@ var answer = new Vue({
         showMobileLogPanel: false,
         workspaceUsageTimer: null,
         cacheVersionTimer: null,
+        iframeMessageHandler: null,
         workspaceStatus: {
             valid: true,
             totalBytes: -1,
@@ -255,12 +259,14 @@ var answer = new Vue({
             self.startScrollStateMonitor();
             self.installScrollDebugTools();
         });
-        window.addEventListener('resize', function() {
+        this.resizeHandler = function() {
             self.updateNavIndicator();
-        });
+            self.refreshMobileViewportMetrics();
+        };
+        window.addEventListener('resize', this.resizeHandler);
 
         // 监听来自 iframe 的消息（批量操作状态）
-        window.addEventListener('message', function(event) {
+        this.iframeMessageHandler = function(event) {
             // 只接受同源消息
             if (event.origin !== window.location.origin) {
                 return;
@@ -280,6 +286,7 @@ var answer = new Vue({
                     self.downScrollDistance = 0;
                     self.lastHeaderToggleAt = Date.now();
                 }
+                self.refreshMobileViewportState();
             }
 
             if (event.data && event.data.type === 'iframeModalState') {
@@ -287,8 +294,19 @@ var answer = new Vue({
                 if (self.iframeModalOpen) {
                     self.showBackToTop = false;
                 }
+                self.refreshMobileViewportState();
             }
-        });
+
+            if (event.data && event.data.type === 'mobileInputFocusState') {
+                self.mobileInputFocused = !!event.data.active;
+                if (self.mobileInputFocused) {
+                    self.headerCompact = true;
+                    self.showBackToTop = false;
+                }
+                self.refreshMobileViewportState();
+            }
+        };
+        window.addEventListener('message', this.iframeMessageHandler);
     },
     watch: {
         activeName: function() {
@@ -299,6 +317,10 @@ var answer = new Vue({
             this.activeConfigHint = '';
             this.iframeWorkspaceMode = false;
             this.iframeModalOpen = false;
+            this.mobileInputFocused = false;
+            if (document && document.body && document.body.classList) {
+                document.body.classList.remove('mobile-input-focused', 'mobile-iframe-modal-open');
+            }
             this.headerCompact = false;
             this.showBackToTop = false;
             this.lastScrollTop = 0;
@@ -325,6 +347,14 @@ var answer = new Vue({
         if (this.cacheVersionTimer) {
             clearInterval(this.cacheVersionTimer);
             this.cacheVersionTimer = null;
+        }
+        if (this.iframeMessageHandler) {
+            window.removeEventListener('message', this.iframeMessageHandler);
+            this.iframeMessageHandler = null;
+        }
+        if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+            this.resizeHandler = null;
         }
     },
     methods: {
@@ -383,6 +413,32 @@ var answer = new Vue({
             this.activeConfigHint = this.activeConfigHint === key ? '' : key;
         },
         noop: function() {},
+        refreshMobileViewportState: function() {
+            var self = this;
+            if (window.MobileViewport && typeof window.MobileViewport.refresh === 'function') {
+                window.MobileViewport.refresh();
+            }
+            if (document && document.body && document.body.classList) {
+                document.body.classList.toggle('mobile-input-focused', !!this.mobileInputFocused);
+                document.body.classList.toggle('mobile-iframe-modal-open', !!this.iframeModalOpen);
+            }
+            this.$nextTick(function() {
+                self.updateNavIndicator();
+                if (!self.iframeWorkspaceMode && !self.iframeModalOpen && !self.mobileInputFocused) {
+                    self.bindScrollObserver();
+                    self.startScrollStateMonitor();
+                }
+            });
+        },
+        refreshMobileViewportMetrics: function() {
+            var self = this;
+            if (window.MobileViewport && typeof window.MobileViewport.refresh === 'function') {
+                window.MobileViewport.refresh();
+            }
+            this.$nextTick(function() {
+                self.updateNavIndicator();
+            });
+        },
         toggleNewUploadFlow: function() {
             this.systemConfig.newUploadFlowEnabled = !this.systemConfig.newUploadFlowEnabled;
             this.checkConfigChanges();
@@ -504,7 +560,7 @@ var answer = new Vue({
             }
 
             this.scrollStateTimer = setInterval(function() {
-                if (self.iframeWorkspaceMode || self.iframeModalOpen) {
+                if (self.iframeWorkspaceMode || self.iframeModalOpen || self.mobileInputFocused) {
                     self.headerCompact = true;
                     self.showBackToTop = false;
                     return;
@@ -1150,6 +1206,7 @@ var answer = new Vue({
                 observerCount: this.scrollObserver.length,
                 scrollBindRetryCount: this.scrollBindRetryCount,
                 iframeWorkspaceMode: this.iframeWorkspaceMode,
+                iframeModalOpen: this.iframeModalOpen,
                 candidates: [],
                 observers: []
             };
@@ -1307,7 +1364,7 @@ var answer = new Vue({
             }
         },
         handleContentScroll: function(top) {
-            if (this.iframeWorkspaceMode) {
+            if (this.iframeWorkspaceMode || this.iframeModalOpen || this.mobileInputFocused) {
                 this.headerCompact = true;
                 this.showBackToTop = false;
                 this.lastScrollTop = top || 0;
@@ -1440,7 +1497,6 @@ var answer = new Vue({
             if (this.activeName === tab) {
                 return;
             }
-
             // 检查 iframe 中是否正在进行批量操作
             if (this.iframeOperating) {
                 this.$message.warning('iframe 中正在进行 ' + (this.iframeOperatingMessage || '批量操作') + '，请稍候完成后再切换标签页');
@@ -1456,10 +1512,16 @@ var answer = new Vue({
 
             // 正常切换
             var self = this;
+            this.pressedNavTab = tab;
             this.activeName = tab;
             this.$nextTick(function() {
                 self.updateNavIndicator();
             });
+            setTimeout(function() {
+                if (self.pressedNavTab === tab) {
+                    self.pressedNavTab = '';
+                }
+            }, 180);
             // 组件化页面不走 iframe 加载流程
             if (tab !== 'home' && !this.isComponentPage(tab)) {
                 this.isTabSwitching = true;
@@ -1491,9 +1553,11 @@ var answer = new Vue({
             if (el && nav) {
                 var navRect = nav.getBoundingClientRect();
                 var elRect = el.getBoundingClientRect();
+                var indicatorWidth = Math.max(40, elRect.width - 16);
+                var indicatorLeft = (elRect.left - navRect.left) + ((elRect.width - indicatorWidth) / 2);
                 this.navIndicatorStyle = {
-                    left: (elRect.left - navRect.left + (elRect.width - 24) / 2) + 'px',
-                    width: '24px',
+                    left: indicatorLeft.toFixed(2) + 'px',
+                    width: indicatorWidth.toFixed(2) + 'px',
                     opacity: 1
                 };
             }

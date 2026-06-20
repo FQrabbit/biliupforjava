@@ -30,7 +30,7 @@ jobs:
         run: |
           # Execute maven native compilation
           # Ensure this runs in the Developer Command Prompt environment
-          cmd.exe /c "call `"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat`" && mvn clean -Pnative native:compile -DskipTests -Dnative.maven.plugin.version=0.9.28"
+          cmd.exe /c "call `"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat`" && rc /nologo /fo app.res app.rc && mvn clean -Pnative native:compile -DskipTests -Dnative.maven.plugin.version=0.9.28"
 
       - name: Set Version
         id: version

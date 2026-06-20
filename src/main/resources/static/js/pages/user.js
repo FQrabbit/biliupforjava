@@ -234,6 +234,7 @@ Vue.component('user-page', {
         deleteMobileUser: function (item) {
             var self = this;
             if (!item || !item.id) return;
+            self.closeMobileUserActions();
             var name = self.maskText(item.uname || '该账号');
             self.$confirm('确定移除账号「' + name + '」吗？', '移除账号', {
                 confirmButtonText: '移除',
@@ -241,7 +242,6 @@ Vue.component('user-page', {
                 type: 'warning',
                 confirmButtonClass: 'el-button--danger'
             }).then(function () {
-                self.closeMobileUserActions();
                 self.deleteUser(item.id);
             }).catch(function () {});
         },

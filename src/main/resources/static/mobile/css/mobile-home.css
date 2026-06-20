@@ -242,9 +242,9 @@
 }
 
 .mobile-shell .mobile-workspace-popover-head button {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
     border: 1px solid var(--mobile-border);
     border-radius: 14px;
     color: var(--text-secondary);
@@ -463,7 +463,7 @@
 
 .mobile-shell .mobile-section-heading button {
     min-width: 76px;
-    min-height: 38px;
+    min-height: 44px;
     padding: 0 12px;
     border: 1px solid var(--mobile-border);
     border-radius: 16px;
@@ -587,7 +587,7 @@
     right: 0;
     bottom: 0;
     z-index: 3001;
-    max-height: min(82dvh, 760px);
+    max-height: min(calc(var(--mobile-viewport-height) * 0.82), 760px);
     display: flex;
     flex-direction: column;
     padding: 9px 14px calc(14px + var(--mobile-safe-bottom));
@@ -730,7 +730,7 @@
 .mobile-shell .mobile-config-control {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 42px;
+    grid-template-columns: minmax(0, 1fr) 44px;
     gap: 8px;
     align-items: center;
 }
@@ -751,8 +751,8 @@
 }
 
 .mobile-shell .mobile-config-info {
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
     border: 1px solid var(--mobile-border);
     border-radius: 15px;
     color: var(--text-secondary);
@@ -835,15 +835,18 @@
     font-size: 15px;
     line-height: 1.15;
     font-weight: 780;
+    overflow-wrap: anywhere;
 }
 
 .mobile-shell .mobile-upload-flow-copy span {
     color: var(--text-secondary);
     font-size: 12px;
     line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
 .mobile-shell .mobile-upload-flow-state {
+    max-width: 100%;
     padding: 5px 8px;
     border-radius: 999px;
     color: var(--mobile-accent-1);
@@ -852,6 +855,8 @@
     line-height: 1;
     font-weight: 800;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mobile-shell .mobile-upload-flow-main .el-switch__core {
@@ -877,13 +882,14 @@
 
 .mobile-shell .mobile-upload-flow-info {
     width: 100%;
-    min-height: 38px;
+    min-height: 44px;
     margin-top: 8px;
     border: 1px solid transparent;
     border-radius: 15px;
     color: var(--text-secondary);
     background: color-mix(in srgb, var(--mobile-surface-strong) 70%, transparent);
     font-size: 12px;
+    line-height: 1.25;
     font-weight: 760;
     cursor: pointer;
     transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
@@ -1057,10 +1063,36 @@
 
     .mobile-shell .mobile-upload-flow-main {
         grid-template-columns: 42px minmax(0, 1fr) auto;
+        align-items: flex-start;
     }
 
     .mobile-shell .mobile-upload-flow-state {
         display: none;
+    }
+}
+
+@media (max-width: 380px) {
+    .mobile-shell .mobile-config-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 12px 0;
+    }
+
+    .mobile-shell .mobile-config-label {
+        justify-content: space-between;
+    }
+
+    .mobile-shell .mobile-sheet-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-upload-flow-main {
+        grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .mobile-shell .mobile-upload-flow-main .el-switch {
+        grid-column: 1 / -1;
+        justify-self: end;
     }
 }
 
@@ -1086,22 +1118,12 @@
         justify-content: center;
     }
 
-    .mobile-shell .mobile-config-row {
-        grid-template-columns: 1fr;
-        gap: 8px;
-        padding: 12px 0;
-    }
-
-    .mobile-shell .mobile-config-label {
-        justify-content: space-between;
-    }
-
     .mobile-shell .mobile-config-control {
-        grid-template-columns: minmax(0, 1fr) 42px;
+        grid-template-columns: minmax(0, 1fr) 44px;
     }
 
     .mobile-shell .mobile-upload-flow-main {
-        grid-template-columns: 40px minmax(0, 1fr) auto;
+        grid-template-columns: 40px minmax(0, 1fr);
         gap: 8px;
     }
 

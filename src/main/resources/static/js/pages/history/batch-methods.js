@@ -253,7 +253,7 @@
                 if (status === 'failed') return '删除失败';
                 return '未删除';
             };
-            var html = '<div style="max-height: 45vh; overflow:auto;">';
+            var html = '<div style="max-height: calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.45); overflow:auto;">';
             html += '<p style="margin:0 0 10px 0; color:#606266;">以下文件未删除成功，请手动检查（可能已被移动/删除/占用/权限不足）：</p>';
             items.forEach(function(group) {
                 html += '<div style="margin:10px 0 6px 0; font-weight:600; color:#303133;">稿件ID：' + esc(group.historyId) + '</div>';
@@ -450,7 +450,7 @@
                 _this.initTable();
 
                 if (failCount > 0) {
-                    var details = '<div style="max-height:40vh;overflow:auto;"><div style="margin-bottom:8px;color:#606266;">以下稿件切换失败：</div><ul style="margin:0;padding-left:18px;">';
+                    var details = '<div style="max-height:calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.4);overflow:auto;"><div style="margin-bottom:8px;color:#606266;">以下稿件切换失败：</div><ul style="margin:0;padding-left:18px;">';
                     failList.slice(0, 20).forEach(function(f) {
                         details += '<li style="margin:4px 0;">ID ' + f.id + '：' + String(f.msg || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</li>';
                     });

@@ -3,6 +3,8 @@
 :root {
     --mobile-page-safe-top: env(safe-area-inset-top, 0px);
     --mobile-page-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --mobile-page-viewport-width: 100vw;
+    --mobile-page-viewport-height: 100vh;
     --mobile-page-surface: rgba(255, 255, 255, 0.74);
     --mobile-page-surface-strong: rgba(255, 255, 255, 0.92);
     --mobile-page-border: rgba(27, 42, 78, 0.12);
@@ -30,6 +32,471 @@ body {
         linear-gradient(30deg, color-mix(in srgb, var(--mobile-teal) 10%, transparent), transparent 40%),
         linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 58%, color-mix(in srgb, var(--mobile-coral) 8%, var(--bg-primary)) 100%);
     touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+@supports (height: 100svh) {
+    :root {
+        --mobile-page-viewport-height: 100svh;
+    }
+}
+
+@supports (height: 100dvh) {
+    :root {
+        --mobile-page-viewport-height: 100dvh;
+    }
+}
+
+@supports (width: 100svw) {
+    :root {
+        --mobile-page-viewport-width: 100svw;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+input,
+textarea,
+select,
+button {
+    font: inherit;
+}
+
+button,
+[role="button"],
+[tabindex]:not([tabindex="-1"]),
+.el-button,
+.el-switch,
+.el-checkbox,
+.el-radio,
+.el-select,
+.el-date-editor,
+.el-upload,
+.el-tabs__item,
+.el-radio-button__inner,
+.el-checkbox-button__inner,
+.mobile-room-card,
+.mobile-room-command,
+.mobile-room-stat,
+.mobile-room-card-more,
+.mobile-history-card,
+.mobile-history-metric-button,
+.mobile-history-detail-stat-button,
+.mobile-history-detail-alerts button,
+.status-item-modern.audit-clickable,
+.skip-header.is-clickable,
+.mobile-stats-room-card,
+.mobile-stats-session-card,
+.mobile-stats-wide-command {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+button,
+[role="button"],
+.mobile-room-card,
+.mobile-room-command,
+.mobile-room-stat,
+.mobile-history-card,
+.mobile-history-metric-button,
+.mobile-history-detail-stat-button,
+.mobile-stats-room-card,
+.mobile-stats-session-card {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+[contenteditable=""],
+.el-input__inner,
+.el-textarea__inner,
+.el-range-input,
+.el-select__input,
+.el-select .el-input__inner,
+.el-date-editor .el-input__inner,
+.el-input-number .el-input__inner,
+.el-cascader .el-input__inner {
+    font-size: 16px !important;
+}
+
+input[type="search"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 44px;
+    font-size: 16px !important;
+}
+
+body > .el-select-dropdown,
+body > .el-picker-panel,
+body > .el-message-box__wrapper,
+body > .el-dialog__wrapper,
+body > .el-popover,
+body > .el-tooltip__popper,
+body > .el-cascader__dropdown,
+body > .el-dropdown-menu,
+body > .el-autocomplete-suggestion,
+body > .el-time-panel,
+body > .el-color-dropdown,
+body > .el-popper {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body > .el-select-dropdown input,
+body > .el-picker-panel input,
+body > .el-message-box__wrapper input,
+body > .el-message-box__wrapper textarea,
+body > .el-dialog__wrapper input,
+body > .el-dialog__wrapper textarea,
+body > .el-popover input,
+body > .el-popover textarea,
+body > .el-cascader__dropdown input,
+body > .el-autocomplete-suggestion input,
+body > .el-time-panel input,
+body > .el-color-dropdown input,
+body > .el-popper input,
+body > .el-popper textarea,
+body > .el-dialog__wrapper [contenteditable="true"],
+body > .el-dialog__wrapper [contenteditable=""],
+body > .el-message-box__wrapper [contenteditable="true"],
+body > .el-message-box__wrapper [contenteditable=""],
+body > .el-select-dropdown .el-input__inner,
+body > .el-picker-panel .el-input__inner,
+body > .el-message-box__wrapper .el-input__inner,
+body > .el-message-box__wrapper .el-textarea__inner,
+body > .el-dialog__wrapper .el-input__inner,
+body > .el-dialog__wrapper .el-textarea__inner,
+body > .el-popover .el-input__inner,
+body > .el-popover .el-textarea__inner,
+body > .el-cascader__dropdown .el-input__inner,
+body > .el-autocomplete-suggestion .el-input__inner,
+body > .el-time-panel .el-input__inner,
+body > .el-color-dropdown .el-input__inner,
+body > .el-popper .el-input__inner,
+body > .el-popper .el-textarea__inner,
+body > .el-popper .el-select__input,
+body > .el-popper .el-range-input {
+    font-size: 16px !important;
+}
+
+body > .el-dialog__wrapper button,
+body > .el-message-box__wrapper button,
+body > .el-select-dropdown button,
+body > .el-picker-panel button,
+body > .el-popover button,
+body > .el-cascader__dropdown button,
+body > .el-dropdown-menu button,
+body > .el-autocomplete-suggestion button,
+body > .el-time-panel button,
+body > .el-color-dropdown button,
+body > .el-popper button,
+body > .el-dialog__wrapper [role="button"],
+body > .el-message-box__wrapper [role="button"],
+body > .el-select-dropdown [role="button"],
+body > .el-picker-panel [role="button"],
+body > .el-popover [role="button"],
+body > .el-cascader__dropdown [role="button"],
+body > .el-dropdown-menu [role="button"],
+body > .el-autocomplete-suggestion [role="button"],
+body > .el-time-panel [role="button"],
+body > .el-color-dropdown [role="button"],
+body > .el-popper [role="button"] {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body > .el-dialog__wrapper .el-button,
+body > .el-message-box__wrapper .el-button,
+body > .el-picker-panel .el-button,
+body > .el-popover .el-button,
+body > .el-popper .el-button {
+    min-height: 44px;
+    margin-left: 0 !important;
+    font-size: 16px;
+    line-height: 1.2;
+}
+
+.el-input__inner,
+.el-textarea__inner,
+.el-select,
+.el-date-editor,
+.el-input-number,
+.el-cascader {
+    max-width: 100%;
+}
+
+.el-input,
+.el-select,
+.el-date-editor,
+.el-input-number,
+.el-cascader {
+    min-height: 44px;
+}
+
+.el-input__inner,
+.el-textarea__inner,
+.el-range-input,
+.el-select__input,
+.el-select .el-input__inner,
+.el-date-editor .el-input__inner,
+.el-input-number .el-input__inner,
+.el-cascader .el-input__inner {
+    min-height: 44px;
+    line-height: 1.35;
+}
+
+.el-select__input {
+    height: 44px;
+    margin-left: 0;
+}
+
+.el-input__suffix,
+.el-input__prefix,
+.el-select .el-input .el-select__caret,
+.el-input__icon {
+    min-width: 40px;
+    min-height: 44px;
+    line-height: 44px;
+}
+
+.el-input-number__decrease,
+.el-input-number__increase {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 44px;
+    touch-action: manipulation;
+}
+
+.el-select .el-input,
+.el-date-editor .el-input,
+.el-cascader .el-input,
+.el-date-editor--daterange,
+.el-date-editor--datetimerange,
+.el-date-editor .el-range__icon,
+.el-date-editor .el-range__close-icon {
+    min-height: 44px;
+}
+
+.el-date-editor .el-range-input {
+    height: 42px;
+}
+
+.el-textarea__inner {
+    line-height: 1.5;
+}
+
+.el-select-dropdown__item,
+.el-cascader-node,
+.el-dropdown-menu__item,
+.el-autocomplete-suggestion li,
+.el-picker-panel,
+.el-picker-panel input,
+.el-message-box__input .el-input__inner,
+.el-input-number__decrease,
+.el-input-number__increase,
+.el-input-number .el-input,
+.el-input-number .el-input__inner {
+    font-size: 16px !important;
+}
+
+body > .el-select-dropdown .el-select-dropdown__item,
+body > .el-cascader__dropdown .el-cascader-node,
+body > .el-dropdown-menu .el-dropdown-menu__item,
+body > .el-autocomplete-suggestion li,
+body > .el-popper .el-select-dropdown__item {
+    min-height: 44px;
+    line-height: 1.35;
+    display: flex;
+    align-items: center;
+}
+
+.el-radio,
+.el-checkbox,
+.el-switch {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    touch-action: manipulation;
+}
+
+.el-radio__label,
+.el-checkbox__label {
+    line-height: 1.35;
+    white-space: normal;
+}
+
+.el-radio-button__inner,
+.el-checkbox-button__inner,
+.el-pagination button,
+.el-pager li {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    line-height: 1.2;
+    touch-action: manipulation;
+}
+
+.el-dialog__headerbtn,
+.el-message-box__headerbtn {
+    width: 44px;
+    height: 44px;
+    top: max(6px, var(--mobile-page-safe-top));
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+}
+
+.el-dialog__headerbtn .el-dialog__close,
+.el-message-box__headerbtn .el-message-box__close {
+    font-size: 18px;
+}
+
+body > .el-picker-panel .el-date-table td,
+body > .el-picker-panel .el-month-table td,
+body > .el-picker-panel .el-year-table td {
+    min-width: 44px;
+    height: 44px;
+}
+
+body > .el-picker-panel .el-date-table td div {
+    min-height: 44px;
+    padding: 6px 0;
+}
+
+.mobile-history-filter-popper,
+.mobile-room-config-popper,
+.mobile-stats-popper,
+.mobile-user-popper,
+.mobile-history-filter-popper input,
+.mobile-room-config-popper input,
+.mobile-stats-popper input,
+.mobile-user-popper input,
+.mobile-history-filter-popper .el-select-dropdown__item,
+.mobile-room-config-popper .el-select-dropdown__item,
+.mobile-stats-popper .el-select-dropdown__item,
+.mobile-user-popper .el-select-dropdown__item {
+    font-size: 16px !important;
+}
+
+.mobile-history-filter-popper.el-popper,
+.mobile-room-config-popper.el-popper,
+.mobile-stats-popper.el-popper,
+.mobile-user-popper.el-popper,
+.mobile-history-filter-popper.el-select-dropdown,
+.mobile-room-config-popper.el-select-dropdown,
+.mobile-stats-popper.el-select-dropdown,
+.mobile-user-popper.el-select-dropdown,
+body > .el-cascader__dropdown,
+body > .el-dropdown-menu,
+body > .el-autocomplete-suggestion,
+body > .el-time-panel,
+body > .el-color-dropdown,
+.el-picker-panel {
+    z-index: 4100 !important;
+}
+
+body.mobile-iframe-modal-open > .v-modal {
+    z-index: 3000 !important;
+}
+
+body.mobile-iframe-modal-open > .el-dialog__wrapper {
+    z-index: 3010 !important;
+    overflow-y: auto;
+    padding-bottom: calc(12px + var(--mobile-page-safe-bottom));
+    -webkit-overflow-scrolling: touch;
+}
+
+body.mobile-iframe-modal-open,
+body.mobile-room-overlay-open {
+    overflow: hidden;
+    height: var(--mobile-page-viewport-height);
+}
+
+body.mobile-iframe-modal-open > .el-select-dropdown,
+body.mobile-iframe-modal-open > .el-picker-panel,
+body.mobile-iframe-modal-open > .el-popover,
+body.mobile-iframe-modal-open > .el-tooltip__popper,
+body.mobile-iframe-modal-open > .el-cascader__dropdown,
+body.mobile-iframe-modal-open > .el-dropdown-menu,
+body.mobile-iframe-modal-open > .el-autocomplete-suggestion,
+body.mobile-iframe-modal-open > .el-time-panel,
+body.mobile-iframe-modal-open > .el-color-dropdown,
+body.mobile-iframe-modal-open > .el-popper,
+body.mobile-iframe-modal-open > .el-message-box__wrapper {
+    z-index: 4100 !important;
+}
+
+body.mobile-input-focused .mobile-room-action-sheet,
+body.mobile-input-focused .mobile-room-detail-sheet,
+body.mobile-input-focused .mobile-history-filter-sheet,
+body.mobile-input-focused .mobile-history-detail-actions-sheet,
+body.mobile-input-focused .mobile-history-danmaku-sheet,
+body.mobile-input-focused .mobile-stats-actions-sheet {
+    max-height: min(calc(var(--mobile-page-viewport-height) - 16px - var(--mobile-page-safe-top)), 520px);
+}
+
+.mobile-history-filter-popper,
+.mobile-room-config-popper,
+.mobile-stats-popper,
+.mobile-user-popper,
+body > .el-cascader__dropdown,
+body > .el-dropdown-menu,
+body > .el-autocomplete-suggestion,
+body > .el-time-panel,
+body > .el-color-dropdown,
+.el-picker-panel {
+    max-width: calc(var(--mobile-page-viewport-width) - 24px);
+}
+
+.mobile-history-filter-popper .el-select-dropdown__wrap,
+.mobile-room-config-popper .el-select-dropdown__wrap,
+.mobile-stats-popper .el-select-dropdown__wrap,
+.mobile-user-popper .el-select-dropdown__wrap {
+    max-height: min(calc(var(--mobile-page-viewport-height) * 0.44), 320px);
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+body > .el-cascader__dropdown .el-cascader-menu,
+body > .el-dropdown-menu,
+body > .el-autocomplete-suggestion .el-scrollbar__wrap,
+body > .el-time-panel,
+body > .el-color-dropdown {
+    max-height: min(calc(var(--mobile-page-viewport-height) * 0.5), 360px);
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.mobile-history-filter-popper .el-input__inner,
+.mobile-room-config-popper .el-input__inner,
+.mobile-stats-popper .el-input__inner,
+.mobile-user-popper .el-input__inner {
+    min-height: 44px;
+}
+
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
 }
 
 [data-theme="dark"] body {
@@ -42,7 +509,7 @@ body {
 .room-container,
 .history-container,
 .stats-container {
-    min-height: 100dvh;
+    min-height: var(--mobile-page-viewport-height);
     padding: 14px 12px 24px;
     background: transparent;
     overflow-x: hidden;
@@ -83,6 +550,10 @@ body {
     z-index: 50;
     padding: 14px;
     margin-bottom: 12px;
+}
+
+.el-message-box__wrapper {
+    z-index: 4100 !important;
 }
 
 .room-header,
@@ -311,9 +782,12 @@ body {
 }
 
 .el-dialog {
-    width: calc(100vw - 20px) !important;
-    max-width: calc(100vw - 20px);
-    margin-top: 6vh !important;
+    display: flex;
+    flex-direction: column;
+    width: calc(var(--mobile-page-viewport-width) - 20px) !important;
+    max-width: calc(var(--mobile-page-viewport-width) - 20px);
+    max-height: calc(var(--mobile-page-viewport-height) - var(--mobile-page-safe-top) - var(--mobile-page-safe-bottom) - 24px);
+    margin-top: max(12px, calc(var(--mobile-page-viewport-height) * 0.06)) !important;
     border-radius: 24px 24px 0 0;
     background: var(--mobile-page-surface-strong);
     border: 1px solid var(--mobile-page-border);
@@ -323,16 +797,47 @@ body {
 }
 
 .el-dialog.is-fullscreen {
-    width: 100vw !important;
-    max-width: 100vw;
+    width: var(--mobile-page-viewport-width) !important;
+    max-width: var(--mobile-page-viewport-width);
+    max-height: var(--mobile-page-viewport-height);
     border-radius: 0;
     margin-top: 0 !important;
 }
 
 .el-dialog__body {
-    max-height: 74dvh;
+    flex: 1 1 auto;
+    max-height: min(calc(var(--mobile-page-viewport-height) * 0.74), calc(var(--mobile-page-viewport-height) - var(--mobile-page-safe-top) - var(--mobile-page-safe-bottom) - 142px));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+}
+
+.el-dialog__footer {
+    flex: 0 0 auto;
+    padding-bottom: max(16px, calc(12px + var(--mobile-page-safe-bottom)));
+}
+
+.el-dialog__footer .dialog-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.el-dialog__footer .el-button {
+    min-height: 44px;
+    margin-left: 0 !important;
+}
+
+@media (max-width: 360px) {
+    .el-dialog__footer .dialog-footer {
+        display: grid;
+        grid-template-columns: 1fr;
+        justify-content: stretch;
+    }
+
+    .el-dialog__footer .el-button {
+        width: 100%;
+    }
 }
 
 .part-preview-dialog .el-dialog__body,
@@ -349,8 +854,80 @@ body {
 }
 
 .el-message-box {
-    width: calc(100vw - 28px);
+    display: flex;
+    flex-direction: column;
+    width: calc(var(--mobile-page-viewport-width) - 28px) !important;
+    max-width: calc(var(--mobile-page-viewport-width) - 28px) !important;
+    max-height: calc(var(--mobile-page-viewport-height) - var(--mobile-page-safe-top) - var(--mobile-page-safe-bottom) - 32px);
     border-radius: 22px;
+    overflow: hidden;
+}
+
+.el-message-box__content {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: max(160px, calc(var(--mobile-page-viewport-height) - var(--mobile-page-safe-top) - var(--mobile-page-safe-bottom) - 180px));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.el-message-box__message {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.el-message-box__message * {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.el-message-box__message [style*="font-size:12px"],
+.el-message-box__message [style*="font-size: 12px"],
+.el-message-box__message [style*="font-size:11px"],
+.el-message-box__message [style*="font-size: 11px"],
+.el-message-box__message [style*="font-size:10px"],
+.el-message-box__message [style*="font-size: 10px"] {
+    font-size: 13px !important;
+}
+
+.el-message-box__message a,
+.el-message-box__message summary {
+    min-height: 44px;
+    max-width: 100%;
+    display: inline-flex !important;
+    align-items: center;
+    line-height: 1.35;
+}
+
+.el-message-box__message pre {
+    max-height: min(34vh, 220px) !important;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.el-message-box__btns {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-bottom: max(12px, var(--mobile-page-safe-bottom));
+}
+
+.el-message-box__btns .el-button {
+    min-height: 44px;
+    margin-left: 0 !important;
+}
+
+@media (max-width: 360px) {
+    .el-message-box__btns {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .el-message-box__btns .el-button {
+        width: 100%;
+    }
 }
 
 @keyframes mobilePageRise {
@@ -384,7 +961,6 @@ body {
         padding-right: 10px;
     }
 
-    .room-header-actions,
     .chart-box,
     .chart-box-large,
     .chart-box-wide,

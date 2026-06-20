@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="录播姬上传插件 - 自动化直播录制上传解决方案">
     <meta name="theme-color" content="#5b6cff">
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
@@ -23,6 +23,7 @@
     <link href="css/mobile-home.css" rel="stylesheet">
     <link href="css/mobile-user.css" rel="stylesheet">
     <link href="css/mobile-log.css" rel="stylesheet">
+    <script src="../js/app/mobile-viewport.js"></script>
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/vue.min.js"></script>
     <script src="../js/element-ui.js"></script>
@@ -39,7 +40,7 @@
     <script src="../js/pages/user.js"></script>
 </head>
 <body>
-<div id="app" class="app-container mobile-shell" :class="{ 'is-iframe-workspace': iframeWorkspaceMode || iframeModalOpen }">
+<div id="app" class="app-container mobile-shell" :class="{ 'is-iframe-workspace': iframeWorkspaceMode || iframeModalOpen, 'is-iframe-modal': iframeModalOpen, 'is-input-focused': mobileInputFocused }">
     <!-- 顶部导航栏 -->
     <header class="app-header" :class="{ 'is-compact': headerCompact }">
         <div class="header-top">
@@ -114,52 +115,6 @@
                     <span v-else class="brand-version">{{ currentVersion }}</span>
                 </div>
             </div>
-            <nav class="header-nav" ref="headerNav">
-                <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
-                <div class="nav-item" ref="navRoom"
-                     :class="{ 'is-active': activeName === 'room', 'is-disabled': iframeOperating }"
-                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '直播间'"
-                     @click="switchTab('room')">
-                    <i class="el-icon-video-camera"></i>
-                    <span>直播间</span>
-                </div>
-                <div class="nav-item" ref="navUser"
-                     :class="{ 'is-active': activeName === 'user', 'is-disabled': iframeOperating }"
-                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '用户'"
-                     @click="switchTab('user')">
-                    <i class="el-icon-user"></i>
-                    <span>用户</span>
-                </div>
-                <div class="nav-item" ref="navHistory"
-                     :class="{ 'is-active': activeName === 'history', 'is-disabled': iframeOperating }"
-                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '录制历史'"
-                     @click="switchTab('history')">
-                    <i class="el-icon-time"></i>
-                    <span>录制历史</span>
-                </div>
-                <div class="nav-item" ref="navStats"
-                     :class="{ 'is-active': activeName === 'stats', 'is-disabled': iframeOperating }"
-                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '统计'"
-                     @click="switchTab('stats')">
-                    <i class="el-icon-data-analysis"></i>
-                    <span>统计</span>
-                </div>
-                <div class="nav-item" ref="navLog"
-                     :class="{ 'is-active': activeName === 'log', 'has-alert': hasAlerts, 'is-disabled': iframeOperating }"
-                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '日志'"
-                     @click="switchTab('log')">
-                    <i class="el-icon-monitor"></i>
-                    <span>日志</span>
-                    <span v-if="hasAlerts" class="alert-badge"></span>
-                </div>
-                <div class="nav-item" ref="navHome"
-                     :class="{ 'is-active': activeName === 'home', 'is-disabled': iframeOperating }"
-                     :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '更新日志'"
-                     @click="switchTab('home')">
-                    <i class="el-icon-document"></i>
-                    <span>更新日志</span>
-                </div>
-            </nav>
 
             <div class="header-actions">
                 <div class="privacy-toggle" :class="{ 'is-active': privacyMode }" @click="toggleGlobalPrivacyMode" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
@@ -181,6 +136,53 @@
             <div class="subnav-placeholder"></div>
         </div>
     </header>
+    <!-- Keep bottom nav outside the filtered header so fixed positioning stays viewport-based on Android Chromium. -->
+    <nav class="header-nav" ref="headerNav">
+        <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
+        <div class="nav-item" ref="navRoom"
+             :class="{ 'is-active': activeName === 'room', 'is-pressed': pressedNavTab === 'room', 'is-disabled': iframeOperating }"
+             :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '直播间'"
+             @click="switchTab('room')">
+            <i class="el-icon-video-camera"></i>
+            <span>直播间</span>
+        </div>
+        <div class="nav-item" ref="navUser"
+             :class="{ 'is-active': activeName === 'user', 'is-pressed': pressedNavTab === 'user', 'is-disabled': iframeOperating }"
+             :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '用户'"
+             @click="switchTab('user')">
+            <i class="el-icon-user"></i>
+            <span>用户</span>
+        </div>
+        <div class="nav-item" ref="navHistory"
+             :class="{ 'is-active': activeName === 'history', 'is-pressed': pressedNavTab === 'history', 'is-disabled': iframeOperating }"
+             :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '录制历史'"
+             @click="switchTab('history')">
+            <i class="el-icon-time"></i>
+            <span>录制历史</span>
+        </div>
+        <div class="nav-item" ref="navStats"
+             :class="{ 'is-active': activeName === 'stats', 'is-pressed': pressedNavTab === 'stats', 'is-disabled': iframeOperating }"
+             :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '统计'"
+             @click="switchTab('stats')">
+            <i class="el-icon-data-analysis"></i>
+            <span>统计</span>
+        </div>
+        <div class="nav-item" ref="navLog"
+             :class="{ 'is-active': activeName === 'log', 'is-pressed': pressedNavTab === 'log', 'has-alert': hasAlerts, 'is-disabled': iframeOperating }"
+             :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '日志'"
+             @click="switchTab('log')">
+            <i class="el-icon-monitor"></i>
+            <span>日志</span>
+            <span v-if="hasAlerts" class="alert-badge"></span>
+        </div>
+        <div class="nav-item" ref="navHome"
+             :class="{ 'is-active': activeName === 'home', 'is-pressed': pressedNavTab === 'home', 'is-disabled': iframeOperating }"
+             :title="iframeOperating ? 'iframe 中正在进行 ' + iframeOperatingMessage + '，请稍候' : '更新日志'"
+             @click="switchTab('home')">
+            <i class="el-icon-document"></i>
+            <span>更新日志</span>
+        </div>
+    </nav>
     <transition name="fade">
         <div v-if="showThemePanel" class="theme-popover-backdrop" @click="showThemePanel = false"></div>
     </transition>
@@ -198,7 +200,7 @@
             </div>
             <div class="theme-popover-row">
                 <span class="theme-popover-label">主题配色</span>
-                <el-select v-model="themePalette" size="mini" class="theme-palette-select" @change="applyThemePalette" :popper-append-to-body="false" placeholder="主题配色">
+                <el-select v-model="themePalette" size="mini" class="theme-palette-select" @change="applyThemePalette" :popper-append-to-body="false" popper-class="theme-palette-select-popper" placeholder="主题配色">
                     <el-option v-for="item in themePaletteOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
                 </el-select>
             </div>
@@ -369,7 +371,7 @@
                                             <em>QPS</em>
                                         </div>
                                         <div class="mobile-config-control">
-                                            <el-input v-model="systemConfig.apiQps" @input="validateNumber($event, 'apiQps', true)" size="small" class="mobile-config-input"></el-input>
+                                            <el-input v-model="systemConfig.apiQps" inputmode="decimal" @input="validateNumber($event, 'apiQps', true)" size="small" class="mobile-config-input"></el-input>
                                             <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'apiQps' }" @click="toggleConfigHint('apiQps')" aria-label="查看 API 请求限速说明">
                                                 <i class="el-icon-info"></i>
                                             </button>
@@ -388,7 +390,7 @@
                                             <em>MB/s</em>
                                         </div>
                                         <div class="mobile-config-control">
-                                            <el-input v-model="systemConfig.uploadMb" @input="validateNumber($event, 'uploadMb', true)" size="small" class="mobile-config-input"></el-input>
+                                            <el-input v-model="systemConfig.uploadMb" inputmode="decimal" @input="validateNumber($event, 'uploadMb', true)" size="small" class="mobile-config-input"></el-input>
                                             <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'uploadMb' }" @click="toggleConfigHint('uploadMb')" aria-label="查看上传带宽限速说明">
                                                 <i class="el-icon-info"></i>
                                             </button>
@@ -407,7 +409,7 @@
                                             <em>分钟</em>
                                         </div>
                                         <div class="mobile-config-control">
-                                            <el-input v-model="systemConfig.mergeIntervalMinutes" @input="validateNumber($event, 'mergeIntervalMinutes', false)" size="small" class="mobile-config-input"></el-input>
+                                            <el-input v-model="systemConfig.mergeIntervalMinutes" inputmode="numeric" @input="validateNumber($event, 'mergeIntervalMinutes', false)" size="small" class="mobile-config-input"></el-input>
                                             <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'mergeIntervalMinutes' }" @click="toggleConfigHint('mergeIntervalMinutes')" aria-label="查看短时间开播合并说明">
                                                 <i class="el-icon-info"></i>
                                             </button>
@@ -426,7 +428,7 @@
                                             <em>个</em>
                                         </div>
                                         <div class="mobile-config-control">
-                                            <el-input v-model="systemConfig.maxConnections" @input="validateNumber($event, 'maxConnections', false)" size="small" class="mobile-config-input"></el-input>
+                                            <el-input v-model="systemConfig.maxConnections" inputmode="numeric" @input="validateNumber($event, 'maxConnections', false)" size="small" class="mobile-config-input"></el-input>
                                             <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'maxConnections' }" @click="toggleConfigHint('maxConnections')" aria-label="查看上传并发连接说明">
                                                 <i class="el-icon-info"></i>
                                             </button>
@@ -452,7 +454,7 @@
                                             <em>秒</em>
                                         </div>
                                         <div class="mobile-config-control">
-                                            <el-input v-model="systemConfig.normalDanmakuIntervalSeconds" @input="validateNumber($event, 'normalDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
+                                            <el-input v-model="systemConfig.normalDanmakuIntervalSeconds" inputmode="numeric" @input="validateNumber($event, 'normalDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
                                             <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'normalDanmakuIntervalSeconds' }" @click="toggleConfigHint('normalDanmakuIntervalSeconds')" aria-label="查看弹幕发送间隔说明">
                                                 <i class="el-icon-info"></i>
                                             </button>
@@ -471,7 +473,7 @@
                                             <em>秒</em>
                                         </div>
                                         <div class="mobile-config-control">
-                                            <el-input v-model="systemConfig.highLevelDanmakuIntervalSeconds" @input="validateNumber($event, 'highLevelDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
+                                            <el-input v-model="systemConfig.highLevelDanmakuIntervalSeconds" inputmode="numeric" @input="validateNumber($event, 'highLevelDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
                                             <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'highLevelDanmakuIntervalSeconds' }" @click="toggleConfigHint('highLevelDanmakuIntervalSeconds')" aria-label="查看评论发送间隔说明">
                                                 <i class="el-icon-info"></i>
                                             </button>
@@ -672,12 +674,12 @@
 
                 <div class="mobile-brec-field">
                     <label>端口</label>
-                    <el-input v-model="brecConfig.port" placeholder="默认 2356" size="small"></el-input>
+                    <el-input v-model="brecConfig.port" inputmode="numeric" placeholder="默认 2356" size="small"></el-input>
                 </div>
 
                 <div class="mobile-brec-field">
                     <label>提供 Cookie 的账号</label>
-                    <el-select v-model="brecConfig.uid" placeholder="选择账号" size="small" filterable style="width:100%;">
+                    <el-select v-model="brecConfig.uid" placeholder="选择账号" size="small" filterable class="mobile-brec-full-field" popper-class="mobile-user-popper">
                         <el-option
                             v-for="item in tableData"
                             :key="item.uid"
@@ -833,7 +835,7 @@
     </transition>
 
     <!-- 登录弹窗 -->
-    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="false" :modal-append-to-body="false" @close="cancelLogin" title="扫码登录" center custom-class="login-dialog mobile-user-login-dialog" width="420px">
+    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="false" append-to-body @close="cancelLogin" title="扫码登录" center custom-class="login-dialog mobile-user-login-dialog" width="420px">
         <div class="login-qr-wrapper mobile-user-login-wrapper">
             <div class="login-tips mobile-user-login-tips">
                 <i class="el-icon-mobile-phone"></i>
@@ -857,7 +859,7 @@
     </el-dialog>
 
     <!-- 编辑弹窗 -->
-    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="false" :modal-append-to-body="false" title="账号设置" custom-class="mobile-user-settings-dialog" width="500px">
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="false" append-to-body title="账号设置" custom-class="mobile-user-settings-dialog" width="500px">
         <el-form :model="user" label-position="top" class="mobile-user-settings-form">
             <div class="mobile-user-settings-account">
                 <div class="mobile-user-settings-avatar">{{ mobileUserInitial(user) }}</div>
@@ -891,6 +893,7 @@
         :visible.sync="brecSyncResultVisible"
         :fullscreen="isMobile"
         :title="brecSyncResult.success ? '同步成功' : '同步失败'"
+        append-to-body
         center
         custom-class="brec-sync-dialog mobile-brec-sync-dialog">
         <div class="mobile-brec-sync-result" :class="brecSyncResult.success ? 'is-success' : 'is-error'">
@@ -1118,6 +1121,10 @@
                 <i class="el-icon-search"></i>
                 <input v-model="searchKeyword"
                        type="search"
+                       inputmode="search"
+                       enterkeyhint="search"
+                       autocapitalize="off"
+                       spellcheck="false"
                        placeholder="搜索内容、时间或线程"
                        @input="onSearchInput">
             </label>
@@ -1299,7 +1306,13 @@
             </header>
             <label class="mobile-log-search-field">
                 <i class="el-icon-search"></i>
-                <input v-model="detailsSearch" type="search" placeholder="搜索告警">
+                <input v-model="detailsSearch"
+                       type="search"
+                       inputmode="search"
+                       enterkeyhint="search"
+                       autocapitalize="off"
+                       spellcheck="false"
+                       placeholder="搜索告警">
             </label>
             <div class="mobile-log-alert-tabs">
                 <button type="button" :class="{ 'is-active': detailsFilter === '' }" @click="detailsFilter = ''">全部</button>

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>录制历史 - Bili Live Recorder</title>
     <link rel="icon" href="../../img/icon.svg" type="image/svg+xml">
     <link href="../../css/element-ui.css" rel="stylesheet">
@@ -16,6 +16,7 @@
     <link href="../../css/history.css" rel="stylesheet">
     <link href="../css/mobile-pages.css" rel="stylesheet">
     <link href="../css/mobile-history.css" rel="stylesheet">
+    <script src="../../js/app/mobile-viewport.js"></script>
     <script src="../../js/jquery-3.3.1.min.js"></script>
     <script src="../../js/vue.min.js"></script>
     <script src="../../js/element-ui.js"></script>
@@ -307,8 +308,10 @@
                                         :key="room.roomId"
                                         :label="privacyMode ? '***' : (room.roomId + ' - ' + room.uname)"
                                         :value="room.roomId">
-                                    <span style="float: left">{{ maskText(room.uname) }}</span>
-                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ maskText(room.roomId) }}</span>
+                                    <span class="mobile-history-option-row">
+                                        <span>{{ maskText(room.uname) }}</span>
+                                        <em>{{ maskText(room.roomId) }}</em>
+                                    </span>
                                 </el-option>
                             </el-select>
                         </label>
@@ -569,14 +572,16 @@
                     <div class="filter-grid">
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-house"></i> 房间号</label>
-                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small" :disabled="isMultiSelectMode">
+                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small" :disabled="isMultiSelectMode" popper-class="mobile-history-filter-popper">
                                 <el-option
                                         v-for="room in roomList"
                                         :key="room.roomId"
                                         :label="privacyMode ? '***' : (room.roomId + ' - ' + room.uname)"
                                         :value="room.roomId">
-                                    <span style="float: left">{{ maskText(room.uname) }}</span>
-                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ maskText(room.roomId) }}</span>
+                                    <span class="mobile-history-option-row">
+                                        <span>{{ maskText(room.uname) }}</span>
+                                        <em>{{ maskText(room.roomId) }}</em>
+                                    </span>
                                 </el-option>
                             </el-select>
                         </div>
@@ -592,7 +597,7 @@
                             <label class="filter-label"><i class="el-icon-upload2"></i> 上传状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.upload !== null && form.upload !== undefined" class="select-prefix-icon" :class="form.upload === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === true ? '#67c23a' : '#f56c6c'}"></i>
-                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload !== null && form.upload !== undefined}" :disabled="isMultiSelectMode">
+                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload !== null && form.upload !== undefined}" :disabled="isMultiSelectMode" popper-class="mobile-history-filter-popper">
                                     <el-option label="已上传" :value="true">
                                         <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已上传
                                     </el-option>
@@ -607,7 +612,7 @@
                             <label class="filter-label"><i class="el-icon-video-camera"></i> 录制状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.recording !== null && form.recording !== undefined" class="select-prefix-icon" :class="form.recording === true ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === true ? '#e6a23c' : '#909399'}"></i>
-                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording !== null && form.recording !== undefined}" :disabled="isMultiSelectMode">
+                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording !== null && form.recording !== undefined}" :disabled="isMultiSelectMode" popper-class="mobile-history-filter-popper">
                                     <el-option label="录制中" :value="true">
                                         <i class="el-icon-video-camera" style="color: #e6a23c; margin-right: 6px;"></i>录制中
                                     </el-option>
@@ -622,7 +627,7 @@
                             <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? '#67c23a' : '#909399'}"></i>
-                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode || isMultiSelectMode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}">
+                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode || isMultiSelectMode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}" popper-class="mobile-history-filter-popper">
                                     <el-option label="已发布" :value="true">
                                         <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已发布
                                     </el-option>
@@ -637,7 +642,7 @@
                             <label class="filter-label"><i class="el-icon-s-check"></i> 审核状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.code !== null && form.code !== undefined && form.code !== ''" class="select-prefix-icon" :class="getCodeIcon(form.code)" :style="{color: getCodeColor(form.code)}"></i>
-                                <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}" :disabled="isMultiSelectMode">
+                                <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}" :disabled="isMultiSelectMode" popper-class="mobile-history-filter-popper">
                                     <el-option label="未审核" :value="-999">
                                         <i class="el-icon-remove-outline" style="color: #909399; margin-right: 6px;"></i>未审核
                                     </el-option>
@@ -669,9 +674,10 @@
                                         v-model="form.from"
                                         type="datetime"
                                         placeholder="开始时间"
-                                    value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                        value-format="yyyy-MM-dd HH:mm:ss.SSS"
                                         size="small"
                                         :disabled="isMultiSelectMode"
+                                        popper-class="mobile-history-filter-popper"
                                         @change="onFilterChange">
                                 </el-date-picker>
                                 <span class="date-separator">至</span>
@@ -679,9 +685,10 @@
                                         v-model="form.to"
                                         type="datetime"
                                         placeholder="结束时间"
-                                    value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                        value-format="yyyy-MM-dd HH:mm:ss.SSS"
                                         size="small"
                                         :disabled="isMultiSelectMode"
+                                        popper-class="mobile-history-filter-popper"
                                         @change="onFilterChange">
                                 </el-date-picker>
                             </div>
@@ -704,7 +711,7 @@
         <transition :name="transitionName">
             <!-- 空状态 -->
             <div v-if="!loading && tableData.length === 0" key="empty" class="empty-container">
-                <el-empty style="margin-top: 10vh;">
+                <el-empty class="mobile-history-empty-state">
                     <template #description>
                         <div class="empty-desc">
                             <p v-if="activeFilterCount > 0" class="empty-main-text">没有找到符合条件的记录</p>
@@ -741,11 +748,11 @@
                     <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
                         <i class="el-icon-delete selection-icon"></i>
                     </div>
-                    <div style="position: absolute; top: 6px; left: 10px; font-size: 11px; color: var(--text-tertiary, #909399); opacity: 0.5; pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    <div class="mobile-history-card-id">
                         ID: {{ item.id }}
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
+                    <div class="mobile-history-card-layout">
+                        <div class="mobile-history-card-main">
                             <div class="card-title">{{ maskText(item.title || '无标题') }}</div>
                             <div class="card-bvid" :class="{ 'is-placeholder': !item.bvId }">
                                 <span v-if="item.bvId">BV: {{ maskText(item.bvId) }}</span>
@@ -761,10 +768,10 @@
                                 </el-tag>
                                 
                                 <el-tooltip v-if="abnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
-                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ abnormalPartCount(item) }}</span>
+                                    <span class="status-chip danger-soft">异常分P {{ abnormalPartCount(item) }}</span>
                                 </el-tooltip>
                                 <el-tooltip v-if="skippedOnlyCount(item) > 0" effect="dark" content="文件低于配置阈值，已自动跳过" placement="top">
-                                    <span class="status-chip" style="background: rgba(230, 162, 60, 0.15); color: #e6a23c;">已跳过 {{ skippedOnlyCount(item) }}</span>
+                                    <span class="status-chip warning-soft">已跳过 {{ skippedOnlyCount(item) }}</span>
                                 </el-tooltip>
                                 <el-tooltip v-if="uploadFlowFallbackCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatUploadFlowFallbackTooltip(item.uploadFlowFallbackReasons)" placement="top">
                                     <span class="status-chip warn">上传已回退 {{ uploadFlowFallbackCount(item) }}</span>
@@ -790,8 +797,7 @@
                 <el-table
                         v-loading="loading"
                         :data="tableData"
-                        height="calc(100vh - 280px)"
-                        style="width: 100%">
+                        class="mobile-history-table">
                     <el-table-column label="ID" prop="id" width="60"></el-table-column>
                     <el-table-column label="房间号" width="100">
                         <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
@@ -834,13 +840,13 @@
                     <el-table-column label="是否上传" prop="upload" width="90">
                         <template slot-scope="scope">
                             <span class="status-chip success" v-if="scope.row.upload">是</span>
-                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>否</span>
+                            <span class="status-chip muted-soft" v-else>否</span>
                         </template>
                     </el-table-column>
                     <el-table-column label="是否发布成功" prop="publish" width="80">
                         <template slot-scope="scope">
                             <span class="status-chip success" v-if="scope.row.publish">已发布</span>
-                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
+                            <span class="status-chip muted-soft" v-else>未发布</span>
                         </template>
                     </el-table-column>
                     <el-table-column label="是否审核通过" prop="code" width="90">
@@ -1783,22 +1789,22 @@
     </transition>
 
     <!-- 编辑弹窗 -->
-    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="编辑记录" custom-class="edit-dialog mobile-history-form-dialog">
+    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="编辑记录" append-to-body custom-class="edit-dialog mobile-history-form-dialog">
         <el-form :model="history" label-width="100px">
             <el-form-item label="是否上传">
-                <el-select placeholder="请选择" v-model="history.upload">
+                <el-select placeholder="请选择" v-model="history.upload" popper-class="mobile-history-filter-popper">
                     <el-option label="是" :value="true"></el-option>
                     <el-option label="否" :value="false"></el-option>
                 </el-select>
             </el-form-item>
             <el-form-item label="是否录制中">
-                <el-select placeholder="请选择" v-model="history.recording">
+                <el-select placeholder="请选择" v-model="history.recording" popper-class="mobile-history-filter-popper">
                     <el-option label="是" :value="true"></el-option>
                     <el-option label="否" :value="false"></el-option>
                 </el-select>
             </el-form-item>
             <el-form-item label="稿件可见性">
-                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <div class="mobile-history-visibility-actions">
                     <el-tooltip effect="dark" :content="visibilityActionDisabledReason || '切换为公开可见'" placement="top">
                         <span>
                             <el-button
@@ -1824,7 +1830,7 @@
                         </span>
                     </el-tooltip>
                 </div>
-                <div style="margin-top:6px; font-size:12px; color:#909399; line-height:1.5;">
+                <div class="mobile-history-dialog-hint">
                     仅审核通过（公开/仅自己可见）且稿件全部流程完成时可操作。
                 </div>
             </el-form-item>
@@ -1837,19 +1843,19 @@
 
     <!-- 重载弹幕确认弹窗 -->
     <el-dialog title="重载弹幕确认" :visible.sync="reloadDialogVisible" width="500px" append-to-body custom-class="mobile-history-confirm-dialog">
-        <div style="margin-bottom: 20px;">
-            <p style="margin-bottom: 15px;">此操作将重新解析并加载弹幕文件到数据库。</p>
-            <div style="background-color: #fef0f0; color: #f56c6c; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
+        <div class="mobile-history-reload-confirm">
+            <p>此操作将重新解析并加载弹幕文件到数据库。</p>
+            <div class="mobile-history-reload-warning">
                 <i class="el-icon-warning"></i> 警告：如果您开启了以下开关，可能会导致任务被强制中断并重置，从而引起弹幕重复发送等问题，请务必确认当前没有正在进行的重要发送任务！
             </div>
             <el-form label-width="200px">
                 <el-form-item label="重置普通弹幕任务">
                     <el-switch v-model="reloadOptions.restartOrdinary" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
-                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前普通弹幕发送线程并从头开始</div>
+                    <div class="mobile-history-reload-note">终止当前普通弹幕发送线程并从头开始</div>
                 </el-form-item>
                 <el-form-item label="重置高级弹幕任务">
                     <el-switch v-model="reloadOptions.restartAdvanced" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
-                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前SC/上舰发送线程并从头开始</div>
+                    <div class="mobile-history-reload-note">终止当前SC/上舰发送线程并从头开始</div>
                 </el-form-item>
             </el-form>
         </div>
@@ -1861,29 +1867,31 @@
 
     <el-dialog title="补全分P文件" :visible.sync="bindFileDialogVisible" width="600px" append-to-body custom-class="mobile-history-file-dialog">
         <div v-if="bindTargetPart">
-            <div style="font-size: 13px; color: #606266; margin-bottom: 10px;">
+            <div class="mobile-history-file-meta">
                 P{{ bindTargetPart.page }} / partId={{ bindTargetPart.partId }}
             </div>
-            <div v-if="bindTargetPart.issueMessage" style="background: #fff7e6; border: 1px solid #f3d19e; padding: 10px; border-radius: 6px; color: #E6A23C; font-size: 13px; margin-bottom: 12px;">
+            <div v-if="bindTargetPart.issueMessage" class="mobile-history-file-warning">
                 <i class="el-icon-warning"></i> {{ bindTargetPart.issueMessage }}
             </div>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
-            <el-input v-model="candidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）" style="flex: 1;"></el-input>
+        <div class="mobile-history-file-search">
+            <el-input v-model="candidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）"></el-input>
             <el-button size="small" @click="loadCandidateFiles" :loading="candidateFilesLoading">刷新列表</el-button>
         </div>
-        <el-select v-model="selectedCandidateFile" filterable clearable placeholder="请选择要绑定的文件" style="width: 100%;" :loading="candidateFilesLoading">
+        <el-select v-model="selectedCandidateFile" filterable clearable placeholder="请选择要绑定的文件" class="mobile-history-full-field" :loading="candidateFilesLoading" popper-class="mobile-history-filter-popper">
             <el-option v-for="f in candidateFiles" :key="f.filePath" :label="privacyMode ? '***' : (f.name + ' (' + formatSize(f.size) + ')')" :value="f.filePath">
-                <span style="float:left">{{ maskText(f.name) }}</span>
-                <span style="float:right; color:#909399; font-size:12px;">{{ formatSize(f.size) }}</span>
+                <span class="mobile-history-option-row">
+                    <span>{{ maskText(f.name) }}</span>
+                    <em>{{ formatSize(f.size) }}</em>
+                </span>
             </el-option>
         </el-select>
-        <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <div style="font-size: 12px; color: #909399;">
+        <div class="mobile-history-file-options">
+            <div class="mobile-history-dialog-hint">
                 文件来自服务器工作目录
             </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size: 12px; color: #606266;">绑定后触发上传</span>
+            <div class="mobile-history-file-switch">
+                <span>绑定后触发上传</span>
                 <el-switch v-model="bindTriggerUpload"></el-switch>
             </div>
         </div>
@@ -1957,17 +1965,19 @@
     </transition>
 
     <el-dialog :title="editPartFileDialogMode === 'add' ? '从工作目录添加分P' : '从工作目录替换分P'" :visible.sync="editPartFileDialogVisible" width="640px" append-to-body custom-class="mobile-history-file-dialog">
-        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
-            <el-input v-model="editCandidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）" style="flex: 1;"></el-input>
+        <div class="mobile-history-file-search">
+            <el-input v-model="editCandidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）"></el-input>
             <el-button size="small" @click="loadEditCandidateFiles" :loading="editCandidateFilesLoading">刷新列表</el-button>
         </div>
-        <el-select v-model="selectedEditCandidateFile" filterable clearable placeholder="请选择视频文件" style="width: 100%;" :loading="editCandidateFilesLoading">
+        <el-select v-model="selectedEditCandidateFile" filterable clearable placeholder="请选择视频文件" class="mobile-history-full-field" :loading="editCandidateFilesLoading" popper-class="mobile-history-filter-popper">
             <el-option v-for="f in editCandidateFiles" :key="f.filePath" :label="privacyMode ? '***' : (f.name + ' (' + formatSize(f.size) + ')')" :value="f.filePath">
-                <span style="float:left">{{ maskText(f.name) }}</span>
-                <span style="float:right; color:#909399; font-size:12px;">{{ formatSize(f.size) }}</span>
+                <span class="mobile-history-option-row">
+                    <span>{{ maskText(f.name) }}</span>
+                    <em>{{ formatSize(f.size) }}</em>
+                </span>
             </el-option>
         </el-select>
-        <div style="margin-top: 12px; font-size: 12px; color: #909399;">
+        <div class="mobile-history-dialog-hint is-standalone">
             文件来自当前房间工作目录，保存编辑时才会正式上传到 B 站。
         </div>
         <div slot="footer" class="dialog-footer">
@@ -1978,19 +1988,19 @@
 
     <!-- 单条删除确认弹窗 -->
     <el-dialog title="删除记录确认" :visible.sync="singleDeleteDialogVisible" width="420px" append-to-body :close-on-click-modal="false" custom-class="mobile-history-confirm-dialog mobile-history-danger-dialog">
-        <div style="padding: 0 4px;">
-            <div style="display:flex; align-items:flex-start; margin-bottom:16px;">
-                <i class="el-icon-warning" style="font-size:22px; color:#E6A23C; margin-right:10px; margin-top:2px; flex-shrink:0;"></i>
-                <span style="line-height:1.6; color:var(--text-primary);">此操作将永久删除该条录制历史记录（数据库数据），<strong>不可恢复</strong>。</span>
+        <div class="mobile-history-delete-confirm">
+            <div class="mobile-history-delete-warning">
+                <i class="el-icon-warning"></i>
+                <span>此操作将永久删除该条录制历史记录（数据库数据），<strong>不可恢复</strong>。</span>
             </div>
-            <div style="background:var(--bg-tertiary); border-radius:6px; padding:12px 16px; margin-bottom:8px;">
-                <div style="font-size:13px; color:var(--text-secondary); margin-bottom:10px;">同时删除本地文件（可选）：</div>
-                <el-checkbox v-model="singleDeleteOptions.deleteVideo" style="display:block; margin-bottom:8px;">视频文件（.mp4 / .flv / .mkv 等）</el-checkbox>
-                <el-checkbox v-model="singleDeleteOptions.deleteDanmaku" style="display:block; margin-bottom:8px;">弹幕文件（.xml / .ass）</el-checkbox>
-                <el-checkbox v-model="singleDeleteOptions.deleteCover" style="display:block;">封面图片（.jpg / .png 等）</el-checkbox>
+            <div class="mobile-history-delete-options">
+                <div class="mobile-history-delete-options-title">同时删除本地文件（可选）：</div>
+                <el-checkbox v-model="singleDeleteOptions.deleteVideo">视频文件（.mp4 / .flv / .mkv 等）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteDanmaku">弹幕文件（.xml / .ass）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteCover">封面图片（.jpg / .png 等）</el-checkbox>
             </div>
             <div v-if="singleDeleteOptions.deleteVideo || singleDeleteOptions.deleteDanmaku || singleDeleteOptions.deleteCover"
-                 style="font-size:12px; color:#F56C6C; margin-top:8px;">
+                 class="mobile-history-delete-danger">
                 ⚠ 勾选的本地文件将被永久删除，无法恢复！
             </div>
         </div>

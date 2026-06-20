@@ -96,6 +96,12 @@
     transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, background 220ms ease;
 }
 
+.mobile-shell .mobile-log-status > *,
+.mobile-shell .mobile-log-hero-copy p {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .mobile-shell .mobile-log-status:active,
 .mobile-shell .mobile-log-actions button:active,
 .mobile-shell .mobile-log-stat:active,
@@ -301,7 +307,7 @@
 
 .mobile-shell .mobile-log-range button,
 .mobile-shell .mobile-log-alert-tabs button {
-    min-width: 38px;
+    min-width: 44px;
     min-height: 44px;
     padding: 0 8px;
     border: none;
@@ -452,7 +458,7 @@
 }
 
 .mobile-shell .mobile-log-ghost {
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 12px;
     border-radius: 15px;
     box-shadow: none;
@@ -539,6 +545,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 9px;
 }
@@ -556,23 +563,24 @@
 }
 
 .mobile-shell .mobile-log-row-meta em {
-    flex: 1;
+    flex: 1 1 120px;
 }
 
 .mobile-shell .mobile-log-level {
     flex: 0 0 auto;
-    min-width: 48px;
-    min-height: 24px;
-    padding: 0 8px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 10px;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background: color-mix(in srgb, var(--mobile-accent-1) 12%, transparent);
     color: var(--mobile-accent-1);
-    font-size: 10px;
-    line-height: 1;
+    font-size: 11px;
+    line-height: 1.15;
     font-weight: 950;
+    white-space: nowrap;
 }
 
 .mobile-shell .mobile-log-level.is-WARN {
@@ -668,7 +676,7 @@
     right: 10px;
     bottom: calc(10px + var(--mobile-safe-bottom));
     z-index: 2800;
-    max-height: min(82dvh, 720px);
+    max-height: min(calc(var(--mobile-viewport-height) * 0.82), 720px);
     padding: 10px 12px 12px;
     border: 1px solid var(--mobile-border);
     border-radius: 28px;
@@ -686,7 +694,7 @@
 .mobile-shell .mobile-log-alert-sheet,
 .mobile-shell .mobile-log-context-sheet,
 .mobile-shell .mobile-log-detail-sheet {
-    max-height: min(86dvh, 760px);
+    max-height: min(calc(var(--mobile-viewport-height) * 0.86), 760px);
 }
 
 .mobile-shell .mobile-log-sheet-handle {
@@ -703,6 +711,10 @@
     justify-content: space-between;
     gap: 12px;
     padding: 2px 2px 0;
+}
+
+.mobile-shell .mobile-log-sheet-head > div {
+    min-width: 0;
 }
 
 .mobile-shell .mobile-log-sheet-head h3 {
@@ -837,9 +849,14 @@
 
 .mobile-shell .mobile-log-setting-row > span {
     min-width: 0;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+.mobile-shell .mobile-log-setting-row .el-switch {
+    flex: 0 0 auto;
 }
 
 .mobile-shell .mobile-log-setting-row strong {
@@ -858,7 +875,7 @@
 
 .mobile-shell .mobile-log-pre {
     min-height: 180px;
-    max-height: 52dvh;
+    max-height: calc(var(--mobile-viewport-height) * 0.52);
     margin: 0;
     padding: 14px;
     border: 1px solid var(--mobile-border);
@@ -876,7 +893,7 @@
 .mobile-shell .mobile-log-context-list,
 .mobile-shell .mobile-log-alert-list {
     min-height: 180px;
-    max-height: 52dvh;
+    max-height: calc(var(--mobile-viewport-height) * 0.52);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     display: flex;
@@ -926,6 +943,7 @@
 .mobile-shell .mobile-log-alert-meta {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 7px;
     min-width: 0;
 }
@@ -933,8 +951,9 @@
 .mobile-shell .mobile-log-alert-meta span,
 .mobile-shell .mobile-log-alert-meta em {
     flex: 0 0 auto;
-    min-height: 24px;
-    padding: 0 8px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 10px;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
@@ -942,7 +961,7 @@
     background: color-mix(in srgb, var(--warning-color) 14%, transparent);
     color: var(--warning-color);
     font-size: 11px;
-    line-height: 1;
+    line-height: 1.2;
     font-style: normal;
     font-weight: 900;
 }
@@ -953,13 +972,12 @@
 }
 
 .mobile-shell .mobile-log-alert-meta time {
+    flex: 1 1 130px;
     min-width: 0;
     color: var(--text-secondary);
     font-size: 11px;
     line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .mobile-shell .mobile-log-alert-item p {
@@ -977,7 +995,7 @@
 }
 
 .mobile-shell .mobile-log-alert-actions button {
-    min-height: 40px;
+    min-height: 44px;
     border-radius: 15px;
     box-shadow: none;
     color: var(--mobile-accent-1);
@@ -1053,6 +1071,7 @@
 
     .mobile-shell .mobile-log-stat-grid {
         gap: 6px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .mobile-shell .mobile-log-stat {
@@ -1063,6 +1082,8 @@
 
     .mobile-shell .mobile-log-stat span {
         font-size: 9px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
     }
 
     .mobile-shell .mobile-log-stat i {
@@ -1071,6 +1092,42 @@
 
     .mobile-shell .mobile-log-level-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 360px) {
+    .mobile-shell .mobile-log-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-log-stat-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-log-level-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-log-sheet-head {
+        align-items: center;
+    }
+
+    .mobile-shell .mobile-log-sheet-head h3 {
+        font-size: 21px;
+        line-height: 1.12;
+    }
+
+    .mobile-shell .mobile-log-sheet-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-log-setting-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .mobile-shell .mobile-log-setting-row .el-switch {
+        align-self: flex-end;
     }
 }
 
