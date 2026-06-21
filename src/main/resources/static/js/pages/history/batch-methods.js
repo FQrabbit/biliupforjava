@@ -466,6 +466,120 @@
                 }
             }).catch(function() {});
         },
+        handleQueueMaintenanceCommand: function(command) {
+            if (command === 'selected') {
+                this.openBatchAbandonQueue();
+            } else if (command === 'historical') {
+                this.openMsgQueueCleanupDialog();
+            }
+        },
+        openBatchAbandonQueue: function() {
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) {
+                this.$message.info('请先选择要处理的稿件');
+                return;
+            }
+            var pendingOrdinary = 0;
+            var pendingAdvanced = 0;
+            var pendingReply = false;
+            this.selectedItems.forEach(function(item) {
+                pendingOrdinary += Number(item.pendingNormalMsgCount) || 0;
+                pendingAdvanced += Number(item.pendingHighMsgCount) || 0;
+                if (item && item.sendReply === false) pendingReply = true;
+            });
+            this.currentAbandonQueueId = null;
+            this.abandonQueueMode = 'batch';
+            this.abandonQueueOptions.ordinary = pendingOrdinary > 0;
+            this.abandonQueueOptions.advanced = pendingAdvanced > 0;
+            this.abandonQueueOptions.reply = pendingReply;
+            this.abandonQueueOptions.forceArchive = false;
+            if (pendingOrdinary <= 0 && pendingAdvanced <= 0 && !pendingReply) {
+                this.abandonQueueOptions.ordinary = true;
+                this.abandonQueueOptions.advanced = true;
+                this.abandonQueueOptions.reply = true;
+            }
+            this.abandonQueueDialogVisible = true;
+        },
+        openMsgQueueCleanupDialog: function() {
+            this.msgQueueCleanupPreview = null;
+            this.msgQueueCleanupOptions.ordinary = true;
+            this.msgQueueCleanupOptions.advanced = true;
+            this.msgQueueCleanupOptions.reply = true;
+            this.msgQueueCleanupOptions.forceArchive = false;
+            this.msgQueueCleanupOptions.olderThanDays = 7;
+            this.msgQueueCleanupOptions.limit = 5000;
+            this.msgQueueCleanupDialogVisible = true;
+        },
+        buildMsgQueueCleanupPayload: function() {
+            return {
+                ordinary: !!this.msgQueueCleanupOptions.ordinary,
+                advanced: !!this.msgQueueCleanupOptions.advanced,
+                reply: !!this.msgQueueCleanupOptions.reply,
+                forceArchive: !!this.msgQueueCleanupOptions.forceArchive,
+                olderThanDays: Math.max(0, Number(this.msgQueueCleanupOptions.olderThanDays) || 0),
+                limit: Math.max(1, Number(this.msgQueueCleanupOptions.limit) || 5000)
+            };
+        },
+        previewMsgQueueCleanup: function() {
+            var _this = this;
+            if (!this.msgQueueCleanupOptions.ordinary && !this.msgQueueCleanupOptions.advanced && !this.msgQueueCleanupOptions.reply && !this.msgQueueCleanupOptions.forceArchive) {
+                this.$message.info('请选择要清理的内容');
+                return;
+            }
+            this.msgQueueCleanupPreviewLoading = true;
+            HistoryApi.previewMsgQueueCleanup(this.buildMsgQueueCleanupPayload(), function(data) {
+                _this.msgQueueCleanupPreviewLoading = false;
+                _this.msgQueueCleanupPreview = data || null;
+                if (!data || Number(data.totalActions) <= 0) {
+                    _this.$message.info((data && data.msg) || '没有找到符合条件的历史待发送队列');
+                }
+            }, function() {
+                _this.msgQueueCleanupPreviewLoading = false;
+                _this.$message.error('扫描清理范围失败');
+            });
+        },
+        applyMsgQueueCleanup: function() {
+            var _this = this;
+            var preview = this.msgQueueCleanupPreview;
+            if (!preview || Number(preview.totalActions) <= 0) {
+                this.$message.info('请先扫描可清理内容');
+                return;
+            }
+            var msg = '<p>将清理 <b>' + (Number(preview.historyCount) || 0) + '</b> 个历史稿件中的待发送任务：</p>'
+                + '<ul style="margin:8px 0 0 18px;color:#606266;">'
+                + '<li>普通弹幕：' + (Number(preview.ordinary) || 0) + ' 条</li>'
+                + '<li>SC/上舰弹幕：' + (Number(preview.advanced) || 0) + ' 条</li>'
+                + '<li>评论汇总：' + (Number(preview.reply) || 0) + ' 个</li>'
+                + '<li>强制归档：' + (Number(preview.forceArchived) || 0) + ' 个</li>'
+                + '</ul>';
+            if (preview.limited) {
+                msg += '<p style="margin-top:8px;color:#E6A23C;">符合条件的稿件较多，本次只处理前 ' + (Number(preview.limit) || 0) + ' 个。</p>';
+            }
+            this.$confirm(msg, '清理历史待发送队列确认', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: '确认清理',
+                cancelButtonText: '取消',
+                confirmButtonClass: 'el-button--warning',
+                type: 'warning'
+            }).then(function() {
+                _this.msgQueueCleanupApplying = true;
+                HistoryApi.applyMsgQueueCleanup(_this.buildMsgQueueCleanupPayload(), function(data) {
+                    _this.msgQueueCleanupApplying = false;
+                    _this.msgQueueCleanupDialogVisible = false;
+                    _this.msgQueueCleanupPreview = null;
+                    _this.$message({
+                        message: (data && data.msg) || '清理完成',
+                        type: (data && data.type) || 'success'
+                    });
+                    _this.isMultiSelectMode = false;
+                    _this.selectedItems = [];
+                    _this.startPolling();
+                    _this.initTable();
+                }, function() {
+                    _this.msgQueueCleanupApplying = false;
+                    _this.$message.error('清理请求失败');
+                });
+            }).catch(function() {});
+        },
         requestVisibilitySwitch: function(id, isOnlySelf) {
             return new Promise(function(resolve) {
                 HistoryApi.visibility(id, { isOnlySelf: isOnlySelf }, function(res) {

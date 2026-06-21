@@ -72,6 +72,13 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     List<RecordHistoryPart> findByIdIn(List<Long> ids);
 
+    @Query("""
+            select p from RecordHistoryPart p
+            where p.historyId in ?1
+            order by p.historyId asc, p.id asc
+            """)
+    List<RecordHistoryPart> findByHistoryIdIn(List<Long> historyIds);
+
     List<RecordHistoryPart> findByRoomIdAndFileDeleteIsFalseAndEndTimeIsBefore(String roomId, LocalDateTime deleteTime);
 
     List<RecordHistoryPart> findByHistoryIdAndCidIsNotNullOrderByPageAsc(Long historyId);

@@ -8020,6 +8020,42 @@
 
 }
 
+.batch-actions .el-dropdown {
+    display: inline-flex;
+}
+
+.queue-cleanup-dialog {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.queue-cleanup-dialog .el-checkbox {
+    margin-right: 14px;
+}
+
+.queue-cleanup-unit {
+    margin-left: 8px;
+    color: var(--text-secondary);
+}
+
+.queue-cleanup-preview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.queue-cleanup-warning {
+    grid-column: 1 / -1;
+    color: #e6a23c;
+}
+
 .batch-progress-float {
 
     position: fixed;

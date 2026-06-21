@@ -1,5 +1,7 @@
 package top.sshh.bililiverecoder.job;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -112,10 +115,9 @@ public class videoSyncJob {
             result.msg = "房间不存在";
             return result;
         }
-        BiliBiliUser user = null;
-        if (room.getUploadUserId() != null) {
-            user = userRepository.findById(room.getUploadUserId()).orElse(null);
-        }
+        PublishAuthContext auth = resolvePublishAuthContext(history, room);
+        BiliBiliUser user = auth.user();
+        result.authSource = auth.source();
         if (StringUtils.isBlank(history.getBvId())) {
             result.success = false;
             result.type = "warning";
@@ -140,14 +142,29 @@ public class videoSyncJob {
 
         result.videoInfoCode = videoInfoResponse == null ? null : videoInfoResponse.getCode();
         result.videoInfoMessage = videoInfoResponse == null ? "null-response" : videoInfoResponse.getMessage();
+        LockedArchiveSnapshot lockedSnapshot = detectLockedArchive(user, history, result);
+        boolean publicViewMissingButMemberVisible = videoInfoResponse != null
+                && videoInfoResponse.getCode() == -404
+                && result.memberPartInfoCode != null
+                && result.memberPartInfoCode == 0;
         if (videoInfoResponse != null && videoInfoResponse.getCode() == 0 && videoInfoResponse.getData() != null) {
             BiliVideoInfoResponse.BiliVideoInfo data = videoInfoResponse.getData();
             result.oldArchiveCode = history.getCode();
-            result.archiveCode = data.getState();
-            history.setCode(data.getState());
+            int state = data.getState();
+            if (lockedSnapshot.locked()) {
+                state = -4;
+                result.locked = true;
+                result.lockReason = lockedSnapshot.reason();
+                result.forceArchived = true;
+            }
+            result.archiveCode = state;
+            history.setCode(state);
             history.setAvId(data.getAid());
             history.setBvId(data.getBvid());
             history.setCoverUrl(data.getPic());
+            if (state == -4) {
+                markHistoryLockedAndArchived(history);
+            }
             history.setUpdateTime(LocalDateTime.now());
             history = historyRepository.save(history);
             result.statusSynced = true;
@@ -158,13 +175,31 @@ public class videoSyncJob {
             history.setUpdateTime(LocalDateTime.now());
             historyRepository.save(history);
             result.statusSynced = true;
+        } else if (lockedSnapshot.locked()
+                || publicViewMissingButMemberVisible
+                && (Integer.valueOf(-4).equals(result.auditDetailState) || StringUtils.isNotBlank(result.auditReason))) {
+            result.oldArchiveCode = history.getCode();
+            result.archiveCode = -4;
+            result.locked = true;
+            result.lockReason = StringUtils.defaultIfBlank(lockedSnapshot.reason(), result.auditReason);
+            result.forceArchived = true;
+            history.setCode(-4);
+            markHistoryLockedAndArchived(history);
+            history.setUpdateTime(LocalDateTime.now());
+            historyRepository.save(history);
+            result.statusSynced = true;
         }
 
         List<OnlinePartSnapshot> onlineParts = loadOnlinePartSnapshotsForManualRefresh(user, history, videoInfoResponse, result);
         SyncStatusResult orderResult = syncOnlinePartOrder(history, onlineParts);
         result.mergePartOrder(orderResult);
         result.success = result.statusSynced || result.partOrderSynced;
-        if (result.partOrderAnomaly) {
+        if (result.locked) {
+            result.type = "warning";
+            result.msg = StringUtils.isBlank(result.lockReason)
+                    ? "稿件已被平台锁定，已按强制归档处理，后续任务不会再触发"
+                    : "稿件已被平台锁定，已按强制归档处理：" + result.lockReason;
+        } else if (result.partOrderAnomaly) {
             result.type = "warning";
             result.msg = "状态已刷新，但部分线上分P无法与本地记录完全匹配，分P顺序可能存在异常";
         } else if (result.partOrderChanged) {
@@ -178,6 +213,237 @@ public class videoSyncJob {
             result.msg = "未获取到可更新的稿件状态";
         }
         return result;
+    }
+
+    private LockedArchiveSnapshot detectLockedArchive(BiliBiliUser user, RecordHistory history) {
+        return detectLockedArchive(user, history, null);
+    }
+
+    private LockedArchiveSnapshot detectLockedArchive(BiliBiliUser user, RecordHistory history, SyncStatusResult result) {
+        if (user == null || history == null || StringUtils.isBlank(history.getBvId())) {
+            return LockedArchiveSnapshot.unlocked();
+        }
+        try {
+            BiliApi.ApiDebugResponse<BiliVideoPartInfoResponse> partInfoDebug = BiliApi.getVideoPartInfoDebug(user, history.getBvId());
+            BiliVideoPartInfoResponse partInfo = partInfoDebug.getParsed();
+            if (result != null) {
+                result.memberPartInfoCode = partInfo == null ? null : partInfo.getCode();
+                result.memberPartInfoMessage = partInfo == null ? "null-response" : partInfo.getMessage();
+                result.memberPartInfoLockSignal = findLockedSignal(partInfoDebug.getRaw());
+            }
+            String auditReason = loadAuditReason(user, history, result);
+            String memberLockSignal = result == null ? findLockedSignal(partInfoDebug.getRaw()) : result.memberPartInfoLockSignal;
+            String auditLockSignal = result == null ? null : result.auditDetailLockSignal;
+            if (Integer.valueOf(-4).equals(result == null ? null : result.auditDetailState) || containsLockedText(auditReason)) {
+                return LockedArchiveSnapshot.locked(auditReason);
+            }
+            if (containsLockedText(auditLockSignal)) {
+                return LockedArchiveSnapshot.locked(StringUtils.defaultIfBlank(auditReason, auditLockSignal));
+            }
+            if (containsLockedText(memberLockSignal)) {
+                return LockedArchiveSnapshot.locked(StringUtils.defaultIfBlank(auditReason, memberLockSignal));
+            }
+            if (partInfo == null || partInfo.getCode() != 0 || partInfo.getData() == null) {
+                return LockedArchiveSnapshot.unlocked();
+            }
+            if (partInfo.getData().getState() == -4) {
+                return LockedArchiveSnapshot.locked(StringUtils.defaultIfBlank(auditReason, firstPartFailDesc(partInfo)));
+            }
+            if (partInfo.getData().getVideos() != null) {
+                for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+                    if (video == null) {
+                        continue;
+                    }
+                    if (video.getFailCode() == -4 || containsLockedText(video.getFailDesc())) {
+                        return LockedArchiveSnapshot.locked(StringUtils.defaultIfBlank(auditReason, video.getFailDesc()));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("VideoSync.LockedDetect.Failed")
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+        return LockedArchiveSnapshot.unlocked();
+    }
+
+    private String resolveLockedReason(BiliBiliUser user, RecordHistory history, String fallback) {
+        return resolveLockedReason(user, history, fallback, null);
+    }
+
+    private String resolveLockedReason(BiliBiliUser user, RecordHistory history, String fallback, SyncStatusResult result) {
+        String auditReason = loadAuditReason(user, history, result);
+        return StringUtils.defaultIfBlank(auditReason, fallback);
+    }
+
+    private String loadAuditReason(BiliBiliUser user, RecordHistory history) {
+        return loadAuditReason(user, history, null);
+    }
+
+    private String loadAuditReason(BiliBiliUser user, RecordHistory history, SyncStatusResult result) {
+        if (user == null || history == null || StringUtils.isBlank(history.getBvId())) {
+            return null;
+        }
+        try {
+            BiliApi.ApiDebugResponse<top.sshh.bililiverecoder.entity.data.BiliVideoAuditDetailResponse> auditDebug =
+                    BiliApi.getVideoAuditDetailDebug(user, history.getBvId());
+            var audit = auditDebug.getParsed();
+            if (result != null) {
+                result.auditDetailCode = audit == null ? null : audit.getCode();
+                result.auditDetailMessage = audit == null ? "null-response" : audit.getMessage();
+                result.auditDetailState = audit == null || audit.getData() == null ? null : audit.getData().getState();
+                result.auditDetailLockSignal = findLockedSignal(auditDebug.getRaw());
+            }
+            if (audit == null || audit.getCode() != 0 || audit.getData() == null) {
+                return null;
+            }
+            if (audit.getData().getProblem_detail() != null) {
+                for (var detail : audit.getData().getProblem_detail()) {
+                    String text = joinNonBlank(
+                            detail == null ? null : detail.getReject_reason(),
+                            detail == null ? null : detail.getModify_advise(),
+                            detail == null ? null : detail.getProblem_description()
+                    );
+                    if (StringUtils.isNotBlank(text)) {
+                        if (result != null) {
+                            result.auditReason = text;
+                        }
+                        return text;
+                    }
+                }
+            }
+            if (audit.getData().getAppeal() != null) {
+                String text = audit.getData().getAppeal().getReject();
+                if (result != null) {
+                    result.auditReason = text;
+                }
+                return text;
+            }
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("VideoSync.LockedAuditReason.Failed")
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+        return null;
+    }
+
+    private String joinNonBlank(String... values) {
+        List<String> parts = new ArrayList<>();
+        if (values != null) {
+            for (String value : values) {
+                if (StringUtils.isNotBlank(value)) {
+                    parts.add(value.trim());
+                }
+            }
+        }
+        return String.join("；", parts);
+    }
+
+    private String firstPartFailDesc(BiliVideoPartInfoResponse partInfo) {
+        if (partInfo == null || partInfo.getData() == null || partInfo.getData().getVideos() == null) {
+            return null;
+        }
+        for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+            if (video != null && StringUtils.isNotBlank(video.getFailDesc())) {
+                return video.getFailDesc();
+            }
+        }
+        return null;
+    }
+
+    private String findLockedSignal(String raw) {
+        if (!containsLockedText(raw)) {
+            return null;
+        }
+        try {
+            Object parsed = JSONObject.parse(raw);
+            String signal = findLockedSignal(parsed);
+            return StringUtils.abbreviate(StringUtils.defaultIfBlank(signal, "locked"), 240);
+        } catch (Exception e) {
+            return "locked";
+        }
+    }
+
+    private String findLockedSignal(Object node) {
+        if (node == null) {
+            return null;
+        }
+        if (node instanceof JSONObject json) {
+            for (Map.Entry<String, Object> entry : json.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+                if (containsLockedText(key) || containsLockedText(String.valueOf(value))) {
+                    String valueText = summarizeJsonValue(value);
+                    return StringUtils.isBlank(valueText) || valueText.length() > 180 ? key : key + "=" + valueText;
+                }
+                String nested = findLockedSignal(value);
+                if (StringUtils.isNotBlank(nested)) {
+                    return nested;
+                }
+            }
+            return null;
+        }
+        if (node instanceof JSONArray array) {
+            for (Object item : array) {
+                String nested = findLockedSignal(item);
+                if (StringUtils.isNotBlank(nested)) {
+                    return nested;
+                }
+            }
+            return null;
+        }
+        String text = String.valueOf(node);
+        return containsLockedText(text) ? text : null;
+    }
+
+    private String summarizeJsonValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof JSONObject || value instanceof JSONArray) {
+            return null;
+        }
+        return StringUtils.abbreviate(String.valueOf(value), 180);
+    }
+
+    private boolean containsLockedText(String text) {
+        return StringUtils.contains(text, "锁定") || StringUtils.containsIgnoreCase(text, "lock");
+    }
+
+    private void markHistoryLockedAndArchived(RecordHistory history) {
+        if (history == null) {
+            return;
+        }
+        history.setForceArchived(true);
+        history.setUpload(false);
+        history.setSendReply(true);
+        history.setStreaming(false);
+        history.setRecording(false);
+        if (StringUtils.isNotBlank(history.getBvId())) {
+            msgRepository.markPendingByBvidAndPool(history.getBvId(), 0, -4);
+            msgRepository.markPendingByBvidAndPool(history.getBvId(), 1, -4);
+        }
+        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        for (RecordHistoryPart part : parts) {
+            if (part == null) {
+                continue;
+            }
+            LiveMsgSendSync.skipOrdinaryPartIds.add(part.getId());
+            LiveMsgSendSync.skipAdvancedPartIds.add(part.getId());
+            if (part.isRecording()) {
+                part.setRecording(false);
+                partRepository.save(part);
+            }
+        }
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        if (room != null && history.getId() != null && history.getId().equals(room.getHistoryId())) {
+            room.setHistoryId(null);
+            roomRepository.save(room);
+        }
     }
 
     private List<OnlinePartSnapshot> loadOnlinePartSnapshotsForManualRefresh(BiliBiliUser user,
@@ -430,6 +696,25 @@ public class videoSyncJob {
         return StringUtils.defaultString(value).trim().toLowerCase(Locale.ROOT);
     }
 
+    private PublishAuthContext resolvePublishAuthContext(RecordHistory history, RecordRoom room) {
+        Long publishUserId = history == null ? null : history.getPublishUserId();
+        if (publishUserId != null) {
+            Optional<BiliBiliUser> publishUser = userRepository.findById(publishUserId);
+            if (publishUser.isPresent() && publishUser.get().isLogin()) {
+                return new PublishAuthContext("history.publishUserId", publishUser.get());
+            }
+            return new PublishAuthContext(publishUser.isPresent() ? "publishUser.notLogin" : "publishUser.notFound", null);
+        }
+        if (room == null || room.getUploadUserId() == null) {
+            return new PublishAuthContext("room.uploadUserId.missing", null);
+        }
+        Optional<BiliBiliUser> roomUser = userRepository.findById(room.getUploadUserId());
+        if (roomUser.isPresent() && roomUser.get().isLogin()) {
+            return new PublishAuthContext("room.uploadUserId.fallback", roomUser.get());
+        }
+        return new PublishAuthContext(roomUser.isPresent() ? "roomUser.notLogin" : "roomUser.notFound", null);
+    }
+
     private void syncOneInternal(RecordHistory next, boolean doPostPublishProcessing) {
         RecordRoom room = roomRepository.findByRoomId(next.getRoomId());
         if (room == null) {
@@ -440,10 +725,7 @@ public class videoSyncJob {
                     .addIfNotBlank("title", next.getTitle()));
             return;
         }
-        BiliBiliUser user = null;
-        if(room.getUploadUserId() != null){
-            user = userRepository.findById(room.getUploadUserId()).orElse(null);
-        }
+        BiliBiliUser user = resolvePublishAuthContext(next, room).user();
 
         BiliVideoInfoResponse videoInfoResponse = BiliApi.getVideoInfo(user,next.getBvId());
         int code = videoInfoResponse.getCode();
@@ -587,7 +869,22 @@ public class videoSyncJob {
                     .add("localCode", next.getCode()));
             return;
         }
-        next.setCode(videoInfoResponseData.getState());
+        int state = videoInfoResponseData.getState();
+        if (state == -50) {
+            LockedArchiveSnapshot locked = detectLockedArchive(user, next);
+            if (locked.locked()) {
+                state = -4;
+                markHistoryLockedAndArchived(next);
+                log.warn("[BLR] {}", LogKvs.event("VideoSync.LockedArchive.AutoForceArchived")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", next.getId())
+                        .addIfNotBlank("bvid", next.getBvId())
+                        .addIfNotBlank("title", next.getTitle())
+                        .addIfNotBlank("reason", locked.reason()));
+            }
+        }
+        next.setCode(state);
         next.setAvId(videoInfoResponseData.getAid());
         next.setBvId(videoInfoResponseData.getBvid());
         next.setCoverUrl(videoInfoResponseData.getPic());
@@ -602,7 +899,7 @@ public class videoSyncJob {
 
         // 0: 开放浏览, -50: 仅自己可见
         // 这两种状态都视为"发布成功"，可以进行后续的弹幕解析
-        if(videoInfoResponseData.getState() != 0 && videoInfoResponseData.getState() != -50){
+        if(state != 0 && state != -50){
             return;
         }
         
@@ -842,8 +1139,18 @@ public class videoSyncJob {
         private Integer archiveCode;
         private Integer videoInfoCode;
         private Integer memberPartInfoCode;
+        private Integer auditDetailCode;
+        private Integer auditDetailState;
         private String videoInfoMessage;
         private String memberPartInfoMessage;
+        private String auditDetailMessage;
+        private String auditReason;
+        private String authSource;
+        private String memberPartInfoLockSignal;
+        private String auditDetailLockSignal;
+        private boolean locked;
+        private boolean forceArchived;
+        private String lockReason;
         private int onlinePartCount;
         private int matchedPartCount;
         private int unmatchedOnlineCount;
@@ -890,6 +1197,16 @@ public class videoSyncJob {
             data.put("videoInfoMessage", videoInfoMessage);
             data.put("memberPartInfoCode", memberPartInfoCode);
             data.put("memberPartInfoMessage", memberPartInfoMessage);
+            data.put("auditDetailCode", auditDetailCode);
+            data.put("auditDetailMessage", auditDetailMessage);
+            data.put("auditDetailState", auditDetailState);
+            data.put("auditReason", auditReason);
+            data.put("authSource", authSource);
+            data.put("memberPartInfoLockSignal", memberPartInfoLockSignal);
+            data.put("auditDetailLockSignal", auditDetailLockSignal);
+            data.put("locked", locked);
+            data.put("forceArchived", forceArchived);
+            data.put("lockReason", lockReason);
             data.put("onlinePartCount", onlinePartCount);
             data.put("matchedPartCount", matchedPartCount);
             data.put("unmatchedOnlineCount", unmatchedOnlineCount);
@@ -899,5 +1216,18 @@ public class videoSyncJob {
             data.put("sourceMismatchParts", new ArrayList<>(sourceMismatchParts));
             return data;
         }
+    }
+
+    private record LockedArchiveSnapshot(boolean locked, String reason) {
+        private static LockedArchiveSnapshot unlocked() {
+            return new LockedArchiveSnapshot(false, null);
+        }
+
+        private static LockedArchiveSnapshot locked(String reason) {
+            return new LockedArchiveSnapshot(true, reason);
+        }
+    }
+
+    private record PublishAuthContext(String source, BiliBiliUser user) {
     }
 }

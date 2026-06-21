@@ -146,6 +146,16 @@
                         <span>取消</span>
                     </button>
                 </div>
+                <div class="mobile-history-batch-maintenance">
+                    <button type="button" :disabled="selectedItems.length === 0 || batchVisibilityRunning" @click="openBatchAbandonQueue">
+                        <i class="el-icon-remove-outline"></i>
+                        <span>放弃已选待发送</span>
+                    </button>
+                    <button type="button" :disabled="batchVisibilityRunning" @click="openMsgQueueCleanupDialog">
+                        <i class="el-icon-setting"></i>
+                        <span>清理历史队列</span>
+                    </button>
+                </div>
             </section>
         </transition>
 
@@ -884,6 +894,7 @@
                                     <el-dropdown-item command="updatePublishStatus">重置为未上传发布</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
                                     <el-dropdown-item command="reloadHistoryMsg">重新加载弹幕</el-dropdown-item>
+                                    <el-dropdown-item command="abandonHistoryMsgQueue">放弃待发送队列</el-dropdown-item>
                                     <el-dropdown-item command="deleteHistoryMsg">删除弹幕</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
                                     <el-dropdown-item command="deleteHistory" style="color: #F56C6C;">删除</el-dropdown-item>
@@ -912,6 +923,15 @@
             <div class="batch-actions">
                 <el-button type="success" size="small" icon="el-icon-unlock" @click="handleBatchVisibility(0)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected">批量设为公开</el-button>
                 <el-button type="warning" size="small" icon="el-icon-lock" @click="handleBatchVisibility(1)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected">批量设为仅自己可见</el-button>
+                <el-dropdown trigger="click" @command="handleQueueMaintenanceCommand" :disabled="batchVisibilityRunning">
+                    <el-button size="small" icon="el-icon-setting" :disabled="batchVisibilityRunning">
+                        队列维护<i class="el-icon-arrow-up el-icon--right"></i>
+                    </el-button>
+                    <el-dropdown-menu slot="dropdown">
+                        <el-dropdown-item command="selected" :disabled="selectedItems.length === 0">放弃已选待发送</el-dropdown-item>
+                        <el-dropdown-item command="historical">清理历史待发送队列</el-dropdown-item>
+                    </el-dropdown-menu>
+                </el-dropdown>
                 <el-button type="danger" size="small" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedItems.length === 0 || batchVisibilityRunning">批量删除</el-button>
                 <el-button size="small" @click="toggleBatchMode" :disabled="batchVisibilityRunning">取消</el-button>
             </div>
@@ -1034,6 +1054,13 @@
                 <div>
                     <strong>直播间上传配置已变更</strong>
                     <p>该稿件沿用创建时的上传配置；当前直播间上传开关为{{ currentDetail.roomUpload ? '开启' : '关闭' }}。</p>
+                </div>
+            </section>
+            <section v-if="currentDetail && currentDetail.code == -4" class="mobile-history-detail-notice is-warning">
+                <i class="el-icon-lock"></i>
+                <div>
+                    <strong>稿件已被平台锁定</strong>
+                    <p>该状态通常无法继续修改可见性或发送弹幕，系统会按强制归档处理，后续任务不再触发该稿件。</p>
                 </div>
             </section>
 
@@ -1181,6 +1208,7 @@
                         <button v-if="!currentDetail.forceArchived" type="button" @click="updatePartStatus(currentDetail.id)"><i class="el-icon-video-pause"></i>结束录制</button>
                         <button v-if="!currentDetail.forceArchived" type="button" class="is-warning" @click="forceArchive(currentDetail.id)"><i class="el-icon-switch-button"></i>强制归档</button>
                         <button v-if="!currentDetail.forceArchived" type="button" @click="reloadHistoryMsg(currentDetail.id)"><i class="el-icon-chat-dot-round"></i>重载弹幕</button>
+                        <button v-if="!currentDetail.forceArchived" type="button" class="is-warning" @click="abandonHistoryMsgQueue(currentDetail.id, currentDetail)"><i class="el-icon-remove-outline"></i>放弃发送</button>
                         <button type="button" class="is-danger" @click="deleteHistoryMsg(currentDetail.id)"><i class="el-icon-delete"></i>删除弹幕</button>
                     </section>
                     <section>
@@ -1688,6 +1716,7 @@
                                 <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button">强制归档</el-button>
                             </el-tooltip>
                             <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="abandonHistoryMsgQueue(currentDetail.id, currentDetail)" size="mini" type="warning" plain icon="el-icon-remove-outline">放弃发送</el-button>
                             <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
                         </div>
                         <div class="action-divider"></div>
@@ -1838,6 +1867,72 @@
         <div class="dialog-footer" slot="footer">
             <el-button class="modern-btn" @click="editDialogFormVisible = false">取 消</el-button>
             <el-button class="modern-btn" @click="updateHistory()" type="primary">保 存</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="放弃待发送队列" :visible.sync="abandonQueueDialogVisible" width="500px" append-to-body custom-class="mobile-history-confirm-dialog">
+        <div class="mobile-history-reload-confirm">
+            <p>此操作会将已排队但未发送的弹幕/评论标记为已放弃，后续任务不会继续重试。</p>
+            <div class="mobile-history-reload-warning">
+                <i class="el-icon-warning"></i> 不会删除弹幕数据，也不会删除本地弹幕文件；如需重新发送，可再使用“重载弹幕”重新生成队列。
+            </div>
+            <el-form label-width="200px">
+                <el-form-item label="普通弹幕队列">
+                    <el-switch v-model="abandonQueueOptions.ordinary" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+                <el-form-item label="SC/上舰高级队列">
+                    <el-switch v-model="abandonQueueOptions.advanced" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+                <el-form-item label="评论汇总">
+                    <el-switch v-model="abandonQueueOptions.reply" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">停止继续补发 SC/上舰/礼物评论汇总</div>
+                </el-form-item>
+                <el-form-item label="同时强制归档">
+                    <el-switch v-model="abandonQueueOptions.forceArchive" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+            </el-form>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="abandonQueueDialogVisible = false" size="small">取 消</el-button>
+            <el-button type="warning" @click="handleAbandonQueueConfirm" size="small">放弃发送</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="清理历史待发送队列" :visible.sync="msgQueueCleanupDialogVisible" width="500px" append-to-body custom-class="mobile-history-confirm-dialog">
+        <div class="queue-cleanup-dialog">
+            <p>用于清理旧版本或异常状态遗留下来的待发送弹幕/评论。不会删除弹幕数据，也不会删除本地文件。</p>
+            <el-form label-width="130px" size="small">
+                <el-form-item label="清理范围">
+                    <el-checkbox v-model="msgQueueCleanupOptions.ordinary">普通弹幕</el-checkbox>
+                    <el-checkbox v-model="msgQueueCleanupOptions.advanced">SC/上舰</el-checkbox>
+                    <el-checkbox v-model="msgQueueCleanupOptions.reply">评论汇总</el-checkbox>
+                </el-form-item>
+                <el-form-item label="同时强制归档">
+                    <el-switch v-model="msgQueueCleanupOptions.forceArchive" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+                <el-form-item label="结束超过">
+                    <el-input-number v-model="msgQueueCleanupOptions.olderThanDays" :min="0" :max="3650" :step="1" controls-position="right"></el-input-number>
+                    <span class="queue-cleanup-unit">天</span>
+                </el-form-item>
+                <el-form-item label="最多处理">
+                    <el-input-number v-model="msgQueueCleanupOptions.limit" :min="1" :max="20000" :step="500" controls-position="right"></el-input-number>
+                    <span class="queue-cleanup-unit">个稿件</span>
+                </el-form-item>
+            </el-form>
+            <div v-if="msgQueueCleanupPreview" class="queue-cleanup-preview">
+                <div>扫描结果：</div>
+                <div>命中稿件：{{ msgQueueCleanupPreview.historyCount || 0 }} 个</div>
+                <div>普通弹幕：{{ msgQueueCleanupPreview.ordinary || 0 }} 条</div>
+                <div>SC/上舰：{{ msgQueueCleanupPreview.advanced || 0 }} 条</div>
+                <div>评论汇总：{{ msgQueueCleanupPreview.reply || 0 }} 个</div>
+                <div>强制归档：{{ msgQueueCleanupPreview.forceArchived || 0 }} 个</div>
+                <div v-if="msgQueueCleanupPreview.limited" class="queue-cleanup-warning">符合条件的稿件较多，本次只扫描前 {{ msgQueueCleanupPreview.limit }} 个。</div>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="msgQueueCleanupDialogVisible = false" size="small" :disabled="msgQueueCleanupApplying">取 消</el-button>
+            <el-button @click="previewMsgQueueCleanup" size="small" :loading="msgQueueCleanupPreviewLoading" :disabled="msgQueueCleanupApplying">扫 描</el-button>
+            <el-button type="warning" @click="applyMsgQueueCleanup" size="small" :loading="msgQueueCleanupApplying" :disabled="!msgQueueCleanupPreview || msgQueueCleanupPreview.totalActions <= 0">确认清理</el-button>
         </div>
     </el-dialog>
 

@@ -727,6 +727,23 @@
     text-align: center;
 }
 
+.mobile-shell .mobile-config-unit-toggle {
+    flex: 0 0 auto;
+    min-width: 46px;
+    padding: 4px 7px;
+    border: 0;
+    border-radius: 999px;
+    color: var(--mobile-accent-1);
+    background: color-mix(in srgb, var(--mobile-accent-1) 11%, var(--mobile-surface));
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1;
+    font-style: normal;
+    font-weight: 800;
+    text-align: center;
+    cursor: pointer;
+}
+
 .mobile-shell .mobile-config-control {
     min-width: 0;
     display: grid;

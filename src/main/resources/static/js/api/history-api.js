@@ -21,6 +21,18 @@
         deleteMsg: function(id, callback, errorCallback) {
             ApiUtil.get('/history/deleteMsg/' + encodeURIComponent(id), callback, errorCallback);
         },
+        abandonMsgQueue: function(id, data, callback, errorCallback) {
+            ApiUtil.post('/history/abandonMsgQueue/' + encodeURIComponent(id), data, callback, errorCallback);
+        },
+        abandonMsgQueueBatch: function(data, callback, errorCallback) {
+            ApiUtil.post('/history/abandonMsgQueue/batch', data, callback, errorCallback);
+        },
+        previewMsgQueueCleanup: function(data, callback, errorCallback) {
+            ApiUtil.post('/history/msgQueueCleanup/preview', data, callback, errorCallback);
+        },
+        applyMsgQueueCleanup: function(data, callback, errorCallback) {
+            ApiUtil.post('/history/msgQueueCleanup/apply', data, callback, errorCallback);
+        },
         reloadMsg: function(id, data, callback, errorCallback) {
             $.ajax({
                 url: '/history/reloadMsg/' + encodeURIComponent(id),

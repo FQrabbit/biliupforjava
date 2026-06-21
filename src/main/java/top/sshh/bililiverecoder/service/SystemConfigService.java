@@ -20,6 +20,7 @@ import java.util.Optional;
 public class SystemConfigService {
 
     public static final String KEY_API_RATE_LIMIT = "bili.limit.api-qps";
+    // Historical persisted key name. The value is an upload speed limit in MB/s.
     public static final String KEY_UPLOAD_SPEED_LIMIT = "bili.limit.upload-mb";
     public static final String KEY_MERGE_INTERVAL_MINUTES = "bili.publish.merge-interval-minutes";
     public static final String KEY_UPLOAD_MAX_CONNECTIONS = "upload.max-concurrent-connections";

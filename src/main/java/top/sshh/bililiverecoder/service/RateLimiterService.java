@@ -57,25 +57,25 @@ public class RateLimiterService {
                 .add("newLimit", permitsPerSecond));
     }
 
-    public void setUploadSpeedLimit(double mbPerSecond) {
-        if (mbPerSecond <= 0) {
+    public void setUploadSpeedLimit(double megabytesPerSecond) {
+        if (megabytesPerSecond <= 0) {
             uploadSpeedLimitBytesPerSecond = 0L;
             uploadBandwidthLimiter.setRate(Double.MAX_VALUE);
             // 同时更新 Netty 的全局限速器
             NettyUploadClient.updateWriteLimit(0);
             log.info("[BLR] {}", LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
-                    .add("newLimitMB", "Unlimited")
+                    .add("newLimitMBps", "Unlimited")
                     .add("newLimitBytes", uploadSpeedLimitBytesPerSecond));
         } else {
-            double bytesPerSecond = mbPerSecond * 1024 * 1024;
+            double bytesPerSecond = megabytesPerSecond * 1024 * 1024;
             uploadSpeedLimitBytesPerSecond = (long) bytesPerSecond;
             uploadBandwidthLimiter.setRate(bytesPerSecond);
             // 同时更新 Netty 的全局限速器
             NettyUploadClient.updateWriteLimit(uploadSpeedLimitBytesPerSecond);
             log.info("[BLR] {}", LogKvs.event("RateLimiter.Update")
                     .add("type", "Upload")
-                    .add("newLimitMB", mbPerSecond)
+                    .add("newLimitMBps", megabytesPerSecond)
                     .add("newLimitBytes", uploadSpeedLimitBytesPerSecond));
         }
     }

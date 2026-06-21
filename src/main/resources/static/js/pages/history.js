@@ -79,6 +79,27 @@ new Vue({
             restartOrdinary: false,
             restartAdvanced: false
         },
+        abandonQueueDialogVisible: false,
+        currentAbandonQueueId: null,
+        abandonQueueOptions: {
+            ordinary: false,
+            advanced: false,
+            reply: false,
+            forceArchive: false
+        },
+        abandonQueueMode: 'single',
+        msgQueueCleanupDialogVisible: false,
+        msgQueueCleanupPreviewLoading: false,
+        msgQueueCleanupApplying: false,
+        msgQueueCleanupPreview: null,
+        msgQueueCleanupOptions: {
+            ordinary: true,
+            advanced: true,
+            reply: true,
+            forceArchive: false,
+            olderThanDays: 7,
+            limit: 5000
+        },
         bindFileDialogVisible: false,
         bindTargetPart: null,
         candidateFiles: [],
@@ -379,6 +400,10 @@ new Vue({
             if (!this.currentDetail || !this.currentDetail.publish) return false;
             return Number(this.currentDetail.code) === -2;
         },
+        isAuditLocked: function() {
+            if (!this.currentDetail || !this.currentDetail.publish) return false;
+            return Number(this.currentDetail.code) === -4;
+        },
         isAuditInvisibleLikelyDeleted: function() {
             if (!this.currentDetail || !this.currentDetail.publish) return false;
             return Number(this.currentDetail.code) === 62002;
@@ -454,7 +479,7 @@ new Vue({
             return list;
         },
         canShowAuditRejectInfo: function() {
-            return this.isAuditRejected || this.isAuditInvisibleLikelyDeleted;
+            return this.isAuditRejected || this.isAuditLocked || this.isAuditInvisibleLikelyDeleted;
         },
         canQueryArchiveProgress: function() {
             return !!(this.currentDetail && this.currentDetail.publish && this.currentDetail.bvId);
@@ -483,12 +508,15 @@ new Vue({
             if (this.isAuditInvisibleLikelyDeleted) {
                 return 'B站返回稿件不可见(62002)，可能已在B站后台被删除、转为不可见或被系统回收，点击查看说明';
             }
+            if (this.isAuditLocked && this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0) {
+                return '稿件已被平台锁定，点击查看说明';
+            }
             if (this.auditRejectPrimaryDetails.length > 0) {
                 const topPrimary = this.auditRejectPrimaryDetails[0];
                 const reason = topPrimary.rejectReason || topPrimary.modifyAdvise || topPrimary.problemDescription || '稿件触发审核规则';
                 return reason + '；点击查看详情';
             }
-            return '稿件已被退回，暂未获取到详细原因，点击查看说明';
+            return this.isAuditLocked ? '稿件已被平台锁定，暂未获取到详细原因，点击查看说明' : '稿件已被退回，暂未获取到详细原因，点击查看说明';
         },
         isWaitingForUpload: function() {
             // 如果没有详情或已完成，则不显示
@@ -594,6 +622,9 @@ new Vue({
             this.syncParentIframeModalState();
         },
         reloadDialogVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        abandonQueueDialogVisible: function() {
             this.syncParentIframeModalState();
         },
         bindFileDialogVisible: function() {

@@ -14,7 +14,7 @@ var answer = new Vue({
         },
         systemConfig: {
             apiQps: 5.0,
-            uploadMb: 0,
+            uploadSpeedLimitMBps: 0,
             mergeIntervalMinutes: 20,
             maxConnections: 3,
             normalDanmakuIntervalSeconds: 25,
@@ -23,7 +23,7 @@ var answer = new Vue({
         },
         originalConfig: {
             apiQps: 5.0,
-            uploadMb: 0,
+            uploadSpeedLimitMBps: 0,
             mergeIntervalMinutes: 20,
             maxConnections: 3,
             normalDanmakuIntervalSeconds: 25,
@@ -33,6 +33,7 @@ var answer = new Vue({
         configLoading: false,
         configExpanded: false,
         activeConfigHint: '',
+        uploadSpeedUnit: 'MBps',
         hasConfigChanges: false,
         connectionLost: false,
         // 增强的连接状态追踪
@@ -112,6 +113,17 @@ var answer = new Vue({
     computed: {
         currentModuleMeta: function() {
             return this.moduleMetaMap[this.activeName] || { title: '', desc: '' };
+        },
+        uploadSpeedUnitLabel: function() {
+            return this.uploadSpeedUnit === 'Mbps' ? 'Mbps' : 'MB/s';
+        },
+        uploadSpeedInputValue: {
+            get: function() {
+                return this.formatUploadSpeedForUnit(this.systemConfig.uploadSpeedLimitMBps);
+            },
+            set: function(value) {
+                this.setUploadSpeedFromDisplay(value);
+            }
         },
         sortedVersions: function () {
             return this.versions.slice().sort(function (a, b) {
@@ -587,7 +599,7 @@ var answer = new Vue({
         validateNumber: function(value, field, allowDecimal) {
             // 验证输入是否为数字
             var self = this;
-            var cleanValue = value.replace(/[^0-9.]/g, '');
+            var cleanValue = String(value == null ? '' : value).replace(/[^0-9.]/g, '');
 
             // 如果允许小数，确保只有一个小数点
             if (allowDecimal) {
@@ -606,31 +618,76 @@ var answer = new Vue({
             // 检查是否有更改
             self.checkConfigChanges();
         },
+        cleanNumberValue: function(value, allowDecimal) {
+            var cleanValue = String(value == null ? '' : value).replace(/[^0-9.]/g, '');
+            if (allowDecimal) {
+                var parts = cleanValue.split('.');
+                if (parts.length > 2) {
+                    cleanValue = parts[0] + '.' + parts.slice(1).join('');
+                }
+            } else {
+                cleanValue = cleanValue.replace(/\./g, '');
+            }
+            return cleanValue;
+        },
+        trimNumberText: function(value, precision) {
+            if (!isFinite(value)) {
+                return '0';
+            }
+            return parseFloat(value.toFixed(precision == null ? 3 : precision)).toString();
+        },
+        formatUploadSpeedForUnit: function(value) {
+            var megabytesPerSecond = parseFloat(value) || 0;
+            if (this.uploadSpeedUnit === 'Mbps') {
+                return this.trimNumberText(megabytesPerSecond * 1024 * 1024 * 8 / 1000 / 1000);
+            }
+            return this.trimNumberText(megabytesPerSecond);
+        },
+        setUploadSpeedFromDisplay: function(value) {
+            var cleanValue = this.cleanNumberValue(value, true);
+            var displayValue = parseFloat(cleanValue);
+            if (!isFinite(displayValue)) {
+                this.systemConfig.uploadSpeedLimitMBps = cleanValue === '' ? '' : 0;
+                return;
+            }
+            if (this.uploadSpeedUnit === 'Mbps') {
+                this.systemConfig.uploadSpeedLimitMBps = this.trimNumberText(displayValue * 1000 * 1000 / 8 / 1024 / 1024, 6);
+            } else {
+                this.systemConfig.uploadSpeedLimitMBps = cleanValue;
+            }
+        },
+        validateUploadSpeedDisplay: function(value) {
+            this.setUploadSpeedFromDisplay(value);
+            this.checkConfigChanges();
+        },
+        toggleUploadSpeedUnit: function() {
+            this.uploadSpeedUnit = this.uploadSpeedUnit === 'Mbps' ? 'MBps' : 'Mbps';
+        },
         checkConfigChanges: function() {
             // 检查配置是否有更改
             var self = this;
             var originalApiQps = parseFloat(self.originalConfig.apiQps) || 0;
-            var originalUploadMb = parseFloat(self.originalConfig.uploadMb) || 0;
+            var originalUploadSpeedLimitMBps = parseFloat(self.originalConfig.uploadSpeedLimitMBps) || 0;
             var originalMergeIntervalMinutes = parseInt(self.originalConfig.mergeIntervalMinutes) || 20;
             var originalMaxConnections = parseInt(self.originalConfig.maxConnections) || 3;
             var originalNormalDanmakuIntervalSeconds = parseInt(self.originalConfig.normalDanmakuIntervalSeconds) || 25;
             var originalHighLevelDanmakuIntervalSeconds = parseInt(self.originalConfig.highLevelDanmakuIntervalSeconds) || 25;
             var originalNewUploadFlowEnabled = !!self.originalConfig.newUploadFlowEnabled;
             var currentApiQps = parseFloat(self.systemConfig.apiQps) || 0;
-            var currentUploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
+            var currentUploadSpeedLimitMBps = parseFloat(self.systemConfig.uploadSpeedLimitMBps) || 0;
             var currentMergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
             var currentMaxConnections = parseInt(self.systemConfig.maxConnections) || 3;
             var currentNormalDanmakuIntervalSeconds = parseInt(self.systemConfig.normalDanmakuIntervalSeconds) || 25;
             var currentHighLevelDanmakuIntervalSeconds = parseInt(self.systemConfig.highLevelDanmakuIntervalSeconds) || 25;
             var currentNewUploadFlowEnabled = !!self.systemConfig.newUploadFlowEnabled;
 
-            self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadMb !== currentUploadMb) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections) || (originalNormalDanmakuIntervalSeconds !== currentNormalDanmakuIntervalSeconds) || (originalHighLevelDanmakuIntervalSeconds !== currentHighLevelDanmakuIntervalSeconds) || (originalNewUploadFlowEnabled !== currentNewUploadFlowEnabled);
+            self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadSpeedLimitMBps !== currentUploadSpeedLimitMBps) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections) || (originalNormalDanmakuIntervalSeconds !== currentNormalDanmakuIntervalSeconds) || (originalHighLevelDanmakuIntervalSeconds !== currentHighLevelDanmakuIntervalSeconds) || (originalNewUploadFlowEnabled !== currentNewUploadFlowEnabled);
         },
         resetConfig: function() {
             // 重置配置
             var self = this;
             self.systemConfig.apiQps = self.originalConfig.apiQps;
-            self.systemConfig.uploadMb = self.originalConfig.uploadMb;
+            self.systemConfig.uploadSpeedLimitMBps = self.originalConfig.uploadSpeedLimitMBps;
             self.systemConfig.mergeIntervalMinutes = self.originalConfig.mergeIntervalMinutes;
             self.systemConfig.maxConnections = self.originalConfig.maxConnections;
             self.systemConfig.normalDanmakuIntervalSeconds = self.originalConfig.normalDanmakuIntervalSeconds;
@@ -646,7 +703,7 @@ var answer = new Vue({
                         if (item.configKey === 'bili.limit.api-qps') {
                             self.systemConfig.apiQps = parseFloat(item.configValue);
                         } else if (item.configKey === 'bili.limit.upload-mb') {
-                            self.systemConfig.uploadMb = parseFloat(item.configValue);
+                            self.systemConfig.uploadSpeedLimitMBps = parseFloat(item.configValue);
                         } else if (item.configKey === 'bili.publish.merge-interval-minutes') {
                             self.systemConfig.mergeIntervalMinutes = parseInt(item.configValue);
                         } else if (item.configKey === 'upload.max-concurrent-connections') {
@@ -663,7 +720,7 @@ var answer = new Vue({
                 // 保存原始配置用于重置
                 self.originalConfig = {
                     apiQps: self.systemConfig.apiQps,
-                    uploadMb: self.systemConfig.uploadMb,
+                    uploadSpeedLimitMBps: self.systemConfig.uploadSpeedLimitMBps,
                     mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
                     maxConnections: self.systemConfig.maxConnections,
                     normalDanmakuIntervalSeconds: self.systemConfig.normalDanmakuIntervalSeconds,
@@ -680,7 +737,7 @@ var answer = new Vue({
 
             // 确保值为有效的数字
             var apiQps = parseFloat(self.systemConfig.apiQps) || 0;
-            var uploadMb = parseFloat(self.systemConfig.uploadMb) || 0;
+            var uploadSpeedLimitMBps = parseFloat(self.systemConfig.uploadSpeedLimitMBps) || 0;
             var mergeIntervalMinutes = parseInt(self.systemConfig.mergeIntervalMinutes) || 20;
             var maxConnections = parseInt(self.systemConfig.maxConnections) || 3;
             var normalDanmakuIntervalSeconds = parseInt(self.systemConfig.normalDanmakuIntervalSeconds) || 25;
@@ -700,7 +757,7 @@ var answer = new Vue({
 
             var updates = [
                 { key: 'bili.limit.api-qps', value: String(apiQps) },
-                { key: 'bili.limit.upload-mb', value: String(uploadMb) },
+                { key: 'bili.limit.upload-mb', value: String(uploadSpeedLimitMBps) },
                 { key: 'bili.publish.merge-interval-minutes', value: String(mergeIntervalMinutes) },
                 { key: 'upload.max-concurrent-connections', value: String(maxConnections) },
                 { key: 'bili.dm.normal-send-interval-seconds', value: String(normalDanmakuIntervalSeconds) },
@@ -718,7 +775,7 @@ var answer = new Vue({
                 // 保存成功后更新原始配置
                 self.originalConfig = {
                     apiQps: self.systemConfig.apiQps,
-                    uploadMb: self.systemConfig.uploadMb,
+                    uploadSpeedLimitMBps: self.systemConfig.uploadSpeedLimitMBps,
                     mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
                     maxConnections: self.systemConfig.maxConnections,
                     normalDanmakuIntervalSeconds: self.systemConfig.normalDanmakuIntervalSeconds,

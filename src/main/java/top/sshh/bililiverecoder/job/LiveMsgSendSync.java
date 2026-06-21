@@ -17,6 +17,7 @@ import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.DanmakuSendScheduler;
 import top.sshh.bililiverecoder.service.RoomLiveEventParseService;
 import top.sshh.bililiverecoder.service.RoomLiveGiftCatalogService;
+import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -88,6 +89,9 @@ public class LiveMsgSendSync {
 
     @Autowired
     private DanmakuSendScheduler danmakuSendScheduler;
+
+    @Autowired
+    private HistoryMsgQueueCleanupService msgQueueCleanupService;
 
     private static final Lock lock = new ReentrantLock();
     private volatile long lastReconcileAtMs = 0L;
@@ -312,6 +316,10 @@ public class LiveMsgSendSync {
                             .addIfNotBlank("avId", history.getAvId())
                             .addIfNotBlank("err", e.getMessage())
                             .add("ex", e.getClass().getSimpleName()), e);
+                    msgQueueCleanupService.cleanupByHistoryId(history.getId(),
+                            new HistoryMsgQueueCleanupService.CleanupOptions(false, true, true, false),
+                            false,
+                            "reply-private-visibility-failed");
                     // 如果切换公开失败，直接跳过当前视频的后续所有操作（评论、弹幕、切回私有）
                     continue;
                 }
@@ -970,6 +978,10 @@ public class LiveMsgSendSync {
                     .addIfNotBlank("avId", history.getAvId())
                     .addIfNotBlank("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
+            msgQueueCleanupService.cleanupByHistoryId(history.getId(),
+                    new HistoryMsgQueueCleanupService.CleanupOptions(false, true, true, false),
+                    false,
+                    "reply-private-visibility-failed");
             return;
         }
 

@@ -705,6 +705,63 @@
     border-color: color-mix(in srgb, #f56c6c 32%, var(--mobile-page-border));
 }
 
+.mobile-history-batch-maintenance {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.mobile-history-batch-maintenance button {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 14px;
+    border: 1px solid var(--mobile-page-border);
+    background: var(--mobile-panel-bg);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.mobile-history-batch-maintenance button:disabled {
+    opacity: 0.45;
+}
+
+.queue-cleanup-dialog {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.queue-cleanup-dialog .el-checkbox {
+    margin-right: 10px;
+}
+
+.queue-cleanup-unit {
+    margin-left: 6px;
+    color: var(--text-secondary);
+}
+
+.queue-cleanup-preview {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 12px;
+    background: var(--mobile-panel-bg);
+    color: var(--text-primary);
+}
+
+.queue-cleanup-warning {
+    color: #e6a23c;
+}
+
 .mobile-history-progress {
     display: grid;
     gap: 8px;

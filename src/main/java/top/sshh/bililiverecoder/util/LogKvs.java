@@ -31,6 +31,7 @@ public final class LogKvs {
         EVENT_ZH.put("History.Delete.Success", "删除录制历史成功");
         EVENT_ZH.put("History.DeleteMsg.Success", "删除弹幕成功");
         EVENT_ZH.put("History.ReloadMsg.Success", "重新加载弹幕成功");
+        EVENT_ZH.put("History.MsgQueueCleanup.Done", "历史记录：待发送队列清理完成");
         EVENT_ZH.put("History.UpdatePartStatus.Success", "更新分P状态成功");
         EVENT_ZH.put("History.UpdatePublishStatus.Success", "更新投稿状态成功");
         EVENT_ZH.put("History.TouchPublish.Success", "触发发布成功");
@@ -737,6 +738,58 @@ public final class LogKvs {
         EVENT_ZH.put("Blrec.RecordingFinished.SkipForceArchived", "blrec 录制结束：当前稿件已强制归档，跳过历史结束时间更新");
         EVENT_ZH.put("Blrec.RecordingCancelled.SkipForceArchived", "blrec 录制取消：当前稿件已强制归档，跳过历史结束时间更新");
 
+    }
+    static {
+        // 各类日志事件
+        EVENT_ZH.put("BiliApi.Cookie.NormalizeFailed", "B站 Cookie：格式标准化失败，已继续使用原始 Cookie");
+        EVENT_ZH.put("BiliApi.UserCards.Failed", "B站用户卡片：批量获取用户信息失败");
+        EVENT_ZH.put("History.AbandonMsgQueue.Success", "历史记录：已放弃待发送的弹幕队列");
+        EVENT_ZH.put("History.CandidateFiles.SkipUnresolvablePath", "历史记录：候选文件扫描跳过无法解析的路径");
+        EVENT_ZH.put("Part.ArchiveProgress.FetchFailed", "分P进度：获取稿件处理进度失败");
+        EVENT_ZH.put("PartPreview.CacheDeleteFailed", "分P预览：删除预览缓存失败");
+        EVENT_ZH.put("Room.Avatar.BatchRefreshFailed", "房间头像：批量刷新失败");
+        EVENT_ZH.put("SystemConfig.IgnoreObsolete", "系统配置：忽略已废弃的配置项");
+        EVENT_ZH.put("SystemConfig.RemoveObsolete", "系统配置：移除已废弃的配置项");
+        EVENT_ZH.put("User.Profile.BatchRefreshFailed", "用户资料：批量刷新失败");
+
+        // 弹幕队列调度
+        EVENT_ZH.put("DanmakuDispatch.Reply.Duplicate", "评论发送队列：稿件已在队列中，跳过重复入队");
+        EVENT_ZH.put("DanmakuDispatch.Reply.Enqueued", "评论发送队列：稿件已入队");
+        EVENT_ZH.put("DanmakuDispatch.Reply.Rejected", "评论发送队列：线程池拒绝任务，未能入队");
+        EVENT_ZH.put("DanmakuDispatch.Normal.Duplicate", "普通弹幕发送队列：分P已在队列中，跳过重复入队");
+        EVENT_ZH.put("DanmakuDispatch.Normal.Enqueued", "普通弹幕发送队列：分P已入队");
+        EVENT_ZH.put("DanmakuDispatch.Normal.Rejected", "普通弹幕发送队列：线程池拒绝任务，稍后重试");
+        EVENT_ZH.put("DanmakuDispatch.Normal.Sent", "普通弹幕发送队列：已发送一条弹幕并安排下一次发送");
+        EVENT_ZH.put("DanmakuDispatch.Normal.Error", "普通弹幕发送队列：发送流程异常，稍后重试");
+        EVENT_ZH.put("DanmakuDispatch.Normal.SkipArchivedOrLocked", "普通弹幕发送队列：稿件已归档或锁定，停止发送并标记队列");
+        EVENT_ZH.put("DanmakuDispatch.High.Duplicate", "SC/上舰弹幕发送队列：分P已在队列中，跳过重复入队");
+        EVENT_ZH.put("DanmakuDispatch.High.Enqueued", "SC/上舰弹幕发送队列：分P已入队");
+        EVENT_ZH.put("DanmakuDispatch.High.Rejected", "SC/上舰弹幕发送队列：线程池拒绝任务，稍后重试");
+        EVENT_ZH.put("DanmakuDispatch.High.Sent", "SC/上舰弹幕发送队列：已发送一条弹幕并安排下一次发送");
+        EVENT_ZH.put("DanmakuDispatch.High.Error", "SC/上舰弹幕发送队列：发送流程异常，稍后重试");
+        EVENT_ZH.put("DanmakuDispatch.High.SkipArchivedOrLocked", "SC/上舰弹幕发送队列：稿件已归档或锁定，停止发送并标记队列");
+        EVENT_ZH.put("DanmakuDispatch.High.SleepInterrupted", "SC/上舰弹幕发送队列：等待过程被中断");
+
+        // 弹幕发送同步
+        EVENT_ZH.put("LiveMsgSendSync.Reconcile.Done", "弹幕发送同步：队列校准完成");
+        EVENT_ZH.put("LiveMsgSendSync.Reply.Dispatch.Done", "评论发送同步：本轮评论发送完成");
+        EVENT_ZH.put("LiveMsgSendSync.Visibility.High.SwitchPublic.RateLimit", "SC/上舰弹幕：切公开时触发限流，已暂停账号并稍后重试");
+        EVENT_ZH.put("LiveMsgSendSync.Visibility.High.SwitchPublic.Skip", "SC/上舰弹幕：切公开失败，跳过本次发送并稍后重试");
+        EVENT_ZH.put("LiveMsgSendSync.Visibility.High.SwitchPrivate.Deferred", "SC/上舰弹幕：切回仅自己可见触发限流，已延后处理");
+
+        // 投稿状态同步/锁定检测
+        EVENT_ZH.put("VideoSync.ManualRefresh.VideoInfoFailed", "稿件状态刷新：获取公开视频信息失败");
+        EVENT_ZH.put("VideoSync.ManualRefresh.PartInfoFailed", "稿件状态刷新：获取投稿后台分P信息失败");
+        EVENT_ZH.put("VideoSync.LockedDetect.Failed", "稿件状态同步：检测稿件锁定状态失败");
+        EVENT_ZH.put("VideoSync.LockedAuditReason.Failed", "稿件状态同步：获取稿件锁定原因失败");
+        EVENT_ZH.put("VideoSync.LockedArchive.AutoForceArchived", "稿件状态同步：检测到稿件已锁定，已自动强制归档并停止后续任务");
+        EVENT_ZH.put("VideoSync.PartOrder.Anomaly", "稿件状态同步：线上分P顺序异常，已按保守策略处理");
+
+        // 投稿编辑/上传
+        EVENT_ZH.put("Publish.EditParts.FileNotUnderWorkPath", "分P编辑：文件不在工作目录下，跳过该文件");
+        EVENT_ZH.put("Publish.EditParts.StalePartDeleteFailed", "分P编辑：删除过期分P记录失败");
+        EVENT_ZH.put("Upload.Part.Paused", "分P上传：上传任务已暂停");
+        EVENT_ZH.put("Upload.SerialScheduler.SkipPaused", "分P上传串行调度：上传已暂停，跳过本次任务");
     }
 
     private LogKvs() {

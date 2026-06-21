@@ -1325,6 +1325,16 @@
     line-height: 1;
 }
 
+.config-unit-toggle {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.config-unit-toggle:hover {
+    border-color: var(--primary-color);
+    background: var(--brand-soft-bg-strong);
+}
+
 [data-theme="dark"] .config-unit {
     background: var(--brand-soft-bg-strong);
     border-color: var(--brand-accent-border);

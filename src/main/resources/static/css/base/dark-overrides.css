@@ -349,6 +349,19 @@
     border-radius: 4px;
 }
 
+[data-theme="dark"] .el-pagination button:disabled,
+[data-theme="dark"] .el-pagination .btn-next.disabled,
+[data-theme="dark"] .el-pagination .btn-next:disabled,
+[data-theme="dark"] .el-pagination .btn-prev.disabled,
+[data-theme="dark"] .el-pagination .btn-prev:disabled,
+[data-theme="dark"] .el-pager li.disabled {
+    background-color: color-mix(in srgb, var(--bg-primary) 82%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--border-color) 60%, var(--bg-primary)) !important;
+    color: var(--text-disabled) !important;
+    cursor: not-allowed !important;
+    opacity: 0.72;
+}
+
 [data-theme="dark"] .el-pager li.active {
     background-color: var(--primary-color) !important;
     color: var(--text-inverse) !important;
@@ -370,6 +383,13 @@
     color: var(--primary-color);
 }
 
+[data-theme="dark"] .el-tabs__item.is-disabled,
+[data-theme="dark"] .el-tabs__item.is-disabled:hover {
+    color: var(--text-disabled) !important;
+    cursor: not-allowed;
+    opacity: 0.72;
+}
+
 [data-theme="dark"] .el-tabs__nav-wrap::after {
     background-color: var(--border-color);
 }
@@ -378,13 +398,83 @@
     color: var(--text-primary);
 }
 
+[data-theme="dark"] .el-dropdown-menu__item {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .el-dropdown-menu__item:not(.is-disabled):focus,
+[data-theme="dark"] .el-dropdown-menu__item:not(.is-disabled):hover {
+    background-color: var(--bg-secondary);
+    color: var(--primary-light);
+}
+
+[data-theme="dark"] .el-dropdown-menu__item.is-disabled,
+[data-theme="dark"] .el-dropdown-menu__item.is-disabled:focus,
+[data-theme="dark"] .el-dropdown-menu__item.is-disabled:hover {
+    background-color: transparent !important;
+    color: var(--text-disabled) !important;
+    cursor: not-allowed;
+    opacity: 0.68;
+}
+
 [data-theme="dark"] .el-select-dropdown__item {
     color: var(--text-primary);
 }
 
-[data-theme="dark"] .el-select-dropdown__item.hover, 
-[data-theme="dark"] .el-select-dropdown__item:hover {
+[data-theme="dark"] .el-select-dropdown__item:not(.is-disabled).hover,
+[data-theme="dark"] .el-select-dropdown__item:not(.is-disabled):hover {
     background-color: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .el-select-dropdown__item.is-disabled,
+[data-theme="dark"] .el-select-dropdown__item.is-disabled.hover,
+[data-theme="dark"] .el-select-dropdown__item.is-disabled:hover {
+    background-color: transparent !important;
+    color: var(--text-disabled) !important;
+    cursor: not-allowed;
+    opacity: 0.68;
+}
+
+[data-theme="dark"] .el-cascader-node:not(.is-disabled):focus,
+[data-theme="dark"] .el-cascader-node:not(.is-disabled):hover {
+    background-color: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .el-cascader-node.is-disabled,
+[data-theme="dark"] .el-cascader-node.is-disabled:focus,
+[data-theme="dark"] .el-cascader-node.is-disabled:hover {
+    background-color: transparent !important;
+    color: var(--text-disabled) !important;
+    cursor: not-allowed;
+    opacity: 0.68;
+}
+
+[data-theme="dark"] .el-link.is-disabled,
+[data-theme="dark"] .el-link.is-disabled:hover {
+    color: var(--text-disabled) !important;
+    cursor: not-allowed;
+    opacity: 0.72;
+}
+
+[data-theme="dark"] .el-checkbox__input.is-disabled + span.el-checkbox__label,
+[data-theme="dark"] .el-checkbox__input.is-disabled.is-checked + span.el-checkbox__label,
+[data-theme="dark"] .el-radio__input.is-disabled + span.el-radio__label,
+[data-theme="dark"] .el-radio__input.is-disabled.is-checked + span.el-radio__label {
+    color: var(--text-disabled) !important;
+    cursor: not-allowed;
+}
+
+[data-theme="dark"] .el-checkbox__input.is-disabled .el-checkbox__inner,
+[data-theme="dark"] .el-radio__input.is-disabled .el-radio__inner {
+    background-color: color-mix(in srgb, var(--bg-primary) 82%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--border-color) 60%, var(--bg-primary)) !important;
+    cursor: not-allowed;
+}
+
+[data-theme="dark"] .el-checkbox__input.is-disabled.is-checked .el-checkbox__inner,
+[data-theme="dark"] .el-radio__input.is-disabled.is-checked .el-radio__inner {
+    background-color: color-mix(in srgb, var(--text-disabled) 35%, var(--bg-primary)) !important;
+    border-color: color-mix(in srgb, var(--text-disabled) 45%, var(--bg-primary)) !important;
 }
 
 [data-theme="dark"] .el-loading-mask {

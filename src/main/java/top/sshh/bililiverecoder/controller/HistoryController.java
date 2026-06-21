@@ -32,6 +32,7 @@ import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
+import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
 
@@ -80,6 +81,8 @@ public class HistoryController {
     private UploadProgressTracker uploadProgressTracker;
     @Autowired
     private UploadPauseService uploadPauseService;
+    @Autowired
+    private HistoryMsgQueueCleanupService msgQueueCleanupService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -675,6 +678,10 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            msgQueueCleanupService.cleanupByHistoryId(history.getId(),
+                    new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
+                    false,
+                    "delete");
             long msgDeleteStartNs = System.nanoTime();
             int deletedMsgCount = msgRepository.deleteByHistoryId(history.getId());
             long msgDeleteCostMs = toCostMs(msgDeleteStartNs);
@@ -930,6 +937,131 @@ public class HistoryController {
             result.put("msg", "录制历史不存在");
             return result;
         }
+    }
+
+    @PostMapping("/abandonMsgQueue/{id}")
+    public Map<String, Object> abandonMsgQueue(@PathVariable("id") Long id,
+                                               @RequestBody(required = false) Map<String, Object> options) {
+        long totalStartNs = System.nanoTime();
+        Map<String, Object> result = new HashMap<>();
+        if (id == null) {
+            result.put("type", "info");
+            result.put("msg", "请输入id");
+            return result;
+        }
+        Optional<RecordHistory> historyOptional = historyRepository.findById(id);
+        if (historyOptional.isEmpty()) {
+            result.put("type", "warning");
+            result.put("msg", "录制历史不存在");
+            return result;
+        }
+
+        RecordHistory history = historyOptional.get();
+        HistoryMsgQueueCleanupService.CleanupOptions cleanupOptions = msgQueueCleanupService.optionsFrom(options);
+        if (!cleanupOptions.ordinary() && !cleanupOptions.advanced() && !cleanupOptions.reply() && !cleanupOptions.forceArchive()) {
+            result.put("type", "info");
+            result.put("msg", "请选择要放弃的队列");
+            return result;
+        }
+
+        HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.cleanupByHistoryId(id, cleanupOptions, false, "single");
+
+        result.put("type", "success");
+        result.putAll(cleanup.toMap());
+        result.put("msg", buildCleanupMsg(cleanup, "已放弃待发送队列", "没有找到待发送队列"));
+        log.info("[BLR] {}", LogKvs.event("History.AbandonMsgQueue.Success")
+                .add("historyId", id)
+                .add("roomId", history.getRoomId())
+                .add("bvId", history.getBvId())
+                .add("ordinary", cleanupOptions.ordinary())
+                .add("advanced", cleanupOptions.advanced())
+                .add("reply", cleanupOptions.reply())
+                .add("forceArchive", cleanupOptions.forceArchive())
+                .addRoundCount("abandonedOrdinary", cleanup.ordinary)
+                .addRoundCount("abandonedAdvanced", cleanup.advanced)
+                .addRoundCount("abandonedReply", cleanup.reply)
+                .addRoundCount("forceArchived", cleanup.forceArchived)
+                .addStageCostMs("total", totalStartNs));
+        return result;
+    }
+
+    @PostMapping("/abandonMsgQueue/batch")
+    public Map<String, Object> abandonMsgQueueBatch(@RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> result = new HashMap<>();
+        List<Long> ids = historyIdsFromRequest(request);
+        if (ids.isEmpty()) {
+            result.put("type", "info");
+            result.put("msg", "请选择要处理的稿件");
+            return result;
+        }
+        HistoryMsgQueueCleanupService.CleanupOptions options = msgQueueCleanupService.optionsFrom(request);
+        HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.cleanupByHistoryIds(ids, options, false, "batch");
+        result.put("type", "success");
+        result.putAll(cleanup.toMap());
+        result.put("msg", buildCleanupMsg(cleanup, "已放弃所选稿件的待发送队列", "所选稿件没有待发送队列"));
+        return result;
+    }
+
+    @PostMapping("/msgQueueCleanup/preview")
+    public Map<String, Object> previewMsgQueueCleanup(@RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> result = new HashMap<>();
+        HistoryMsgQueueCleanupService.CleanupOptions options = msgQueueCleanupService.optionsFrom(request);
+        int olderThanDays = msgQueueCleanupService.olderThanDaysFrom(request);
+        int limit = msgQueueCleanupService.limitFrom(request);
+        HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.previewHistorical(options, olderThanDays, limit);
+        result.put("type", "success");
+        result.putAll(cleanup.toMap());
+        result.put("msg", cleanup.totalActions() > 0 ? "已完成清理范围扫描" : "没有找到符合条件的历史待发送队列");
+        return result;
+    }
+
+    @PostMapping("/msgQueueCleanup/apply")
+    public Map<String, Object> applyMsgQueueCleanup(@RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> result = new HashMap<>();
+        HistoryMsgQueueCleanupService.CleanupOptions options = msgQueueCleanupService.optionsFrom(request);
+        int olderThanDays = msgQueueCleanupService.olderThanDaysFrom(request);
+        int limit = msgQueueCleanupService.limitFrom(request);
+        HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.applyHistorical(options, olderThanDays, limit);
+        result.put("type", "success");
+        result.putAll(cleanup.toMap());
+        result.put("msg", buildCleanupMsg(cleanup, "历史待发送队列已清理", "没有找到符合条件的历史待发送队列"));
+        return result;
+    }
+
+    private List<Long> historyIdsFromRequest(Map<String, Object> request) {
+        if (request == null) {
+            return List.of();
+        }
+        Object raw = request.get("ids");
+        if (!(raw instanceof Collection<?> values)) {
+            raw = request.get("historyIds");
+        }
+        if (!(raw instanceof Collection<?> values)) {
+            return List.of();
+        }
+        List<Long> ids = new ArrayList<>();
+        for (Object value : values) {
+            try {
+                Long id = Long.parseLong(String.valueOf(value));
+                if (id > 0) {
+                    ids.add(id);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return ids;
+    }
+
+    private String buildCleanupMsg(HistoryMsgQueueCleanupService.CleanupResult cleanup, String prefix, String emptyMsg) {
+        if (cleanup == null || cleanup.totalActions() <= 0) {
+            return emptyMsg;
+        }
+        return String.format("%s：普通弹幕 %d 条，SC/上舰 %d 条，评论汇总 %d 个，强制归档 %d 个",
+                prefix,
+                cleanup.ordinary,
+                cleanup.advanced,
+                cleanup.reply,
+                cleanup.forceArchived);
     }
 
     @GetMapping("/reloadMsg/{id}")
@@ -1263,13 +1395,26 @@ public class HistoryController {
 
             if (changed) {
                 historyRepository.save(history);
+            }
+            HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.cleanupByHistoryId(history.getId(),
+                    new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
+                    false,
+                    "forceArchive");
+            if (changed || cleanup.totalActions() > 0) {
                 result.put("type", "success");
-                result.put("msg", "已强制归档");
+                String cleanupMsg = cleanup.totalActions() > 0
+                        ? String.format("（已同时清理：普通弹幕 %d 条，SC/上舰 %d 条，评论汇总 %d 个）",
+                        cleanup.ordinary, cleanup.advanced, cleanup.reply)
+                        : "";
+                result.put("msg", "已强制归档" + cleanupMsg);
                 log.info("[BLR] {}", LogKvs.event("History.ForceArchive.Success")
                         .add("historyId", id)
                         .add("roomId", history.getRoomId())
                         .add("uploadClosed", uploadClosed)
                         .add("roomDetached", roomDetached)
+                        .addRoundCount("abandonedOrdinary", cleanup.ordinary)
+                        .addRoundCount("abandonedAdvanced", cleanup.advanced)
+                        .addRoundCount("abandonedReply", cleanup.reply)
                         .addStageCostMs("total", totalStartNs));
             } else {
                 result.put("type", "info");

@@ -250,11 +250,13 @@
                                         <el-tooltip effect="dark" content="限速只能保证最高值不超过设定值，不保证最小速度稳定设定值，非必要请不要打开限速功能，避免影响上传效率。" placement="top">
                                             <span class="upload-speed-tip-icon">!</span>
                                         </el-tooltip>
-                                        <span class="config-unit">MB/s</span>
+                                        <button type="button" class="config-unit config-unit-toggle" @click="toggleUploadSpeedUnit" :title="'切换为' + (uploadSpeedUnit === 'Mbps' ? 'MB/s' : 'Mbps')">
+                                            {{ uploadSpeedUnitLabel }}
+                                        </button>
                                     </label>
                                     <el-input 
-                                        v-model="systemConfig.uploadMb" 
-                                        @input="validateNumber($event, 'uploadMb', true)" 
+                                        v-model="uploadSpeedInputValue"
+                                        @input="validateUploadSpeedDisplay"
                                         placeholder="请输入数字" 
                                         size="small"
                                         class="config-input">

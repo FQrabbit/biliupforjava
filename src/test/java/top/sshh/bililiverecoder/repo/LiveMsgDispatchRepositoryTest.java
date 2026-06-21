@@ -51,17 +51,39 @@ class LiveMsgDispatchRepositoryTest {
     @Test
     void pendingHighDispatchQueryOnlyReturnsEnabledPendingHighParts() {
         Long eligiblePartId = createDispatchCase("room-high-ok", true, true, true, 0, 1, -1, 1L);
+        Long privatePartId = createDispatchCase("room-high-private", true, true, true, -50, 1, -1, 1L);
         createDispatchCase("room-high-disabled", true, false, true, 0, 1, -1, 1L);
         createDispatchCase("room-high-normal-pool", true, true, true, 0, 0, -1, 1L);
         createDispatchCase("room-high-sent", true, true, true, 0, 1, 0, 1L);
-        createDispatchCase("room-high-private", true, true, true, -50, 1, -1, 1L);
+        createDispatchCase("room-high-reply-pending", true, true, true, 0, 1, -1, 1L, false);
 
         entityManager.flush();
         entityManager.clear();
 
         List<Long> partIds = liveMsgRepository.findPendingHighDispatchPartIds(PageRequest.of(0, 20));
 
-        assertEquals(List.of(eligiblePartId), partIds);
+        assertEquals(List.of(eligiblePartId, privatePartId), partIds);
+    }
+
+    @Test
+    void markPendingByBvidAndPoolOnlyMarksSelectedPendingQueue() {
+        String bvid = "BV" + UUID.randomUUID().toString().replace("-", "");
+        createLiveMsg(bvid, 0, -1);
+        createLiveMsg(bvid, 0, -1);
+        createLiveMsg(bvid, 0, 0);
+        createLiveMsg(bvid, 1, -1);
+        createLiveMsg("BV" + UUID.randomUUID().toString().replace("-", ""), 0, -1);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        int updated = liveMsgRepository.markPendingByBvidAndPool(bvid, 0, -3);
+
+        assertEquals(2, updated);
+        assertEquals(0, liveMsgRepository.countByBvidAndPoolAndCode(bvid, 0, -1));
+        assertEquals(2, liveMsgRepository.countByBvidAndPoolAndCode(bvid, 0, -3));
+        assertEquals(1, liveMsgRepository.countByBvidAndPoolAndCode(bvid, 0, 0));
+        assertEquals(1, liveMsgRepository.countByBvidAndPoolAndCode(bvid, 1, -1));
     }
 
     private Long createDispatchCase(String roomId,
@@ -72,6 +94,18 @@ class LiveMsgDispatchRepositoryTest {
                                     int pool,
                                     int msgCode,
                                     Long cid) {
+        return createDispatchCase(roomId, sendDm, sendSc, publish, historyCode, pool, msgCode, cid, true);
+    }
+
+    private Long createDispatchCase(String roomId,
+                                    boolean sendDm,
+                                    boolean sendSc,
+                                    boolean publish,
+                                    int historyCode,
+                                    int pool,
+                                    int msgCode,
+                                    Long cid,
+                                    boolean sendReply) {
         RecordRoom room = new RecordRoom();
         room.setRoomId(roomId);
         room.setUname(roomId);
@@ -83,7 +117,7 @@ class LiveMsgDispatchRepositoryTest {
         history.setRoomId(roomId);
         history.setPublish(publish);
         history.setCode(historyCode);
-        history.setSendReply(true);
+        history.setSendReply(sendReply);
         history.setEventId("history-" + UUID.randomUUID());
         entityManager.persist(history);
 
@@ -107,5 +141,17 @@ class LiveMsgDispatchRepositoryTest {
         entityManager.persist(msg);
 
         return part.getId();
+    }
+
+    private void createLiveMsg(String bvid, int pool, int code) {
+        LiveMsg msg = new LiveMsg();
+        msg.setPartId(1L);
+        msg.setBvid(bvid);
+        msg.setCid(1L);
+        msg.setPool(pool);
+        msg.setCode(code);
+        msg.setSendTime(1000L);
+        msg.setContext("test");
+        entityManager.persist(msg);
     }
 }

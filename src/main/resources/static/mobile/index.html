@@ -387,17 +387,19 @@
                                     <div class="mobile-config-row">
                                         <div class="mobile-config-label">
                                             <span>上传带宽限速</span>
-                                            <em>MB/s</em>
+                                            <button type="button" class="mobile-config-unit-toggle" @click="toggleUploadSpeedUnit" :aria-label="'切换上传带宽单位，当前' + uploadSpeedUnitLabel">
+                                                {{ uploadSpeedUnitLabel }}
+                                            </button>
                                         </div>
                                         <div class="mobile-config-control">
-                                            <el-input v-model="systemConfig.uploadMb" inputmode="decimal" @input="validateNumber($event, 'uploadMb', true)" size="small" class="mobile-config-input"></el-input>
-                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'uploadMb' }" @click="toggleConfigHint('uploadMb')" aria-label="查看上传带宽限速说明">
+                                            <el-input v-model="uploadSpeedInputValue" inputmode="decimal" @input="validateUploadSpeedDisplay" size="small" class="mobile-config-input"></el-input>
+                                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'uploadSpeedLimit' }" @click="toggleConfigHint('uploadSpeedLimit')" aria-label="查看上传带宽限速说明">
                                                 <i class="el-icon-info"></i>
                                             </button>
                                         </div>
                                     </div>
                                     <transition name="mobile-config-hint">
-                                        <div v-if="activeConfigHint === 'uploadMb'" class="mobile-config-hint">
+                                        <div v-if="activeConfigHint === 'uploadSpeedLimit'" class="mobile-config-hint">
                                             限制上传视频时的最大带宽，0 为不限速。限速只保证最高值不超过设定值，非必要不建议开启，避免影响上传效率。
                                         </div>
                                     </transition>

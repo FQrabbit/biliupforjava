@@ -11,14 +11,17 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
 import top.sshh.bililiverecoder.entity.LiveMsg;
+import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.LiveMsgRepository;
+import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
+import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
 
@@ -47,11 +50,13 @@ public class DanmakuSendScheduler {
     private final TaskExecutor normalExecutor;
     private final TaskScheduler scheduler;
     private final LiveMsgRepository msgRepository;
+    private final RecordHistoryRepository historyRepository;
     private final RecordHistoryPartRepository partRepository;
     private final RecordRoomRepository roomRepository;
     private final BiliUserRepository userRepository;
     private final LiveMsgService liveMsgService;
     private final SystemConfigService systemConfigService;
+    private final HistoryMsgQueueCleanupService msgQueueCleanupService;
 
     @Value("${record.wx-push-token}")
     private String wxToken;
@@ -79,21 +84,25 @@ public class DanmakuSendScheduler {
                                 @Qualifier("danmakuNormalExecutor") TaskExecutor normalExecutor,
                                 @Qualifier("danmakuTaskScheduler") TaskScheduler scheduler,
                                 LiveMsgRepository msgRepository,
+                                RecordHistoryRepository historyRepository,
                                 RecordHistoryPartRepository partRepository,
                                 RecordRoomRepository roomRepository,
                                 BiliUserRepository userRepository,
                                 LiveMsgService liveMsgService,
-                                SystemConfigService systemConfigService) {
+                                SystemConfigService systemConfigService,
+                                HistoryMsgQueueCleanupService msgQueueCleanupService) {
         this.replyExecutor = replyExecutor;
         this.highExecutor = highExecutor;
         this.normalExecutor = normalExecutor;
         this.scheduler = scheduler;
         this.msgRepository = msgRepository;
+        this.historyRepository = historyRepository;
         this.partRepository = partRepository;
         this.roomRepository = roomRepository;
         this.userRepository = userRepository;
         this.liveMsgService = liveMsgService;
         this.systemConfigService = systemConfigService;
+        this.msgQueueCleanupService = msgQueueCleanupService;
     }
 
     public boolean enqueueReply(Long historyId, Runnable task) {
@@ -227,6 +236,27 @@ public class DanmakuSendScheduler {
                 return;
             }
             RecordHistoryPart part = partOptional.get();
+            RecordHistory history = null;
+            if (part.getHistoryId() != null) {
+                history = historyRepository.findById(part.getHistoryId()).orElse(null);
+            }
+            if (history == null || history.isForceArchived() || history.getCode() == -4) {
+                if (history != null && history.getId() != null) {
+                    msgQueueCleanupService.cleanupByHistoryId(history.getId(),
+                            new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
+                            false,
+                            "dispatch-high-archived");
+                } else {
+                    markMessageFailed(msg, -3);
+                }
+                pendingHighPartIds.remove(partId);
+                log.info("[BLR] {}", LogKvs.event("DanmakuDispatch.High.SkipArchivedOrLocked")
+                        .add("partId", partId)
+                        .add("historyId", history == null ? null : history.getId())
+                        .add("code", history == null ? null : history.getCode())
+                        .add("forceArchived", history != null && history.isForceArchived()));
+                return;
+            }
             RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
             if (room == null || !Boolean.TRUE.equals(room.getSendSc()) || room.getUploadUserId() == null) {
                 markMessageDone(msg);
@@ -270,10 +300,41 @@ public class DanmakuSendScheduler {
                 return;
             }
             int code;
+            boolean privateFlow = history != null && history.getCode() == -50;
+            boolean switchedPublic = false;
             try {
+                if (privateFlow) {
+                    switchHighVisibility(history, user, 0, "LiveMsgSendSync.Visibility.High.SwitchPublic.Response");
+                    switchedPublic = true;
+                    sleepQuietly(15_000L, "highPrivatePublicWait");
+                }
                 code = liveMsgService.sendMsg(user, msg);
+            } catch (VisibilitySwitchException e) {
+                if (!switchedPublic) {
+                    handleHighVisibilitySwitchPublicFailure(room, part, msg, user, e, businessDelayMs);
+                    return;
+                }
+                throw e;
             } finally {
-                busyUserIds.remove(user.getUid());
+                try {
+                    if (switchedPublic) {
+                        try {
+                            switchHighVisibility(history, user, 1, "LiveMsgSendSync.Visibility.High.SwitchPrivate.Response");
+                            sleepQuietly(5_000L, "highPrivateSwitchBackWait");
+                        } catch (VisibilitySwitchException e) {
+                            if (isVisibilityRateLimitCode(e.code())) {
+                                markDanmakuAccountPause(user.getUid(), RATE_LIMIT_PAUSE_MS);
+                            }
+                            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.High.SwitchPrivate.Deferred")
+                                    .addIfNotBlank("uname", user.getUname())
+                                    .add("code", e.code())
+                                    .addIfNotBlank("bvid", msg.getBvid())
+                                    .add("partId", msg.getPartId()));
+                        }
+                    }
+                } finally {
+                    busyUserIds.remove(user.getUid());
+                }
             }
             if (code != 0 && code != 36703) {
                 log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.Send.Failed")
@@ -373,6 +434,31 @@ public class DanmakuSendScheduler {
             LiveMsg msg = firstPendingMessage(partId, 0);
             if (msg == null) {
                 pendingNormalPartIds.remove(partId);
+                return;
+            }
+            Optional<RecordHistoryPart> partOptional = partRepository.findById(partId);
+            if (partOptional.isEmpty()) {
+                markMessageFailed(msg, -3);
+                pendingNormalPartIds.remove(partId);
+                return;
+            }
+            RecordHistoryPart part = partOptional.get();
+            RecordHistory history = part.getHistoryId() == null ? null : historyRepository.findById(part.getHistoryId()).orElse(null);
+            if (history == null || history.isForceArchived() || history.getCode() == -4) {
+                if (history != null && history.getId() != null) {
+                    msgQueueCleanupService.cleanupByHistoryId(history.getId(),
+                            new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
+                            false,
+                            "dispatch-normal-archived");
+                } else {
+                    markMessageFailed(msg, -3);
+                }
+                pendingNormalPartIds.remove(partId);
+                log.info("[BLR] {}", LogKvs.event("DanmakuDispatch.Normal.SkipArchivedOrLocked")
+                        .add("partId", partId)
+                        .add("historyId", history == null ? null : history.getId())
+                        .add("code", history == null ? null : history.getCode())
+                        .add("forceArchived", history != null && history.isForceArchived()));
                 return;
             }
             long globalWaitMs = globalDanmakuWaitMs();
@@ -509,6 +595,14 @@ public class DanmakuSendScheduler {
             return;
         }
         msg.setCode(-1);
+        msgRepository.save(msg);
+    }
+
+    private void markMessageFailed(LiveMsg msg, int code) {
+        if (msg == null) {
+            return;
+        }
+        msg.setCode(code);
         msgRepository.save(msg);
     }
 
@@ -656,6 +750,10 @@ public class DanmakuSendScheduler {
         return code != null && (code == 36703 || code == -352 || code == -412 || code == 12002);
     }
 
+    private boolean isVisibilityRateLimitCode(Integer code) {
+        return code != null && (code == 21540 || code == -352 || code == -412 || code == 12002);
+    }
+
     private void sleepPermit(long waitMs) {
         try {
             Thread.sleep(Math.max(1L, waitMs));
@@ -725,6 +823,129 @@ public class DanmakuSendScheduler {
                 PushNotifyClient.sendParallel(room, message);
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    private void handleHighVisibilitySwitchPublicFailure(RecordRoom room,
+                                                         RecordHistoryPart part,
+                                                         LiveMsg msg,
+                                                         BiliBiliUser user,
+                                                         VisibilitySwitchException error,
+                                                         long businessDelayMs) {
+        int code = error.code();
+        if (isVisibilityRateLimitCode(code)) {
+            restoreMessagePending(msg);
+            markDanmakuAccountPause(user.getUid(), RATE_LIMIT_PAUSE_MS);
+            long requeueDelayMs = Math.max(globalDanmakuWaitMs(), danmakuAccountCooldownWaitMs(user.getUid()));
+            requeueHighPart(msg.getPartId(), requeueDelayMs);
+            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.High.SwitchPublic.RateLimit")
+                    .addIfNotBlank("uname", user.getUname())
+                    .add("code", code)
+                    .addIfNotBlank("bvid", msg.getBvid())
+                    .add("partId", msg.getPartId())
+                    .add("businessDelayMs", businessDelayMs)
+                    .add("rateLimitPauseMs", RATE_LIMIT_PAUSE_MS)
+                    .add("waitMs", requeueDelayMs));
+            return;
+        }
+
+        markMessageFailed(msg, code);
+        if (part != null && part.getHistoryId() != null) {
+            msgQueueCleanupService.cleanupByHistoryId(part.getHistoryId(),
+                    new HistoryMsgQueueCleanupService.CleanupOptions(false, true, true, false),
+                    false,
+                    "dispatch-high-visibility-failed");
+            pendingHighPartIds.remove(msg.getPartId());
+        } else {
+            requeueHighPart(msg.getPartId(), globalDanmakuWaitMs());
+        }
+        log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.High.SwitchPublic.Skip")
+                .addIfNotBlank("uname", user.getUname())
+                .add("code", code)
+                .addIfNotBlank("message", error.apiMessage())
+                .addIfNotBlank("bvid", msg.getBvid())
+                .add("partId", msg.getPartId())
+                .add("contextLen", msg.getContext() == null ? 0 : msg.getContext().length()));
+        sendHighFailurePush(room, part, msg, user, code);
+    }
+
+    private void switchHighVisibility(RecordHistory history, BiliBiliUser user, int visibility, String eventName) {
+        if (history == null || history.getAvId() == null || history.getAvId().isBlank()) {
+            throw new IllegalStateException("history avId is missing");
+        }
+        String editRes = BiliApi.updateVideoVisibility(user, Long.parseLong(history.getAvId()), visibility);
+        int editCode = -1;
+        String editMsg = null;
+        try {
+            com.alibaba.fastjson.JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(editRes);
+            Integer c = jsonObject.getInteger("code");
+            editCode = c == null ? -1 : c;
+            editMsg = jsonObject.getString("message");
+            if (editCode != 0) {
+                throw new VisibilitySwitchException(editCode, editMsg, editRes);
+            }
+        } catch (VisibilitySwitchException e) {
+            log.warn("[BLR] {}", LogKvs.event(eventName)
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("avId", history.getAvId())
+                    .add("visibility", visibility)
+                    .add("code", editCode)
+                    .addIfNotBlank("message", editMsg)
+                    .add("respLen", editRes == null ? 0 : editRes.length()));
+            throw e;
+        } catch (RuntimeException e) {
+            log.error("[BLR] {}", LogKvs.event(eventName)
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("avId", history.getAvId())
+                    .add("visibility", visibility)
+                    .add("code", editCode)
+                    .addIfNotBlank("message", editMsg)
+                    .add("respLen", editRes == null ? 0 : editRes.length()), e);
+            throw e;
+        }
+        log.info("[BLR] {}", LogKvs.event(eventName)
+                .addIfNotBlank("bvid", history.getBvId())
+                .addIfNotBlank("avId", history.getAvId())
+                .add("visibility", visibility)
+                .add("code", editCode)
+                .addIfNotBlank("message", editMsg)
+                .add("respLen", editRes == null ? 0 : editRes.length()));
+    }
+
+    private void sleepQuietly(long waitMs, String phase) {
+        try {
+            Thread.sleep(waitMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("[BLR] {}", LogKvs.event("DanmakuDispatch.High.SleepInterrupted")
+                    .add("phase", phase)
+                    .add("waitMs", waitMs), e);
+        }
+    }
+
+    private static class VisibilitySwitchException extends RuntimeException {
+        private final int code;
+        private final String apiMessage;
+        private final String response;
+
+        private VisibilitySwitchException(int code, String apiMessage, String response) {
+            super("visibility switch failed: " + response);
+            this.code = code;
+            this.apiMessage = apiMessage;
+            this.response = response;
+        }
+
+        private int code() {
+            return code;
+        }
+
+        private String apiMessage() {
+            return apiMessage;
+        }
+
+        @SuppressWarnings("unused")
+        private String response() {
+            return response;
         }
     }
 

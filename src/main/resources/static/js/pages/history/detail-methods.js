@@ -177,7 +177,7 @@
             var _this = this;
             this.clearArchiveProgressDetailBoxTimer();
             var shouldFallbackRetry = !skipFallbackRetry
-                && this.isAuditRejected
+                && (this.isAuditRejected || this.isAuditLocked)
                 && this.currentDetail
                 && this.currentDetail.id
                 && this.auditRejectPrimaryDetails.length === 0
@@ -1021,7 +1021,7 @@
             if (!this.canShowAuditRejectInfo) return;
             var _this = this;
             var shouldFallbackRetry = !skipFallbackRetry
-                && this.isAuditRejected
+                && (this.isAuditRejected || this.isAuditLocked)
                 && this.currentDetail
                 && this.currentDetail.id
                 && this.auditRejectPrimaryDetails.length === 0
@@ -1075,6 +1075,9 @@
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;');
             };
+            const detailTitle = this.isAuditLocked ? '锁定详情' : '审核退回详情';
+            const detailLabel = this.isAuditLocked ? '稿件锁定说明' : '稿件级审核退回说明';
+            const emptyText = this.isAuditLocked ? '该稿件当前已显示为平台锁定，但暂未拿到详细锁定文本。' : '该稿件当前已显示为审核退回，但暂未拿到详细退回文本。';
             const buildFoldableText = function(label, text, threshold) {
                 const safeLabel = esc(label || '');
                 const raw = String(text == null ? '' : text).trim();
@@ -1151,11 +1154,11 @@
             };
             let html = '<div style="max-height:52vh;overflow:auto;line-height:1.7;">';
             if (this.auditRejectPrimaryDetails.length > 0) {
-                html += '<div style="margin-bottom:8px;color:var(--text-secondary,#a0a0a0);font-size:12px;">稿件级审核退回说明：</div>';
+                html += '<div style="margin-bottom:8px;color:var(--text-secondary,#a0a0a0);font-size:12px;">' + esc(detailLabel) + '：</div>';
                 html += '<ul style="margin:0;padding-left:18px;">';
                 this.auditRejectPrimaryDetails.forEach(item => {
                     html += '<li style="margin:8px 0;">';
-                    if (item.rejectReason) html += '<div style="color:var(--text-primary,#e8e8e8);"><strong>退回原因：</strong>' + esc(item.rejectReason) + '</div>';
+                    if (item.rejectReason) html += '<div style="color:var(--text-primary,#e8e8e8);"><strong>' + (this.isAuditLocked ? '锁定原因' : '退回原因') + '：</strong>' + esc(item.rejectReason) + '</div>';
                     if (item.modifyAdvise) html += '<div style="color:var(--text-secondary,#a0a0a0);margin-top:2px;"><strong>修改建议：</strong>' + esc(item.modifyAdvise) + '</div>';
                     html += buildViolationTimeBlock(item.violationPosition, item.violationTime);
                     html += buildPictureDataBlock(item.pictureData);
@@ -1174,7 +1177,7 @@
                 html += '</ul>';
             }
             if (this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0) {
-                html += '<div style="margin:4px 0 8px;color:var(--text-secondary,#a0a0a0);">该稿件当前已显示为审核退回，但暂未拿到详细退回文本。</div>';
+                html += '<div style="margin:4px 0 8px;color:var(--text-secondary,#a0a0a0);">' + esc(emptyText) + '</div>';
                 html += '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;">可稍后重试，或确认投稿账号登录状态是否有效。</div>';
                 var dbg = this.auditRejectReviewDebug || {};
                 var dbgAuthSource = (dbg.authSource !== undefined && dbg.authSource !== null && String(dbg.authSource).trim() !== '') ? String(dbg.authSource) : '未知';
@@ -1223,8 +1226,8 @@
             }
             html += '<div style="margin-top:10px;color:var(--text-secondary,#a0a0a0);font-size:12px;">说明：以上内容用于排障参考，最终审核结论以B站后台为准。</div>';
             html += '</div>';
-            if (this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0 && this.isAuditRejected) {
-                this.$confirm(html, '审核退回详情', {
+            if (this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0 && (this.isAuditRejected || this.isAuditLocked)) {
+                this.$confirm(html, detailTitle, {
                     dangerouslyUseHTMLString: true,
                     confirmButtonText: '我知道了',
                     cancelButtonText: this.auditRejectManualRefreshing ? '获取中…' : '重新获取原因',
@@ -1241,7 +1244,7 @@
                 });
                 return;
             }
-            this.$alert(html, '审核退回详情', {
+            this.$alert(html, detailTitle, {
                 dangerouslyUseHTMLString: true,
                 confirmButtonText: '我知道了',
                 type: 'warning',
@@ -1379,6 +1382,7 @@
                 case 'touchPublish': this.touchPublish(row.id); break;
                 case 'updatePublishStatus': this.updatePublishStatus(row.id); break;
                 case 'reloadHistoryMsg': this.reloadHistoryMsg(row.id); break;
+                case 'abandonHistoryMsgQueue': this.abandonHistoryMsgQueue(row.id, row); break;
                 case 'deleteHistoryMsg': this.deleteHistoryMsg(row.id); break;
                 case 'deleteHistory': this.deleteHistory(row.id); break;
             }

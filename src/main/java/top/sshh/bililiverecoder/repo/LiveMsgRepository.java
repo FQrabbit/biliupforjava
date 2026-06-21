@@ -51,6 +51,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         where h.id = p.historyId
                           and h.publish = true
                           and h.code = 0
+                          and h.sendReply = true
                     )
                     and exists (
                         select 1
@@ -79,7 +80,8 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         from RecordHistory h
                         where h.id = p.historyId
                           and h.publish = true
-                          and h.code = 0
+                          and h.code in (0, -50)
+                          and h.sendReply = true
                     )
                     and exists (
                         select 1
@@ -110,6 +112,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         where h.id = p.historyId
                           and h.publish = true
                           and h.code = 0
+                          and h.sendReply = true
                     )
                     and exists (
                         select 1
@@ -139,7 +142,8 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         from RecordHistory h
                         where h.id = p.historyId
                           and h.publish = true
-                          and h.code = 0
+                          and h.code in (0, -50)
+                          and h.sendReply = true
                     )
                     and exists (
                         select 1
@@ -179,6 +183,75 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
     int countByBvidAndPool(String bvId, int pool);
 
     int countByBvidAndPoolAndContextStartingWith(String bvId, int pool, String prefix);
+
+    @Query("select count(m) from LiveMsg m where m.partId in ?1 and m.pool = ?2 and m.code = -1")
+    long countPendingByPartIdsAndPool(List<Long> partIds, int pool);
+
+    @Query("""
+            select count(m)
+            from LiveMsg m
+            where m.partId in ?1
+              and m.pool = ?2
+              and m.code = -1
+              and m.partId in (
+                  select p.id
+                  from RecordHistoryPart p, RecordHistory h, RecordRoom r
+                  where p.id in ?1
+                    and p.historyId = h.id
+                    and r.roomId = p.roomId
+                    and h.forceArchived = false
+                    and h.recording = false
+                    and h.streaming = false
+                    and h.publish = true
+                    and p.uploadRetryCount < 9999
+                    and p.cid is not null
+                    and p.cid <> 0
+                    and (
+                        (?2 = 0 and h.code = 0 and r.sendDm = true)
+                        or (?2 = 1 and h.code in (0, -50) and r.sendSc = true)
+                    )
+              )
+            """)
+    long countDispatchablePendingByPartIdsAndPool(List<Long> partIds, int pool);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("update LiveMsg m set m.code = ?3 where m.bvid = ?1 and m.pool = ?2 and m.code = -1")
+    int markPendingByBvidAndPool(String bvId, int pool, int code);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("update LiveMsg m set m.code = ?3 where m.partId in ?1 and m.pool = ?2 and m.code = -1")
+    int markPendingByPartIdsAndPool(List<Long> partIds, int pool, int code);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            update LiveMsg m
+            set m.code = ?3
+            where m.partId in ?1
+              and m.pool = ?2
+              and m.code = -1
+              and m.partId in (
+                  select p.id
+                  from RecordHistoryPart p, RecordHistory h, RecordRoom r
+                  where p.id in ?1
+                    and p.historyId = h.id
+                    and r.roomId = p.roomId
+                    and h.forceArchived = false
+                    and h.recording = false
+                    and h.streaming = false
+                    and h.publish = true
+                    and p.uploadRetryCount < 9999
+                    and p.cid is not null
+                    and p.cid <> 0
+                    and (
+                        (?2 = 0 and h.code = 0 and r.sendDm = true)
+                        or (?2 = 1 and h.code in (0, -50) and r.sendSc = true)
+                    )
+              )
+            """)
+    int markDispatchablePendingByPartIdsAndPool(List<Long> partIds, int pool, int code);
 
     @Query("""
             select m.bvid,

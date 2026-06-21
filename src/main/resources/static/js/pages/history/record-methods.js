@@ -191,6 +191,15 @@
                         if (_this.currentDetail && _this.currentDetail.id === id && data.archiveCode !== undefined && data.archiveCode !== null) {
                             _this.$set(_this.currentDetail, 'code', Number(data.archiveCode));
                         }
+                        if (_this.currentDetail && _this.currentDetail.id === id && data.forceArchived !== undefined) {
+                            _this.$set(_this.currentDetail, 'forceArchived', !!data.forceArchived);
+                        }
+                        if (_this.currentDetail && _this.currentDetail.id === id && data.locked) {
+                            _this.$set(_this.currentDetail, 'upload', false);
+                            _this.$set(_this.currentDetail, 'sendReply', true);
+                            _this.$set(_this.currentDetail, 'pendingNormalMsgCount', 0);
+                            _this.$set(_this.currentDetail, 'pendingHighMsgCount', 0);
+                        }
                         _this.initTable(true);
                         if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === id) {
                             _this.fetchPartList(id, function () {}, { forceRefreshReview: true });
@@ -456,6 +465,71 @@
             this.reloadOptions.restartOrdinary = false;
             this.reloadOptions.restartAdvanced = false;
             this.reloadDialogVisible = true;
+        },
+        abandonHistoryMsgQueue: function (id, row) {
+            const target = row || this.currentDetail || {};
+            const pendingOrdinary = Number(target.pendingNormalMsgCount) || 0;
+            const pendingAdvanced = Number(target.pendingHighMsgCount) || 0;
+            this.currentAbandonQueueId = id;
+            this.abandonQueueMode = 'single';
+            this.abandonQueueOptions.ordinary = pendingOrdinary > 0;
+            this.abandonQueueOptions.advanced = pendingAdvanced > 0;
+            this.abandonQueueOptions.reply = target.sendReply === false;
+            this.abandonQueueOptions.forceArchive = false;
+            if (pendingOrdinary <= 0 && pendingAdvanced <= 0 && target.sendReply !== false) {
+                this.abandonQueueOptions.advanced = true;
+            }
+            this.abandonQueueDialogVisible = true;
+        },
+        handleAbandonQueueConfirm: function() {
+            let _this = this;
+            if (!this.abandonQueueOptions.ordinary && !this.abandonQueueOptions.advanced && !this.abandonQueueOptions.reply && !this.abandonQueueOptions.forceArchive) {
+                this.$message.info('请选择要放弃的队列');
+                return;
+            }
+            var targetText = this.abandonQueueMode === 'batch' ? ('所选 ' + this.selectedItems.length + ' 个稿件') : '当前稿件';
+            this.$confirm('此操作只会停止' + targetText + '的弹幕/评论继续发送，不会删除弹幕数据，也不会删除本地弹幕文件。<br/><br/>确定要放弃所选待发送队列吗？', '放弃待发送队列确认', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: '放弃发送',
+                cancelButtonText: '取消',
+                confirmButtonClass: 'el-button--warning',
+                type: 'warning'
+            }).then(() => {
+                _this.abandonQueueDialogVisible = false;
+                const loading = _this.$loading({
+                    lock: true,
+                    text: '正在放弃待发送队列...',
+                    spinner: 'el-icon-loading',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                var payload = {
+                        ordinary: _this.abandonQueueOptions.ordinary,
+                        advanced: _this.abandonQueueOptions.advanced,
+                        reply: _this.abandonQueueOptions.reply,
+                        forceArchive: _this.abandonQueueOptions.forceArchive
+                    };
+                var onSuccess = function (data) {
+                        loading.close();
+                        _this.$message({
+                            message: data.msg,
+                            type: data.type
+                        });
+                        _this.isMultiSelectMode = false;
+                        _this.selectedItems = [];
+                        _this.startPolling();
+                        _this.initTable();
+                    };
+                var onError = function() {
+                        loading.close();
+                        _this.$message.error('请求失败');
+                    };
+                if (_this.abandonQueueMode === 'batch') {
+                    payload.ids = (_this.selectedItems || []).map(function(item) { return item.id; });
+                    HistoryApi.abandonMsgQueueBatch(payload, onSuccess, onError);
+                } else {
+                    HistoryApi.abandonMsgQueue(_this.currentAbandonQueueId, payload, onSuccess, onError);
+                }
+            }).catch(() => {});
         },
         handleReloadConfirm: function() {
             let _this = this;
