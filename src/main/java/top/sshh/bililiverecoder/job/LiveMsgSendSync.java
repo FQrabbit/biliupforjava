@@ -15,8 +15,8 @@ import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.DanmakuSendScheduler;
+import top.sshh.bililiverecoder.service.GiftReplyCandidateService;
 import top.sshh.bililiverecoder.service.RoomLiveEventParseService;
-import top.sshh.bililiverecoder.service.RoomLiveGiftCatalogService;
 import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
@@ -24,8 +24,6 @@ import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.PushNotifyClient;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -79,10 +77,7 @@ public class LiveMsgSendSync {
     private RoomLiveEventRepository roomLiveEventRepository;
 
     @Autowired
-    private RoomLiveGiftCatalogRepository roomLiveGiftCatalogRepository;
-
-    @Autowired
-    private RoomLiveGiftCatalogService roomLiveGiftCatalogService;
+    private GiftReplyCandidateService giftReplyCandidateService;
 
     @Autowired
     private SystemConfigService systemConfigService;
@@ -1283,10 +1278,6 @@ public class LiveMsgSendSync {
     }
 
     private int appendGiftReplyLines(List<String> replyLines, RecordHistory history, List<RecordHistoryPart> parts, RecordRoom room, DateFormat format) {
-        BigDecimal minPrice = room.getGiftReplyMinPriceCny() == null ? BigDecimal.ZERO : room.getGiftReplyMinPriceCny();
-        if (minPrice.compareTo(BigDecimal.ZERO) < 0) {
-            minPrice = BigDecimal.ZERO;
-        }
         Map<Long, RecordHistoryPart> partById = new HashMap<>();
         for (RecordHistoryPart part : parts) {
             if (part == null || part.getId() == null) {
@@ -1305,186 +1296,47 @@ public class LiveMsgSendSync {
                     .addIfNotBlank("bvid", history.getBvId())
                     .add("giftEvent", 0)
                     .add("appended", 0)
-                    .add("minPriceCny", formatMoney(minPrice))
+                    .add("minPriceCny", giftReplyCandidateService.formatMoney(room == null ? null : room.getGiftReplyMinPriceCny()))
                     .add("skippedNoPart", 0)
                     .add("skippedNoPrice", 0)
                     .add("skippedBelowThreshold", 0));
             return 0;
         }
 
-        GiftCatalogLookup catalogLookup = loadGiftCatalogForGiftReply(history, room, giftEvents);
-        int appended = 0;
-        int skippedNoPart = 0;
-        int skippedNoPrice = 0;
-        int skippedBelowThreshold = 0;
-        Map<String, Integer> appendedByPriceSource = new HashMap<>();
-        for (RoomLiveEvent event : giftEvents) {
+        GiftReplyCandidateService.GiftReplyScan scan = giftReplyCandidateService.scan(history, room, parts, giftEvents);
+        for (GiftReplyCandidateService.GiftReplyCandidate candidate : scan.candidates()) {
+            RoomLiveEvent event = candidate.event();
             RecordHistoryPart part = partById.get(event.getPartId());
-            if (part == null) {
-                skippedNoPart++;
-                continue;
-            }
-            GiftPriceResolution unitPrice = resolveGiftUnitPriceCny(event, catalogLookup);
-            if (unitPrice.price() == null) {
-                skippedNoPrice++;
-                continue;
-            }
-            if (unitPrice.price().compareTo(minPrice) < 0) {
-                skippedBelowThreshold++;
-                continue;
-            }
-            long count = event.getGiftCount() == null || event.getGiftCount() <= 0 ? 1L : event.getGiftCount();
-            BigDecimal totalPrice = resolveGiftTotalPriceCny(event, unitPrice.price(), count);
             String uname = hasText(event.getUname()) ? event.getUname() : "未知用户";
             String giftName = hasText(event.getGiftName())
                     ? event.getGiftName()
-                    : (hasText(unitPrice.giftName()) ? unitPrice.giftName() : "未知礼物");
+                    : (hasText(candidate.giftName()) ? candidate.giftName() : "未知礼物");
             long sendTime = event.getSendTime() == null ? 0L : event.getSendTime();
             replyLines.add(part.getPage() + "#" + format.format(new Date(sendTime))
-                    + "  礼物 [💎" + formatMoney(unitPrice.price()) + "] "
-                    + uname + ": " + giftName + " x" + count
-                    + "，总计💎" + formatMoney(totalPrice) + "\n");
-            appendedByPriceSource.merge(unitPrice.source(), 1, Integer::sum);
-            appended++;
+                    + "  礼物 [💎" + giftReplyCandidateService.formatMoney(candidate.unitPrice()) + "] "
+                    + uname + ": " + giftName + " x" + candidate.count()
+                    + "，总计💎" + giftReplyCandidateService.formatMoney(candidate.totalPrice()) + "\n");
         }
+        Map<String, Integer> appendedByPriceSource = scan.matchedByPriceSource();
         log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.GiftReply.Scan")
                 .add("roomId", history.getRoomId())
                 .add("historyId", history.getId())
                 .addIfNotBlank("bvid", history.getBvId())
                 .add("giftEvent", giftEvents.size())
-                .add("appended", appended)
-                .add("minPriceCny", formatMoney(minPrice))
-                .add("skippedNoPart", skippedNoPart)
-                .add("skippedNoPrice", skippedNoPrice)
-                .add("skippedBelowThreshold", skippedBelowThreshold)
+                .add("appended", scan.candidates().size())
+                .add("minPriceCny", giftReplyCandidateService.formatMoney(scan.minPrice()))
+                .add("skippedNoPart", scan.skippedNoPart())
+                .add("skippedNoPrice", scan.skippedNoPrice())
+                .add("skippedBelowThreshold", scan.skippedBelowThreshold())
                 .add("rawPriceHit", appendedByPriceSource.getOrDefault("raw", 0))
                 .add("roomCatalogHit", appendedByPriceSource.getOrDefault("room_catalog", 0))
                 .add("localGiftIdFallback", appendedByPriceSource.getOrDefault("local_gift_id", 0))
                 .add("localGiftNameFallback", appendedByPriceSource.getOrDefault("local_gift_name", 0)));
-        return appended;
-    }
-
-    private GiftCatalogLookup loadGiftCatalogForGiftReply(RecordHistory history, RecordRoom room, List<RoomLiveEvent> giftEvents) {
-        String roomId = hasText(history.getRoomId()) ? history.getRoomId() : (room == null ? null : room.getRoomId());
-        List<Integer> giftIds = giftEvents.stream()
-                .map(RoomLiveEvent::getGiftId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        Map<String, RoomLiveGiftCatalog> roomCatalogByGiftId = new HashMap<>();
-        if (hasText(roomId) && !giftIds.isEmpty()) {
-            for (RoomLiveGiftCatalog catalog : roomLiveGiftCatalogRepository.findByRoomIdAndGiftIdIn(roomId, giftIds)) {
-                if (catalog.getGiftId() != null) {
-                    roomCatalogByGiftId.put(giftCatalogKey(roomId, catalog.getGiftId()), catalog);
-                }
-            }
-        }
-
-        Map<Integer, RoomLiveGiftCatalog> localByGiftId = new HashMap<>();
-        if (!giftIds.isEmpty()) {
-            for (RoomLiveGiftCatalog catalog : roomLiveGiftCatalogRepository.findPricedByGiftIdIn(giftIds)) {
-                if (catalog.getGiftId() != null && catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
-                    localByGiftId.putIfAbsent(catalog.getGiftId(), catalog);
-                }
-            }
-        }
-
-        List<String> giftNames = giftEvents.stream()
-                .map(RoomLiveEvent::getGiftName)
-                .filter(this::hasText)
-                .distinct()
-                .toList();
-        Map<String, RoomLiveGiftCatalog> localByGiftName = new HashMap<>();
-        if (!giftNames.isEmpty()) {
-            for (RoomLiveGiftCatalog catalog : roomLiveGiftCatalogRepository.findPricedByGiftNameIn(giftNames)) {
-                if (hasText(catalog.getGiftName()) && catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
-                    localByGiftName.putIfAbsent(catalog.getGiftName(), catalog);
-                }
-            }
-        }
-
-        return new GiftCatalogLookup(roomId, roomCatalogByGiftId, localByGiftId, localByGiftName);
-    }
-
-    private GiftPriceResolution resolveGiftUnitPriceCny(RoomLiveEvent event, GiftCatalogLookup lookup) {
-        Long unitCoin = event.getGiftPriceCoin();
-        long count = event.getGiftCount() == null || event.getGiftCount() <= 0 ? 1L : event.getGiftCount();
-        if ((unitCoin == null || unitCoin <= 0) && event.getGiftTotalCoin() != null && event.getGiftTotalCoin() > 0) {
-            unitCoin = event.getGiftTotalCoin() / count;
-        }
-        if (unitCoin != null && unitCoin > 0) {
-            return new GiftPriceResolution(roomLiveGiftCatalogService.toCny(unitCoin), event.getGiftName(), "raw");
-        }
-
-        RoomLiveGiftCatalog catalog = null;
-        if (event.getGiftId() != null && lookup != null && hasText(lookup.roomId())) {
-            catalog = lookup.roomCatalogByGiftId().get(giftCatalogKey(lookup.roomId(), event.getGiftId()));
-            BigDecimal price = catalogPriceCny(catalog);
-            if (price != null) {
-                return new GiftPriceResolution(price, catalog.getGiftName(), "room_catalog");
-            }
-        }
-
-        if (event.getGiftId() != null && lookup != null) {
-            catalog = lookup.localByGiftId().get(event.getGiftId());
-            BigDecimal price = catalogPriceCny(catalog);
-            if (price != null) {
-                return new GiftPriceResolution(price, catalog.getGiftName(), "local_gift_id");
-            }
-        }
-
-        if (hasText(event.getGiftName()) && lookup != null) {
-            catalog = lookup.localByGiftName().get(event.getGiftName());
-            BigDecimal price = catalogPriceCny(catalog);
-            if (price != null) {
-                return new GiftPriceResolution(price, catalog.getGiftName(), "local_gift_name");
-            }
-        }
-        return new GiftPriceResolution(null, event.getGiftName(), "missing");
-    }
-
-    private BigDecimal resolveGiftTotalPriceCny(RoomLiveEvent event, BigDecimal unitPrice, long count) {
-        if (event.getGiftTotalCoin() != null && event.getGiftTotalCoin() > 0) {
-            return roomLiveGiftCatalogService.toCny(event.getGiftTotalCoin());
-        }
-        return unitPrice.multiply(BigDecimal.valueOf(count));
-    }
-
-    private BigDecimal catalogPriceCny(RoomLiveGiftCatalog catalog) {
-        if (catalog == null) {
-            return null;
-        }
-        if (catalog.getPriceCny() != null && catalog.getPriceCny().compareTo(BigDecimal.ZERO) > 0) {
-            return catalog.getPriceCny();
-        }
-        if (catalog.getPriceCoin() != null && catalog.getPriceCoin() > 0) {
-            return roomLiveGiftCatalogService.toCny(catalog.getPriceCoin());
-        }
-        return null;
-    }
-
-    private String giftCatalogKey(String roomId, Integer giftId) {
-        return roomId + "#" + giftId;
-    }
-
-    private String formatMoney(BigDecimal value) {
-        if (value == null) {
-            return "0";
-        }
-        return value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
+        return scan.candidates().size();
     }
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private record GiftCatalogLookup(String roomId,
-                                     Map<String, RoomLiveGiftCatalog> roomCatalogByGiftId,
-                                     Map<Integer, RoomLiveGiftCatalog> localByGiftId,
-                                     Map<String, RoomLiveGiftCatalog> localByGiftName) {
-    }
-
-    private record GiftPriceResolution(BigDecimal price, String giftName, String source) {
     }
 
 }

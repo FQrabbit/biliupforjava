@@ -248,7 +248,7 @@
                         <div class="mobile-history-metrics">
                             <span><i class="el-icon-coin"></i>{{ formatFileSize(item.fileSize) }}</span>
                             <span><i class="el-icon-time"></i>{{ formatDuration(item.partDuration) }}</span>
-                            <button type="button" class="mobile-history-metric-button is-danmaku" @click.stop="openMobileDanmakuStats(item)" aria-label="查看弹幕数据">
+                            <button type="button" class="mobile-history-metric-button is-danmaku" @touchstart.stop.prevent="openMobileDanmakuStats(item, 'touch')" @click.stop="openMobileDanmakuStats(item, 'click')" aria-label="查看弹幕数据">
                                 <i class="el-icon-chat-dot-round"></i>
                                 <span>{{ item.successMsgCount || 0 }}/{{ item.msgCount || 0 }}</span>
                                 <i class="el-icon-arrow-up"></i>
@@ -1077,7 +1077,7 @@
                     <span>分P</span>
                     <strong>{{ currentDetail.uploadPartCount || 0 }}/{{ currentDetail.partCount || 0 }}</strong>
                 </div>
-                <button type="button" class="mobile-history-detail-stat-button is-danmaku" @click="openMobileDanmakuStats(currentDetail)">
+                <button type="button" class="mobile-history-detail-stat-button is-danmaku" @touchstart.stop.prevent="openMobileDanmakuStats(currentDetail, 'touch')" @click.stop="openMobileDanmakuStats(currentDetail, 'click')">
                     <span>弹幕</span>
                     <strong>{{ currentDetail.successMsgCount || 0 }}/{{ currentDetail.msgCount || 0 }}</strong>
                     <small>点按查看分类</small>
@@ -1730,11 +1730,9 @@
         </div>
     </el-dialog>
 
-    <transition name="fade">
-        <div v-if="mobileDanmakuStatsVisible" class="mobile-history-danmaku-backdrop" @click="closeMobileDanmakuStats"></div>
-    </transition>
-    <transition name="mobile-history-danmaku-sheet">
-        <aside v-if="mobileDanmakuStatsVisible" class="mobile-history-danmaku-sheet" role="dialog" aria-modal="true" aria-label="弹幕数据" @click.stop>
+    <div v-if="mobileDanmakuStatsVisible" ref="mobileDanmakuStatsPortal" class="mobile-history-danmaku-portal" :class="{ 'is-leaving': mobileDanmakuStatsLeaving }">
+        <div class="mobile-history-danmaku-backdrop" @click="closeMobileDanmakuStats"></div>
+        <aside class="mobile-history-danmaku-sheet" role="dialog" aria-modal="true" aria-label="弹幕数据" @click.stop>
             <div class="mobile-history-sheet-grabber"></div>
             <header class="mobile-history-danmaku-head">
                 <div>
@@ -1765,27 +1763,39 @@
                     <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('successMsgCount')) }}</strong>
                 </div>
                 <div class="mobile-history-danmaku-stat">
-                    <span>普通弹幕</span>
-                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('normalMsgCount')) }}</strong>
-                </div>
-                <div class="mobile-history-danmaku-stat is-sc">
-                    <span>SC</span>
-                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('scMsgCount')) }}</strong>
-                </div>
-                <div class="mobile-history-danmaku-stat is-guard">
-                    <span>上舰</span>
-                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('guardMsgCount')) }}</strong>
-                </div>
-                <div class="mobile-history-danmaku-stat">
                     <span>队列中</span>
                     <strong>{{ formatMobileDanmakuCount(getMobileDanmakuQueueCount()) }}</strong>
+                </div>
+                <div class="mobile-history-danmaku-stat is-task">
+                    <span>普通弹幕</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('normalMsgCount')) }}</strong>
+                    <small>{{ getDanmakuTaskSubtext(getMobileDanmakuStatsItem(), 'normal') }}</small>
+                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(getMobileDanmakuStatsItem(), 'normal')]">{{ getDanmakuTaskStateText(getMobileDanmakuStatsItem(), 'normal') }}</em>
+                </div>
+                <div class="mobile-history-danmaku-stat is-task is-sc">
+                    <span>SC/上舰高级弹幕</span>
+                    <strong>{{ formatMobileDanmakuCount(getAdvancedDanmakuCount(getMobileDanmakuStatsItem())) }}</strong>
+                    <small>{{ getDanmakuTaskSubtext(getMobileDanmakuStatsItem(), 'advanced') }}</small>
+                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(getMobileDanmakuStatsItem(), 'advanced')]">{{ getDanmakuTaskStateText(getMobileDanmakuStatsItem(), 'advanced') }}</em>
+                </div>
+                <div class="mobile-history-danmaku-stat is-task">
+                    <span>SC、上舰评论</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('highReplyLineCount')) }}</strong>
+                    <small>{{ getDanmakuTaskSubtext(getMobileDanmakuStatsItem(), 'highReply') }}</small>
+                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(getMobileDanmakuStatsItem(), 'highReply')]">{{ getDanmakuTaskStateText(getMobileDanmakuStatsItem(), 'highReply') }}</em>
+                </div>
+                <div class="mobile-history-danmaku-stat is-task is-guard">
+                    <span>高价值礼物评论</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('giftReplyLineCount')) }}</strong>
+                    <small>{{ getDanmakuTaskSubtext(getMobileDanmakuStatsItem(), 'giftReply') }}</small>
+                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(getMobileDanmakuStatsItem(), 'giftReply')]">{{ getDanmakuTaskStateText(getMobileDanmakuStatsItem(), 'giftReply') }}</em>
                 </div>
             </section>
             <footer class="mobile-history-danmaku-actions">
                 <button type="button" @click="closeMobileDanmakuStats">我知道了</button>
             </footer>
         </aside>
-    </transition>
+    </div>
 
     <transition name="edit-upload-float">
         <div v-if="editPartUploadQueue.length > 0" class="edit-upload-float">

@@ -716,8 +716,16 @@ new Vue({
         window.removeEventListener('message', this.handleGlobalPartPreviewMessage);
         this.editPartUploadQueue = [];
         this.editPartUploadRunning = false;
+        clearTimeout(this.mobileDanmakuStatsCloseTimer);
+        if (typeof this.unmountMobileDanmakuStatsPortal === 'function') {
+            this.unmountMobileDanmakuStatsPortal();
+        }
         this.notifyParentWorkspaceMode(false);
         this.notifyParentIframeModal(false, 'history-reset');
+        document.body.classList.remove('mobile-danmaku-stats-open');
+        document.querySelectorAll('.mobile-history-detail-wrapper--behind-danmaku').forEach(function (node) {
+            node.classList.remove('mobile-history-detail-wrapper--behind-danmaku');
+        });
         this.notifyParentOperationStatus();
     }
 });

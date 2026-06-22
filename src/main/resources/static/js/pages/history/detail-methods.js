@@ -117,15 +117,46 @@
             if (pending > 0) return '发送中';
             return '已完成';
         },
-        openMobileDanmakuStats: function(item) {
+        openMobileDanmakuStats: function(item, source) {
             if (!this.isMobile || !item) return;
+            const now = Date.now();
+            if (source === 'click' && this.lastMobileDanmakuStatsTouchAt && now - this.lastMobileDanmakuStatsTouchAt < 700) {
+                return;
+            }
+            if (source === 'touch') {
+                this.lastMobileDanmakuStatsTouchAt = now;
+            }
+            if (this.lastMobileDanmakuStatsOpenAt && now - this.lastMobileDanmakuStatsOpenAt < 350) {
+                return;
+            }
+            this.lastMobileDanmakuStatsOpenAt = now;
             this.showMoreActions = false;
+            this.mobileDanmakuStatsLeaving = false;
             this.mobileDanmakuStatsTarget = item;
             this.mobileDanmakuStatsVisible = true;
+            this.$nextTick(() => {
+                this.mountMobileDanmakuStatsPortal();
+            });
         },
         closeMobileDanmakuStats: function() {
-            this.mobileDanmakuStatsVisible = false;
-            this.mobileDanmakuStatsTarget = null;
+            if (!this.mobileDanmakuStatsVisible && !this.mobileDanmakuStatsTarget) {
+                this.clearMobileDanmakuLayerState();
+                return;
+            }
+            if (this.mobileDanmakuStatsLeaving) {
+                return;
+            }
+            this.mobileDanmakuStatsLeaving = true;
+            this.lastMobileDanmakuStatsOpenAt = 0;
+            this.lastMobileDanmakuStatsTouchAt = 0;
+            clearTimeout(this.mobileDanmakuStatsCloseTimer);
+            this.mobileDanmakuStatsCloseTimer = setTimeout(() => {
+                this.unmountMobileDanmakuStatsPortal();
+                this.mobileDanmakuStatsVisible = false;
+                this.mobileDanmakuStatsTarget = null;
+                this.mobileDanmakuStatsLeaving = false;
+                this.clearMobileDanmakuLayerState();
+            }, 220);
         },
         getMobileDanmakuStatsItem: function() {
             return this.mobileDanmakuStatsTarget || this.currentDetail || {};
@@ -146,6 +177,87 @@
             const pendingNormal = Number(target.pendingNormalMsgCount) || 0;
             const pendingHigh = Number(target.pendingHighMsgCount) || 0;
             return Math.max(0, pendingNormal) + Math.max(0, pendingHigh);
+        },
+        getDanmakuStatsValue: function(item, key) {
+            const n = Number(item && item[key]);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        },
+        getAdvancedDanmakuCount: function(item) {
+            const explicit = this.getDanmakuStatsValue(item, 'advancedMsgCount');
+            if (explicit > 0) return explicit;
+            const total = this.getDanmakuStatsValue(item, 'msgCount');
+            const normal = this.getDanmakuStatsValue(item, 'normalMsgCount');
+            return Math.max(0, total - normal);
+        },
+        getOtherHighDanmakuCount: function(item) {
+            const explicit = this.getDanmakuStatsValue(item, 'otherHighMsgCount');
+            if (explicit > 0) return explicit;
+            const advanced = this.getAdvancedDanmakuCount(item);
+            const sc = this.getDanmakuStatsValue(item, 'scMsgCount');
+            const guard = this.getDanmakuStatsValue(item, 'guardMsgCount');
+            return Math.max(0, advanced - sc - guard);
+        },
+        getDanmakuTaskStateLabel: function(state) {
+            const map = {
+                disabled: '未开启',
+                empty: '无内容',
+                waiting: '待发布',
+                pending: '待发送',
+                done: '已完成'
+            };
+            return map[state] || '待确认';
+        },
+        getDanmakuTaskStateClass: function(state) {
+            if (state === 'done') return 'is-done';
+            if (state === 'pending' || state === 'waiting') return 'is-pending';
+            if (state === 'disabled' || state === 'empty') return 'is-muted';
+            return 'is-muted';
+        },
+        getNormalDanmakuTaskState: function(item) {
+            const target = item || {};
+            if (target.roomSendDm !== true) return 'disabled';
+            if (!target.publish) return 'waiting';
+            const pending = Math.max(0, Number(target.pendingNormalMsgCount) || 0);
+            return pending > 0 ? 'pending' : 'done';
+        },
+        getAdvancedDanmakuTaskState: function(item) {
+            const target = item || {};
+            if (target.roomSendSc !== true) return 'disabled';
+            if (!target.publish) return 'waiting';
+            const pending = Math.max(0, Number(target.pendingHighMsgCount) || 0);
+            return pending > 0 ? 'pending' : 'done';
+        },
+        getDanmakuTaskSubtext: function(item, type) {
+            const target = item || {};
+            if (type === 'normal') {
+                return '队列 ' + (Math.max(0, Number(target.pendingNormalMsgCount) || 0));
+            }
+            if (type === 'advanced') {
+                return 'SC ' + this.getDanmakuStatsValue(target, 'scMsgCount')
+                    + ' · 上舰 ' + this.getDanmakuStatsValue(target, 'guardMsgCount')
+                    + ' · 其他 ' + this.getOtherHighDanmakuCount(target);
+            }
+            if (type === 'highReply') {
+                return '共 ' + this.getDanmakuStatsValue(target, 'highReplyLineCount') + ' 条';
+            }
+            if (type === 'giftReply') {
+                return '共 ' + this.getDanmakuStatsValue(target, 'giftReplyLineCount') + ' 条';
+            }
+            return '';
+        },
+        getDanmakuTaskState: function(item, type) {
+            const target = item || {};
+            if (type === 'normal') return this.getNormalDanmakuTaskState(target);
+            if (type === 'advanced') return this.getAdvancedDanmakuTaskState(target);
+            if (type === 'highReply') return target.highReplyTaskState || 'disabled';
+            if (type === 'giftReply') return target.giftReplyTaskState || 'disabled';
+            return 'disabled';
+        },
+        getDanmakuTaskStateText: function(item, type) {
+            return this.getDanmakuTaskStateLabel(this.getDanmakuTaskState(item, type));
+        },
+        getDanmakuTaskStateBadgeClass: function(item, type) {
+            return this.getDanmakuTaskStateClass(this.getDanmakuTaskState(item, type));
         },
         getMobileDanmakuQueueCount: function() {
             return this.getDanmakuQueueCount(this.getMobileDanmakuStatsItem());
@@ -1686,7 +1798,39 @@
                 this.editPartFileDialogVisible ||
                 this.singleDeleteDialogVisible
             ));
+            if (typeof document !== 'undefined' && document.body) {
+                document.body.classList.toggle('mobile-danmaku-stats-open', !!(this.isMobile && this.mobileDanmakuStatsVisible));
+                var detailDialog = document.querySelector('.mobile-history-detail-dialog');
+                var detailWrapper = detailDialog ? detailDialog.closest('.el-dialog__wrapper') : null;
+                if (detailWrapper) {
+                    detailWrapper.classList.toggle('mobile-history-detail-wrapper--behind-danmaku', !!(this.isMobile && this.mobileDanmakuStatsVisible));
+                }
+            }
             this.notifyParentIframeModal(active, 'history');
+        },
+        clearMobileDanmakuLayerState: function() {
+            if (typeof document === 'undefined' || !document.body) return;
+            if (!this.mobileDanmakuStatsVisible) {
+                document.body.classList.remove('mobile-danmaku-stats-open');
+                document.querySelectorAll('.mobile-history-detail-wrapper--behind-danmaku').forEach(function (node) {
+                    node.classList.remove('mobile-history-detail-wrapper--behind-danmaku');
+                });
+            }
+        },
+        mountMobileDanmakuStatsPortal: function() {
+            if (typeof document === 'undefined' || !document.body) return;
+            const portal = this.$refs.mobileDanmakuStatsPortal;
+            if (!portal || portal.parentNode === document.body) return;
+            this.mobileDanmakuStatsPortalAnchor = portal.parentNode;
+            document.body.appendChild(portal);
+        },
+        unmountMobileDanmakuStatsPortal: function() {
+            if (typeof document === 'undefined') return;
+            const portal = this.$refs.mobileDanmakuStatsPortal || document.querySelector('.mobile-history-danmaku-portal');
+            if (portal && this.mobileDanmakuStatsPortalAnchor && portal.parentNode !== this.mobileDanmakuStatsPortalAnchor) {
+                this.mobileDanmakuStatsPortalAnchor.appendChild(portal);
+            }
+            this.mobileDanmakuStatsPortalAnchor = null;
         },
         updateDetailFooterOffset: function() {
             if (!this.detailDialogVisible) return;

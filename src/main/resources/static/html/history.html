@@ -125,7 +125,8 @@
             </div>
             
             <transition name="filter-slide">
-                <div class="filter-body" v-show="filterExpanded" :class="{ 'is-disabled': isMultiSelectMode }">
+                <div class="filter-body" v-show="filterExpanded">
+                    <div class="filter-controls" :class="{ 'is-disabled': isMultiSelectMode }">
                     <!-- 快捷筛选标签 -->
                     <div class="quick-filters">
                         <span class="quick-filter-label">快捷筛选：</span>
@@ -288,12 +289,13 @@
                             </div>
                         </div>
                     </div>
+                    </div>
                     
                     <!-- 操作按钮 -->
                     <div class="filter-footer">
-                        <el-button class="modern-btn" type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading || isMultiSelectMode">查询</el-button>
-                        <el-button class="modern-btn" icon="el-icon-refresh" @click="resetFilters" size="small" :disabled="isMultiSelectMode">重置</el-button>
-                        <el-button class="modern-btn" icon="el-icon-files" @click="toggleBatchMode" size="small" :type="isMultiSelectMode ? 'primary' : 'default'" plain>
+                        <el-button class="modern-btn filter-action-btn filter-action-btn--query" type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading || isMultiSelectMode">查询</el-button>
+                        <el-button class="modern-btn filter-action-btn filter-action-btn--reset" icon="el-icon-refresh" @click="resetFilters" size="small" :disabled="isMultiSelectMode">重置</el-button>
+                        <el-button class="modern-btn filter-action-btn filter-action-btn--manage" icon="el-icon-files" @click="toggleBatchMode" size="small" :type="isMultiSelectMode ? 'primary' : 'default'" plain :disabled="batchVisibilityRunning">
                             {{ isMultiSelectMode ? '退出管理' : '批量管理' }}
                         </el-button>
                     </div>
@@ -705,32 +707,50 @@
                     <div class="stat-label">弹幕数量</div>
                     <div class="stat-value stat-value--danmaku">
                         <span>{{ currentDetail.msgCount }}</span>
-                        <el-popover placement="top" width="260" trigger="click" popper-class="danmaku-stat-popover">
+                        <el-popover placement="top" width="320" trigger="click" popper-class="danmaku-stat-popover">
                             <div class="danmaku-stat-popover-content">
                                 <div class="danmaku-stat-popover-title">弹幕明细</div>
                                 <div class="danmaku-stat-popover-row">
-                                    <span>全部弹幕</span>
+                                    <span class="danmaku-stat-popover-label">全部弹幕</span>
                                     <strong>{{ currentDetail.msgCount || 0 }}</strong>
                                 </div>
                                 <div class="danmaku-stat-popover-row">
-                                    <span>成功发送</span>
+                                    <span class="danmaku-stat-popover-label">成功发送</span>
                                     <strong>{{ currentDetail.successMsgCount || 0 }}</strong>
                                 </div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>普通弹幕</span>
-                                    <strong>{{ currentDetail.normalMsgCount || 0 }}</strong>
-                                </div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>SC</span>
-                                    <strong>{{ currentDetail.scMsgCount || 0 }}</strong>
-                                </div>
-                                <div class="danmaku-stat-popover-row">
-                                    <span>上舰</span>
-                                    <strong>{{ currentDetail.guardMsgCount || 0 }}</strong>
-                                </div>
                                 <div class="danmaku-stat-popover-row is-queue">
-                                    <span>队列中</span>
+                                    <span class="danmaku-stat-popover-label">队列中</span>
                                     <strong>{{ getDanmakuQueueCount(currentDetail) }}</strong>
+                                </div>
+                                <div class="danmaku-stat-popover-row">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>普通弹幕</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'normal') }}</small>
+                                    </span>
+                                    <strong>{{ currentDetail.normalMsgCount || 0 }}</strong>
+                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'normal')]">{{ getDanmakuTaskStateText(currentDetail, 'normal') }}</em>
+                                </div>
+                                <div class="danmaku-stat-popover-row">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>SC/上舰高级弹幕</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'advanced') }}</small>
+                                    </span>
+                                    <strong>{{ getAdvancedDanmakuCount(currentDetail) }}</strong>
+                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'advanced')]">{{ getDanmakuTaskStateText(currentDetail, 'advanced') }}</em>
+                                </div>
+                                <div class="danmaku-stat-popover-row">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>SC、上舰评论</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'highReply') }}</small>
+                                    </span>
+                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'highReply')]">{{ getDanmakuTaskStateText(currentDetail, 'highReply') }}</em>
+                                </div>
+                                <div class="danmaku-stat-popover-row">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>高价值礼物评论</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'giftReply') }}</small>
+                                    </span>
+                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'giftReply')]">{{ getDanmakuTaskStateText(currentDetail, 'giftReply') }}</em>
                                 </div>
                             </div>
                             <button slot="reference" type="button" class="stat-detail-trigger" aria-label="查看弹幕明细">
@@ -741,8 +761,8 @@
                     </div>
                     <div class="stat-breakdown stat-breakdown--danmaku">
                         <span>普通 {{currentDetail.normalMsgCount || 0}}</span>
-                        <span>SC {{currentDetail.scMsgCount || 0}}</span>
-                        <span>舰 {{currentDetail.guardMsgCount || 0}}</span>
+                        <span>高级 {{getAdvancedDanmakuCount(currentDetail)}}</span>
+                        <span>队列 {{getDanmakuQueueCount(currentDetail)}}</span>
                     </div>
                 </div>
             </div>

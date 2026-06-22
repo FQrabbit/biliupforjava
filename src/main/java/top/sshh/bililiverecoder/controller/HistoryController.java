@@ -24,6 +24,7 @@ import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveEventRepository;
 import top.sshh.bililiverecoder.repo.RoomLiveSessionStatsRepository;
 import top.sshh.bililiverecoder.service.impl.HighEnergyCutPublishService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
@@ -32,6 +33,7 @@ import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
+import top.sshh.bililiverecoder.service.GiftReplyCandidateService;
 import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
@@ -68,6 +70,8 @@ public class HistoryController {
     @Autowired
     private LiveMsgRepository msgRepository;
     @Autowired
+    private RoomLiveEventRepository roomLiveEventRepository;
+    @Autowired
     private RoomLiveSessionStatsRepository sessionStatsRepository;
     @Autowired
     private LiveMsgService msgService;
@@ -83,6 +87,8 @@ public class HistoryController {
     private UploadPauseService uploadPauseService;
     @Autowired
     private HistoryMsgQueueCleanupService msgQueueCleanupService;
+    @Autowired
+    private GiftReplyCandidateService giftReplyCandidateService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -142,13 +148,15 @@ public class HistoryController {
         Map<Long, RoomLiveSessionStats> sessionStatsMap = buildPageSessionStats(list);
         Map<Long, PartListStats> partStatsMap = buildPagePartStats(list);
         Map<String, MsgListStats> msgStatsMap = buildPageMsgStats(list, sessionStatsMap);
+        Map<Long, ReplyTaskStats> replyTaskStatsMap = buildPageReplyTaskStats(list, roomEntityCache);
         
         // 同步执行数据库查询操作，避免并行流中的 EntityManager 会话问题
         for (RecordHistory history : list) {
             history.setRoomName(roomCache.get(history.getRoomId()));
             // 使用统一方法填充额外字段（分P统计、放弃分P、弹幕统计等）
             populateHistoryFields(history, configMap, roomEntityCache.get(history.getRoomId()),
-                    partStatsMap.get(history.getId()), msgStatsMap.get(history.getBvId()));
+                    partStatsMap.get(history.getId()), msgStatsMap.get(history.getBvId()),
+                    replyTaskStatsMap.get(history.getId()));
         }
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
@@ -1609,7 +1617,8 @@ public class HistoryController {
                                        Map<String, String> configMap,
                                        RecordRoom room,
                                        PartListStats partStats,
-                                       MsgListStats msgStats) {
+                                       MsgListStats msgStats,
+                                       ReplyTaskStats replyTaskStats) {
         if (history == null) {
             return;
         }
@@ -1707,6 +1716,11 @@ public class HistoryController {
             history.setNormalMsgCount(msgStats == null ? msgRepository.countByBvidAndPool(history.getBvId(), 0) : msgStats.normalMsgCount());
             history.setScMsgCount(msgStats == null ? msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC [") : msgStats.scMsgCount());
             history.setGuardMsgCount(msgStats == null ? msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓") : msgStats.guardMsgCount());
+            int advancedMsgCount = msgStats == null
+                    ? Math.max(0, history.getMsgCount() - history.getNormalMsgCount())
+                    : Math.max(0, msgStats.advancedMsgCount());
+            history.setAdvancedMsgCount(advancedMsgCount);
+            history.setOtherHighMsgCount(Math.max(0, advancedMsgCount - history.getScMsgCount() - history.getGuardMsgCount()));
 
             // 发送开关与待发送数量（仅用于状态展示，不影响后台任务）
             boolean sendDm = room != null && Boolean.TRUE.equals(room.getSendDm());
@@ -1717,6 +1731,11 @@ public class HistoryController {
             history.setRoomSendGiftReply(sendGiftReply);
             history.setPendingNormalMsgCount(sendDm ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : msgStats.pendingNormalMsgCount()) : 0);
             history.setPendingHighMsgCount(sendSc ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : msgStats.pendingHighMsgCount()) : 0);
+            ReplyTaskStats effectiveReplyTaskStats = replyTaskStats == null ? buildReplyTaskStats(history, room) : replyTaskStats;
+            history.setHighReplyLineCount(effectiveReplyTaskStats.highReplyLineCount());
+            history.setGiftReplyLineCount(effectiveReplyTaskStats.giftReplyLineCount());
+            history.setHighReplyTaskState(resolveReplyTaskState(sendSc, history.isPublish(), history.isSendReply(), effectiveReplyTaskStats.highReplyLineCount()));
+            history.setGiftReplyTaskState(resolveReplyTaskState(sendGiftReply, history.isPublish(), history.isSendReply(), effectiveReplyTaskStats.giftReplyLineCount()));
         }
 
     // 计算是否处于等待投稿状态
@@ -1816,6 +1835,7 @@ public class HistoryController {
                     safeLongToInt(stats.getNormalMsgCount()),
                     safeLongToInt(stats.getScCount()),
                     safeLongToInt(stats.getGuardCount()),
+                    safeLongToInt(stats.getAdvancedMsgCount()),
                     sendStats.pendingNormalMsgCount(),
                     sendStats.pendingHighMsgCount()
             ));
@@ -1839,6 +1859,7 @@ public class HistoryController {
                         toInt(row[3]),
                         toInt(row[4]),
                         toInt(row[5]),
+                        Math.max(0, toInt(row[1]) - toInt(row[3])),
                         sendStats.pendingNormalMsgCount(),
                         sendStats.pendingHighMsgCount()
                 ));
@@ -1868,6 +1889,89 @@ public class HistoryController {
             }
         }
         return result;
+    }
+
+    private Map<Long, ReplyTaskStats> buildPageReplyTaskStats(List<RecordHistory> histories,
+                                                              Map<String, RecordRoom> roomEntityCache) {
+        List<Long> historyIds = histories.stream()
+                .map(RecordHistory::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (historyIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, Integer> highReplyLineCounts = new HashMap<>();
+        for (Object[] row : msgRepository.aggregateHighReplyLineCountByHistoryIds(historyIds)) {
+            Long historyId = toLong(row[0]);
+            if (historyId != null) {
+                highReplyLineCounts.put(historyId, toInt(row[1]));
+            }
+        }
+
+        Map<Long, ReplyTaskStats> result = new HashMap<>();
+        for (RecordHistory history : histories) {
+            if (history == null || history.getId() == null) {
+                continue;
+            }
+            int giftReplyLineCount = 0;
+            RecordRoom room = roomEntityCache.get(history.getRoomId());
+            if (room != null && Boolean.TRUE.equals(room.getSendGiftReply())) {
+                giftReplyLineCount = countGiftReplyLines(history, room);
+            }
+            result.put(history.getId(), new ReplyTaskStats(
+                    highReplyLineCounts.getOrDefault(history.getId(), 0),
+                    giftReplyLineCount
+            ));
+        }
+        return result;
+    }
+
+    private ReplyTaskStats buildReplyTaskStats(RecordHistory history, RecordRoom room) {
+        if (history == null || history.getId() == null) {
+            return new ReplyTaskStats(0, 0);
+        }
+        int highReplyLineCount = 0;
+        for (Object[] row : msgRepository.aggregateHighReplyLineCountByHistoryIds(List.of(history.getId()))) {
+            highReplyLineCount = toInt(row[1]);
+        }
+        int giftReplyLineCount = room != null && Boolean.TRUE.equals(room.getSendGiftReply())
+                ? countGiftReplyLines(history, room)
+                : 0;
+        return new ReplyTaskStats(highReplyLineCount, giftReplyLineCount);
+    }
+
+    private int countGiftReplyLines(RecordHistory history, RecordRoom room) {
+        if (history == null || history.getId() == null || room == null) {
+            return 0;
+        }
+        try {
+            List<RoomLiveEvent> giftEvents = roomLiveEventRepository.findByHistoryIdAndTypeOrderByPartIdAscSendTimeAsc(
+                    history.getId(), RoomLiveEvent.TYPE_GIFT);
+            if (giftEvents.isEmpty()) {
+                return 0;
+            }
+            List<RecordHistoryPart> parts = partRepository.findByHistoryId(history.getId());
+            return giftReplyCandidateService.scan(history, room, parts, giftEvents).candidates().size();
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("History.GiftReplyLineCount.QueryFailed")
+                    .add("historyId", history.getId())
+                    .add("err", e.getMessage()), e);
+            return 0;
+        }
+    }
+
+    private String resolveReplyTaskState(boolean enabled, boolean published, boolean done, int candidateCount) {
+        if (!enabled) {
+            return "disabled";
+        }
+        if (!published) {
+            return "waiting";
+        }
+        if (candidateCount <= 0) {
+            return "empty";
+        }
+        return done ? "done" : "pending";
     }
 
     private int safeLongToInt(long value) {
@@ -1927,6 +2031,7 @@ public class HistoryController {
                                 int normalMsgCount,
                                 int scMsgCount,
                                 int guardMsgCount,
+                                int advancedMsgCount,
                                 int pendingNormalMsgCount,
                                 int pendingHighMsgCount) {
     }
@@ -1935,5 +2040,9 @@ public class HistoryController {
                                  int pendingNormalMsgCount,
                                  int pendingHighMsgCount) {
         private static final SendListStats EMPTY = new SendListStats(0, 0, 0);
+    }
+
+    private record ReplyTaskStats(int highReplyLineCount,
+                                  int giftReplyLineCount) {
     }
 }

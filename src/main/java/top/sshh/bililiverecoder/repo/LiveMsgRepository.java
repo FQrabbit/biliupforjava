@@ -279,6 +279,17 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
             """)
     List<Object[]> aggregateSendStatsByBvids(List<String> bvids);
 
+    @Query("""
+            select p.historyId, count(m)
+            from LiveMsg m, RecordHistoryPart p
+            where m.partId = p.id
+              and p.historyId in ?1
+              and m.pool = 1
+              and m.cid is not null
+            group by p.historyId
+            """)
+    List<Object[]> aggregateHighReplyLineCountByHistoryIds(List<Long> historyIds);
+
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("delete from LiveMsg where partId = ?1")

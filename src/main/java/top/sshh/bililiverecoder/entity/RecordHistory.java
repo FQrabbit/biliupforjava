@@ -142,6 +142,24 @@ public class RecordHistory {
     @Transient
     private int guardMsgCount;
 
+    @Transient
+    private int advancedMsgCount;
+
+    @Transient
+    private int otherHighMsgCount;
+
+    @Transient
+    private int highReplyLineCount;
+
+    @Transient
+    private int giftReplyLineCount;
+
+    @Transient
+    private String highReplyTaskState;
+
+    @Transient
+    private String giftReplyTaskState;
+
     /**
      * 待发送普通弹幕数量（仅用于前端展示，不入库）
      */

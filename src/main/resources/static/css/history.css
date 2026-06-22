@@ -622,7 +622,7 @@
 
 
 
-.filter-body.is-disabled {
+.filter-controls.is-disabled {
 
     opacity: 0.55;
 
@@ -634,7 +634,7 @@
 
 
 
-.filter-body.is-disabled * {
+.filter-controls.is-disabled * {
 
     cursor: not-allowed;
 
@@ -894,7 +894,7 @@
 
     justify-content: flex-end;
 
-    gap: 10px;
+    gap: 12px;
 
     padding-top: 16px;
 
@@ -906,11 +906,34 @@
 
 .filter-footer .el-button {
 
-    border-radius: var(--radius-md);
+    min-width: 104px;
 
-    padding: 10px 20px;
+    height: 40px;
+
+    border-radius: 6px;
+
+    padding: 0 18px;
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    letter-spacing: 0;
 
     transition: var(--transition);
+
+}
+
+.filter-footer .filter-action-btn {
+
+    box-shadow: none;
+
+}
+
+.filter-footer .filter-action-btn [class^="el-icon-"],
+.filter-footer .filter-action-btn [class*=" el-icon-"] {
+
+    font-weight: 700;
 
 }
 
@@ -918,21 +941,76 @@
 
 .filter-footer .el-button--primary {
 
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+    background: var(--brand-soft-bg);
 
-    border: none;
+    border: 1px solid var(--primary-color);
 
-    box-shadow: var(--brand-shadow-md);
+    color: var(--primary-color);
 
 }
 
 
 
-.filter-footer .el-button--primary:hover {
+.filter-footer .filter-action-btn--query:hover,
+.filter-footer .filter-action-btn--manage:hover {
 
-    transform: translateY(-2px);
+    background: color-mix(in srgb, var(--primary-color) 18%, var(--bg-primary));
 
-    box-shadow: var(--brand-shadow-lg);
+    border-color: var(--primary-light);
+
+    color: var(--primary-light);
+
+    transform: translateY(-1px);
+
+}
+
+.filter-footer .filter-action-btn--reset {
+
+    background: var(--bg-secondary);
+
+    border-color: var(--border-color);
+
+    color: var(--text-secondary);
+
+}
+
+.filter-footer .filter-action-btn--reset:hover {
+
+    background: var(--bg-tertiary);
+
+    border-color: var(--text-secondary);
+
+    color: var(--text-primary);
+
+    transform: translateY(-1px);
+
+}
+
+.filter-footer .filter-action-btn--manage {
+
+    background: var(--brand-soft-bg);
+
+    border-color: var(--primary-color);
+
+    color: var(--primary-color);
+
+}
+
+.filter-footer .filter-action-btn.is-disabled,
+.filter-footer .filter-action-btn.is-disabled:focus,
+.filter-footer .filter-action-btn.is-disabled:hover {
+
+    background: var(--bg-tertiary);
+
+    border-color: var(--border-light);
+
+    color: var(--text-disabled);
+
+    box-shadow: none;
+
+    opacity: 0.62;
+
+    transform: none;
 
 }
 
@@ -5395,6 +5473,28 @@
 
 }
 
+.danmaku-stat-popover-label {
+
+    min-width: 0;
+
+    display: grid;
+
+    gap: 2px;
+
+    line-height: 1.2;
+
+}
+
+.danmaku-stat-popover-label small {
+
+    color: var(--text-muted);
+
+    font-size: 11px;
+
+    font-weight: 500;
+
+}
+
 .danmaku-stat-popover-row strong {
 
     color: var(--text-primary);
@@ -5402,6 +5502,68 @@
     font-size: 13px;
 
     font-variant-numeric: tabular-nums;
+
+}
+
+.danmaku-task-badge {
+
+    flex: 0 0 auto;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    min-height: 20px;
+
+    padding: 2px 7px;
+
+    border-radius: 999px;
+
+    border: 1px solid var(--border-color);
+
+    font-size: 11px;
+
+    font-style: normal;
+
+    font-weight: 700;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
+}
+
+.danmaku-task-badge.is-done {
+
+    color: var(--success-color);
+
+    border-color: var(--success-border);
+
+    background: var(--success-soft-bg-faint);
+
+}
+
+.danmaku-task-badge.is-pending {
+
+    color: var(--warning-color);
+
+    border-color: var(--warning-border);
+
+    background: var(--warning-soft-bg-faint);
+
+}
+
+.danmaku-task-badge.is-muted {
+
+    color: var(--text-muted);
+
+    border-color: var(--border-color);
+
+    background: var(--bg-tertiary);
+
+    opacity: 0.72;
 
 }
 
