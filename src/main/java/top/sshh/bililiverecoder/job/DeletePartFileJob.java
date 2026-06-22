@@ -9,6 +9,7 @@ import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
@@ -35,6 +36,9 @@ public class DeletePartFileJob {
     @Autowired
     RecordHistoryPartRepository partRepository;
 
+    @Autowired
+    private PartFileCleanupPolicy partFileCleanupPolicy;
+
     @Scheduled(fixedDelay = 3600000, initialDelay = 60000)
     public void deleteFileProcess() {
         long roundStartNs = System.nanoTime();
@@ -54,6 +58,9 @@ public class DeletePartFileJob {
             }
             for (RecordHistoryPart part : partList) {
                 String filePath = part.getFilePath();
+                if (partFileCleanupPolicy.shouldSkipProtectedArchive(room, part, filePath, "DeletePartFileJob", "delete")) {
+                    continue;
+                }
                 if (filePath == null || filePath.isBlank()) {
                     log.warn("[BLR] {}", LogKvs.event("DeletePartFileJob.SkipBlankPath")
                             .add("roomId", room.getRoomId())
@@ -154,6 +161,9 @@ public class DeletePartFileJob {
             }
             for (RecordHistoryPart part : partList) {
                 String filePath = part.getFilePath();
+                if (partFileCleanupPolicy.shouldSkipProtectedArchive(room, part, filePath, "MovePartFileJob", "move")) {
+                    continue;
+                }
                 if (filePath == null || filePath.isBlank()) {
                     log.warn("[BLR] {}", LogKvs.event("MovePartFileJob.SkipBlankPath")
                             .add("roomId", room.getRoomId())

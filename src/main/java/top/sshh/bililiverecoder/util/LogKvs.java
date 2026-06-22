@@ -334,6 +334,7 @@ public final class LogKvs {
         EVENT_ZH.put("MovePartFileJob.Success", "定时任务：移动成功");
         EVENT_ZH.put("MovePartFileJob.Failed", "定时任务：移动失败");
         EVENT_ZH.put("MovePartFileJob.Round.Done", "定时任务：分P文件移动轮次完成");
+        EVENT_ZH.put("PartFileCleanup.SkipProtectedArchive", "分P文件清理：稿件已退回/锁定/强制归档，跳过删除或移动");
 
         EVENT_ZH.put("RefreshTokenJob.SkipRecent", "定时任务：刷新token-距离上次更新过近，跳过");
         EVENT_ZH.put("RefreshTokenJob.SleepInterrupted", "定时任务：刷新token-等待被中断");

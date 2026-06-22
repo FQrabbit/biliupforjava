@@ -22,6 +22,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.MultipartUploadSessionService;
+import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
@@ -79,6 +80,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     @Autowired
     private CaptchaService captchaService;
+
+    @Autowired
+    private PartFileCleanupPolicy partFileCleanupPolicy;
 
     @Value("${server.port:8080}")
     private String serverPort;
@@ -1382,7 +1386,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     }
                                     part = partRepository.save(part);
                                     //如果配置上传完成删除，则删除文件
-                                    if (room.getDeleteType() == 1) {
+                                    if (partFileCleanupPolicy.isPostUploadCleanupType(room.getDeleteType())
+                                            && partFileCleanupPolicy.shouldSkipProtectedArchive(room, part, filePath, "Upload", "postUploadCleanup")) {
+                                        // 保留退回/锁定稿件的本地分P文件，方便后续检查和编辑。
+                                    } else if (room.getDeleteType() == 1) {
                                         boolean delete = uploadFile.delete();
                                         if (delete) {
                                             log.info("[BLR] {}", LogKvs.event("Upload.Post.DeleteSuccess")

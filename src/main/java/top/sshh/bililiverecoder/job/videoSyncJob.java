@@ -12,6 +12,7 @@ import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.BiliVideoInfoResponse;
 import top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse;
 import top.sshh.bililiverecoder.repo.*;
+import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -60,6 +61,9 @@ public class videoSyncJob {
     // 定时查询录制历史，每五分钟验证一下是否发布成功
     @Autowired
     private LiveMsgSendSync liveMsgSendSync;
+
+    @Autowired
+    private PartFileCleanupPolicy partFileCleanupPolicy;
 
     @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void syncVideo() {
@@ -900,6 +904,14 @@ public class videoSyncJob {
         // 0: 开放浏览, -50: 仅自己可见
         // 这两种状态都视为"发布成功"，可以进行后续的弹幕解析
         if(state != 0 && state != -50){
+            if (doPostPublishProcessing
+                    && room != null
+                    && partFileCleanupPolicy.isPostAuditCleanupType(room.getDeleteType())
+                    && partFileCleanupPolicy.isProtectedFromPartFileCleanup(next)) {
+                for (RecordHistoryPart part : dbParts) {
+                    partFileCleanupPolicy.shouldSkipProtectedArchive(room, next, part, part.getFilePath(), "VideoSync", "postAuditCleanup");
+                }
+            }
             return;
         }
         
@@ -979,6 +991,11 @@ public class videoSyncJob {
                 if (part != null) {
                     //如果配置成发布完成后删除则删除文件
                     String filePath = part.getFilePath();
+                    if (recordRoom != null
+                            && partFileCleanupPolicy.isPostAuditCleanupType(recordRoom.getDeleteType())
+                            && partFileCleanupPolicy.shouldSkipProtectedArchive(recordRoom, next, part, filePath, "VideoSync", "postAuditCleanup")) {
+                        continue;
+                    }
                     if (recordRoom != null && recordRoom.getDeleteType() == 2) {
                         File file = new File(filePath);
                         boolean delete = file.delete();

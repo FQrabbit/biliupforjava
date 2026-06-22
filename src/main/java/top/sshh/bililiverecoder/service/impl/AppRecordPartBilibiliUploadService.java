@@ -20,6 +20,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
+import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -96,6 +97,9 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
 
     @Autowired
     private UploadUserSerialScheduler uploadUserSerialScheduler;
+
+    @Autowired
+    private PartFileCleanupPolicy partFileCleanupPolicy;
 
     private static final int UPLOAD_RETRY_GIVE_UP = 9999;
 
@@ -472,7 +476,10 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                 part.setUpdateTime(LocalDateTime.now());
                                 part = partRepository.save(part);
                                 //如果配置上传完成删除，则删除文件
-                                if (room.getDeleteType() == 1) {
+                                if (partFileCleanupPolicy.isPostUploadCleanupType(room.getDeleteType())
+                                        && partFileCleanupPolicy.shouldSkipProtectedArchive(room, part, filePath, "Upload", "postUploadCleanup")) {
+                                    // 保留退回/锁定稿件的本地分P文件，方便后续检查和编辑。
+                                } else if (room.getDeleteType() == 1) {
                                     boolean delete = uploadFile.delete();
                                     if (delete) {
                                         log.info("[BLR] {}", LogKvs.event("Upload.Post.DeleteSuccess")

@@ -22,6 +22,7 @@ import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 import top.sshh.bililiverecoder.job.videoSyncJob;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
+import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -114,6 +115,8 @@ public class RecordBiliPublishService {
     private videoSyncJob videoSyncJob;
     @Autowired
     private LiveMsgSendSync liveMsgSendSync;
+    @Autowired
+    private PartFileCleanupPolicy partFileCleanupPolicy;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -2029,6 +2032,10 @@ public class RecordBiliPublishService {
                         try {
                             for (RecordHistoryPart part : uploadParts) {
                                 String filePath = part.getFilePath();
+                                if (partFileCleanupPolicy.isPostPublishCleanupType(room.getDeleteType())
+                                        && partFileCleanupPolicy.shouldSkipProtectedArchive(room, history, part, filePath, "Publish", "postPublishCleanup")) {
+                                    continue;
+                                }
                                 if (room.getDeleteType() == 9) {
                                     File file = new File(filePath);
                                     boolean delete = file.delete();
