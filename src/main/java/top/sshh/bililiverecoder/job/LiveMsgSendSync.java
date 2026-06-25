@@ -319,6 +319,7 @@ public class LiveMsgSendSync {
                     continue;
                 }
 
+                ReplyPageResolver pageResolver = buildReplyPageResolver(history, user, parts);
                 List<String> replyLines = new ArrayList<>();
                 boolean hasScReply = false;
                 boolean hasGuardReply = false;
@@ -335,14 +336,14 @@ public class LiveMsgSendSync {
                             } else {
                                 hasOtherHighLevelReply = true;
                             }
-                            replyLines.add(part.getPage() + "#" + format.format(new Date(liveMsg.getSendTime()))
+                            replyLines.add(pageResolver.resolve(part) + "#" + format.format(new Date(liveMsg.getSendTime()))
                                     + "  " + contextText + "\n");
                         }
                     }
                 }
                 int giftReplyCount = 0;
                 if (sendGiftReplyEnabled) {
-                    giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format);
+                    giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format, pageResolver);
                 }
                 List<BiliReply> replies = buildVideoReplies(history,
                         buildReplyHeader(hasScReply, hasGuardReply, hasOtherHighLevelReply, giftReplyCount),
@@ -983,6 +984,7 @@ public class LiveMsgSendSync {
         try {
             DateFormat format = new SimpleDateFormat("HH:mm:ss");
             format.setTimeZone(TimeZone.getTimeZone("UTC"));
+            ReplyPageResolver pageResolver = buildReplyPageResolver(history, user, parts);
             List<String> replyLines = new ArrayList<>();
             List<Long> partIds = parts.stream()
                     .map(RecordHistoryPart::getId)
@@ -1007,14 +1009,14 @@ public class LiveMsgSendSync {
                         } else {
                             hasOtherHighLevelReply = true;
                         }
-                        replyLines.add(part.getPage() + "#" + format.format(new Date(liveMsg.getSendTime()))
+                        replyLines.add(pageResolver.resolve(part) + "#" + format.format(new Date(liveMsg.getSendTime()))
                                 + "  " + contextText + "\n");
                     }
                 }
             }
             int giftReplyCount = 0;
             if (sendGiftReplyEnabled) {
-                giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format);
+                giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format, pageResolver);
             }
             List<BiliReply> replies = buildVideoReplies(history,
                     buildReplyHeader(hasScReply, hasGuardReply, hasOtherHighLevelReply, giftReplyCount),
@@ -1277,7 +1279,12 @@ public class LiveMsgSendSync {
         return reply;
     }
 
-    private int appendGiftReplyLines(List<String> replyLines, RecordHistory history, List<RecordHistoryPart> parts, RecordRoom room, DateFormat format) {
+    private int appendGiftReplyLines(List<String> replyLines,
+                                     RecordHistory history,
+                                     List<RecordHistoryPart> parts,
+                                     RecordRoom room,
+                                     DateFormat format,
+                                     ReplyPageResolver pageResolver) {
         Map<Long, RecordHistoryPart> partById = new HashMap<>();
         for (RecordHistoryPart part : parts) {
             if (part == null || part.getId() == null) {
@@ -1312,7 +1319,7 @@ public class LiveMsgSendSync {
                     ? event.getGiftName()
                     : (hasText(candidate.giftName()) ? candidate.giftName() : "未知礼物");
             long sendTime = event.getSendTime() == null ? 0L : event.getSendTime();
-            replyLines.add(part.getPage() + "#" + format.format(new Date(sendTime))
+            replyLines.add(pageResolver.resolve(part) + "#" + format.format(new Date(sendTime))
                     + "  礼物 [💎" + giftReplyCandidateService.formatMoney(candidate.unitPrice()) + "] "
                     + uname + ": " + giftName + " x" + candidate.count()
                     + "，总计💎" + giftReplyCandidateService.formatMoney(candidate.totalPrice()) + "\n");
@@ -1337,6 +1344,190 @@ public class LiveMsgSendSync {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private ReplyPageResolver buildReplyPageResolver(RecordHistory history, BiliBiliUser user, List<RecordHistoryPart> orderedParts) {
+        ReplyPageResolver resolver = ReplyPageResolver.localFallback(orderedParts);
+        if (history == null || user == null || !hasText(history.getBvId())) {
+            return resolver;
+        }
+        try {
+            BiliVideoPartInfoResponse partInfo = BiliApi.getVideoPartInfo(user, history.getBvId());
+            ReplyPageResolver withOnlineSnapshot = ReplyPageResolver.fromOnlineSnapshot(orderedParts, partInfo);
+            log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.PageSnapshot")
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .add("partInfoCode", partInfo == null ? null : partInfo.getCode())
+                    .add("onlinePageCount", withOnlineSnapshot.onlinePageCount())
+                    .add("cidMapCount", withOnlineSnapshot.cidMapCount())
+                    .add("fileNameMapCount", withOnlineSnapshot.fileNameMapCount())
+                    .add("titleMapCount", withOnlineSnapshot.titleMapCount()));
+            return withOnlineSnapshot;
+        } catch (Exception e) {
+            log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.PageSnapshot.Failed")
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+            return resolver;
+        }
+    }
+
+    static int resolveReplyPage(RecordHistoryPart part, List<RecordHistoryPart> orderedParts) {
+        if (part == null) {
+            return 1;
+        }
+        if (part.getPage() > 0) {
+            return part.getPage();
+        }
+        if (orderedParts != null) {
+            for (int i = 0; i < orderedParts.size(); i++) {
+                if (isSamePart(part, orderedParts.get(i))) {
+                    return i + 1;
+                }
+            }
+        }
+        Integer partOrder = part.getPartOrder();
+        if (partOrder != null && partOrder > 0) {
+            return partOrder;
+        }
+        return 1;
+    }
+
+    private static boolean isSamePart(RecordHistoryPart left, RecordHistoryPart right) {
+        if (left == right) {
+            return true;
+        }
+        return left != null
+                && right != null
+                && left.getId() != null
+                && left.getId().equals(right.getId());
+    }
+
+    static final class ReplyPageResolver {
+        private final List<RecordHistoryPart> orderedParts;
+        private final Map<Long, Integer> pageByCid;
+        private final Map<String, Integer> pageByFileName;
+        private final Map<String, Integer> pageByTitle;
+        private final int onlinePageCount;
+
+        private ReplyPageResolver(List<RecordHistoryPart> orderedParts,
+                                  Map<Long, Integer> pageByCid,
+                                  Map<String, Integer> pageByFileName,
+                                  Map<String, Integer> pageByTitle,
+                                  int onlinePageCount) {
+            this.orderedParts = orderedParts == null ? Collections.emptyList() : List.copyOf(orderedParts);
+            this.pageByCid = pageByCid == null ? Collections.emptyMap() : Map.copyOf(pageByCid);
+            this.pageByFileName = pageByFileName == null ? Collections.emptyMap() : Map.copyOf(pageByFileName);
+            this.pageByTitle = pageByTitle == null ? Collections.emptyMap() : Map.copyOf(pageByTitle);
+            this.onlinePageCount = onlinePageCount;
+        }
+
+        static ReplyPageResolver localFallback(List<RecordHistoryPart> orderedParts) {
+            return new ReplyPageResolver(orderedParts, Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), 0);
+        }
+
+        static ReplyPageResolver fromOnlineSnapshot(List<RecordHistoryPart> orderedParts, BiliVideoPartInfoResponse partInfo) {
+            if (partInfo == null || partInfo.getCode() != 0 || partInfo.getData() == null
+                    || partInfo.getData().getVideos() == null || partInfo.getData().getVideos().isEmpty()) {
+                return localFallback(orderedParts);
+            }
+
+            Map<Long, Integer> pageByCid = new HashMap<>();
+            Map<String, Integer> pageByFileName = new HashMap<>();
+            Map<String, Integer> pageByTitle = new HashMap<>();
+            Set<String> duplicateFileNames = new HashSet<>();
+            Set<String> duplicateTitles = new HashSet<>();
+            int fallbackPage = 1;
+            int onlinePageCount = 0;
+            for (BiliVideoPartInfoResponse.Video video : partInfo.getData().getVideos()) {
+                if (video == null) {
+                    continue;
+                }
+                int page = video.getPage() > 0 ? video.getPage() : fallbackPage;
+                fallbackPage++;
+                if (page <= 0) {
+                    continue;
+                }
+                onlinePageCount++;
+                if (video.getCid() > 0) {
+                    pageByCid.put(video.getCid(), page);
+                }
+                putUniquePage(pageByFileName, duplicateFileNames, normalizeReplyPageKey(video.getFilename()), page);
+                putUniquePage(pageByTitle, duplicateTitles, normalizeReplyPageKey(video.getTitle()), page);
+                putUniquePage(pageByTitle, duplicateTitles, normalizeReplyPageKey(video.getPart()), page);
+            }
+            removeDuplicateKeys(pageByFileName, duplicateFileNames);
+            removeDuplicateKeys(pageByTitle, duplicateTitles);
+            return new ReplyPageResolver(orderedParts, pageByCid, pageByFileName, pageByTitle, onlinePageCount);
+        }
+
+        int resolve(RecordHistoryPart part) {
+            Integer onlinePage = resolveOnlinePage(part);
+            if (onlinePage != null && onlinePage > 0) {
+                return onlinePage;
+            }
+            return resolveReplyPage(part, orderedParts);
+        }
+
+        private Integer resolveOnlinePage(RecordHistoryPart part) {
+            if (part == null) {
+                return null;
+            }
+            Long cid = part.getCid();
+            if (cid != null && cid > 0 && pageByCid.containsKey(cid)) {
+                return pageByCid.get(cid);
+            }
+            String fileNameKey = normalizeReplyPageKey(part.getFileName());
+            if (fileNameKey != null && pageByFileName.containsKey(fileNameKey)) {
+                return pageByFileName.get(fileNameKey);
+            }
+            String titleKey = normalizeReplyPageKey(part.getTitle());
+            if (titleKey != null && pageByTitle.containsKey(titleKey)) {
+                return pageByTitle.get(titleKey);
+            }
+            return null;
+        }
+
+        int onlinePageCount() {
+            return onlinePageCount;
+        }
+
+        int cidMapCount() {
+            return pageByCid.size();
+        }
+
+        int fileNameMapCount() {
+            return pageByFileName.size();
+        }
+
+        int titleMapCount() {
+            return pageByTitle.size();
+        }
+
+        private static void putUniquePage(Map<String, Integer> target, Set<String> duplicates, String key, int page) {
+            if (key == null || duplicates.contains(key)) {
+                return;
+            }
+            Integer previous = target.putIfAbsent(key, page);
+            if (previous != null && previous != page) {
+                duplicates.add(key);
+                target.remove(key);
+            }
+        }
+
+        private static void removeDuplicateKeys(Map<String, Integer> target, Set<String> duplicates) {
+            for (String key : duplicates) {
+                target.remove(key);
+            }
+        }
+    }
+
+    private static String normalizeReplyPageKey(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
 }

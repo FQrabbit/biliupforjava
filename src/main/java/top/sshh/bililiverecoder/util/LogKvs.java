@@ -774,6 +774,8 @@ public final class LogKvs {
         // 弹幕发送同步
         EVENT_ZH.put("LiveMsgSendSync.Reconcile.Done", "弹幕发送同步：队列校准完成");
         EVENT_ZH.put("LiveMsgSendSync.Reply.Dispatch.Done", "评论发送同步：本轮评论发送完成");
+        EVENT_ZH.put("LiveMsgSendSync.Reply.PageSnapshot", "视频评论发送：已获取线上分P页码快照");
+        EVENT_ZH.put("LiveMsgSendSync.Reply.PageSnapshot.Failed", "视频评论发送：获取线上分P页码快照失败，改用本地分P顺序兜底");
         EVENT_ZH.put("LiveMsgSendSync.Visibility.High.SwitchPublic.RateLimit", "SC/上舰弹幕：切公开时触发限流，已暂停账号并稍后重试");
         EVENT_ZH.put("LiveMsgSendSync.Visibility.High.SwitchPublic.Skip", "SC/上舰弹幕：切公开失败，跳过本次发送并稍后重试");
         EVENT_ZH.put("LiveMsgSendSync.Visibility.High.SwitchPrivate.Deferred", "SC/上舰弹幕：切回仅自己可见触发限流，已延后处理");
