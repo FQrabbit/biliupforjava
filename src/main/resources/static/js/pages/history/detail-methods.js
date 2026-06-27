@@ -867,6 +867,9 @@
             const payload = this.getBiliPayloadData(xcodeResp);
             const list = payload && Array.isArray(payload.transcode_list) ? payload.transcode_list : [];
             const stats = this.getTranscodeListStats(list);
+            const payloadProgressRaw = payload ? this.pickArchiveProgressNumber(payload, list.length === 0) : null;
+            const directPayloadPercent = this.normalizeArchivePercent(payloadProgressRaw);
+            const payloadPercent = directPayloadPercent !== null ? directPayloadPercent : this.calculateXcodePayloadPercent(payload, list);
             const index = part.index || (idx + 1);
             const title = part.title ? String(part.title) : '';
             const cid = part.cid || (payload && payload.cid);
@@ -885,7 +888,7 @@
             if (stats.total > 0) {
                 const qualityItems = this.normalizeTranscodeQualityItems(list);
                 const qualityPercent = qualityItems.length > 0
-                    ? Math.round(qualityItems.reduce((sum, item) => sum + (Number(item.percent) || 0), 0) / qualityItems.length)
+                    ? (payloadPercent !== null ? payloadPercent : Math.round(qualityItems.reduce((sum, item) => sum + (Number(item.percent) || 0), 0) / qualityItems.length))
                     : Math.round(stats.done * 100 / stats.total);
                 return {
                     source: '转码详情',
@@ -894,6 +897,16 @@
                     stateText: this.formatTranscodeListState(stats),
                     message: this.buildTranscodeListMessage(stats, tip),
                     qualityItems: qualityItems
+                };
+            }
+            if (payloadPercent !== null) {
+                const stateValue = this.pickArchiveValue(payload, ['xcode_state', 'xcodeState', 'state', 'status']);
+                return {
+                    source: '转码详情',
+                    label: label,
+                    percent: payloadPercent,
+                    stateText: this.formatArchiveProgressState(stateValue, payload),
+                    message: tip
                 };
             }
             if (payload && (payload.xcode_state !== undefined || payload.xcodeState !== undefined || tip)) {
@@ -962,12 +975,38 @@
                 };
             }).filter(Boolean);
         },
+        calculateXcodePayloadPercent: function(payload, list) {
+            if (!payload || typeof payload !== 'object') return null;
+            const start = this.pickArchiveNumber(payload, ['xcode_begin_at', 'xcodeBeginAt', 'start_time', 'startTime']);
+            const end = this.pickArchiveNumber(payload, ['max_estimate_end_at', 'maxEstimateEndAt', 'estimated_time', 'estimatedTime']);
+            const maxEstimate = this.pickArchiveNumber(payload, ['max_estimate_time', 'maxEstimateTime']);
+            const now = this.pickArchiveNumber(payload, ['time_now', 'timeNow']) || this.pickTranscodeListTimeNow(list);
+            if (!start || start <= 0 || !now || now <= start) return null;
+            let duration = null;
+            if (maxEstimate && maxEstimate > 0) {
+                duration = maxEstimate;
+            } else if (end && end > start) {
+                duration = end - start;
+            }
+            if (!duration || duration <= 0) return null;
+            return Math.max(0, Math.min(99, Math.round(((now - start) * 100) / duration)));
+        },
+        pickTranscodeListTimeNow: function(list) {
+            if (!Array.isArray(list)) return null;
+            let latest = null;
+            list.forEach(item => {
+                const n = this.pickArchiveNumber(item, ['time_now', 'timeNow']);
+                if (n !== null && n !== undefined && (!latest || n > latest)) {
+                    latest = n;
+                }
+            });
+            return latest;
+        },
         calculateTranscodeQualityPercent: function(item) {
-            const direct = this.pickArchiveNumber(item, ['progress', 'percent', 'rate', 'xcode_progress', 'xcodeProgress']);
+            const direct = this.pickArchiveProgressNumber(item, true);
             if (direct !== null && direct !== undefined) {
-                let p = Number(direct);
-                if (isFinite(p) && p > 0 && p <= 1) p = p * 100;
-                if (isFinite(p)) return Math.max(0, Math.min(100, Math.round(p)));
+                const p = this.normalizeArchivePercent(direct);
+                if (p !== null) return p;
             }
             const status = String(item && item.status ? item.status : '').toLowerCase();
             if (status.indexOf('success') >= 0 || status.indexOf('complete') >= 0 || status.indexOf('finish') >= 0 || status === 'done') {
@@ -984,7 +1023,10 @@
             const start = this.pickArchiveNumber(item, ['start_time', 'startTime']);
             const now = this.pickArchiveNumber(item, ['time_now', 'timeNow']);
             if (estimated && estimated > 0 && start && start > 0 && now && now > start) {
-                return Math.max(0, Math.min(99, Math.round(((now - start) * 100) / estimated)));
+                const duration = estimated > start ? (estimated - start) : estimated;
+                if (duration > 0) {
+                    return Math.max(0, Math.min(99, Math.round(((now - start) * 100) / duration)));
+                }
             }
             return 0;
         },
@@ -998,8 +1040,16 @@
         },
         formatTranscodeQualityEstimate: function(item, percent) {
             const estimated = this.pickArchiveNumber(item, ['estimated_time', 'estimatedTime']);
+            const start = this.pickArchiveNumber(item, ['start_time', 'startTime']);
+            const now = this.pickArchiveNumber(item, ['time_now', 'timeNow']);
             if (estimated && estimated > 0 && percent < 100) {
-                return '预计约 ' + Math.ceil(estimated / 60) + ' 分钟';
+                let seconds = estimated;
+                if (estimated > start && now && now > 0) {
+                    seconds = Math.max(0, estimated - now);
+                }
+                if (seconds > 0) {
+                    return '预计约 ' + Math.ceil(seconds / 60) + ' 分钟';
+                }
             }
             return '';
         },
@@ -1056,13 +1106,7 @@
                 || (this.pickArchiveValue(obj, ['page']) ? ('P' + this.pickArchiveValue(obj, ['page'])) : '')
                 || (this.pickArchiveValue(obj, ['cid']) ? ('CID ' + this.pickArchiveValue(obj, ['cid'])) : '')
                 || source;
-            const percentRaw = this.pickArchiveNumber(obj, ['progress', 'percent', 'rate', 'xcode_progress', 'xcodeProgress']);
-            let percent = null;
-            if (percentRaw !== null && percentRaw !== undefined) {
-                percent = Number(percentRaw);
-                if (isFinite(percent) && percent > 0 && percent <= 1) percent = percent * 100;
-                percent = Math.max(0, Math.min(100, Math.round(percent)));
-            }
+            const percent = this.normalizeArchivePercent(this.pickArchiveProgressNumber(obj, true));
             const stateValue = this.pickArchiveValue(obj, ['xcode_state', 'xcodeState', 'state', 'status', 'stage']);
             const message = this.pickArchiveValue(obj, ['failDesc', 'fail_desc', 'message', 'msg', 'desc', 'remark']);
             return {
@@ -1072,6 +1116,49 @@
                 stateText: this.formatArchiveProgressState(stateValue, obj),
                 message: message ? String(message) : ''
             };
+        },
+        getArchiveProgressKeys: function() {
+            return [
+                'progress', 'percent', 'percentage', 'pct', 'rate',
+                'xcode_progress', 'xcodeProgress', 'xcode_percent', 'xcodePercent',
+                'transcode_progress', 'transcodeProgress', 'transcode_percent', 'transcodePercent',
+                'process_progress', 'processProgress', 'process_percent', 'processPercent',
+                'complete_rate', 'completeRate', 'complete_percent', 'completePercent',
+                'progress_percent', 'progressPercent'
+            ];
+        },
+        pickArchiveProgressNumber: function(obj, deep) {
+            const keys = this.getArchiveProgressKeys();
+            const direct = this.pickArchiveNumber(obj, keys);
+            if (direct !== null && direct !== undefined) return direct;
+            return deep ? this.pickArchiveNumberDeep(obj, keys, 4) : null;
+        },
+        pickArchiveNumberDeep: function(obj, keys, depth) {
+            if (!obj || typeof obj !== 'object' || depth < 0) return null;
+            const direct = this.pickArchiveNumber(obj, keys);
+            if (direct !== null && direct !== undefined) return direct;
+            const objKeys = Object.keys(obj);
+            for (let i = 0; i < objKeys.length; i++) {
+                const child = obj[objKeys[i]];
+                if (!child || typeof child !== 'object') continue;
+                if (Array.isArray(child)) {
+                    for (let j = 0; j < child.length; j++) {
+                        const found = this.pickArchiveNumberDeep(child[j], keys, depth - 1);
+                        if (found !== null && found !== undefined) return found;
+                    }
+                } else {
+                    const found = this.pickArchiveNumberDeep(child, keys, depth - 1);
+                    if (found !== null && found !== undefined) return found;
+                }
+            }
+            return null;
+        },
+        normalizeArchivePercent: function(value) {
+            if (value === null || value === undefined) return null;
+            let p = Number(value);
+            if (!isFinite(p)) return null;
+            if (p > 0 && p <= 1) p = p * 100;
+            return Math.max(0, Math.min(100, Math.round(p)));
         },
         pickArchiveValue: function(obj, keys) {
             if (!obj) return null;
