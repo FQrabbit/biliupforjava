@@ -3,7 +3,8 @@
 .mobile-shell .mobile-user-container {
     min-height: 100%;
     height: 100%;
-    padding: 14px 12px calc(112px + var(--mobile-safe-bottom));
+    padding: 14px 12px var(--mobile-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
     overflow-y: auto;
     overflow-x: hidden;
     background: transparent;

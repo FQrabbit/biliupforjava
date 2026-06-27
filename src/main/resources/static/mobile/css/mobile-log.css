@@ -15,7 +15,8 @@
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    padding: 14px 12px calc(112px + var(--mobile-safe-bottom));
+    padding: 14px 12px var(--mobile-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
     display: flex;
     flex-direction: column;
     gap: 14px;

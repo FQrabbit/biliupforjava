@@ -15,6 +15,7 @@
     --mobile-accent-2: var(--success-color, #16b89f);
     --mobile-accent-3: var(--danger-accent, #ff7a59);
     --mobile-on-accent: var(--mobile-on-primary, #ffffff);
+    --mobile-bottom-nav-clearance: calc(112px + var(--mobile-safe-bottom));
 }
 
 [data-theme="dark"] {
@@ -833,7 +834,8 @@ body.mobile-iframe-modal-open {
 }
 
 .mobile-shell .changelog-container {
-    padding: 14px 12px 20px;
+    padding: 14px 12px var(--mobile-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -914,7 +916,8 @@ body.mobile-iframe-modal-open {
 .mobile-shell .log-page {
     height: 100%;
     overflow-y: auto;
-    padding: 14px 12px 20px;
+    padding: 14px 12px var(--mobile-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
     -webkit-overflow-scrolling: touch;
 }
 

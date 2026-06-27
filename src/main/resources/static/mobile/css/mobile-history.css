@@ -12,7 +12,8 @@
     height: var(--mobile-page-viewport-height);
     min-height: var(--mobile-page-viewport-height);
     box-sizing: border-box;
-    padding: 14px 12px calc(28px + var(--mobile-page-safe-bottom));
+    padding: 14px 12px var(--mobile-page-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-page-bottom-nav-clearance);
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior-y: contain;

@@ -5,7 +5,8 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 14px 12px calc(112px + var(--mobile-safe-bottom));
+    padding: 14px 12px var(--mobile-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
 }
 
 .mobile-shell .mobile-status-area {

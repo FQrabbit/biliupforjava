@@ -14,6 +14,7 @@
     --mobile-teal: var(--success-color, #16b89f);
     --mobile-coral: var(--danger-accent, #ff7a59);
     --mobile-page-on-accent: var(--mobile-on-primary, #ffffff);
+    --mobile-page-bottom-nav-clearance: calc(96px + var(--mobile-page-safe-bottom));
 }
 
 [data-theme="dark"] {
@@ -510,7 +511,8 @@ svg {
 .history-container,
 .stats-container {
     min-height: var(--mobile-page-viewport-height);
-    padding: 14px 12px 24px;
+    padding: 14px 12px var(--mobile-page-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-page-bottom-nav-clearance);
     background: transparent;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
