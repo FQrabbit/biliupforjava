@@ -28,6 +28,9 @@ public class RoomLiveEventParseService {
 
     public static final int PARSER_VERSION = 2;
     private static final int BATCH_SIZE = 500;
+    private static final int PART_PARSE_LOCK_COUNT = 256;
+
+    private final Object[] partParseLocks = createPartParseLocks();
 
     @Autowired
     private RecordHistoryRepository historyRepository;
@@ -75,6 +78,12 @@ public class RoomLiveEventParseService {
         if (part == null || part.getId() == null || StringUtils.isBlank(part.getFilePath())) {
             return ParseResult.skipped("invalid part");
         }
+        synchronized (partParseLocks[lockIndex(part.getId())]) {
+            return parsePartLocked(part, force);
+        }
+    }
+
+    private ParseResult parsePartLocked(RecordHistoryPart part, boolean force) {
         if (!force && (part.isRecording() || part.getEndTime() == null)) {
             log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipActive")
                     .add("roomId", part.getRoomId())
@@ -244,6 +253,18 @@ public class RoomLiveEventParseService {
                     .addStageCostMs("total", parseStartNs), e);
             return ParseResult.skipped("parse failed");
         }
+    }
+
+    private static Object[] createPartParseLocks() {
+        Object[] locks = new Object[PART_PARSE_LOCK_COUNT];
+        for (int i = 0; i < locks.length; i++) {
+            locks[i] = new Object();
+        }
+        return locks;
+    }
+
+    private static int lockIndex(Long partId) {
+        return Math.floorMod(partId.hashCode(), PART_PARSE_LOCK_COUNT);
     }
 
     public int backfillMatureHistories(LocalDateTime endBefore, int limit) {
