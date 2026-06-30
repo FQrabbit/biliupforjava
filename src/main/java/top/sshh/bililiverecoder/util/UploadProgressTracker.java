@@ -68,6 +68,11 @@ public class UploadProgressTracker {
 
     public void start(long partId, long historyId, Integer page, int chunkTotal, long chunkSizeBytes, long fileSizeBytes, String uploadFlow) {
         long now = System.currentTimeMillis();
+        Progress existing = byPartId.get(partId);
+        boolean preserveProgress = existing != null
+                && existing.getChunkDone() > 0
+                && (existing.getFileSizeBytes() <= 0 || fileSizeBytes <= 0 || existing.getFileSizeBytes() == fileSizeBytes)
+                && (existing.getChunkTotal() <= 0 || chunkTotal <= 0 || existing.getChunkTotal() == chunkTotal);
         byPartId.compute(partId, (k, old) -> {
             Progress p = (old != null) ? old : new Progress();
             p.setPartId(partId);
@@ -76,7 +81,7 @@ public class UploadProgressTracker {
             p.setChunkTotal(Math.max(chunkTotal, 0));
             p.setChunkSizeBytes(Math.max(chunkSizeBytes, 0L));
             p.setFileSizeBytes(Math.max(fileSizeBytes, 0L));
-            p.setChunkDone(0);
+            p.setChunkDone(preserveProgress && old != null ? Math.max(0, old.getChunkDone()) : 0);
             updateByteProgress(p);
             p.setUploadFlow(uploadFlow);
             p.setPercent(calcPercent(p.getChunkDone(), p.getChunkTotal()));

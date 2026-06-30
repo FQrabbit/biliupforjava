@@ -130,6 +130,24 @@ public class MultipartUploadSessionService {
     }
 
     @Transactional
+    public void markRetryWait(MultipartUploadSession session, String reason) {
+        if (session == null) {
+            return;
+        }
+        session.setStatus(STATUS_ACTIVE);
+        session.setLastError(reason);
+        session.setUpdatedAt(LocalDateTime.now());
+        sessionRepository.save(session);
+        log.info("[BLR] {}", LogKvs.event("Upload.Multipart.SessionRetryWait")
+                .add("partId", session.getPartId())
+                .add("historyId", session.getHistoryId())
+                .add("sessionId", session.getId())
+                .add("doneParts", countCompletedParts(session))
+                .add("chunkTotal", session.getChunkTotal())
+                .addIfNotBlank("reason", reason));
+    }
+
+    @Transactional
     public void markExpired(MultipartUploadSession session, String reason) {
         if (session == null) {
             return;

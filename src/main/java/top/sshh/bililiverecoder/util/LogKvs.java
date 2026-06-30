@@ -63,6 +63,7 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.Chunk.Progress", "分片上传进度(调试)");
         EVENT_ZH.put("Upload.Chunk.FileMissing", "分片上传时文件不存在，终止");
         EVENT_ZH.put("Upload.Chunk.Error", "分片上传失败，将等待后重试");
+        EVENT_ZH.put("Upload.Chunk.Retryable", "分片上传可重试，已进入等待重试");
         EVENT_ZH.put("Upload.Chunk.GlobalFuseOpen", "分片上传触发全局熔断，停止继续重试");
         EVENT_ZH.put("Upload.Chunk.AllFailed", "分片上传未完成，进入分P失败重试流程");
         EVENT_ZH.put("Upload.GatewayErrorPause", "捕获到网关错误，暂停任务一段时间");
@@ -684,6 +685,7 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.Multipart.SessionReuseHit", "分片上传：找到可复用的断点会话");
         EVENT_ZH.put("Upload.Multipart.SessionCreated", "分片上传：已创建新的断点会话");
         EVENT_ZH.put("Upload.Multipart.SessionPaused", "分片上传：会话已在分片边界暂停");
+        EVENT_ZH.put("Upload.Multipart.SessionRetryWait", "分片上传：会话已进入等待重试");
         EVENT_ZH.put("Upload.Multipart.SessionExpired", "分片上传：断点会话已失效，将重新开始该分P");
         EVENT_ZH.put("Upload.Multipart.Part.SkipDone", "分片上传：跳过已完成的分片");
         EVENT_ZH.put("Upload.Multipart.InitFallback", "分片上传：初始化失败，尝试回退方案");

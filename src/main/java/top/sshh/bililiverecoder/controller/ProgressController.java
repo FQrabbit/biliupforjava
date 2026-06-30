@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.service.MultipartUploadSessionService;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
+import org.apache.commons.lang3.StringUtils;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 
 import java.time.ZoneId;
@@ -141,6 +142,7 @@ public class ProgressController {
             return null;
         }
         UploadProgressTracker.Progress p = basePersistedProgress(part);
+        final String[] resolvedMsg = {stateMsg};
         boolean[] found = {false};
         multipartUploadSessionService.findReusableSession(part.getId(), p.getFileSizeBytes()).ifPresent(session -> {
             found[0] = true;
@@ -150,6 +152,9 @@ public class ProgressController {
             p.setChunkTotal(Math.max(chunkTotal, 0));
             p.setChunkDone(Math.max(chunkDone, 0));
             p.setChunkSizeBytes(Math.max(chunkSize, 0L));
+            if (StringUtils.isNotBlank(session.getLastError()) && state == UploadProgressTracker.State.WAITING) {
+                resolvedMsg[0] = session.getLastError();
+            }
         });
         if (!found[0]) {
             return null;
@@ -158,8 +163,10 @@ public class ProgressController {
         long uploadedBytes = p.getChunkSizeBytes() <= 0 ? 0L : Math.min(p.getFileSizeBytes(), p.getChunkDone() * p.getChunkSizeBytes());
         p.setUploadedBytes(uploadedBytes);
         p.setRemainingBytes(Math.max(0L, p.getFileSizeBytes() - uploadedBytes));
-        p.setState(state);
-        p.setStateMsg(stateMsg);
+        p.setState(state == UploadProgressTracker.State.WAITING && StringUtils.isNotBlank(resolvedMsg[0])
+                ? UploadProgressTracker.State.RETRY_WAIT
+                : state);
+        p.setStateMsg(resolvedMsg[0]);
         p.setUpdateAtMs(System.currentTimeMillis());
         return p;
     }

@@ -36,6 +36,7 @@ import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.UploadRetryLogPolicy;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
+import top.sshh.bililiverecoder.util.retry.UploadRetryClassifier;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
 import top.sshh.bililiverecoder.util.bili.upload.ChunkUploadRequest;
@@ -67,6 +68,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ConcurrentHashMap;
@@ -214,6 +216,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     public void upload(RecordHistoryPart part) {
         part = partRepository.findById(part.getId()).get();
         long uploadStartNs = System.nanoTime();
+        AtomicBoolean preserveProgressOnExit = new AtomicBoolean(false);
+        if (Thread.interrupted()) {
+            preserveProgressOnExit.set(true);
+        }
         if (part.isUpload()) {
             log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipAlreadyUploaded")
                     .add("os", OS)
@@ -923,6 +929,51 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     globalFuseOpen.set(true);
                                                     break;
                                                 }
+                                                UploadRetryClassifier.UploadRetryAssessment retryAssessment =
+                                                        UploadRetryClassifier.assess(e, e.getMessage());
+                                                if (retryAssessment.retryable()) {
+                                                    preserveProgressOnExit.set(true);
+                                                    String retryMessage = retryAssessment.userMessage();
+                                                    long backoffMs = uploadRetryBackoffPolicy.nextDecision(chunkRetryCount + 1, e, e.getMessage()).delayMs();
+                                                    uploadProgressTracker.markRetryWait(partId, retryMessage, chunkRetryCount + 1, backoffMs);
+                                                    if (finalUseMultipartFlow && finalMultipartSession != null) {
+                                                        multipartUploadSessionService.markRetryWait(finalMultipartSession, retryMessage);
+                                                    }
+                                                    log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Retryable")
+                                                            .add("roomId", room.getRoomId())
+                                                            .add("uname", room.getUname())
+                                                            .add("partId", partId)
+                                                            .add("historyId", historyId)
+                                                            .add("chunkIndex", finalI)
+                                                            .add("chunkRetryCount", chunkRetryCount + 1)
+                                                            .add("retryCategory", retryAssessment.category())
+                                                            .addIfNotBlank("remoteCode", retryAssessment.remoteCode())
+                                                            .add("backoffMs", backoffMs)
+                                                            .addIfNotBlank("reason", retryMessage)
+                                                            .addIfNotBlank("err", e.getMessage())
+                                                            .add("ex", e.getClass().getSimpleName()), e);
+                                                    chunkRetryCount++;
+                                                    try {
+                                                        Thread.sleep(backoffMs);
+                                                    } catch (InterruptedException ex) {
+                                                        log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.RetryWaitInterrupted")
+                                                                .add("roomId", room.getRoomId())
+                                                                .add("uname", room.getUname())
+                                                                .add("partId", partId)
+                                                                .add("historyId", historyId)
+                                                                .add("chunkIndex", finalI)
+                                                                .addIfNotBlank("reason", retryMessage)
+                                                                .add("sleepMs", backoffMs)
+                                                                .addIfNotBlank("err", ex.getMessage())
+                                                                .add("ex", ex.getClass().getSimpleName()), ex);
+                                                        globalFuseReason.compareAndSet(null, "RETRY_WAIT_INTERRUPTED");
+                                                        globalFuseOpen.set(true);
+                                                        Thread.currentThread().interrupt();
+                                                        preserveProgressOnExit.set(true);
+                                                        return;
+                                                    }
+                                                    continue;
+                                                }
                                                 if (finalUseMultipartFlow && finalMultipartSession != null && isMultipartSessionInvalid(e)) {
                                                     String invalidReason = StringUtils.defaultIfBlank(e.getMessage(), "multipart session invalid");
                                                     multipartUploadSessionService.markExpired(finalMultipartSession, invalidReason);
@@ -964,6 +1015,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         log.info("[BLR] {}", gatewayLog);
                                                     }
                                                     gatewayError.set(e.getMessage());
+                                                    preserveProgressOnExit.set(true);
                                                     globalFuseReason.compareAndSet(null, "UPLOAD_GATEWAY_ERROR");
                                                     globalFuseOpen.set(true);
                                                     break;
@@ -1110,12 +1162,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 customThreadPool.shutdown();
                             }
 
-                            if (gatewayError.get() != null) {
-                                throw new RuntimeException("UPLOAD_GATEWAY_ERROR:" + gatewayError.get());
-                            }
-
                             if ("UPLOAD_PAUSED".equals(globalFuseReason.get()) || shouldPauseUpload(historyId, partId)) {
                                 pauseUpload(historyId, partId, multipartSession);
+                                preserveProgressOnExit.set(false);
                                 return;
                             }
 
@@ -1125,7 +1174,14 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 part.setUploadRetryCount(part.getUploadRetryCount() + 1);
                                 part = partRepository.save(part);
                                 String chunkFailReason = StringUtils.defaultIfBlank(globalFuseReason.get(), "chunk upload failed");
-                                uploadProgressTracker.markFailed(partId, chunkFailReason);
+                                if (preserveProgressOnExit.get()) {
+                                    uploadProgressTracker.markRetryWait(partId, chunkFailReason, part.getUploadRetryCount(), 0L);
+                                    if (useMultipartFlow && multipartSession != null) {
+                                        multipartUploadSessionService.markRetryWait(multipartSession, chunkFailReason);
+                                    }
+                                } else {
+                                    uploadProgressTracker.markFailed(partId, chunkFailReason);
+                                }
                                 log.error("[BLR] {}", LogKvs.event("Upload.Chunk.AllFailed")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
@@ -1147,6 +1203,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                             .add("nextAttemptMultipart", part.getUploadRetryCount() < MULTIPART_RETRY_LIMIT)
                                             .add("maxRetry", MULTIPART_RETRY_LIMIT)
                                             .add("filePath", filePath));
+                                    TaskUtil.partUploadTask.remove(part.getId());
+                                    return;
                                 } else {
                                     part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
                                     String errorMsg = "稿件分P上传失败次数过多，已放弃: " + filePath;
@@ -1479,9 +1537,18 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     }
                                 } else {
                                     // 合并失败，检查是否可以重试
+                                    UploadRetryClassifier.UploadRetryAssessment completeAssessment =
+                                            UploadRetryClassifier.assess(
+                                                    new RuntimeException(StringUtils.defaultIfBlank(completeResponse, "multipart complete failed")),
+                                                    completeResponse);
                                     if (useMultipartFlow && multipartSession != null) {
-                                        multipartUploadSessionService.markExpired(multipartSession,
-                                                StringUtils.defaultIfBlank(completeResponse, "multipart complete failed"));
+                                        if (completeAssessment.retryable()) {
+                                            preserveProgressOnExit.set(true);
+                                            multipartUploadSessionService.markRetryWait(multipartSession, completeAssessment.userMessage());
+                                        } else {
+                                            multipartUploadSessionService.markExpired(multipartSession,
+                                                    StringUtils.defaultIfBlank(completeResponse, "multipart complete failed"));
+                                        }
                                     }
                                     int currentRetry = part.getUploadRetryCount();
                                     int nextRetryCount = currentRetry + 1;
@@ -1495,9 +1562,13 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         }
                                         part = partRepository.save(part);
                                         TaskUtil.partUploadTask.remove(part.getId());
-                                        uploadProgressTracker.markFailed(part.getId(), nextAttemptMultipart
-                                            ? "multipart complete failed, will retry multipart session"
-                                            : "multipart complete failed, will fallback to legacy");
+                                        if (completeAssessment.retryable()) {
+                                            uploadProgressTracker.markRetryWait(part.getId(), completeAssessment.userMessage(), nextRetryCount, 0L);
+                                        } else {
+                                            uploadProgressTracker.markFailed(part.getId(), nextAttemptMultipart
+                                                ? "multipart complete failed, will retry multipart session"
+                                                : "multipart complete failed, will fallback to legacy");
+                                        }
                                         log.warn("[BLR] {}", LogKvs.event("Upload.MultipartComplete.WillRetry")
                                                 .add("roomId", room.getRoomId())
                                                 .add("uname", room.getUname())
@@ -1508,6 +1579,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 .add("nextRetry", nextRetryCount)
                                                 .add("retryLimit", MULTIPART_RETRY_LIMIT)
                                                 .add("nextAttemptMultipart", nextAttemptMultipart)
+                                                .add("retryCategory", completeAssessment.category())
+                                                .addIfNotBlank("remoteCode", completeAssessment.remoteCode())
                                                 .add("response", completeResponse)
                                                 .addIfNotBlank("sessionDigest", multipartSessionDigest)
                                                 .add("willUseLegacyFlow", !nextAttemptMultipart)
@@ -1529,7 +1602,17 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             } catch (Exception e) {
                                 //存在异常
                                 TaskUtil.partUploadTask.remove(part.getId());
-                                uploadProgressTracker.markFailed(part.getId(), e.getMessage());
+                                UploadRetryClassifier.UploadRetryAssessment catchAssessment =
+                                        UploadRetryClassifier.assess(e, e.getMessage());
+                                if (catchAssessment.retryable()) {
+                                    preserveProgressOnExit.set(true);
+                                    uploadProgressTracker.markRetryWait(part.getId(), catchAssessment.userMessage(), part.getUploadRetryCount(), 0L);
+                                    if (useMultipartFlow && multipartSession != null) {
+                                        multipartUploadSessionService.markRetryWait(multipartSession, catchAssessment.userMessage());
+                                    }
+                                } else {
+                                    uploadProgressTracker.markFailed(part.getId(), e.getMessage());
+                                }
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.Failed")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
@@ -1537,8 +1620,13 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         .add("historyId", part.getHistoryId())
                                         .add("filePath", filePath)
                                         .add("err", e.getMessage())
+                                    .add("retryCategory", catchAssessment.category())
+                                    .addIfNotBlank("remoteCode", catchAssessment.remoteCode())
                                     .add("ex", e.getClass().getSimpleName())
                                     .addStageCostMs("total", uploadStartNs), e);
+                                if (catchAssessment.retryable()) {
+                                    scheduleRetryEnqueue(room, part, filePath, 3000L, catchAssessment.category());
+                                }
                                 if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "分P上传")) {
                                     message.setAppToken(wxToken);
                                     message.setContentType(Message.CONTENT_TYPE_TEXT);
@@ -1582,7 +1670,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
             }
         } finally {
             TaskUtil.partUploadTask.remove(part.getId());
-            uploadProgressTracker.remove(part.getId());
+            if (!preserveProgressOnExit.get()) {
+                uploadProgressTracker.remove(part.getId());
+            }
         }
 
     }
@@ -1614,7 +1704,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
         if (partId != null) {
             uploadProgressTracker.markPaused(partId, msg);
         }
-        multipartUploadSessionService.markPaused(session, msg);
+        if (session != null) {
+            multipartUploadSessionService.markPaused(session, msg);
+        }
         TaskUtil.partUploadTask.remove(partId);
         log.info("[BLR] {}", LogKvs.event("Upload.Part.Paused")
                 .add("partId", partId)
