@@ -134,6 +134,9 @@ public class RecordHistory {
     private int successMsgCount;
 
     @Transient
+    private int failedMsgCount;
+
+    @Transient
     private int normalMsgCount;
 
     @Transient
@@ -144,6 +147,12 @@ public class RecordHistory {
 
     @Transient
     private int advancedMsgCount;
+
+    @Transient
+    private int failedNormalMsgCount;
+
+    @Transient
+    private int failedHighMsgCount;
 
     @Transient
     private int otherHighMsgCount;

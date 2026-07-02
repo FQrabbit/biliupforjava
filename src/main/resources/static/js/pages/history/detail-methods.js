@@ -132,6 +132,8 @@
             this.lastMobileDanmakuStatsOpenAt = now;
             this.showMoreActions = false;
             this.mobileDanmakuStatsLeaving = false;
+            this.danmakuFailedHintVisible = false;
+            this.danmakuFailedHintHover = false;
             this.mobileDanmakuStatsTarget = item;
             this.mobileDanmakuStatsVisible = true;
             this.$nextTick(() => {
@@ -155,6 +157,8 @@
                 this.mobileDanmakuStatsVisible = false;
                 this.mobileDanmakuStatsTarget = null;
                 this.mobileDanmakuStatsLeaving = false;
+                this.danmakuFailedHintVisible = false;
+                this.danmakuFailedHintHover = false;
                 this.clearMobileDanmakuLayerState();
             }, 220);
         },
@@ -177,6 +181,29 @@
             const pendingNormal = Number(target.pendingNormalMsgCount) || 0;
             const pendingHigh = Number(target.pendingHighMsgCount) || 0;
             return Math.max(0, pendingNormal) + Math.max(0, pendingHigh);
+        },
+        getDanmakuFailedCount: function(item) {
+            const target = item || {};
+            if (Object.prototype.hasOwnProperty.call(target, 'failedMsgCount')) {
+                const explicit = Number(target.failedMsgCount);
+                return Number.isFinite(explicit) && explicit > 0 ? Math.floor(explicit) : 0;
+            }
+            const total = this.getDanmakuStatsValue(target, 'msgCount');
+            const success = this.getDanmakuStatsValue(target, 'successMsgCount');
+            const pending = this.getDanmakuQueueCount(target);
+            return Math.max(0, total - success - pending);
+        },
+        getNormalDanmakuFailedCount: function(item) {
+            const target = item || {};
+            if (!Object.prototype.hasOwnProperty.call(target, 'failedNormalMsgCount')) return 0;
+            const n = Number(target.failedNormalMsgCount);
+            return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+        },
+        getHighDanmakuFailedCount: function(item) {
+            const target = item || {};
+            if (!Object.prototype.hasOwnProperty.call(target, 'failedHighMsgCount')) return 0;
+            const n = Number(target.failedHighMsgCount);
+            return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
         },
         getDanmakuStatsValue: function(item, key) {
             const n = Number(item && item[key]);
@@ -203,12 +230,14 @@
                 empty: '无内容',
                 waiting: '待发布',
                 pending: '待发送',
+                failed: '部分失败',
                 done: '已完成'
             };
             return map[state] || '待确认';
         },
         getDanmakuTaskStateClass: function(state) {
             if (state === 'done') return 'is-done';
+            if (state === 'failed') return 'is-failed';
             if (state === 'pending' || state === 'waiting') return 'is-pending';
             if (state === 'disabled' || state === 'empty') return 'is-muted';
             return 'is-muted';
@@ -218,24 +247,30 @@
             if (target.roomSendDm !== true) return 'disabled';
             if (!target.publish) return 'waiting';
             const pending = Math.max(0, Number(target.pendingNormalMsgCount) || 0);
-            return pending > 0 ? 'pending' : 'done';
+            if (pending > 0) return 'pending';
+            return this.getNormalDanmakuFailedCount(target) > 0 ? 'failed' : 'done';
         },
         getAdvancedDanmakuTaskState: function(item) {
             const target = item || {};
             if (target.roomSendSc !== true) return 'disabled';
             if (!target.publish) return 'waiting';
             const pending = Math.max(0, Number(target.pendingHighMsgCount) || 0);
-            return pending > 0 ? 'pending' : 'done';
+            if (pending > 0) return 'pending';
+            return this.getHighDanmakuFailedCount(target) > 0 ? 'failed' : 'done';
         },
         getDanmakuTaskSubtext: function(item, type) {
             const target = item || {};
             if (type === 'normal') {
-                return '队列 ' + (Math.max(0, Number(target.pendingNormalMsgCount) || 0));
+                const pending = Math.max(0, Number(target.pendingNormalMsgCount) || 0);
+                const failed = this.getNormalDanmakuFailedCount(target);
+                return '队列 ' + pending + (failed > 0 ? ' · 未成功 ' + failed : '');
             }
             if (type === 'advanced') {
+                const failed = this.getHighDanmakuFailedCount(target);
                 return 'SC ' + this.getDanmakuStatsValue(target, 'scMsgCount')
                     + ' · 上舰 ' + this.getDanmakuStatsValue(target, 'guardMsgCount')
-                    + ' · 其他 ' + this.getOtherHighDanmakuCount(target);
+                    + ' · 其他 ' + this.getOtherHighDanmakuCount(target)
+                    + (failed > 0 ? ' · 未成功 ' + failed : '');
             }
             if (type === 'highReply') {
                 return '共 ' + this.getDanmakuStatsValue(target, 'highReplyLineCount') + ' 条';
@@ -261,6 +296,40 @@
         },
         getMobileDanmakuQueueCount: function() {
             return this.getDanmakuQueueCount(this.getMobileDanmakuStatsItem());
+        },
+        getMobileDanmakuFailedCount: function() {
+            return this.getDanmakuFailedCount(this.getMobileDanmakuStatsItem());
+        },
+        toggleDanmakuFailedHint: function() {
+            const nextVisible = !this.danmakuFailedHintVisible;
+            this.danmakuFailedHintVisible = nextVisible;
+            if (!nextVisible) {
+                this.danmakuFailedHintHover = false;
+            }
+        },
+        showDanmakuFailedHint: function() {
+            this.danmakuFailedHintHover = true;
+        },
+        hideDanmakuFailedHint: function() {
+            this.danmakuFailedHintHover = false;
+        },
+        isDanmakuFailedHintVisible: function() {
+            return !!(this.danmakuFailedHintVisible || this.danmakuFailedHintHover);
+        },
+        getDanmakuFailedReasonIntro: function() {
+            return '未成功表示弹幕已经离开待发送队列，但没有收到成功返回。常见原因包括：';
+        },
+        getDanmakuFailedReasonLines: function() {
+            return [
+                '内容包含平台禁止内容、屏蔽词，或弹幕长度超限',
+                '弹幕发送时间点不合法，超出稿件可发送范围',
+                '稿件未审核通过、禁止发送弹幕，或稿件状态变化',
+                '发送账号未登录、被限制、等级或样式权限不足',
+                '高级弹幕临时切换可见性失败，或稿件/分P已归档、异常'
+            ];
+        },
+        getDanmakuFailedReasonFooter: function() {
+            return '发送频率过快通常会继续等待重试，不会立刻计入未成功。';
         },
         getMobileDanmakuSuccessPercent: function() {
             const total = this.getMobileDanmakuStatsValue('msgCount');

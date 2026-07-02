@@ -5555,6 +5555,16 @@
 
 }
 
+.danmaku-task-badge.is-failed {
+
+    color: var(--danger-color);
+
+    border-color: var(--danger-border-soft);
+
+    background: var(--danger-soft-bg-faint);
+
+}
+
 .danmaku-task-badge.is-muted {
 
     color: var(--text-muted);
@@ -5574,6 +5584,141 @@
     background: var(--warning-soft-bg-faint);
 
     border: 1px solid var(--warning-border);
+
+}
+
+.danmaku-stat-popover-row.is-failed {
+
+    color: var(--danger-color);
+
+    background: var(--danger-soft-bg-faint);
+
+    border: 1px solid var(--danger-border-soft);
+
+}
+
+.danmaku-stat-popover-help-wrap {
+
+    display: grid;
+
+    gap: 6px;
+
+}
+
+.danmaku-stat-popover-row.is-helpable {
+
+    cursor: pointer;
+
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+
+}
+
+.danmaku-stat-popover-row.is-helpable:focus-visible,
+.danmaku-stat-popover-row.is-helpable.is-help-open {
+
+    outline: none;
+
+    border-color: var(--danger-border);
+
+    background: var(--danger-soft-bg);
+
+}
+
+.danmaku-failed-hint {
+
+    display: grid;
+
+    gap: 6px;
+
+    padding: 8px 10px;
+
+    border: 1px solid var(--danger-border-soft);
+
+    border-radius: var(--radius-sm);
+
+    background: var(--danger-soft-bg-faint);
+
+    color: var(--text-secondary);
+
+    font-size: 11px;
+
+    line-height: 1.45;
+
+    transform-origin: top center;
+
+    will-change: opacity, transform;
+
+}
+
+.danmaku-failed-hint-motion-enter-active {
+
+    transition: opacity 180ms ease-out, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+
+}
+
+.danmaku-failed-hint-motion-leave-active {
+
+    transition: opacity 130ms ease-in, transform 130ms ease-in;
+
+}
+
+.danmaku-failed-hint-motion-enter,
+.danmaku-failed-hint-motion-leave-to {
+
+    opacity: 0;
+
+    transform: translateY(-6px) scale(0.98);
+
+}
+
+.danmaku-failed-hint-motion-enter-to,
+.danmaku-failed-hint-motion-leave {
+
+    opacity: 1;
+
+    transform: translateY(0) scale(1);
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .danmaku-failed-hint-motion-enter-active,
+    .danmaku-failed-hint-motion-leave-active {
+
+        transition: none;
+
+    }
+
+    .danmaku-failed-hint-motion-enter,
+    .danmaku-failed-hint-motion-enter-to,
+    .danmaku-failed-hint-motion-leave,
+    .danmaku-failed-hint-motion-leave-to {
+
+        opacity: 1;
+
+        transform: none;
+
+    }
+
+}
+
+.danmaku-failed-hint p {
+
+    margin: 0;
+
+}
+
+.danmaku-failed-hint ul {
+
+    margin: 0;
+
+    padding-left: 16px;
+
+}
+
+.danmaku-failed-hint li + li {
+
+    margin-top: 3px;
 
 }
 

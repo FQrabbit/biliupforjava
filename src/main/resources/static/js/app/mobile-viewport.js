@@ -74,7 +74,6 @@
         '.mobile-config-help-confirm',
         '.mobile-room-paste-link',
         '.mobile-history-card',
-        '.mobile-history-metric-button',
         '.mobile-history-detail-stat-button',
         '.mobile-history-detail-alerts button',
         '.mobile-history-filter-backdrop',

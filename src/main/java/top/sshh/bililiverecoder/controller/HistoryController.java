@@ -1711,13 +1711,18 @@ public class HistoryController {
 
         // 弹幕统计
         if (StringUtils.isNotBlank(history.getBvId())) {
-            history.setMsgCount(msgStats == null ? msgRepository.countByBvid(history.getBvId()) : msgStats.msgCount());
-            history.setSuccessMsgCount(msgStats == null ? msgRepository.countByBvidAndCode(history.getBvId(), 0) : msgStats.successMsgCount());
-            history.setNormalMsgCount(msgStats == null ? msgRepository.countByBvidAndPool(history.getBvId(), 0) : msgStats.normalMsgCount());
+            int msgCount = msgStats == null ? msgRepository.countByBvid(history.getBvId()) : msgStats.msgCount();
+            int successMsgCount = msgStats == null ? msgRepository.countByBvidAndCode(history.getBvId(), 0) : msgStats.successMsgCount();
+            int normalMsgCount = msgStats == null ? msgRepository.countByBvidAndPool(history.getBvId(), 0) : msgStats.normalMsgCount();
+            int successNormalMsgCount = msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, 0) : msgStats.successNormalMsgCount();
+            int successHighMsgCount = msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, 0) : msgStats.successHighMsgCount();
+            history.setMsgCount(msgCount);
+            history.setSuccessMsgCount(successMsgCount);
+            history.setNormalMsgCount(normalMsgCount);
             history.setScMsgCount(msgStats == null ? msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "SC [") : msgStats.scMsgCount());
             history.setGuardMsgCount(msgStats == null ? msgRepository.countByBvidAndPoolAndContextStartingWith(history.getBvId(), 1, "⚓") : msgStats.guardMsgCount());
             int advancedMsgCount = msgStats == null
-                    ? Math.max(0, history.getMsgCount() - history.getNormalMsgCount())
+                    ? Math.max(0, msgCount - normalMsgCount)
                     : Math.max(0, msgStats.advancedMsgCount());
             history.setAdvancedMsgCount(advancedMsgCount);
             history.setOtherHighMsgCount(Math.max(0, advancedMsgCount - history.getScMsgCount() - history.getGuardMsgCount()));
@@ -1729,8 +1734,15 @@ public class HistoryController {
             history.setRoomSendDm(sendDm);
             history.setRoomSendSc(sendSc);
             history.setRoomSendGiftReply(sendGiftReply);
-            history.setPendingNormalMsgCount(sendDm ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : msgStats.pendingNormalMsgCount()) : 0);
-            history.setPendingHighMsgCount(sendSc ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : msgStats.pendingHighMsgCount()) : 0);
+            int pendingNormalMsgCount = sendDm ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1) : msgStats.pendingNormalMsgCount()) : 0;
+            int pendingHighMsgCount = sendSc ? (msgStats == null ? msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1) : msgStats.pendingHighMsgCount()) : 0;
+            int failedNormalMsgCount = sendDm ? countUnsuccessfulMsg(normalMsgCount, successNormalMsgCount, pendingNormalMsgCount) : 0;
+            int failedHighMsgCount = sendSc ? countUnsuccessfulMsg(advancedMsgCount, successHighMsgCount, pendingHighMsgCount) : 0;
+            history.setPendingNormalMsgCount(pendingNormalMsgCount);
+            history.setPendingHighMsgCount(pendingHighMsgCount);
+            history.setFailedNormalMsgCount(failedNormalMsgCount);
+            history.setFailedHighMsgCount(failedHighMsgCount);
+            history.setFailedMsgCount(failedNormalMsgCount + failedHighMsgCount);
             ReplyTaskStats effectiveReplyTaskStats = replyTaskStats == null ? buildReplyTaskStats(history, room) : replyTaskStats;
             history.setHighReplyLineCount(effectiveReplyTaskStats.highReplyLineCount());
             history.setGiftReplyLineCount(effectiveReplyTaskStats.giftReplyLineCount());
@@ -1771,6 +1783,10 @@ public class HistoryController {
         }
     }
     history.setWaitingForPublish(waitingForPublish);
+    }
+
+    private int countUnsuccessfulMsg(int total, int success, int pending) {
+        return Math.max(0, total - Math.max(0, success) - Math.max(0, pending));
     }
 
     private Map<Long, RoomLiveSessionStats> buildPageSessionStats(List<RecordHistory> histories) {
@@ -1832,6 +1848,8 @@ public class HistoryController {
             result.put(history.getBvId(), new MsgListStats(
                     msgCount,
                     sendStats.successMsgCount(),
+                    sendStats.successNormalMsgCount(),
+                    sendStats.successHighMsgCount(),
                     safeLongToInt(stats.getNormalMsgCount()),
                     safeLongToInt(stats.getScCount()),
                     safeLongToInt(stats.getGuardCount()),
@@ -1856,6 +1874,8 @@ public class HistoryController {
                 result.put(bvid, new MsgListStats(
                         toInt(row[1]),
                         sendStats.successMsgCount(),
+                        sendStats.successNormalMsgCount(),
+                        sendStats.successHighMsgCount(),
                         toInt(row[3]),
                         toInt(row[4]),
                         toInt(row[5]),
@@ -1884,7 +1904,9 @@ public class HistoryController {
                 result.put(bvid, new SendListStats(
                         toInt(row[1]),
                         toInt(row[2]),
-                        toInt(row[3])
+                        toInt(row[3]),
+                        toInt(row[4]),
+                        toInt(row[5])
                 ));
             }
         }
@@ -2028,6 +2050,8 @@ public class HistoryController {
 
     private record MsgListStats(int msgCount,
                                 int successMsgCount,
+                                int successNormalMsgCount,
+                                int successHighMsgCount,
                                 int normalMsgCount,
                                 int scMsgCount,
                                 int guardMsgCount,
@@ -2037,9 +2061,11 @@ public class HistoryController {
     }
 
     private record SendListStats(int successMsgCount,
+                                 int successNormalMsgCount,
+                                 int successHighMsgCount,
                                  int pendingNormalMsgCount,
                                  int pendingHighMsgCount) {
-        private static final SendListStats EMPTY = new SendListStats(0, 0, 0);
+        private static final SendListStats EMPTY = new SendListStats(0, 0, 0, 0, 0);
     }
 
     private record ReplyTaskStats(int highReplyLineCount,

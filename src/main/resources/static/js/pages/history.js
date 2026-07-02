@@ -32,6 +32,8 @@ new Vue({
         currentDetail: {},
         mobileDanmakuStatsVisible: false,
         mobileDanmakuStatsTarget: null,
+        danmakuFailedHintVisible: false,
+        danmakuFailedHintHover: false,
         currentDetailParts: [],
         partListMeta: { hasBlockingIssues: false, blockingIssueCount: 0 },
         showAllParts: false,

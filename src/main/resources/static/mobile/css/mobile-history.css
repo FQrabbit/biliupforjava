@@ -550,7 +550,6 @@
 }
 
 .mobile-history-metrics span,
-.mobile-history-metric-button,
 .mobile-history-alerts span {
     min-height: 30px;
     display: inline-flex;
@@ -564,29 +563,6 @@
     font-size: 12px;
     line-height: 1;
     font-weight: 740;
-}
-
-.mobile-history-metric-button {
-    appearance: none;
-    -webkit-appearance: none;
-    font-family: inherit;
-    min-height: 44px;
-    position: relative;
-    z-index: 2;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
-}
-
-.mobile-history-metric-button.is-danmaku {
-    color: var(--mobile-blue);
-    border-color: color-mix(in srgb, var(--mobile-blue) 28%, var(--mobile-page-border));
-    background: color-mix(in srgb, var(--mobile-blue) 10%, var(--mobile-page-surface-strong));
-}
-
-.mobile-history-metric-button:active {
-    transform: scale(0.96);
 }
 
 .mobile-history-alerts .is-private,
@@ -3046,10 +3022,102 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
     background: color-mix(in srgb, var(--mobile-teal) 9%, var(--mobile-page-surface-strong));
 }
 
+.mobile-history-danmaku-stat.is-failed {
+    border-color: color-mix(in srgb, var(--danger-color) 30%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 8%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat.is-helpable {
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.mobile-history-danmaku-stat.is-helpable:active {
+    transform: scale(0.985);
+}
+
+.mobile-history-danmaku-stat.is-helpable:focus-visible,
+.mobile-history-danmaku-stat.is-helpable.is-help-open {
+    outline: none;
+    border-color: color-mix(in srgb, var(--danger-color) 55%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-failed-hint {
+    grid-column: 1 / -1;
+    min-width: 0;
+    display: grid;
+    gap: 7px;
+    padding: 11px 12px;
+    border: 1px solid color-mix(in srgb, var(--danger-color) 30%, var(--mobile-page-border));
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--danger-color) 8%, var(--mobile-page-surface-strong));
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+    transform-origin: top center;
+    will-change: opacity, transform;
+}
+
+.danmaku-failed-hint-motion-enter-active {
+    transition: opacity 180ms ease-out, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.danmaku-failed-hint-motion-leave-active {
+    transition: opacity 130ms ease-in, transform 130ms ease-in;
+}
+
+.danmaku-failed-hint-motion-enter,
+.danmaku-failed-hint-motion-leave-to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+}
+
+.danmaku-failed-hint-motion-enter-to,
+.danmaku-failed-hint-motion-leave {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .danmaku-failed-hint-motion-enter-active,
+    .danmaku-failed-hint-motion-leave-active {
+        transition: none;
+    }
+
+    .danmaku-failed-hint-motion-enter,
+    .danmaku-failed-hint-motion-enter-to,
+    .danmaku-failed-hint-motion-leave,
+    .danmaku-failed-hint-motion-leave-to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.mobile-history-danmaku-failed-hint p {
+    margin: 0;
+}
+
+.mobile-history-danmaku-failed-hint ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.mobile-history-danmaku-failed-hint li + li {
+    margin-top: 4px;
+}
+
 .mobile-history-danmaku-stat .danmaku-task-badge.is-done {
     color: var(--mobile-teal);
     border-color: color-mix(in srgb, var(--mobile-teal) 34%, var(--mobile-page-border));
     background: color-mix(in srgb, var(--mobile-teal) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat .danmaku-task-badge.is-failed {
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 10%, var(--mobile-page-surface-strong));
 }
 
 .mobile-history-danmaku-stat .danmaku-task-badge.is-pending {

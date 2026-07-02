@@ -718,6 +718,33 @@
                                     <span class="danmaku-stat-popover-label">成功发送</span>
                                     <strong>{{ currentDetail.successMsgCount || 0 }}</strong>
                                 </div>
+                                <div class="danmaku-stat-popover-help-wrap"
+                                     @mouseenter="showDanmakuFailedHint"
+                                     @mouseleave="hideDanmakuFailedHint">
+                                    <div class="danmaku-stat-popover-row is-failed is-helpable"
+                                         :class="{ 'is-help-open': isDanmakuFailedHintVisible() }"
+                                         role="button"
+                                         tabindex="0"
+                                         :aria-expanded="isDanmakuFailedHintVisible() ? 'true' : 'false'"
+                                         aria-label="查看未成功说明"
+                                         @click.stop="toggleDanmakuFailedHint"
+                                         @keydown.enter.prevent="toggleDanmakuFailedHint"
+                                         @keydown.space.prevent="toggleDanmakuFailedHint"
+                                         @focus="showDanmakuFailedHint"
+                                         @blur="hideDanmakuFailedHint">
+                                        <span class="danmaku-stat-popover-label">未成功</span>
+                                        <strong>{{ getDanmakuFailedCount(currentDetail) }}</strong>
+                                    </div>
+                                    <transition name="danmaku-failed-hint-motion">
+                                        <div v-if="isDanmakuFailedHintVisible()" class="danmaku-failed-hint">
+                                            <p>{{ getDanmakuFailedReasonIntro() }}</p>
+                                            <ul>
+                                                <li v-for="line in getDanmakuFailedReasonLines()" :key="line">{{ line }}</li>
+                                            </ul>
+                                            <p>{{ getDanmakuFailedReasonFooter() }}</p>
+                                        </div>
+                                    </transition>
+                                </div>
                                 <div class="danmaku-stat-popover-row is-queue">
                                     <span class="danmaku-stat-popover-label">队列中</span>
                                     <strong>{{ getDanmakuQueueCount(currentDetail) }}</strong>

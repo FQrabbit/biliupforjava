@@ -248,11 +248,6 @@
                         <div class="mobile-history-metrics">
                             <span><i class="el-icon-coin"></i>{{ formatFileSize(item.fileSize) }}</span>
                             <span><i class="el-icon-time"></i>{{ formatDuration(item.partDuration) }}</span>
-                            <button type="button" class="mobile-history-metric-button is-danmaku" @touchstart.stop.prevent="openMobileDanmakuStats(item, 'touch')" @click.stop="openMobileDanmakuStats(item, 'click')" aria-label="查看弹幕数据">
-                                <i class="el-icon-chat-dot-round"></i>
-                                <span>{{ item.successMsgCount || 0 }}/{{ item.msgCount || 0 }}</span>
-                                <i class="el-icon-arrow-up"></i>
-                            </button>
                         </div>
                         <div class="mobile-history-alerts" v-if="abnormalPartCount(item) > 0 || skippedOnlyCount(item) > 0 || uploadFlowFallbackCount(item) > 0 || item.code === -50">
                             <span v-if="item.code === -50" class="is-private"><i class="el-icon-view"></i>仅自己可见</span>
@@ -1762,6 +1757,31 @@
                     <span>成功发送</span>
                     <strong>{{ formatMobileDanmakuCount(getMobileDanmakuStatsValue('successMsgCount')) }}</strong>
                 </div>
+                <div class="mobile-history-danmaku-stat is-failed is-helpable"
+                     :class="{ 'is-help-open': isDanmakuFailedHintVisible() }"
+                     role="button"
+                     tabindex="0"
+                     :aria-expanded="isDanmakuFailedHintVisible() ? 'true' : 'false'"
+                     aria-label="查看未成功说明"
+                     @click.stop="toggleDanmakuFailedHint"
+                     @mouseenter="showDanmakuFailedHint"
+                     @mouseleave="hideDanmakuFailedHint"
+                     @keydown.enter.prevent="toggleDanmakuFailedHint"
+                     @keydown.space.prevent="toggleDanmakuFailedHint"
+                     @focus="showDanmakuFailedHint"
+                     @blur="hideDanmakuFailedHint">
+                    <span>未成功</span>
+                    <strong>{{ formatMobileDanmakuCount(getMobileDanmakuFailedCount()) }}</strong>
+                </div>
+                <transition name="danmaku-failed-hint-motion">
+                    <div v-if="isDanmakuFailedHintVisible()" class="mobile-history-danmaku-failed-hint">
+                        <p>{{ getDanmakuFailedReasonIntro() }}</p>
+                        <ul>
+                            <li v-for="line in getDanmakuFailedReasonLines()" :key="line">{{ line }}</li>
+                        </ul>
+                        <p>{{ getDanmakuFailedReasonFooter() }}</p>
+                    </div>
+                </transition>
                 <div class="mobile-history-danmaku-stat">
                     <span>队列中</span>
                     <strong>{{ formatMobileDanmakuCount(getMobileDanmakuQueueCount()) }}</strong>

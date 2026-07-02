@@ -271,6 +271,8 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
     @Query("""
             select m.bvid,
                    sum(case when m.code = 0 then 1 else 0 end),
+                   sum(case when m.pool = 0 and m.code = 0 then 1 else 0 end),
+                   sum(case when m.pool = 1 and m.code = 0 then 1 else 0 end),
                    sum(case when m.pool = 0 and m.code = -1 then 1 else 0 end),
                    sum(case when m.pool = 1 and m.code = -1 then 1 else 0 end)
             from LiveMsg m
