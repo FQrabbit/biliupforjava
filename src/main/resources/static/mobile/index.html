@@ -643,7 +643,7 @@
         <button type="button" class="mobile-brec-header" @click="toggleBrecConfig">
             <div class="mobile-brec-header-title">
                 <i class="el-icon-video-camera"></i>
-                <span>录播姬 WebApi 设置</span>
+                <span>录播姬 Cookie 设置</span>
                 <em v-if="brecConfig.enabled" class="mobile-brec-badge">已启用</em>
             </div>
             <i :class="brecConfigExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
@@ -677,6 +677,7 @@
                 <div class="mobile-brec-field">
                     <label>端口</label>
                     <el-input v-model="brecConfig.port" inputmode="numeric" placeholder="默认 2356" size="small"></el-input>
+                    <small>填写录播姬 Web 页面端口，默认 2356</small>
                 </div>
 
                 <div class="mobile-brec-field">

@@ -5477,6 +5477,8 @@
 
     min-width: 0;
 
+    flex: 1 1 auto;
+
     display: grid;
 
     gap: 2px;
@@ -5493,15 +5495,47 @@
 
     font-weight: 500;
 
+    overflow-wrap: anywhere;
+
 }
 
 .danmaku-stat-popover-row strong {
+
+    flex: 0 0 auto;
 
     color: var(--text-primary);
 
     font-size: 13px;
 
     font-variant-numeric: tabular-nums;
+
+    white-space: nowrap;
+
+}
+
+.danmaku-stat-popover-row.is-task {
+
+    align-items: flex-start;
+
+    gap: 10px;
+
+    min-height: 38px;
+
+    padding-block: 8px;
+
+}
+
+.danmaku-stat-popover-meta {
+
+    flex: 0 0 auto;
+
+    min-width: 76px;
+
+    display: grid;
+
+    justify-items: end;
+
+    gap: 5px;
 
 }
 
@@ -5605,6 +5639,81 @@
 
 }
 
+.danmaku-stat-popover-actions {
+
+    display: flex;
+
+    justify-content: flex-end;
+
+}
+
+.danmaku-retry-button {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 5px;
+
+    min-height: 30px;
+
+    padding: 5px 10px;
+
+    border: 1px solid var(--danger-border-soft);
+
+    border-radius: 999px;
+
+    background: var(--danger-soft-bg-faint);
+
+    color: var(--danger-color);
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    line-height: 1;
+
+    cursor: pointer;
+
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
+
+}
+
+.danmaku-retry-button:hover,
+.danmaku-retry-button:focus-visible {
+
+    outline: none;
+
+    border-color: var(--danger-border);
+
+    background: var(--danger-soft-bg);
+
+}
+
+.danmaku-retry-button:active {
+
+    transform: scale(0.98);
+
+}
+
+.danmaku-retry-button:disabled {
+
+    cursor: not-allowed;
+
+    opacity: 0.62;
+
+    transform: none;
+
+}
+
+.danmaku-retry-button i {
+
+    font-size: 13px;
+
+}
+
 .danmaku-stat-popover-row.is-helpable {
 
     cursor: pointer;
@@ -5695,6 +5804,18 @@
     .danmaku-failed-hint-motion-leave-to {
 
         opacity: 1;
+
+        transform: none;
+
+    }
+
+    .danmaku-retry-button {
+
+        transition: none;
+
+    }
+
+    .danmaku-retry-button:active {
 
         transform: none;
 

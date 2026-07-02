@@ -187,6 +187,12 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
     @Query("select count(m) from LiveMsg m where m.partId in ?1 and m.pool = ?2 and m.code = -1")
     long countPendingByPartIdsAndPool(List<Long> partIds, int pool);
 
+    @Query("select count(m) from LiveMsg m where m.partId in ?1 and m.pool = ?2 and m.code <> 0 and m.code <> -1")
+    long countFailedByPartIdsAndPool(List<Long> partIds, int pool);
+
+    @Query("select count(m) from LiveMsg m where m.bvid = ?1 and m.code <> 0 and m.code <> -1")
+    long countFailedByBvid(String bvid);
+
     @Query("""
             select count(m)
             from LiveMsg m
@@ -252,6 +258,37 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
               )
             """)
     int markDispatchablePendingByPartIdsAndPool(List<Long> partIds, int pool, int code);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            update LiveMsg m
+            set m.code = -1
+            where m.partId in ?1
+              and m.pool = ?2
+              and m.code <> 0
+              and m.code <> -1
+              and m.code not in ?3
+              and m.partId in (
+                  select p.id
+                  from RecordHistoryPart p, RecordHistory h, RecordRoom r
+                  where p.id in ?1
+                    and p.historyId = h.id
+                    and r.roomId = p.roomId
+                    and h.forceArchived = false
+                    and h.recording = false
+                    and h.streaming = false
+                    and h.publish = true
+                    and p.uploadRetryCount < 9999
+                    and p.cid is not null
+                    and p.cid <> 0
+                    and (
+                        (?2 = 0 and h.code = 0 and r.sendDm = true)
+                        or (?2 = 1 and h.code in (0, -50) and r.sendSc = true)
+                    )
+              )
+            """)
+    int retryDispatchableFailedByPartIdsAndPool(List<Long> partIds, int pool, List<Integer> excludedCodes);
 
     @Query("""
             select m.bvid,

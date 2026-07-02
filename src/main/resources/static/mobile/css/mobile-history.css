@@ -3108,6 +3108,134 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
     margin-top: 4px;
 }
 
+.mobile-history-danmaku-retry {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+
+.mobile-history-danmaku-retry button {
+    width: 100%;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--danger-color) 9%, var(--mobile-page-surface-strong));
+    color: var(--danger-color);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    touch-action: manipulation;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.mobile-history-danmaku-retry button:active {
+    transform: scale(0.985);
+}
+
+.mobile-history-danmaku-retry button:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--danger-color) 58%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 13%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-retry button:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.mobile-history-danmaku-feedback {
+    grid-column: 1 / -1;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 30%, var(--mobile-page-border));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--mobile-page-surface-strong));
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    transform-origin: top center;
+    will-change: opacity, transform;
+}
+
+.mobile-history-danmaku-feedback i {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    font-size: 14px;
+}
+
+.mobile-history-danmaku-feedback span {
+    min-width: 0;
+}
+
+.mobile-history-danmaku-feedback.is-success {
+    color: var(--mobile-teal);
+    border-color: color-mix(in srgb, var(--mobile-teal) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-teal) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-feedback.is-warning {
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 36%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--warning-color) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-feedback.is-error {
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 10%, var(--mobile-page-surface-strong));
+}
+
+.danmaku-retry-feedback-motion-enter-active {
+    transition: opacity 190ms ease-out, transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.danmaku-retry-feedback-motion-leave-active {
+    transition: opacity 130ms ease-in, transform 130ms ease-in;
+}
+
+.danmaku-retry-feedback-motion-enter,
+.danmaku-retry-feedback-motion-leave-to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+}
+
+.danmaku-retry-feedback-motion-enter-to,
+.danmaku-retry-feedback-motion-leave {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mobile-history-danmaku-retry button,
+    .danmaku-retry-feedback-motion-enter-active,
+    .danmaku-retry-feedback-motion-leave-active {
+        transition: none;
+    }
+
+    .mobile-history-danmaku-retry button:active {
+        transform: none;
+    }
+
+    .danmaku-retry-feedback-motion-enter,
+    .danmaku-retry-feedback-motion-enter-to,
+    .danmaku-retry-feedback-motion-leave,
+    .danmaku-retry-feedback-motion-leave-to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
 .mobile-history-danmaku-stat .danmaku-task-badge.is-done {
     color: var(--mobile-teal);
     border-color: color-mix(in srgb, var(--mobile-teal) 34%, var(--mobile-page-border));

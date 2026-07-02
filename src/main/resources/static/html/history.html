@@ -730,13 +730,31 @@
                                          @click.stop="toggleDanmakuFailedHint"
                                          @keydown.enter.prevent="toggleDanmakuFailedHint"
                                          @keydown.space.prevent="toggleDanmakuFailedHint"
-                                         @focus="showDanmakuFailedHint"
+                                         @focus="showDanmakuFailedHint(true)"
                                          @blur="hideDanmakuFailedHint">
                                         <span class="danmaku-stat-popover-label">未成功</span>
                                         <strong>{{ getDanmakuFailedCount(currentDetail) }}</strong>
                                     </div>
+                                    <div v-if="canRetryFailedDanmaku(currentDetail)"
+                                         class="danmaku-stat-popover-actions"
+                                         @mouseenter="holdDanmakuFailedHint"
+                                         @mouseleave="hideDanmakuFailedHint">
+                                        <button type="button"
+                                                class="danmaku-retry-button"
+                                                :disabled="danmakuRetryLoading"
+                                                aria-label="重试未成功弹幕"
+                                                @focus="holdDanmakuFailedHint"
+                                                @blur="hideDanmakuFailedHint"
+                                                @click.stop="retryFailedDanmaku(currentDetail)">
+                                            <i :class="danmakuRetryLoading ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+                                            <span>{{ danmakuRetryLoading ? '加入中' : '重试未成功' }}</span>
+                                        </button>
+                                    </div>
                                     <transition name="danmaku-failed-hint-motion">
-                                        <div v-if="isDanmakuFailedHintVisible()" class="danmaku-failed-hint">
+                                        <div v-if="isDanmakuFailedHintVisible()"
+                                             class="danmaku-failed-hint"
+                                             @mouseenter="holdDanmakuFailedHint"
+                                             @mouseleave="hideDanmakuFailedHint">
                                             <p>{{ getDanmakuFailedReasonIntro() }}</p>
                                             <ul>
                                                 <li v-for="line in getDanmakuFailedReasonLines()" :key="line">{{ line }}</li>
@@ -749,35 +767,43 @@
                                     <span class="danmaku-stat-popover-label">队列中</span>
                                     <strong>{{ getDanmakuQueueCount(currentDetail) }}</strong>
                                 </div>
-                                <div class="danmaku-stat-popover-row">
+                                <div class="danmaku-stat-popover-row is-task">
                                     <span class="danmaku-stat-popover-label">
                                         <span>普通弹幕</span>
                                         <small>{{ getDanmakuTaskSubtext(currentDetail, 'normal') }}</small>
                                     </span>
-                                    <strong>{{ currentDetail.normalMsgCount || 0 }}</strong>
-                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'normal')]">{{ getDanmakuTaskStateText(currentDetail, 'normal') }}</em>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <strong>{{ currentDetail.normalMsgCount || 0 }}</strong>
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'normal')]">{{ getDanmakuTaskStateText(currentDetail, 'normal') }}</em>
+                                    </span>
                                 </div>
-                                <div class="danmaku-stat-popover-row">
+                                <div class="danmaku-stat-popover-row is-task">
                                     <span class="danmaku-stat-popover-label">
                                         <span>SC/上舰高级弹幕</span>
                                         <small>{{ getDanmakuTaskSubtext(currentDetail, 'advanced') }}</small>
                                     </span>
-                                    <strong>{{ getAdvancedDanmakuCount(currentDetail) }}</strong>
-                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'advanced')]">{{ getDanmakuTaskStateText(currentDetail, 'advanced') }}</em>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <strong>{{ getAdvancedDanmakuCount(currentDetail) }}</strong>
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'advanced')]">{{ getDanmakuTaskStateText(currentDetail, 'advanced') }}</em>
+                                    </span>
                                 </div>
-                                <div class="danmaku-stat-popover-row">
+                                <div class="danmaku-stat-popover-row is-task">
                                     <span class="danmaku-stat-popover-label">
                                         <span>SC、上舰评论</span>
                                         <small>{{ getDanmakuTaskSubtext(currentDetail, 'highReply') }}</small>
                                     </span>
-                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'highReply')]">{{ getDanmakuTaskStateText(currentDetail, 'highReply') }}</em>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'highReply')]">{{ getDanmakuTaskStateText(currentDetail, 'highReply') }}</em>
+                                    </span>
                                 </div>
-                                <div class="danmaku-stat-popover-row">
+                                <div class="danmaku-stat-popover-row is-task">
                                     <span class="danmaku-stat-popover-label">
                                         <span>高价值礼物评论</span>
                                         <small>{{ getDanmakuTaskSubtext(currentDetail, 'giftReply') }}</small>
                                     </span>
-                                    <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'giftReply')]">{{ getDanmakuTaskStateText(currentDetail, 'giftReply') }}</em>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'giftReply')]">{{ getDanmakuTaskStateText(currentDetail, 'giftReply') }}</em>
+                                    </span>
                                 </div>
                             </div>
                             <button slot="reference" type="button" class="stat-detail-trigger" aria-label="查看弹幕明细">

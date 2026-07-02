@@ -1768,13 +1768,40 @@
                      @mouseleave="hideDanmakuFailedHint"
                      @keydown.enter.prevent="toggleDanmakuFailedHint"
                      @keydown.space.prevent="toggleDanmakuFailedHint"
-                     @focus="showDanmakuFailedHint"
+                     @focus="showDanmakuFailedHint(true)"
                      @blur="hideDanmakuFailedHint">
                     <span>未成功</span>
                     <strong>{{ formatMobileDanmakuCount(getMobileDanmakuFailedCount()) }}</strong>
                 </div>
+                <div v-if="canRetryFailedDanmaku(getMobileDanmakuStatsItem())"
+                     class="mobile-history-danmaku-retry"
+                     @mouseenter="holdDanmakuFailedHint"
+                     @mouseleave="hideDanmakuFailedHint">
+                    <button type="button"
+                            :disabled="danmakuRetryLoading"
+                            aria-label="重试未成功弹幕"
+                            @focus="holdDanmakuFailedHint"
+                            @blur="hideDanmakuFailedHint"
+                            @click.stop="retryFailedDanmaku(getMobileDanmakuStatsItem())">
+                        <i :class="danmakuRetryLoading ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+                        <span>{{ danmakuRetryLoading ? '正在加入队列' : '重试未成功弹幕' }}</span>
+                    </button>
+                </div>
+                <transition name="danmaku-retry-feedback-motion">
+                    <div v-if="danmakuRetryFeedback"
+                         :class="['mobile-history-danmaku-feedback', 'is-' + danmakuRetryFeedback.type]"
+                         role="status"
+                         aria-live="polite"
+                         aria-atomic="true">
+                        <i :class="getDanmakuRetryFeedbackIcon(danmakuRetryFeedback.type)" aria-hidden="true"></i>
+                        <span>{{ danmakuRetryFeedback.message }}</span>
+                    </div>
+                </transition>
                 <transition name="danmaku-failed-hint-motion">
-                    <div v-if="isDanmakuFailedHintVisible()" class="mobile-history-danmaku-failed-hint">
+                    <div v-if="isDanmakuFailedHintVisible()"
+                         class="mobile-history-danmaku-failed-hint"
+                         @mouseenter="holdDanmakuFailedHint"
+                         @mouseleave="hideDanmakuFailedHint">
                         <p>{{ getDanmakuFailedReasonIntro() }}</p>
                         <ul>
                             <li v-for="line in getDanmakuFailedReasonLines()" :key="line">{{ line }}</li>

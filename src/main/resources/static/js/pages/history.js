@@ -34,6 +34,11 @@ new Vue({
         mobileDanmakuStatsTarget: null,
         danmakuFailedHintVisible: false,
         danmakuFailedHintHover: false,
+        danmakuFailedHintShowTimer: null,
+        danmakuFailedHintHideTimer: null,
+        danmakuRetryLoading: false,
+        danmakuRetryFeedback: null,
+        danmakuRetryFeedbackTimer: null,
         currentDetailParts: [],
         partListMeta: { hasBlockingIssues: false, blockingIssueCount: 0 },
         showAllParts: false,
@@ -718,6 +723,9 @@ new Vue({
         window.removeEventListener('message', this.handleGlobalPartPreviewMessage);
         this.editPartUploadQueue = [];
         this.editPartUploadRunning = false;
+        if (typeof this.clearDanmakuRetryFeedback === 'function') {
+            this.clearDanmakuRetryFeedback();
+        }
         clearTimeout(this.mobileDanmakuStatsCloseTimer);
         if (typeof this.unmountMobileDanmakuStatsPortal === 'function') {
             this.unmountMobileDanmakuStatsPortal();

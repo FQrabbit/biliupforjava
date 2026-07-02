@@ -35,8 +35,10 @@ import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.service.GiftReplyCandidateService;
 import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
+import top.sshh.bililiverecoder.service.HistoryMsgRetryService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
+import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 
 import java.io.File;
 import java.io.IOException;
@@ -89,6 +91,10 @@ public class HistoryController {
     private HistoryMsgQueueCleanupService msgQueueCleanupService;
     @Autowired
     private GiftReplyCandidateService giftReplyCandidateService;
+    @Autowired
+    private HistoryMsgRetryService msgRetryService;
+    @Autowired
+    private LiveMsgSendSync liveMsgSendSync;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -949,7 +955,7 @@ public class HistoryController {
 
     @PostMapping("/abandonMsgQueue/{id}")
     public Map<String, Object> abandonMsgQueue(@PathVariable("id") Long id,
-                                               @RequestBody(required = false) Map<String, Object> options) {
+                                                @RequestBody(required = false) Map<String, Object> options) {
         long totalStartNs = System.nanoTime();
         Map<String, Object> result = new HashMap<>();
         if (id == null) {
@@ -991,6 +997,17 @@ public class HistoryController {
                 .addRoundCount("forceArchived", cleanup.forceArchived)
                 .addStageCostMs("total", totalStartNs));
         return result;
+    }
+
+    @PostMapping("/{id}/danmaku/retryFailed")
+    public Map<String, Object> retryFailedDanmaku(@PathVariable("id") Long id,
+                                                   @RequestBody(required = false) Map<String, Object> request) {
+        int displayedFailed = parseNonNegativeInt(request == null ? null : request.get("displayedFailed"));
+        HistoryMsgRetryService.RetryResult retry = msgRetryService.retryFailedByHistoryId(id, displayedFailed);
+        if (retry != null && retry.retried > 0) {
+            liveMsgSendSync.enqueueHistoryDispatch(id);
+        }
+        return retry == null ? HistoryMsgRetryService.RetryResult.warning("重试请求失败").toMap() : retry.toMap();
     }
 
     @PostMapping("/abandonMsgQueue/batch")
@@ -2026,6 +2043,14 @@ public class HistoryController {
             return number.intValue();
         }
         return Integer.parseInt(value.toString());
+    }
+
+    private int parseNonNegativeInt(Object value) {
+        try {
+            return Math.max(0, toInt(value));
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private float toFloat(Object value) {

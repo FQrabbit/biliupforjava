@@ -132,8 +132,8 @@
             this.lastMobileDanmakuStatsOpenAt = now;
             this.showMoreActions = false;
             this.mobileDanmakuStatsLeaving = false;
-            this.danmakuFailedHintVisible = false;
-            this.danmakuFailedHintHover = false;
+            this.resetDanmakuFailedHintState();
+            this.clearDanmakuRetryFeedback();
             this.mobileDanmakuStatsTarget = item;
             this.mobileDanmakuStatsVisible = true;
             this.$nextTick(() => {
@@ -142,6 +142,7 @@
         },
         closeMobileDanmakuStats: function() {
             if (!this.mobileDanmakuStatsVisible && !this.mobileDanmakuStatsTarget) {
+                this.clearDanmakuRetryFeedback();
                 this.clearMobileDanmakuLayerState();
                 return;
             }
@@ -157,8 +158,8 @@
                 this.mobileDanmakuStatsVisible = false;
                 this.mobileDanmakuStatsTarget = null;
                 this.mobileDanmakuStatsLeaving = false;
-                this.danmakuFailedHintVisible = false;
-                this.danmakuFailedHintHover = false;
+                this.resetDanmakuFailedHintState();
+                this.clearDanmakuRetryFeedback();
                 this.clearMobileDanmakuLayerState();
             }, 220);
         },
@@ -300,18 +301,196 @@
         getMobileDanmakuFailedCount: function() {
             return this.getDanmakuFailedCount(this.getMobileDanmakuStatsItem());
         },
+        canRetryFailedDanmaku: function(item) {
+            const target = item || this.currentDetail || {};
+            return !!(target && target.id && this.getDanmakuFailedCount(target) > 0);
+        },
+        isMobileDanmakuStatsActive: function() {
+            return !!(this.isMobile && this.mobileDanmakuStatsVisible);
+        },
+        normalizeDanmakuRetryFeedbackType: function(type) {
+            const value = String(type || 'info');
+            return ['success', 'warning', 'error', 'info'].indexOf(value) !== -1 ? value : 'info';
+        },
+        getDanmakuRetryFeedbackIcon: function(type) {
+            const normalized = this.normalizeDanmakuRetryFeedbackType(type);
+            if (normalized === 'success') return 'el-icon-circle-check';
+            if (normalized === 'warning') return 'el-icon-warning-outline';
+            if (normalized === 'error') return 'el-icon-circle-close';
+            return 'el-icon-info';
+        },
+        setDanmakuRetryFeedback: function(type, message, autoHideMs) {
+            if (this.danmakuRetryFeedbackTimer) {
+                clearTimeout(this.danmakuRetryFeedbackTimer);
+                this.danmakuRetryFeedbackTimer = null;
+            }
+            const text = String(message || '').trim();
+            if (!text) {
+                this.danmakuRetryFeedback = null;
+                return;
+            }
+            this.danmakuRetryFeedback = {
+                type: this.normalizeDanmakuRetryFeedbackType(type),
+                message: text
+            };
+            if (autoHideMs !== false) {
+                const delay = Number(autoHideMs) > 0 ? Number(autoHideMs) : 7000;
+                this.danmakuRetryFeedbackTimer = setTimeout(() => {
+                    this.danmakuRetryFeedback = null;
+                    this.danmakuRetryFeedbackTimer = null;
+                }, delay);
+            }
+        },
+        clearDanmakuRetryFeedback: function() {
+            if (this.danmakuRetryFeedbackTimer) {
+                clearTimeout(this.danmakuRetryFeedbackTimer);
+                this.danmakuRetryFeedbackTimer = null;
+            }
+            this.danmakuRetryFeedback = null;
+        },
+        notifyDanmakuRetryResult: function(type, message) {
+            const normalized = this.normalizeDanmakuRetryFeedbackType(type);
+            if (this.isMobileDanmakuStatsActive()) {
+                this.setDanmakuRetryFeedback(normalized, message);
+                return;
+            }
+            if (this.$message) {
+                this.$message({
+                    message: message,
+                    type: normalized
+                });
+            }
+        },
+        applyDanmakuRetryResult: function(target, result) {
+            if (!target || !result) return;
+            const ordinary = Math.max(0, Number(result.ordinary) || 0);
+            const advanced = Math.max(0, Number(result.advanced) || 0);
+            if (ordinary > 0) {
+                this.$set(target, 'pendingNormalMsgCount', Math.max(0, Number(target.pendingNormalMsgCount) || 0) + ordinary);
+                if (Object.prototype.hasOwnProperty.call(target, 'failedNormalMsgCount')) {
+                    this.$set(target, 'failedNormalMsgCount', Math.max(0, (Number(target.failedNormalMsgCount) || 0) - ordinary));
+                }
+            }
+            if (advanced > 0) {
+                this.$set(target, 'pendingHighMsgCount', Math.max(0, Number(target.pendingHighMsgCount) || 0) + advanced);
+                if (Object.prototype.hasOwnProperty.call(target, 'failedHighMsgCount')) {
+                    this.$set(target, 'failedHighMsgCount', Math.max(0, (Number(target.failedHighMsgCount) || 0) - advanced));
+                }
+            }
+            const retried = ordinary + advanced;
+            if (retried > 0 && Object.prototype.hasOwnProperty.call(target, 'failedMsgCount')) {
+                this.$set(target, 'failedMsgCount', Math.max(0, (Number(target.failedMsgCount) || 0) - retried));
+            }
+        },
+        retryFailedDanmaku: function(item) {
+            const _this = this;
+            const target = item || this.getMobileDanmakuStatsItem() || this.currentDetail || {};
+            const historyId = target && target.id;
+            if (!historyId || _this.danmakuRetryLoading) return;
+            if (!_this.canRetryFailedDanmaku(target)) {
+                _this.notifyDanmakuRetryResult('info', '当前没有可重试的未成功弹幕');
+                return;
+            }
+            _this.danmakuRetryLoading = true;
+            if (_this.isMobileDanmakuStatsActive()) {
+                _this.setDanmakuRetryFeedback('info', '正在把仍满足条件的未成功弹幕加入队列...', false);
+            }
+            HistoryApi.retryFailedDanmaku(historyId, {
+                displayedFailed: _this.getDanmakuFailedCount(target),
+                displayedNormalFailed: _this.getNormalDanmakuFailedCount(target),
+                displayedHighFailed: _this.getHighDanmakuFailedCount(target)
+            }, function(data) {
+                _this.danmakuRetryLoading = false;
+                _this.notifyDanmakuRetryResult(
+                    (data && data.type) || 'success',
+                    (data && data.msg) || '重试请求已提交'
+                );
+                if (data && Number(data.retried) > 0) {
+                    _this.applyDanmakuRetryResult(target, data);
+                    if (_this.currentDetail && Number(_this.currentDetail.id) === Number(historyId) && _this.currentDetail !== target) {
+                        _this.applyDanmakuRetryResult(_this.currentDetail, data);
+                    }
+                    if (_this.mobileDanmakuStatsTarget && Number(_this.mobileDanmakuStatsTarget.id) === Number(historyId) && _this.mobileDanmakuStatsTarget !== target) {
+                        _this.applyDanmakuRetryResult(_this.mobileDanmakuStatsTarget, data);
+                    }
+                    _this.resetDanmakuFailedHintState();
+                }
+                _this.initTable(true);
+            }, function() {
+                _this.danmakuRetryLoading = false;
+                _this.notifyDanmakuRetryResult('error', '重试请求失败，请稍后再试');
+            });
+        },
         toggleDanmakuFailedHint: function() {
+            this.clearDanmakuFailedHintTimers();
             const nextVisible = !this.danmakuFailedHintVisible;
             this.danmakuFailedHintVisible = nextVisible;
             if (!nextVisible) {
                 this.danmakuFailedHintHover = false;
             }
         },
-        showDanmakuFailedHint: function() {
-            this.danmakuFailedHintHover = true;
+        clearDanmakuFailedHintTimers: function() {
+            if (this.danmakuFailedHintShowTimer) {
+                clearTimeout(this.danmakuFailedHintShowTimer);
+                this.danmakuFailedHintShowTimer = null;
+            }
+            if (this.danmakuFailedHintHideTimer) {
+                clearTimeout(this.danmakuFailedHintHideTimer);
+                this.danmakuFailedHintHideTimer = null;
+            }
         },
-        hideDanmakuFailedHint: function() {
+        resetDanmakuFailedHintState: function() {
+            this.clearDanmakuFailedHintTimers();
+            this.danmakuFailedHintVisible = false;
             this.danmakuFailedHintHover = false;
+        },
+        showDanmakuFailedHint: function(immediate) {
+            if (this.danmakuFailedHintHideTimer) {
+                clearTimeout(this.danmakuFailedHintHideTimer);
+                this.danmakuFailedHintHideTimer = null;
+            }
+            if (this.danmakuFailedHintVisible) return;
+            if (this.danmakuFailedHintShowTimer) {
+                clearTimeout(this.danmakuFailedHintShowTimer);
+                this.danmakuFailedHintShowTimer = null;
+            }
+            if (immediate === true) {
+                this.danmakuFailedHintHover = true;
+                return;
+            }
+            this.danmakuFailedHintShowTimer = setTimeout(() => {
+                this.danmakuFailedHintHover = true;
+                this.danmakuFailedHintShowTimer = null;
+            }, 1000);
+        },
+        holdDanmakuFailedHint: function() {
+            if (this.danmakuFailedHintHideTimer) {
+                clearTimeout(this.danmakuFailedHintHideTimer);
+                this.danmakuFailedHintHideTimer = null;
+            }
+            if (!this.isDanmakuFailedHintVisible() && this.danmakuFailedHintShowTimer) {
+                clearTimeout(this.danmakuFailedHintShowTimer);
+                this.danmakuFailedHintShowTimer = null;
+            }
+        },
+        hideDanmakuFailedHint: function(immediate) {
+            if (this.danmakuFailedHintShowTimer) {
+                clearTimeout(this.danmakuFailedHintShowTimer);
+                this.danmakuFailedHintShowTimer = null;
+            }
+            if (this.danmakuFailedHintVisible) return;
+            if (this.danmakuFailedHintHideTimer) {
+                clearTimeout(this.danmakuFailedHintHideTimer);
+                this.danmakuFailedHintHideTimer = null;
+            }
+            if (immediate === true) {
+                this.danmakuFailedHintHover = false;
+                return;
+            }
+            this.danmakuFailedHintHideTimer = setTimeout(() => {
+                this.danmakuFailedHintHover = false;
+                this.danmakuFailedHintHideTimer = null;
+            }, 450);
         },
         isDanmakuFailedHintVisible: function() {
             return !!(this.danmakuFailedHintVisible || this.danmakuFailedHintHover);
@@ -329,7 +508,7 @@
             ];
         },
         getDanmakuFailedReasonFooter: function() {
-            return '发送频率过快通常会继续等待重试，不会立刻计入未成功。';
+            return '发送频率过快通常会继续等待重试；手动重试只会处理当前仍满足发送条件的未成功弹幕。';
         },
         getMobileDanmakuSuccessPercent: function() {
             const total = this.getMobileDanmakuStatsValue('msgCount');
