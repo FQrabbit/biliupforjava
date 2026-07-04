@@ -102,7 +102,7 @@ public class RoomStatusSyncJob {
                                 }
                             }
                             changed = true;
-                            log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetRecording")
+                            log.debug("[BLR] {}", LogKvs.event("RoomStatusSyncJob.ForceResetRecording")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname()));
                         }

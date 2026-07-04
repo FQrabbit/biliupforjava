@@ -110,7 +110,7 @@ public class RoomLiveGiftCatalogService {
             giftCatalogRepository.saveAll(toSave);
             roomFailureState.remove(roomId);
             roomNextSuccessSyncAt.put(roomId, nowMs + SYNC_INTERVAL_MS);
-            log.info("[BLR] {}", LogKvs.event("GiftCatalog.Sync.Done")
+            log.debug("[BLR] {}", LogKvs.event("GiftCatalog.Sync.Done")
                     .add("roomId", roomId)
                     .add("count", toSave.size()));
             return GiftCatalogSyncResult.success("api", "礼物价格目录同步成功", toSave.size());
