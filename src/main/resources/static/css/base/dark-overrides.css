@@ -369,10 +369,45 @@
     border-color: var(--primary-color);
 }
 
+[data-theme="dark"] .el-tag {
+    background-color: color-mix(in srgb, var(--primary-color) 14%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--border-color)) !important;
+    color: color-mix(in srgb, var(--primary-light) 78%, var(--text-primary)) !important;
+    text-shadow: none;
+}
+
+[data-theme="dark"] .el-tag--success {
+    background-color: color-mix(in srgb, var(--success-color) 15%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--success-color) 34%, var(--border-color)) !important;
+    color: color-mix(in srgb, var(--success-light) 76%, var(--text-primary)) !important;
+}
+
+[data-theme="dark"] .el-tag--warning {
+    background-color: color-mix(in srgb, var(--warning-color) 14%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--warning-color) 32%, var(--border-color)) !important;
+    color: color-mix(in srgb, var(--warning-color) 72%, var(--text-primary)) !important;
+}
+
+[data-theme="dark"] .el-tag--danger {
+    background-color: color-mix(in srgb, var(--danger-color) 15%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--danger-color) 34%, var(--border-color)) !important;
+    color: color-mix(in srgb, var(--danger-light) 76%, var(--text-primary)) !important;
+}
+
 [data-theme="dark"] .el-tag--info {
-    background-color: var(--bg-tertiary);
-    border-color: var(--border-color);
-    color: var(--text-secondary);
+    background-color: color-mix(in srgb, var(--bg-primary) 68%, var(--bg-tertiary)) !important;
+    border-color: color-mix(in srgb, var(--border-color) 78%, var(--bg-tertiary)) !important;
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .el-tag .el-tag__close {
+    color: currentColor !important;
+    background-color: transparent !important;
+}
+
+[data-theme="dark"] .el-tag .el-tag__close:hover {
+    color: var(--text-primary) !important;
+    background-color: color-mix(in srgb, var(--text-primary) 14%, transparent) !important;
 }
 
 [data-theme="dark"] .el-tabs__item {

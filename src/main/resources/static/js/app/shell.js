@@ -32,9 +32,85 @@ var answer = new Vue({
         },
         configLoading: false,
         configExpanded: false,
+        configActiveTab: 'base',
         activeConfigHint: '',
         uploadSpeedUnit: 'MBps',
         hasConfigChanges: false,
+        notificationConfigLoading: false,
+        notificationEnabledSaving: false,
+        notificationConfig: {
+            enabled: true,
+            eventTypes: [],
+            channels: [],
+            rules: [],
+            deliveries: []
+        },
+        notificationChannelDrafts: [],
+        notificationNewChannel: {
+            type: 'wxpusher',
+            name: '',
+            enabled: true,
+            uid: '',
+            sendKey: '',
+            tags: '',
+            deviceKey: '',
+            serverUrl: 'https://api.day.app',
+            group: 'biliupforjava',
+            sound: '',
+            icon: '',
+            level: 'active',
+            corpId: '',
+            agentId: '',
+            corpSecret: '',
+            toUser: '@all',
+            toParty: '',
+            toTag: '',
+            safe: false,
+            webhookKey: '',
+            messageType: 'text',
+            mentionedList: '',
+            mentionedMobileList: ''
+        },
+        notificationRuleDrafts: [],
+        notificationRooms: [],
+        notificationRuleModeOptions: [
+            { value: 'all', label: '全部直播间' },
+            { value: 'rooms', label: '指定直播间' },
+            { value: 'mute', label: '不推送' }
+        ],
+        notificationRuleEditor: {
+            visible: false,
+            saving: false,
+            sourceType: 'default',
+            eventType: '',
+            eventLabel: '',
+            scope: 'all',
+            roomIds: [],
+            channelIdList: [],
+            roomKeyword: '',
+            roomFilter: 'all',
+            originalGlobalRuleId: null,
+            originalRoomRules: []
+        },
+        notificationRuleEditorRoomFilters: [
+            { value: 'all', label: '全部' },
+            { value: 'streaming', label: '开播中' },
+            { value: 'recording', label: '录制中' },
+            { value: 'selected', label: '已选' }
+        ],
+        notificationLegacyMigration: {
+            visible: false,
+            loading: false,
+            revealSecrets: false,
+            data: null
+        },
+        notificationChannelTypeOptions: [
+            { value: 'wxpusher', label: 'WxPusher' },
+            { value: 'bark', label: 'Bark' },
+            { value: 'wecom_app', label: '企业微信应用消息' },
+            { value: 'wecom_webhook', label: '企业微信群机器人' },
+            { value: 'serverchan3', label: 'Server酱3' }
+        ],
         connectionLost: false,
         // 增强的连接状态追踪
         pageLoading: false,
@@ -108,6 +184,7 @@ var answer = new Vue({
             error: ''
         },
         alertCount: 0,
+        viewportWidth: window.innerWidth || 0,
         needCacheRefresh: false
     },
     computed: {
@@ -124,6 +201,129 @@ var answer = new Vue({
             set: function(value) {
                 this.setUploadSpeedFromDisplay(value);
             }
+        },
+        notificationChannelOptions: function() {
+            var self = this;
+            return this.notificationChannelDrafts
+                .filter(function(channel) {
+                    return channel && channel.id != null;
+                })
+                .map(function(channel) {
+                    return {
+                        value: channel.id,
+                        label: self.notificationChannelDisplayName(channel)
+                    };
+                });
+        },
+        notificationRoomOptions: function() {
+            return (this.notificationRooms || []).map(function(room) {
+                var roomName = room.roomName || room.uname || room.roomId || '未命名直播间';
+                return {
+                    value: room.roomId,
+                    label: roomName + '（' + room.roomId + '）'
+                };
+            });
+        },
+        notificationRoomMap: function() {
+            var map = {};
+            (this.notificationRooms || []).forEach(function(room) {
+                if (room && room.roomId) {
+                    map[room.roomId] = room;
+                }
+            });
+            return map;
+        },
+        notificationRoomSelectorOptions: function() {
+            var self = this;
+            var keyword = String(this.notificationRuleEditor.roomKeyword || '').trim().toLowerCase();
+            var filter = this.notificationRuleEditor.roomFilter || 'all';
+            var selected = new Set((this.notificationRuleEditor.roomIds || []).map(function(item) {
+                return String(item);
+            }));
+            return (this.notificationRooms || []).filter(function(room) {
+                if (!room || !room.roomId) {
+                    return false;
+                }
+                if (filter === 'streaming' && !room.streaming) {
+                    return false;
+                }
+                if (filter === 'recording' && !room.recording) {
+                    return false;
+                }
+                if (filter === 'selected' && !selected.has(String(room.roomId))) {
+                    return false;
+                }
+                if (keyword) {
+                    var haystack = [
+                        room.roomId,
+                        room.roomName,
+                        room.uname,
+                        room.title
+                    ].map(function(value) {
+                        return String(value || '').toLowerCase();
+                    }).join(' ');
+                    if (haystack.indexOf(keyword) === -1) {
+                        return false;
+                    }
+                }
+                return true;
+            }).map(function(room) {
+                return {
+                    roomId: room.roomId,
+                    roomName: room.roomName || room.uname || room.roomId,
+                    title: room.title || '',
+                    streaming: !!room.streaming,
+                    recording: !!room.recording,
+                    selected: selected.has(String(room.roomId))
+                };
+            });
+        },
+        notificationDefaultRuleDrafts: function() {
+            var self = this;
+            var rules = this.notificationConfig.eventTypes || [];
+            return rules.map(function(eventType) {
+                return self.getNotificationDefaultRuleDraft(eventType.key);
+            });
+        },
+        notificationOverrideRuleDrafts: function() {
+            var self = this;
+            var eventIndex = {};
+            (this.notificationConfig.eventTypes || []).forEach(function(eventType, index) {
+                eventIndex[eventType.key] = index;
+            });
+            return this.notificationRuleDrafts.filter(function(rule) {
+                return rule.roomId && rule.roomId !== '*';
+            }).slice().sort(function(a, b) {
+                var ai = eventIndex[a.eventType] == null ? 999 : eventIndex[a.eventType];
+                var bi = eventIndex[b.eventType] == null ? 999 : eventIndex[b.eventType];
+                if (ai !== bi) {
+                    return ai - bi;
+                }
+                return self.notificationRoomName(a.roomId).localeCompare(self.notificationRoomName(b.roomId));
+            });
+        },
+        notificationEnabledChannelCount: function() {
+            return this.notificationChannelDrafts.filter(function(channel) {
+                return channel && channel.id != null && channel.enabled;
+            }).length;
+        },
+        notificationRuleCount: function() {
+            return this.notificationRuleDrafts.filter(function(rule) {
+                return rule && rule.id != null;
+            }).length;
+        },
+        notificationDeliveryCount: function() {
+            return (this.notificationConfig.deliveries || []).length;
+        },
+        notificationRuleEditorSize: function() {
+            return this.viewportWidth <= 640 ? '100%' : '560px';
+        },
+        notificationLegacyBackupJson: function() {
+            var data = this.notificationLegacyMigration.data;
+            if (!data) {
+                return '';
+            }
+            return data.backupJson || JSON.stringify(data.rooms || [], null, 2);
         },
         sortedVersions: function () {
             return this.versions.slice().sort(function (a, b) {
@@ -256,6 +456,8 @@ var answer = new Vue({
         this.checkAlerts();
         this.fetchWorkspaceUsageStatus();
         this.loadSystemConfig();
+        this.loadNotificationConfig();
+        this.checkLegacyNotificationMigration();
         setInterval(this.checkAlerts, 30000);
         this.workspaceUsageTimer = setInterval(function() {
             self.fetchWorkspaceUsageStatus();
@@ -272,6 +474,7 @@ var answer = new Vue({
             self.installScrollDebugTools();
         });
         this.resizeHandler = function() {
+            self.viewportWidth = window.innerWidth || 0;
             self.updateNavIndicator();
             self.refreshMobileViewportMetrics();
         };
@@ -348,7 +551,22 @@ var answer = new Vue({
         configExpanded: function(open) {
             if (!open) {
                 this.activeConfigHint = '';
+                return;
             }
+            if (this.configActiveTab === 'notification') {
+                this.refreshNotificationTableLayout();
+            }
+        },
+        configActiveTab: function(tab) {
+            if (tab === 'notification') {
+                this.refreshNotificationTableLayout();
+            }
+        },
+        'notificationRuleEditor.eventType': function() {
+            this.syncNotificationRuleEditor();
+        },
+        'notificationRuleEditor.scope': function() {
+            this.syncNotificationRuleEditor();
         }
     },
     beforeDestroy: function() {
@@ -397,6 +615,891 @@ var answer = new Vue({
                 self.workspaceStatus.valid = false;
                 self.workspaceStatus.error = '状态获取失败' + (xhr && xhr.status ? (' (HTTP ' + xhr.status + ')') : '');
             });
+        },
+        parseJsonObject: function(raw) {
+            if (!raw) {
+                return {};
+            }
+            try {
+                var parsed = JSON.parse(raw);
+                return parsed && typeof parsed === 'object' ? parsed : {};
+            } catch (e) {
+                return {};
+            }
+        },
+        notificationTypeLabel: function(type) {
+            if (type === 'wxpusher') {
+                return 'WxPusher';
+            }
+            if (type === 'bark') {
+                return 'Bark';
+            }
+            if (type === 'wecom_app') {
+                return '企业微信应用消息';
+            }
+            if (type === 'wecom_webhook') {
+                return '企业微信群机器人';
+            }
+            if (type === 'serverchan3') {
+                return 'Server酱3';
+            }
+            return type || '未知渠道';
+        },
+        notificationChannelDisplayName: function(channel) {
+            if (!channel) {
+                return '未知渠道';
+            }
+            var name = channel.name || this.notificationTypeLabel(channel.type);
+            return name + ' / ' + this.notificationTypeLabel(channel.type) + (channel.enabled ? '' : '（停用）');
+        },
+        makeNotificationChannelDraft: function(channel) {
+            var config = this.parseJsonObject(channel && channel.configJson);
+            return {
+                id: channel ? channel.id : null,
+                name: channel ? (channel.name || '') : '',
+                type: channel ? (channel.type || 'wxpusher') : 'wxpusher',
+                enabled: !channel || channel.enabled !== false,
+                uid: config.uid || '',
+                tags: config.tags || '',
+                deviceKey: '',
+                serverUrl: config.serverUrl || 'https://api.day.app',
+                group: config.group || 'biliupforjava',
+                sound: config.sound || '',
+                icon: config.icon || '',
+                level: config.level || 'active',
+                corpId: config.corpId || '',
+                agentId: config.agentId || '',
+                corpSecret: '',
+                toUser: config.toUser || '@all',
+                toParty: config.toParty || '',
+                toTag: config.toTag || '',
+                safe: config.safe === true || config.safe === 'true',
+                webhookKey: '',
+                messageType: config.messageType || 'text',
+                mentionedList: config.mentionedList || '',
+                mentionedMobileList: config.mentionedMobileList || '',
+                sendKey: '',
+                saving: false,
+                testing: false
+            };
+        },
+        resetNotificationNewChannel: function(keepType) {
+            var nextType = keepType ? (this.notificationNewChannel.type || 'wxpusher') : 'wxpusher';
+            this.notificationNewChannel = {
+                type: nextType,
+                name: '',
+                enabled: true,
+                uid: '',
+                sendKey: '',
+                tags: '',
+                deviceKey: '',
+                serverUrl: 'https://api.day.app',
+                group: 'biliupforjava',
+                sound: '',
+                icon: '',
+                level: 'active',
+                corpId: '',
+                agentId: '',
+                corpSecret: '',
+                toUser: '@all',
+                toParty: '',
+                toTag: '',
+                safe: false,
+                webhookKey: '',
+                messageType: 'text',
+                mentionedList: '',
+                mentionedMobileList: ''
+            };
+        },
+        parseNotificationChannelIds: function(raw) {
+            if (raw == null || raw === '') {
+                return [];
+            }
+            return String(raw).split(',')
+                .map(function(item) {
+                    return parseInt(String(item).trim(), 10);
+                })
+                .filter(function(id) {
+                    return isFinite(id);
+                });
+        },
+        makeNotificationRuleDraft: function(rule, eventType, isVirtual) {
+            var roomId = rule && rule.roomId ? rule.roomId : '*';
+            var eventKey = (rule && rule.eventType) || (eventType && eventType.key) || '';
+            var eventLabel = (rule && rule.eventLabel) || (eventType && eventType.label) || eventKey;
+            var enabled = rule ? rule.enabled !== false : false;
+            var channelIdList = this.parseNotificationChannelIds(rule && rule.channelIds);
+            return {
+                id: rule ? rule.id : null,
+                eventType: eventKey,
+                eventLabel: eventLabel,
+                roomId: roomId,
+                roomName: rule && rule.roomName ? rule.roomName : (roomId === '*' ? '全部直播间' : ''),
+                enabled: enabled,
+                mode: roomId !== '*' ? (enabled ? 'enable' : 'mute') : (enabled ? 'enable' : 'inherit'),
+                channelIdList: channelIdList,
+                virtual: !!isVirtual,
+                saving: false
+            };
+        },
+        buildNotificationRuleDrafts: function(eventTypes, rules) {
+            var self = this;
+            var eventIndex = {};
+            (eventTypes || []).forEach(function(eventType, index) {
+                eventIndex[eventType.key] = index;
+            });
+            var drafts = (rules || []).map(function(rule) {
+                return self.makeNotificationRuleDraft(rule, null, false);
+            });
+            var hasGlobalRule = {};
+            drafts.forEach(function(rule) {
+                if (!rule.roomId || rule.roomId === '*') {
+                    hasGlobalRule[rule.eventType] = true;
+                }
+            });
+            (eventTypes || []).forEach(function(eventType) {
+                if (!hasGlobalRule[eventType.key]) {
+                    drafts.push(self.makeNotificationRuleDraft(null, eventType, true));
+                }
+            });
+            drafts.sort(function(a, b) {
+                var ai = eventIndex[a.eventType] == null ? 999 : eventIndex[a.eventType];
+                var bi = eventIndex[b.eventType] == null ? 999 : eventIndex[b.eventType];
+                if (ai !== bi) {
+                    return ai - bi;
+                }
+                var ag = !a.roomId || a.roomId === '*';
+                var bg = !b.roomId || b.roomId === '*';
+                if (ag !== bg) {
+                    return ag ? -1 : 1;
+                }
+                return String(a.roomName || a.roomId || '').localeCompare(String(b.roomName || b.roomId || ''));
+            });
+            return drafts;
+        },
+        normalizeNotificationConfig: function(data) {
+            var config = data || {};
+            var eventTypes = config.eventTypes || [];
+            var channels = config.channels || [];
+            var rules = config.rules || [];
+            var rooms = config.rooms || [];
+            this.notificationConfig = {
+                enabled: config.enabled !== false,
+                eventTypes: eventTypes,
+                channels: channels,
+                rules: rules,
+                rooms: rooms,
+                deliveries: config.deliveries || []
+            };
+            this.notificationChannelDrafts = channels.map(this.makeNotificationChannelDraft.bind(this));
+            this.notificationRooms = rooms;
+            this.notificationRuleDrafts = this.buildNotificationRuleDrafts(eventTypes, rules);
+            this.ensureNotificationRuleEditorDefaults();
+            this.notificationRuleEditor.saving = false;
+            this.refreshNotificationTableLayout();
+        },
+        refreshNotificationTableLayout: function() {
+            var self = this;
+            this.$nextTick(function() {
+                setTimeout(function() {
+                    ['notificationChannelTable', 'notificationDeliveryTable'].forEach(function(refName) {
+                        var table = self.$refs[refName];
+                        if (Array.isArray(table)) {
+                            table = table[0];
+                        }
+                        if (table && typeof table.doLayout === 'function') {
+                            table.doLayout();
+                        }
+                    });
+                }, 0);
+            });
+        },
+        loadNotificationConfig: function() {
+            var self = this;
+            if (!window.NotificationApi) {
+                return;
+            }
+            self.notificationConfigLoading = true;
+            NotificationApi.config(function(data) {
+                self.normalizeNotificationConfig(data);
+                self.notificationConfigLoading = false;
+            }, function(xhr) {
+                self.notificationConfigLoading = false;
+                console.error('Failed to load notification config', xhr);
+            });
+        },
+        saveNotificationEnabled: function(enabled) {
+            var self = this;
+            if (!window.NotificationApi) {
+                return;
+            }
+            self.notificationEnabledSaving = true;
+            NotificationApi.updateEnabled(enabled, function(data) {
+                self.notificationConfig.enabled = data && data.enabled !== false;
+                self.notificationEnabledSaving = false;
+                self.$message.success('推送总开关已更新');
+            }, function() {
+                self.notificationEnabledSaving = false;
+                self.notificationConfig.enabled = !enabled;
+                self.$message.error('推送总开关保存失败');
+            });
+        },
+        serializeNotificationChannel: function(draft) {
+            var type = draft.type || 'wxpusher';
+            var config = {};
+            var secret = '';
+            if (type === 'wxpusher') {
+                config.uid = String(draft.uid || '').trim();
+            } else if (type === 'serverchan3') {
+                config.tags = String(draft.tags || '').trim();
+                if (String(draft.sendKey || '').trim()) {
+                    secret = JSON.stringify({ sendKey: String(draft.sendKey || '').trim() });
+                }
+            } else if (type === 'bark') {
+                config.serverUrl = String(draft.serverUrl || '').trim() || 'https://api.day.app';
+                config.group = String(draft.group || '').trim() || 'biliupforjava';
+                config.sound = String(draft.sound || '').trim();
+                config.icon = String(draft.icon || '').trim();
+                config.level = String(draft.level || '').trim() || 'active';
+                if (String(draft.deviceKey || '').trim()) {
+                    secret = JSON.stringify({ deviceKey: String(draft.deviceKey || '').trim() });
+                }
+            } else if (type === 'wecom_app') {
+                config.corpId = String(draft.corpId || '').trim();
+                config.agentId = String(draft.agentId || '').trim();
+                config.toUser = String(draft.toUser || '').trim();
+                config.toParty = String(draft.toParty || '').trim();
+                config.toTag = String(draft.toTag || '').trim();
+                config.safe = draft.safe === true;
+                if (String(draft.corpSecret || '').trim()) {
+                    secret = JSON.stringify({ corpSecret: String(draft.corpSecret || '').trim() });
+                }
+            } else if (type === 'wecom_webhook') {
+                config.messageType = String(draft.messageType || '').trim() === 'markdown' ? 'markdown' : 'text';
+                config.mentionedList = String(draft.mentionedList || '').trim();
+                config.mentionedMobileList = String(draft.mentionedMobileList || '').trim();
+                if (String(draft.webhookKey || '').trim()) {
+                    secret = JSON.stringify({ webhookKey: String(draft.webhookKey || '').trim() });
+                }
+            }
+            return {
+                id: draft.id || null,
+                name: String(draft.name || '').trim() || this.notificationTypeLabel(type),
+                type: type,
+                enabled: draft.enabled !== false,
+                configJson: JSON.stringify(config),
+                secretJson: secret
+            };
+        },
+        validateNotificationChannelDraft: function(draft) {
+            if (!draft || !draft.type) {
+                this.$message.warning('请选择推送渠道类型');
+                return false;
+            }
+            if (draft.type === 'wxpusher' && !String(draft.uid || '').trim()) {
+                this.$message.warning('请填写 WxPusher UID');
+                return false;
+            }
+            if (draft.type === 'serverchan3' && !draft.id && !String(draft.sendKey || '').trim()) {
+                this.$message.warning('请填写 Server酱3 SendKey');
+                return false;
+            }
+            if (draft.type === 'bark' && !draft.id && !String(draft.deviceKey || '').trim()) {
+                this.$message.warning('请填写 Bark 密钥或测试链接');
+                return false;
+            }
+            if (draft.type === 'wecom_app') {
+                if (!String(draft.corpId || '').trim()) {
+                    this.$message.warning('请填写企业微信企业 ID');
+                    return false;
+                }
+                if (!String(draft.agentId || '').trim()) {
+                    this.$message.warning('请填写企业微信应用 AgentId');
+                    return false;
+                }
+                if (!draft.id && !String(draft.corpSecret || '').trim()) {
+                    this.$message.warning('请填写企业微信应用 Secret');
+                    return false;
+                }
+            }
+            if (draft.type === 'wecom_webhook' && !draft.id && !String(draft.webhookKey || '').trim()) {
+                this.$message.warning('请填写企业微信群机器人 Webhook Key 或完整地址');
+                return false;
+            }
+            return true;
+        },
+        saveNotificationChannel: function(draft, isNew) {
+            var self = this;
+            if (!this.validateNotificationChannelDraft(draft)) {
+                return;
+            }
+            this.$set(draft, 'saving', true);
+            NotificationApi.saveChannel(this.serializeNotificationChannel(draft), function() {
+                self.$message.success('推送渠道已保存');
+                if (isNew) {
+                    self.resetNotificationNewChannel(true);
+                }
+                self.loadNotificationConfig();
+            }, function() {
+                self.$set(draft, 'saving', false);
+                self.$message.error('推送渠道保存失败');
+            });
+        },
+        testNotificationChannel: function(draft) {
+            var self = this;
+            if (!draft || !draft.id) {
+                this.$message.warning('请先保存推送渠道');
+                return;
+            }
+            this.$set(draft, 'testing', true);
+            NotificationApi.testSend(draft.id, function(data) {
+                self.$set(draft, 'testing', false);
+                if (data && data.success) {
+                    self.$message.success(data.message || '测试通知已发送');
+                } else {
+                    self.$message.error((data && data.message) || '测试通知发送失败');
+                }
+                self.loadNotificationConfig();
+            }, function() {
+                self.$set(draft, 'testing', false);
+                self.$message.error('测试通知发送失败');
+            });
+        },
+        notificationRuleScopeText: function(rule) {
+            if (!rule || !rule.roomId || rule.roomId === '*') {
+                return '全部直播间';
+            }
+            if (rule.roomName) {
+                return rule.roomName + '（' + rule.roomId + '）';
+            }
+            return '房间 ' + rule.roomId;
+        },
+        notificationEventLabel: function(eventType) {
+            var found = (this.notificationConfig.eventTypes || []).find(function(item) {
+                return item.key === eventType;
+            });
+            return found ? found.label : eventType;
+        },
+        notificationRoomLabel: function(roomId) {
+            var found = (this.notificationRooms || []).find(function(room) {
+                return room.roomId === roomId;
+            });
+            if (found) {
+                return this.notificationRoomName(roomId) + '（' + found.roomId + '）';
+            }
+            return roomId ? ('房间 ' + roomId) : '未选择直播间';
+        },
+        notificationRoomName: function(roomId) {
+            var found = (this.notificationRooms || []).find(function(room) {
+                return room.roomId === roomId;
+            });
+            return found ? (found.roomName || found.uname || found.roomId) : '';
+        },
+        findNotificationRuleDraft: function(roomId, eventType) {
+            var normalizedRoomId = roomId || '*';
+            return this.notificationRuleDrafts.find(function(rule) {
+                return (rule.roomId || '*') === normalizedRoomId && rule.eventType === eventType;
+            });
+        },
+        getNotificationDefaultRuleDraft: function(eventType) {
+            var globalRule = this.findNotificationRuleDraft('*', eventType);
+            if (globalRule) {
+                return globalRule;
+            }
+            var event = (this.notificationConfig.eventTypes || []).find(function(item) {
+                return item.key === eventType;
+            });
+            return this.makeNotificationRuleDraft(null, event, true);
+        },
+        getNotificationRoomRuleDrafts: function(eventType) {
+            return this.notificationRuleDrafts.filter(function(rule) {
+                return rule && rule.eventType === eventType && rule.roomId && rule.roomId !== '*';
+            });
+        },
+        notificationRuleModeType: function(rule) {
+            if (!rule || rule.enabled === false) {
+                return 'warning';
+            }
+            return 'success';
+        },
+        notificationRuleModeText: function(rule) {
+            if (!rule || rule.enabled === false) {
+                return '不推送';
+            }
+            return '启用';
+        },
+        notificationRuleStatusType: function(rule) {
+            if (!rule) {
+                return 'info';
+            }
+            var enabledRoomRules = this.getNotificationRoomRuleDrafts(rule.eventType).filter(function(item) {
+                return item.enabled && (item.channelIdList || []).length > 0;
+            });
+            if (!rule.enabled && enabledRoomRules.length === 0) {
+                return 'warning';
+            }
+            return 'success';
+        },
+        notificationRuleStatusText: function(rule) {
+            if (!rule) {
+                return '未配置';
+            }
+            var roomRules = this.getNotificationRoomRuleDrafts(rule.eventType);
+            var enabledRoomRules = roomRules.filter(function(item) {
+                return item.enabled && (item.channelIdList || []).length > 0;
+            });
+            if (!rule.enabled && enabledRoomRules.length > 0) {
+                return '指定直播间';
+            }
+            if (!rule.enabled) {
+                return '不推送';
+            }
+            if (roomRules.length > 0) {
+                return '含房间规则';
+            }
+            return '启用';
+        },
+        notificationRoomSummaryText: function(roomIds) {
+            var ids = (roomIds || []).filter(function(roomId) {
+                return !!roomId;
+            });
+            if (ids.length === 0) {
+                return '未选择直播间';
+            }
+            if (ids.length === (this.notificationRooms || []).length) {
+                return '全部直播间';
+            }
+            return '已选 ' + ids.length + ' 个直播间';
+        },
+        notificationRuleScopeSummary: function(rule) {
+            if (!rule) {
+                return '未配置';
+            }
+            var roomRules = this.getNotificationRoomRuleDrafts(rule.eventType);
+            var enabledRoomRules = roomRules.filter(function(item) {
+                return item.enabled && (item.channelIdList || []).length > 0;
+            });
+            if (!rule.enabled && enabledRoomRules.length === 0) {
+                return '不推送';
+            }
+            if (!rule.enabled && enabledRoomRules.length > 0) {
+                return '指定 ' + enabledRoomRules.length + ' 个直播间';
+            }
+            if (roomRules.length > 0) {
+                return '全部直播间，含 ' + roomRules.length + ' 条房间规则';
+            }
+            return '全部直播间';
+        },
+        notificationRuleChannelSummary: function(rule) {
+            if (!rule) {
+                return '未配置';
+            }
+            var roomRules = this.getNotificationRoomRuleDrafts(rule.eventType);
+            var enabledRoomRules = roomRules.filter(function(item) {
+                return item.enabled && (item.channelIdList || []).length > 0;
+            });
+            if (rule.enabled && (rule.channelIdList || []).length > 0) {
+                return (rule.channelIdList || []).length + ' 个默认渠道';
+            }
+            if (enabledRoomRules.length > 0) {
+                return enabledRoomRules.length + ' 个房间有渠道';
+            }
+            return '不发送';
+        },
+        normalizeNotificationEditorRoomIds: function(roomIds) {
+            var seen = {};
+            return (roomIds || []).map(function(roomId) {
+                return String(roomId || '').trim();
+            }).filter(function(roomId) {
+                if (!roomId) {
+                    return false;
+                }
+                if (seen[roomId]) {
+                    return false;
+                }
+                seen[roomId] = true;
+                return true;
+            });
+        },
+        ensureNotificationRuleEditorDefaults: function() {
+            if (!this.notificationRuleEditor.eventType && (this.notificationConfig.eventTypes || []).length > 0) {
+                this.notificationRuleEditor.eventType = this.notificationConfig.eventTypes[0].key;
+            }
+            if (!this.notificationRuleEditor.roomFilter) {
+                this.notificationRuleEditor.roomFilter = 'all';
+            }
+            this.syncNotificationRuleEditor();
+        },
+        openNotificationRuleEditor: function(eventType) {
+            if (eventType) {
+                this.notificationRuleEditor.eventType = eventType;
+            }
+            this.notificationRuleEditor.roomKeyword = '';
+            this.notificationRuleEditor.roomFilter = 'all';
+            this.ensureNotificationRuleEditorDefaults();
+            var editor = this.notificationRuleEditor;
+            var globalRule = editor.eventType ? this.findNotificationRuleDraft('*', editor.eventType) : null;
+            var enabledRoomRules = editor.eventType ? this.getNotificationRoomRuleDrafts(editor.eventType).filter(function(rule) {
+                return rule.enabled && (rule.channelIdList || []).length > 0;
+            }) : [];
+            if (globalRule && !globalRule.enabled && enabledRoomRules.length > 0) {
+                editor.scope = 'rooms';
+                editor.roomIds = enabledRoomRules.map(function(rule) {
+                    return rule.roomId;
+                });
+                var channelMap = {};
+                editor.channelIdList = [];
+                enabledRoomRules.forEach(function(rule) {
+                    (rule.channelIdList || []).forEach(function(channelId) {
+                        if (!channelMap[channelId]) {
+                            channelMap[channelId] = true;
+                            editor.channelIdList.push(channelId);
+                        }
+                    });
+                });
+            } else if (globalRule && !globalRule.enabled) {
+                editor.scope = 'mute';
+                editor.roomIds = [];
+                editor.channelIdList = [];
+            } else {
+                editor.scope = 'all';
+                editor.roomIds = [];
+                editor.channelIdList = globalRule ? [].concat(globalRule.channelIdList || []) : [];
+            }
+            this.syncNotificationRuleEditor();
+            this.notificationRuleEditor.visible = true;
+        },
+        closeNotificationRuleEditor: function() {
+            this.notificationRuleEditor.visible = false;
+        },
+        setNotificationRuleEditorScope: function(scope) {
+            this.notificationRuleEditor.scope = scope;
+            if (scope === 'all') {
+                this.notificationRuleEditor.roomIds = [];
+            }
+            if (scope === 'rooms' && (!this.notificationRuleEditor.roomIds || this.notificationRuleEditor.roomIds.length === 0) && this.notificationRoomOptions.length > 0) {
+                this.notificationRuleEditor.roomIds = [this.notificationRoomOptions[0].value];
+            }
+        },
+        toggleNotificationRoomSelection: function(roomId) {
+            var current = this.normalizeNotificationEditorRoomIds(this.notificationRuleEditor.roomIds);
+            var index = current.indexOf(roomId);
+            if (index >= 0) {
+                current.splice(index, 1);
+            } else {
+                current.push(roomId);
+            }
+            this.notificationRuleEditor.roomIds = current;
+            this.notificationRuleEditor.scope = current.length > 0 ? 'rooms' : 'all';
+        },
+        selectAllNotificationRooms: function() {
+            this.notificationRuleEditor.roomIds = (this.notificationRooms || []).map(function(room) {
+                return room.roomId;
+            }).filter(function(roomId) {
+                return !!roomId;
+            });
+            this.notificationRuleEditor.scope = 'rooms';
+        },
+        clearNotificationRoomSelection: function() {
+            this.notificationRuleEditor.roomIds = [];
+            this.notificationRuleEditor.scope = 'all';
+        },
+        syncNotificationRuleEditor: function() {
+            var editor = this.notificationRuleEditor;
+            editor.roomIds = this.normalizeNotificationEditorRoomIds(editor.roomIds);
+            editor.eventLabel = editor.eventType ? this.notificationEventLabel(editor.eventType) : '';
+            var globalRule = editor.eventType ? this.findNotificationRuleDraft('*', editor.eventType) : null;
+            editor.originalGlobalRuleId = globalRule ? globalRule.id : null;
+            if (editor.scope === 'all') {
+                editor.channelIdList = globalRule ? [].concat(globalRule.channelIdList || []) : [];
+            }
+            if (editor.scope === 'mute') {
+                editor.channelIdList = [];
+                editor.roomIds = [];
+            }
+            if (editor.scope === 'rooms' && editor.roomIds.length === 0 && this.notificationRoomOptions.length > 0) {
+                editor.roomIds = [this.notificationRoomOptions[0].value];
+            }
+            if (editor.scope === 'all') {
+                editor.roomIds = [];
+            }
+        },
+        saveNotificationRule: function(rule) {
+            var self = this;
+            if (!rule || !rule.eventType) {
+                return;
+            }
+            if (rule.enabled && (!rule.channelIdList || rule.channelIdList.length === 0)) {
+                this.$message.warning('启用规则前请选择至少一个推送渠道');
+                return;
+            }
+            this.$set(rule, 'saving', true);
+            NotificationApi.saveRule({
+                id: rule.id || null,
+                eventType: rule.eventType,
+                eventLabel: rule.eventLabel,
+                roomId: rule.roomId || '*',
+                roomName: rule.roomName || '',
+                enabled: !!rule.enabled,
+                channelIds: (rule.channelIdList || []).join(',')
+            }, function() {
+                self.$message.success('推送规则已保存');
+                self.loadNotificationConfig();
+            }, function() {
+                self.$set(rule, 'saving', false);
+                self.$message.error('推送规则保存失败');
+            });
+        },
+        saveNotificationRoomRules: function() {
+            var editor = this.notificationRuleEditor;
+            var self = this;
+            if (!editor.eventType) {
+                this.$message.warning('请选择事件');
+                return;
+            }
+            var normalizedRoomIds = this.normalizeNotificationEditorRoomIds(editor.roomIds);
+            if (editor.scope === 'rooms' && normalizedRoomIds.length === 0) {
+                this.$message.warning('请选择至少一个直播间');
+                return;
+            }
+            if (editor.scope !== 'mute' && (!editor.channelIdList || editor.channelIdList.length === 0)) {
+                this.$message.warning('启用规则前请选择至少一个推送渠道');
+                return;
+            }
+            var payloads = [];
+            var deleteRules = [];
+            var currentRoomRules = this.getNotificationRoomRuleDrafts(editor.eventType);
+            var selectedRoomMap = {};
+            normalizedRoomIds.forEach(function(roomId) {
+                selectedRoomMap[roomId] = true;
+            });
+            if (editor.scope === 'all') {
+                payloads.push({
+                    id: editor.originalGlobalRuleId || null,
+                    eventType: editor.eventType,
+                    eventLabel: editor.eventLabel,
+                    roomId: '*',
+                    roomName: '',
+                    enabled: true,
+                    channelIds: (editor.channelIdList || []).join(',')
+                });
+                deleteRules = currentRoomRules.filter(function(rule) {
+                    return !!rule.id;
+                });
+            } else if (editor.scope === 'mute') {
+                payloads.push({
+                    id: editor.originalGlobalRuleId || null,
+                    eventType: editor.eventType,
+                    eventLabel: editor.eventLabel,
+                    roomId: '*',
+                    roomName: '',
+                    enabled: false,
+                    channelIds: ''
+                });
+                deleteRules = currentRoomRules.filter(function(rule) {
+                    return !!rule.id;
+                });
+            } else {
+                payloads.push({
+                    id: editor.originalGlobalRuleId || null,
+                    eventType: editor.eventType,
+                    eventLabel: editor.eventLabel,
+                    roomId: '*',
+                    roomName: '',
+                    enabled: false,
+                    channelIds: ''
+                });
+                deleteRules = currentRoomRules.filter(function(rule) {
+                    return !!rule.id && !selectedRoomMap[rule.roomId];
+                });
+                normalizedRoomIds.forEach(function(roomId) {
+                    var existing = self.findNotificationRuleDraft(roomId, editor.eventType);
+                    payloads.push({
+                        id: existing ? existing.id : null,
+                        eventType: editor.eventType,
+                        eventLabel: editor.eventLabel,
+                        roomId: roomId,
+                        roomName: self.notificationRoomName(roomId),
+                        enabled: true,
+                        channelIds: (editor.channelIdList || []).join(',')
+                    });
+                });
+            }
+            editor.saving = true;
+            var pending = Promise.resolve();
+            payloads.forEach(function(payload) {
+                pending = pending.then(function() {
+                    return new Promise(function(resolve, reject) {
+                        NotificationApi.saveRule(payload, resolve, reject);
+                    });
+                });
+            });
+            deleteRules.forEach(function(rule) {
+                pending = pending.then(function() {
+                    return new Promise(function(resolve, reject) {
+                        NotificationApi.deleteRule(rule.id, resolve, reject);
+                    });
+                });
+            });
+            pending.then(function() {
+                editor.saving = false;
+                editor.visible = false;
+                self.$message.success('直播间规则已保存');
+                self.loadNotificationConfig();
+            }).catch(function() {
+                editor.saving = false;
+                self.$message.error('直播间规则保存失败');
+            });
+        },
+        deleteNotificationRule: function(rule) {
+            var self = this;
+            if (!rule || !rule.id) {
+                return;
+            }
+            this.$confirm('确认删除这条规则吗？', '删除规则', {
+                confirmButtonText: '删除',
+                cancelButtonText: '取消',
+                type: 'warning',
+                center: true,
+                roundButton: true,
+                customClass: 'modern-confirm'
+            }).then(function() {
+                NotificationApi.deleteRule(rule.id, function() {
+                    self.$message.success('规则已删除');
+                    self.loadNotificationConfig();
+                }, function() {
+                    self.$message.error('规则删除失败');
+                });
+            }).catch(function() {});
+        },
+        notificationDeliveryStatusType: function(status) {
+            if (status === 'SUCCESS') {
+                return 'success';
+            }
+            if (status === 'FAILED') {
+                return 'danger';
+            }
+            return 'info';
+        },
+        formatNotificationTime: function(value) {
+            if (!value) {
+                return '--';
+            }
+            return String(value).replace('T', ' ').replace(/\.\d+$/, '');
+        },
+        checkLegacyNotificationMigration: function() {
+            var self = this;
+            if (!window.NotificationApi) {
+                return;
+            }
+            NotificationApi.legacyStatus(false, function(data) {
+                if (data && data.needsMigration) {
+                    self.notificationLegacyMigration.data = data;
+                    self.notificationLegacyMigration.revealSecrets = false;
+                    self.notificationLegacyMigration.visible = true;
+                }
+            }, function(xhr) {
+                console.warn('Failed to check legacy notification migration', xhr);
+            });
+        },
+        loadLegacyNotificationMigration: function(revealSecrets, notifyWhenEmpty) {
+            var self = this;
+            self.notificationLegacyMigration.loading = true;
+            NotificationApi.legacyStatus(!!revealSecrets, function(data) {
+                self.notificationLegacyMigration.data = data;
+                self.notificationLegacyMigration.revealSecrets = !!revealSecrets;
+                self.notificationLegacyMigration.visible = !!(data && data.needsMigration);
+                self.notificationLegacyMigration.loading = false;
+                if (notifyWhenEmpty && !(data && data.needsMigration)) {
+                    self.$message.success('没有发现旧版推送设置');
+                }
+            }, function() {
+                self.notificationLegacyMigration.loading = false;
+                self.$message.error('旧版推送设置读取失败');
+            });
+        },
+        revealLegacyNotificationSecrets: function() {
+            var self = this;
+            this.$confirm('显示完整旧版推送参数后，请注意不要在截图或日志中泄露。是否继续？', '显示完整参数', {
+                confirmButtonText: '显示',
+                cancelButtonText: '取消',
+                type: 'warning',
+                center: true,
+                roundButton: true,
+                customClass: 'modern-confirm'
+            }).then(function() {
+                self.loadLegacyNotificationMigration(true);
+            }).catch(function() {});
+        },
+        copyLegacyNotificationBackup: function() {
+            var self = this;
+            var text = this.notificationLegacyBackupJson;
+            if (!text) {
+                return;
+            }
+            var fallbackCopy = function() {
+                var textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.setAttribute('readonly', 'readonly');
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                self.$message.success('旧版推送参数已复制');
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    self.$message.success('旧版推送参数已复制');
+                }).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+        },
+        applyLegacyNotificationMigration: function() {
+            var self = this;
+            this.$confirm('迁移会把旧版房间推送参数写入新的推送渠道和规则，并清理旧字段。是否继续？', '迁移旧版推送设置', {
+                confirmButtonText: '迁移并清理',
+                cancelButtonText: '取消',
+                type: 'warning',
+                center: true,
+                roundButton: true,
+                customClass: 'modern-confirm'
+            }).then(function() {
+                self.notificationLegacyMigration.loading = true;
+                NotificationApi.applyLegacyMigration(function(data) {
+                    self.notificationLegacyMigration.loading = false;
+                    self.notificationLegacyMigration.visible = false;
+                    self.$message.success('已迁移 ' + ((data && data.rooms) || 0) + ' 个房间的旧版推送设置');
+                    self.loadNotificationConfig();
+                }, function() {
+                    self.notificationLegacyMigration.loading = false;
+                    self.$message.error('旧版推送设置迁移失败');
+                });
+            }).catch(function() {});
+        },
+        discardLegacyNotificationMigration: function() {
+            var self = this;
+            this.$confirm('不迁移会直接清理旧版推送参数。清理前建议先复制备份。是否继续？', '不迁移并清理旧配置', {
+                confirmButtonText: '清理旧配置',
+                cancelButtonText: '取消',
+                type: 'warning',
+                center: true,
+                roundButton: true,
+                customClass: 'modern-confirm'
+            }).then(function() {
+                self.notificationLegacyMigration.loading = true;
+                NotificationApi.discardLegacyMigration(function(data) {
+                    self.notificationLegacyMigration.loading = false;
+                    self.notificationLegacyMigration.visible = false;
+                    self.$message.success('已清理 ' + ((data && data.rooms) || 0) + ' 个房间的旧版推送设置');
+                    self.loadNotificationConfig();
+                }, function() {
+                    self.notificationLegacyMigration.loading = false;
+                    self.$message.error('旧版推送设置清理失败');
+                });
+            }).catch(function() {});
         },
         handleMobileWorkspaceTap: function() {
             if (this.showWorkspaceUsagePanel) {

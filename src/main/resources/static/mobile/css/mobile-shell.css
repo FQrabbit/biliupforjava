@@ -390,17 +390,19 @@ body > .el-picker-panel .el-date-table td div {
 .theme-palette-select-popper.el-popper,
 .mobile-user-popper.el-select-dropdown,
 .theme-palette-select-popper.el-select-dropdown,
+body > .el-select-dropdown,
 body > .el-cascader__dropdown,
 body > .el-dropdown-menu,
 body > .el-autocomplete-suggestion,
 body > .el-time-panel,
 body > .el-color-dropdown,
 .el-picker-panel {
-    z-index: 4100 !important;
+    z-index: 4300 !important;
 }
 
 .mobile-user-popper,
 .theme-palette-select-popper,
+body > .el-select-dropdown,
 body > .el-cascader__dropdown,
 body > .el-dropdown-menu,
 body > .el-autocomplete-suggestion,
@@ -418,6 +420,7 @@ body > .el-color-dropdown,
 }
 
 body > .el-cascader__dropdown .el-cascader-menu,
+body > .el-select-dropdown .el-select-dropdown__wrap,
 body > .el-dropdown-menu,
 body > .el-autocomplete-suggestion .el-scrollbar__wrap,
 body > .el-time-panel,
@@ -808,6 +811,12 @@ body.mobile-iframe-modal-open {
 
 #app.mobile-shell ~ .v-modal {
     z-index: 3190 !important;
+}
+
+#app.mobile-shell ~ .el-drawer__wrapper {
+    z-index: 4200 !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 #app.mobile-shell ~ .el-dialog__wrapper {

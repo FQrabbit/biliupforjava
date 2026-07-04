@@ -30,6 +30,7 @@ public class SystemConfigService {
     public static final String KEY_DANMAKU_RECONCILE_INTERVAL_SECONDS = "bili.dm.reconcile-interval-seconds";
     public static final String KEY_DANMAKU_DISPATCH_BATCH_SIZE = "bili.dm.dispatch-batch-size";
     public static final String KEY_DANMAKU_MAX_NORMAL_WORKERS = "bili.dm.max-normal-workers";
+    public static final String KEY_NOTIFICATION_ENABLED = "notification.enabled";
 
     // 录播姬 Cookie 自动同步配置
     public static final String KEY_BREC_SYNC_ENABLED = "brec.cookie-sync.enabled";
@@ -77,6 +78,11 @@ public class SystemConfigService {
         loadOrInitConfig(KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS, String.valueOf(DEFAULT_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS), "评论发送间隔(秒)：SC/上舰列表评论与礼物评论共用的全局发送节拍");
         initDanmakuDispatchConfig();
         initBrecCookieSyncConfig();
+        initNotificationConfig();
+    }
+
+    private void initNotificationConfig() {
+        loadOrInitConfig(KEY_NOTIFICATION_ENABLED, "true", "是否启用统一推送通知模块");
     }
 
     private void initBrecCookieSyncConfig() {
@@ -165,6 +171,7 @@ public class SystemConfigService {
             if (KEY_UPLOAD_NEW_FLOW_ENABLED.equals(key)) config.setDescription("是否使用浏览器 multipart 上传流程");
             if (KEY_NORMAL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("弹幕发送间隔(秒)：普通弹幕与SC/上舰高级弹幕共用的全局发送节拍");
             if (KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("评论发送间隔(秒)：SC/上舰列表评论与礼物评论共用的全局发送节拍");
+            if (KEY_NOTIFICATION_ENABLED.equals(key)) config.setDescription("是否启用统一推送通知模块");
         }
         systemConfigRepository.save(config);
         
@@ -179,7 +186,7 @@ public class SystemConfigService {
         if (value == null) {
             return null;
         }
-        if (KEY_UPLOAD_NEW_FLOW_ENABLED.equals(key)) {
+        if (KEY_UPLOAD_NEW_FLOW_ENABLED.equals(key) || KEY_NOTIFICATION_ENABLED.equals(key)) {
             String normalized = value.trim().toLowerCase();
             return ("true".equals(normalized) || "1".equals(normalized) || "yes".equals(normalized) || "on".equals(normalized)) ? "true" : "false";
         }
@@ -277,7 +284,7 @@ public class SystemConfigService {
     }
 
     private void applyConfig(String key, String value) {
-        if (KEY_UPLOAD_NEW_FLOW_ENABLED.equals(key)) {
+        if (KEY_UPLOAD_NEW_FLOW_ENABLED.equals(key) || KEY_NOTIFICATION_ENABLED.equals(key)) {
             log.info("[BLR] {}", LogKvs.event("SystemConfig.ApplyBoolean")
                     .add("key", key)
                     .add("value", value));

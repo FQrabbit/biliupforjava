@@ -7733,6 +7733,45 @@
   ]
 },
 {
+  "name":"top.sshh.bililiverecoder.entity.NotificationChannel",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.NotificationDelivery",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
+  "name":"top.sshh.bililiverecoder.entity.NotificationRule",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[
+    {"name":"<init>","parameterTypes":[] }, 
+    {"name":"equals","parameterTypes":["java.lang.Object"] }, 
+    {"name":"getId","parameterTypes":[] }, 
+    {"name":"setId","parameterTypes":["java.lang.Long"] }
+  ]
+},
+{
   "name":"top.sshh.bililiverecoder.entity.RecordHistory",
   "allDeclaredFields":true,
   "queryAllDeclaredMethods":true,

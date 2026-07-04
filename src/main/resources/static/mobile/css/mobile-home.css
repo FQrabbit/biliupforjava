@@ -928,6 +928,359 @@
     margin-bottom: 0;
 }
 
+.mobile-shell .mobile-notification-card {
+    padding: 10px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--mobile-surface) 74%, transparent);
+}
+
+.mobile-shell .mobile-notification-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+}
+
+.mobile-shell .mobile-notification-main span,
+.mobile-shell .mobile-notification-channel span {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.mobile-shell .mobile-notification-main strong,
+.mobile-shell .mobile-notification-channel strong {
+    color: var(--text-primary);
+    font-size: 15px;
+    line-height: 1.2;
+    font-weight: 780;
+    overflow-wrap: anywhere;
+}
+
+.mobile-shell .mobile-notification-main em,
+.mobile-shell .mobile-notification-channel em {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.3;
+    font-style: normal;
+}
+
+.mobile-shell .mobile-notification-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.mobile-shell .mobile-notification-metrics span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    padding: 9px 8px;
+    border-radius: 15px;
+    background: color-mix(in srgb, var(--mobile-accent-1) 8%, var(--mobile-surface-strong));
+    text-align: center;
+}
+
+.mobile-shell .mobile-notification-metrics strong {
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.mobile-shell .mobile-notification-metrics em {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.2;
+    font-style: normal;
+    overflow-wrap: anywhere;
+}
+
+.mobile-shell .mobile-notification-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.mobile-shell .mobile-notification-actions button,
+.mobile-shell .mobile-notification-channel button {
+    min-height: 44px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 15px;
+    color: var(--mobile-accent-1);
+    background: color-mix(in srgb, var(--mobile-accent-1) 8%, var(--mobile-surface-strong));
+    font-size: 13px;
+    font-weight: 760;
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-notification-actions button i,
+.mobile-shell .mobile-notification-channel button i {
+    margin-right: 5px;
+}
+
+.mobile-shell .mobile-notification-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.mobile-shell .mobile-notification-channel {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--mobile-surface-strong) 72%, transparent);
+}
+
+.mobile-shell .mobile-notification-channel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.mobile-shell .mobile-notification-channel-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.mobile-shell .mobile-notification-channel button:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+
+.mobile-shell .mobile-notification-channel-editor {
+    display: grid;
+    gap: 8px;
+    padding-top: 2px;
+    border-top: 1px solid var(--mobile-border);
+}
+
+.mobile-shell .mobile-notification-channel-input .el-input__inner {
+    background: var(--mobile-surface);
+    border-color: var(--mobile-border);
+    color: var(--text-primary);
+}
+
+.mobile-shell .mobile-notification-channel-fieldset {
+    display: grid;
+    gap: 8px;
+    padding: 9px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 15px;
+    background: color-mix(in srgb, var(--mobile-surface-strong) 58%, transparent);
+}
+
+.mobile-shell .mobile-notification-channel-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 42px;
+    color: var(--text-secondary);
+}
+
+.mobile-shell .mobile-notification-channel-editor-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.mobile-shell .mobile-notification-channel-editor-actions button {
+    min-height: 44px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 15px;
+    color: var(--mobile-accent-1);
+    background: color-mix(in srgb, var(--mobile-accent-1) 8%, var(--mobile-surface-strong));
+    font-size: 13px;
+    font-weight: 760;
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-notification-empty {
+    margin-top: 10px;
+    margin-bottom: 0;
+    text-align: center;
+}
+
+.mobile-shell .mobile-notification-rules {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+    min-width: 0;
+}
+
+.mobile-shell .mobile-notification-subtitle {
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.3;
+    font-weight: 780;
+}
+
+.mobile-shell .mobile-notification-rule,
+.mobile-shell .mobile-notification-override {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-width: 0;
+    min-height: 188px;
+    padding: 10px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--mobile-surface-strong) 72%, transparent);
+}
+
+.mobile-shell .mobile-notification-rule-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 40px;
+    min-width: 0;
+}
+
+.mobile-shell .mobile-notification-rule-head span {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.mobile-shell .mobile-notification-rule-head strong {
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.25;
+    font-weight: 760;
+}
+
+.mobile-shell .mobile-notification-rule-head em {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.25;
+    font-style: normal;
+}
+
+.mobile-shell .mobile-notification-rule-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 9px 10px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--mobile-accent-1) 6%, var(--mobile-surface));
+    box-sizing: border-box;
+}
+
+.mobile-shell .mobile-notification-rule-meta span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.mobile-shell .mobile-notification-rule-meta strong {
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.25;
+    font-weight: 760;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.mobile-shell .mobile-notification-room-rules {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+    max-height: 96px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.mobile-shell .mobile-notification-room-rules button {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    min-height: 40px;
+    padding: 8px 10px;
+    border-radius: 14px;
+}
+
+.mobile-shell .mobile-notification-room-rules button span {
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.3;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+    text-align: left;
+}
+
+.mobile-shell .mobile-notification-room-rules button em {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.2;
+    font-style: normal;
+}
+
+.mobile-shell .mobile-notification-select,
+.mobile-shell .mobile-notification-mode {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.mobile-shell .mobile-notification-select .el-select__tags {
+    max-width: calc(100% - 30px) !important;
+    overflow: hidden;
+    flex-wrap: nowrap;
+}
+
+.mobile-shell .mobile-notification-mode .el-radio-button {
+    width: 33.333%;
+}
+
+.mobile-shell .mobile-notification-mode .el-radio-button__inner {
+    width: 100%;
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+.mobile-shell .mobile-notification-rule button,
+.mobile-shell .mobile-notification-override button {
+    min-height: 44px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 15px;
+    color: var(--mobile-accent-1);
+    background: color-mix(in srgb, var(--mobile-accent-1) 8%, var(--mobile-surface-strong));
+    font-size: 13px;
+    font-weight: 760;
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-notification-rule-edit {
+    margin-top: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.mobile-shell .mobile-notification-rule button:disabled,
+.mobile-shell .mobile-notification-override button:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+
 .mobile-shell .mobile-sheet-actions {
     display: grid;
     grid-template-columns: 1fr 1.25fr;

@@ -1,185 +1,51 @@
-package top.sshh.bililiverecoder.util;
+package top.sshh.bililiverecoder.notification;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.zjiecode.wxpusher.client.WxPusher;
-import com.zjiecode.wxpusher.client.bean.Message;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import top.sshh.bililiverecoder.entity.RecordRoom;
-import top.sshh.bililiverecoder.notification.NotificationEventType;
-import top.sshh.bililiverecoder.notification.NotificationService;
+import org.springframework.stereotype.Component;
+import top.sshh.bililiverecoder.entity.NotificationChannel;
+import top.sshh.bililiverecoder.util.HttpClientUtil;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Slf4j
-public final class PushNotifyClient {
+@Component
+public class ServerChan3NotificationChannel implements NotificationChannelAdapter {
+
+    public static final String TYPE = "serverchan3";
 
     private static final String SERVER_CHAN3_SEND_URL = "https://%s.push.ft07.com/send/%s.send";
     private static final Pattern SERVER_CHAN3_UID_PATTERN = Pattern.compile("^sctp(\\d+)t.*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern BV_ID_PATTERN = Pattern.compile("BV[0-9A-Za-z]+");
-    private static final ThreadLocal<NotificationEventType> CURRENT_EVENT_TYPE = new ThreadLocal<>();
-    private static volatile NotificationService notificationService;
-    private static final List<String> KNOWN_PUSH_TAGS = Arrays.asList(
-            "开始直播", "录制结束", "分P上传", "视频投稿", "高级弹幕", "视频评论", "云剪辑"
-    );
 
-    private PushNotifyClient() {
+    @Override
+    public String type() {
+        return TYPE;
     }
 
-    public static void setNotificationService(NotificationService service) {
-        notificationService = service;
-    }
-
-    public static boolean canSend(RecordRoom room, String wxuid, String pushMsgTags, String tag) {
-        NotificationEventType eventType = NotificationEventType.fromLegacyLabel(tag).orElse(null);
-        boolean allowed;
-        if (notificationService != null && eventType != null) {
-            allowed = notificationService.canSend(room, eventType);
-        } else if (!isTagEnabled(pushMsgTags, tag)) {
-            allowed = false;
-        } else {
-            allowed = hasAnyChannel(room, wxuid);
+    @Override
+    public NotificationSendResult send(NotificationChannel channel, NotificationMessage notificationMessage) {
+        JSONObject config = NotificationJson.parse(channel.getConfigJson());
+        JSONObject secret = NotificationJson.parse(channel.getSecretJson());
+        String sendKey = secret.getString("sendKey");
+        if (StringUtils.isBlank(sendKey)) {
+            return NotificationSendResult.failed("ServerChan3 SendKey is empty");
         }
-        if (allowed && eventType != null) {
-            CURRENT_EVENT_TYPE.set(eventType);
-        } else {
-            CURRENT_EVENT_TYPE.remove();
-        }
-        return allowed;
-    }
-
-    public static String normalizePushMsgTags(String pushMsgTags) {
-        Set<String> enabled = parseEnabledTags(pushMsgTags);
-        if (enabled.isEmpty()) {
-            return "";
-        }
-        return KNOWN_PUSH_TAGS.stream().filter(enabled::contains).collect(Collectors.joining(","));
-    }
-
-    public static boolean isTagEnabled(String pushMsgTags, String tag) {
-        if (StringUtils.isBlank(pushMsgTags) || StringUtils.isBlank(tag)) {
-            return false;
-        }
-        Set<String> enabled = parseEnabledTags(pushMsgTags);
-        String target = normalizeTag(tag);
-        return enabled.contains(target);
-    }
-
-    private static Set<String> parseEnabledTags(String rawTags) {
-        if (StringUtils.isBlank(rawTags)) {
-            return Collections.emptySet();
-        }
-        String normalizedRaw = normalizeSeparators(rawTags);
-        String[] pieces = normalizedRaw.split(",");
-        Set<String> enabled = new LinkedHashSet<>();
-        for (String piece : pieces) {
-            String token = normalizeTag(piece);
-            if (StringUtils.isNotBlank(token) && KNOWN_PUSH_TAGS.contains(token)) {
-                enabled.add(token);
-            }
-        }
-        if (!enabled.isEmpty()) {
-            return enabled;
-        }
-
-        // 兼容极旧数据：如直接拼接成一个长字符串（无分隔符），按已知标签做回退识别。
-        String compact = normalizeTag(normalizedRaw);
-        for (String knownTag : KNOWN_PUSH_TAGS) {
-            if (compact.contains(normalizeTag(knownTag))) {
-                enabled.add(knownTag);
-            }
-        }
-        return enabled;
-    }
-
-    private static String normalizeSeparators(String raw) {
-        return StringUtils.defaultString(raw)
-                .replace("，", ",")
-                .replace("、", ",")
-                .replace("|", ",")
-                .replace("；", ",")
-                .replace(";", ",")
-                .replace("\n", ",")
-                .replace("\r", ",")
-                .replace("\t", ",")
-                .trim();
-    }
-
-    private static String normalizeTag(String raw) {
-        String value = StringUtils.defaultString(raw).trim();
-        while (value.startsWith("[") || value.startsWith("\"") || value.startsWith("'")) {
-            value = value.substring(1).trim();
-        }
-        while (value.endsWith("]") || value.endsWith("\"") || value.endsWith("'")) {
-            value = value.substring(0, value.length() - 1).trim();
-        }
-        return value.replace(" ", "").replace("　", "");
-    }
-
-    public static boolean hasAnyChannel(RecordRoom room, String wxuid) {
-        if (StringUtils.isNotBlank(wxuid)) {
-            return true;
-        }
-        if (room == null) {
-            return false;
-        }
-        return StringUtils.isNotBlank(room.getServerChanSendKey());
-    }
-
-    public static void sendParallel(RecordRoom room, Message message) {
-        if (room == null || message == null) {
-            return;
-        }
-        NotificationEventType eventType = CURRENT_EVENT_TYPE.get();
-        CURRENT_EVENT_TYPE.remove();
-        if (notificationService != null && eventType != null) {
-            notificationService.sendWxPusherMessage(room, eventType, message);
-            return;
-        }
-        String wxuid = room.getWxuid();
-        String serverChanSendKey = room.getServerChanSendKey();
-
-        CompletableFuture<Void> wxFuture = CompletableFuture.runAsync(() -> sendWxPusher(message, room.getRoomId(), wxuid));
-        CompletableFuture<Void> serverChanFuture = CompletableFuture.runAsync(() -> sendServerChan3(room, message, serverChanSendKey));
-        CompletableFuture.allOf(wxFuture, serverChanFuture).join();
-    }
-
-    private static void sendWxPusher(Message message, String roomId, String wxuid) {
-        if (StringUtils.isBlank(wxuid)) {
-            return;
+        String apiUrl = buildServerChan3ApiUrl(sendKey);
+        if (StringUtils.isBlank(apiUrl)) {
+            return NotificationSendResult.failed("invalid ServerChan3 SendKey format");
         }
         try {
-            WxPusher.send(message);
-        } catch (Exception e) {
-            log.warn("[BLR] {}", LogKvs.event("Notify.WxPusher.Send.Failed")
-                    .add("roomId", roomId)
-                    .addIfNotBlank("wxuid", wxuid)
-                    .addIfNotBlank("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
-        }
-    }
-
-    private static void sendServerChan3(RecordRoom room, Message message, String serverChanSendKey) {
-        if (StringUtils.isBlank(serverChanSendKey)) {
-            return;
-        }
-        try {
-            String rawContent = StringUtils.defaultString(message.getContent());
+            String rawContent = StringUtils.defaultString(notificationMessage.getContent());
             String title = buildTitle(rawContent);
-            String markdownContent = buildServerChanMarkdown(room, rawContent);
+            String markdownContent = buildServerChanMarkdown(notificationMessage, rawContent);
             String shortSummary = buildShortSummary(rawContent);
 
             Map<String, String> headers = new HashMap<>();
@@ -189,48 +55,34 @@ public final class PushNotifyClient {
             if (StringUtils.isNotBlank(shortSummary)) {
                 form.put("short", shortSummary);
             }
-            if (StringUtils.isNotBlank(room.getServerChanChannel())) {
-                form.put("tags", room.getServerChanChannel());
+            String tags = config.getString("tags");
+            if (StringUtils.isNotBlank(tags)) {
+                form.put("tags", tags);
             }
 
-            String apiUrl = buildServerChan3ApiUrl(serverChanSendKey);
-            String serverChanUid = extractServerChan3Uid(serverChanSendKey);
-            if (StringUtils.isBlank(apiUrl)) {
-                log.warn("[BLR] {}", LogKvs.event("Notify.ServerChan3.Send.Failed")
-                        .add("roomId", room.getRoomId())
-                        .add("code", -1)
-                        .add("message", "invalid serverChanSendKey format"));
-                return;
-            }
             String resp = HttpClientUtil.post(
                     apiUrl,
                     headers,
                     form,
                     false,
                     LogKvs.event("Http.Notify.ServerChan3.Request.Failed")
-                            .add("roomId", room.getRoomId())
-                            .addIfNotBlank("uname", room.getUname())
+                            .addIfNotBlank("roomId", notificationMessage.getRoomId())
                             .addIfNotBlank("notifyTitle", title)
-                            .addIfNotBlank("serverChanUid", serverChanUid),
+                            .addIfNotBlank("serverChanUid", extractServerChan3Uid(sendKey)),
                     false
             );
             if (StringUtils.isBlank(resp)) {
-                return;
+                return NotificationSendResult.failed("empty ServerChan3 response");
             }
             JSONObject json = JSON.parseObject(resp);
             Integer code = json.getInteger("code");
             if (code == null || code != 0) {
-                log.warn("[BLR] {}", LogKvs.event("Notify.ServerChan3.Send.Failed")
-                        .add("roomId", room.getRoomId())
-                        .add("code", code == null ? -1 : code)
-                        .addIfNotBlank("message", json.getString("message"))
-                        .addIfNotBlank("error", json.getString("error")));
+                String message = StringUtils.defaultIfBlank(json.getString("message"), json.getString("error"));
+                return NotificationSendResult.failed("ServerChan3 code=" + (code == null ? -1 : code) + ", " + StringUtils.defaultString(message));
             }
+            return NotificationSendResult.ok();
         } catch (Exception e) {
-            log.warn("[BLR] {}", LogKvs.event("Notify.ServerChan3.Send.Failed")
-                    .add("roomId", room.getRoomId())
-                    .addIfNotBlank("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
+            return NotificationSendResult.failed(StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName()));
         }
     }
 
@@ -260,7 +112,7 @@ public final class PushNotifyClient {
         return title;
     }
 
-    private static String buildServerChanMarkdown(RecordRoom room, String text) {
+    private static String buildServerChanMarkdown(NotificationMessage message, String text) {
         List<String> lines = splitLines(text);
         List<String> normalized = lines.stream()
                 .map(StringUtils::trim)
@@ -312,14 +164,14 @@ public final class PushNotifyClient {
             md.append("\n");
         }
 
-        appendUsefulLinks(md, room, kv);
-        appendMeta(md, room);
+        appendUsefulLinks(md, message, kv);
+        appendMeta(md, message);
         return md.toString().trim();
     }
 
-    private static void appendUsefulLinks(StringBuilder md, RecordRoom room, Map<String, String> kv) {
+    private static void appendUsefulLinks(StringBuilder md, NotificationMessage message, Map<String, String> kv) {
         String bv = extractBvId(kv);
-        String roomId = room == null ? null : room.getRoomId();
+        String roomId = message == null ? null : message.getRoomId();
         if (StringUtils.isBlank(bv) && StringUtils.isBlank(roomId)) {
             return;
         }
@@ -333,14 +185,14 @@ public final class PushNotifyClient {
         md.append("\n");
     }
 
-    private static void appendMeta(StringBuilder md, RecordRoom room) {
+    private static void appendMeta(StringBuilder md, NotificationMessage message) {
         md.append("---\n");
         md.append("来自 biliupforjava");
-        if (room != null && StringUtils.isNotBlank(room.getUname())) {
-            md.append(" | 主播: ").append(escapeMarkdownInline(room.getUname()));
+        if (message != null && StringUtils.isNotBlank(message.getRoomName())) {
+            md.append(" | 主播: ").append(escapeMarkdownInline(message.getRoomName()));
         }
-        if (room != null && StringUtils.isNotBlank(room.getRoomId())) {
-            md.append(" | 房间ID: ").append(room.getRoomId());
+        if (message != null && StringUtils.isNotBlank(message.getRoomId())) {
+            md.append(" | 房间ID: ").append(message.getRoomId());
         }
         md.append("\n");
     }
