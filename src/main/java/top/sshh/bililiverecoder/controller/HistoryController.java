@@ -1010,6 +1010,17 @@ public class HistoryController {
         return retry == null ? HistoryMsgRetryService.RetryResult.warning("重试请求失败").toMap() : retry.toMap();
     }
 
+    @PostMapping("/{id}/danmaku/forceRetryFailed")
+    public Map<String, Object> forceRetryFailedDanmaku(@PathVariable("id") Long id,
+                                                        @RequestBody(required = false) Map<String, Object> request) {
+        int displayedFailed = parseNonNegativeInt(request == null ? null : request.get("displayedFailed"));
+        HistoryMsgRetryService.RetryResult retry = msgRetryService.forceRetryFailedByHistoryId(id, displayedFailed);
+        if (retry != null && retry.retried > 0) {
+            liveMsgSendSync.enqueueHistoryDispatch(id);
+        }
+        return retry == null ? HistoryMsgRetryService.RetryResult.warning("强制重试请求失败").toMap() : retry.toMap();
+    }
+
     @PostMapping("/abandonMsgQueue/batch")
     public Map<String, Object> abandonMsgQueueBatch(@RequestBody(required = false) Map<String, Object> request) {
         Map<String, Object> result = new HashMap<>();

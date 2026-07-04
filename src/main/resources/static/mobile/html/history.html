@@ -1779,12 +1779,22 @@
                      @mouseleave="hideDanmakuFailedHint">
                     <button type="button"
                             :disabled="danmakuRetryLoading"
-                            aria-label="重试未成功弹幕"
+                            aria-label="重试可发送弹幕"
                             @focus="holdDanmakuFailedHint"
                             @blur="hideDanmakuFailedHint"
                             @click.stop="retryFailedDanmaku(getMobileDanmakuStatsItem())">
-                        <i :class="danmakuRetryLoading ? 'el-icon-loading' : 'el-icon-refresh'"></i>
-                        <span>{{ danmakuRetryLoading ? '正在加入队列' : '重试未成功弹幕' }}</span>
+                        <i :class="danmakuRetryLoading && danmakuRetryMode === 'normal' ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+                        <span>{{ danmakuRetryLoading && danmakuRetryMode === 'normal' ? '正在加入队列' : '重试可发送弹幕' }}</span>
+                    </button>
+                    <button type="button"
+                            class="is-force"
+                            :disabled="danmakuRetryLoading"
+                            aria-label="强制重新入队未成功弹幕"
+                            @focus="holdDanmakuFailedHint"
+                            @blur="hideDanmakuFailedHint"
+                            @click.stop="forceRetryFailedDanmaku(getMobileDanmakuStatsItem())">
+                        <i :class="danmakuRetryLoading && danmakuRetryMode === 'force' ? 'el-icon-loading' : 'el-icon-warning-outline'"></i>
+                        <span>{{ danmakuRetryLoading && danmakuRetryMode === 'force' ? '正在强制加入' : '强制重新入队' }}</span>
                     </button>
                 </div>
                 <transition name="danmaku-retry-feedback-motion">

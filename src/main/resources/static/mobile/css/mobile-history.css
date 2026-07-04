@@ -3111,6 +3111,9 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 .mobile-history-danmaku-retry {
     grid-column: 1 / -1;
     min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
 }
 
 .mobile-history-danmaku-retry button {
@@ -3120,10 +3123,10 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
     align-items: center;
     justify-content: center;
     gap: 7px;
-    border: 1px solid color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    border: 1px solid color-mix(in srgb, var(--primary-color) 34%, var(--mobile-page-border));
     border-radius: 14px;
-    background: color-mix(in srgb, var(--danger-color) 9%, var(--mobile-page-surface-strong));
-    color: var(--danger-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--mobile-page-surface-strong));
+    color: var(--primary-color);
     font-size: 13px;
     font-weight: 800;
     line-height: 1;
@@ -3132,12 +3135,23 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
     transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
 }
 
+.mobile-history-danmaku-retry button.is-force {
+    border-color: color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 9%, var(--mobile-page-surface-strong));
+    color: var(--danger-color);
+}
+
 .mobile-history-danmaku-retry button:active {
     transform: scale(0.985);
 }
 
 .mobile-history-danmaku-retry button:focus-visible {
     outline: none;
+    border-color: color-mix(in srgb, var(--primary-color) 58%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--primary-color) 13%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-retry button.is-force:focus-visible {
     border-color: color-mix(in srgb, var(--danger-color) 58%, var(--mobile-page-border));
     background: color-mix(in srgb, var(--danger-color) 13%, var(--mobile-page-surface-strong));
 }

@@ -5645,6 +5645,10 @@
 
     justify-content: flex-end;
 
+    flex-wrap: wrap;
+
+    gap: 6px;
+
 }
 
 .danmaku-retry-button {
@@ -5661,13 +5665,13 @@
 
     padding: 5px 10px;
 
-    border: 1px solid var(--danger-border-soft);
+    border: 1px solid var(--primary-color);
 
     border-radius: 999px;
 
-    background: var(--danger-soft-bg-faint);
+    background: var(--primary-soft-bg, rgba(64, 158, 255, 0.1));
 
-    color: var(--danger-color);
+    color: var(--primary-color);
 
     font-size: 12px;
 
@@ -5685,6 +5689,25 @@
 .danmaku-retry-button:focus-visible {
 
     outline: none;
+
+    border-color: var(--primary-color);
+
+    background: var(--primary-soft-bg-hover, rgba(64, 158, 255, 0.16));
+
+}
+
+.danmaku-retry-button.is-force {
+
+    border-color: var(--danger-border-soft);
+
+    background: var(--danger-soft-bg-faint);
+
+    color: var(--danger-color);
+
+}
+
+.danmaku-retry-button.is-force:hover,
+.danmaku-retry-button.is-force:focus-visible {
 
     border-color: var(--danger-border);
 

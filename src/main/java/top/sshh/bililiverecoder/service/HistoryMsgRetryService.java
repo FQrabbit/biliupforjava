@@ -43,6 +43,15 @@ public class HistoryMsgRetryService {
 
     @Transactional
     public RetryResult retryFailedByHistoryId(Long historyId, int displayedFailed) {
+        return retryFailedByHistoryId(historyId, displayedFailed, false);
+    }
+
+    @Transactional
+    public RetryResult forceRetryFailedByHistoryId(Long historyId, int displayedFailed) {
+        return retryFailedByHistoryId(historyId, displayedFailed, true);
+    }
+
+    private RetryResult retryFailedByHistoryId(Long historyId, int displayedFailed, boolean force) {
         if (historyId == null) {
             return RetryResult.warning("稿件不存在");
         }
@@ -69,24 +78,27 @@ public class HistoryMsgRetryService {
         int totalFailed = countFailed(partIds, 0) + countFailed(partIds, 1);
         if (totalFailed <= 0) {
             int bvidFailed = countFailedByBvid(history.getBvId());
-            RetryResult result = RetryResult.warning(buildNoRetryableMessage(displayedFailed, bvidFailed));
+            RetryResult result = RetryResult.warning(buildNoRetryableMessage(displayedFailed, bvidFailed, force));
+            result.forced = force;
             result.displayedFailed = Math.max(0, displayedFailed);
             result.totalFailed = bvidFailed;
             result.skipped = Math.max(result.displayedFailed, bvidFailed);
             log.info("[BLR] {}", LogKvs.event("History.MsgRetry.NoDispatchableFailed")
                     .add("historyId", historyId)
                     .addIfNotBlank("bvid", history.getBvId())
+                    .add("force", force)
                     .add("displayedFailed", displayedFailed)
                     .add("bvidFailed", bvidFailed));
             return result;
         }
 
-        int ordinary = retryFailed(partIds, 0);
-        int advanced = retryFailed(partIds, 1);
+        int ordinary = retryFailed(partIds, 0, force);
+        int advanced = retryFailed(partIds, 1, force);
         int retried = ordinary + advanced;
         int skipped = Math.max(0, totalFailed - retried);
 
         RetryResult result = new RetryResult();
+        result.forced = force;
         result.displayedFailed = Math.max(0, displayedFailed);
         result.totalFailed = totalFailed;
         result.ordinary = ordinary;
@@ -97,12 +109,19 @@ public class HistoryMsgRetryService {
         if (retried > 0) {
             result.success = true;
             result.type = "success";
-            result.msg = skipped > 0
-                    ? String.format("已将 %d 条未成功弹幕重新加入队列，跳过 %d 条暂不可重试项", retried, skipped)
-                    : String.format("已将 %d 条未成功弹幕重新加入队列", retried);
+            if (force) {
+                result.msg = skipped > 0
+                        ? String.format("已强制将 %d 条未成功弹幕重新加入队列，跳过 %d 条状态不满足项", retried, skipped)
+                        : String.format("已强制将 %d 条未成功弹幕重新加入队列", retried);
+            } else {
+                result.msg = skipped > 0
+                        ? String.format("已将 %d 条可重试弹幕重新加入队列，跳过 %d 条暂不可重试项", retried, skipped)
+                        : String.format("已将 %d 条可重试弹幕重新加入队列", retried);
+            }
             log.info("[BLR] {}", LogKvs.event("History.MsgRetry.Done")
                     .add("historyId", historyId)
                     .addIfNotBlank("bvid", history.getBvId())
+                    .add("force", force)
                     .add("ordinary", ordinary)
                     .add("advanced", advanced)
                     .add("retried", retried)
@@ -110,10 +129,13 @@ public class HistoryMsgRetryService {
         } else {
             result.success = false;
             result.type = "warning";
-            result.msg = "当前未成功弹幕暂不可重试，可能是内容/时间非法，或稿件、房间、分P状态不满足发送条件";
+            result.msg = force
+                    ? "当前未成功弹幕无法强制重新入队，可能是稿件、房间开关、分P/CID 状态不满足发送条件，或发送记录已被清理"
+                    : "当前未成功弹幕暂不可自动重试，可能是内容/时间非法，或稿件、房间、分P状态不满足发送条件";
             log.info("[BLR] {}", LogKvs.event("History.MsgRetry.None")
                     .add("historyId", historyId)
                     .addIfNotBlank("bvid", history.getBvId())
+                    .add("force", force)
                     .add("totalFailed", totalFailed));
         }
         return result;
@@ -134,17 +156,22 @@ public class HistoryMsgRetryService {
         return (int) Math.min(Integer.MAX_VALUE, msgRepository.countFailedByBvid(bvid));
     }
 
-    private String buildNoRetryableMessage(int displayedFailed, int bvidFailed) {
+    private String buildNoRetryableMessage(int displayedFailed, int bvidFailed, boolean force) {
         if (displayedFailed > 0 || bvidFailed > 0) {
+            if (force) {
+                return "当前未成功弹幕没有可强制重新入队的发送记录，通常是记录已被清理，或分P/CID、房间开关、稿件状态已不满足发送条件。可刷新列表确认最新统计。";
+            }
             return "当前未成功弹幕没有可重新入队的发送记录，通常是平台已明确拒绝、弹幕记录已被清理，或分P/CID、房间开关、稿件状态已不满足发送条件。可刷新列表确认最新统计。";
         }
         return "当前没有可重试的未成功弹幕";
     }
 
-    private int retryFailed(List<Long> partIds, int pool) {
+    private int retryFailed(List<Long> partIds, int pool, boolean force) {
         int total = 0;
         for (List<Long> batch : batches(partIds)) {
-            total += msgRepository.retryDispatchableFailedByPartIdsAndPool(batch, pool, NON_RETRYABLE_CODES);
+            total += force
+                    ? msgRepository.forceRetryDispatchableFailedByPartIdsAndPool(batch, pool)
+                    : msgRepository.retryDispatchableFailedByPartIdsAndPool(batch, pool, NON_RETRYABLE_CODES);
         }
         return total;
     }
@@ -164,6 +191,7 @@ public class HistoryMsgRetryService {
         public boolean success;
         public String type;
         public String msg;
+        public boolean forced;
         public int totalFailed;
         public int displayedFailed;
         public int retried;
@@ -192,6 +220,7 @@ public class HistoryMsgRetryService {
             map.put("success", success);
             map.put("type", type);
             map.put("msg", msg);
+            map.put("forced", forced);
             map.put("totalFailed", totalFailed);
             map.put("displayedFailed", displayedFailed);
             map.put("retried", retried);

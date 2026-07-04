@@ -742,12 +742,22 @@
                                         <button type="button"
                                                 class="danmaku-retry-button"
                                                 :disabled="danmakuRetryLoading"
-                                                aria-label="重试未成功弹幕"
+                                                aria-label="重试可发送弹幕"
                                                 @focus="holdDanmakuFailedHint"
                                                 @blur="hideDanmakuFailedHint"
                                                 @click.stop="retryFailedDanmaku(currentDetail)">
-                                            <i :class="danmakuRetryLoading ? 'el-icon-loading' : 'el-icon-refresh'"></i>
-                                            <span>{{ danmakuRetryLoading ? '加入中' : '重试未成功' }}</span>
+                                            <i :class="danmakuRetryLoading && danmakuRetryMode === 'normal' ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+                                            <span>{{ danmakuRetryLoading && danmakuRetryMode === 'normal' ? '加入中' : '重试可发送' }}</span>
+                                        </button>
+                                        <button type="button"
+                                                class="danmaku-retry-button is-force"
+                                                :disabled="danmakuRetryLoading"
+                                                aria-label="强制重新入队未成功弹幕"
+                                                @focus="holdDanmakuFailedHint"
+                                                @blur="hideDanmakuFailedHint"
+                                                @click.stop="forceRetryFailedDanmaku(currentDetail)">
+                                            <i :class="danmakuRetryLoading && danmakuRetryMode === 'force' ? 'el-icon-loading' : 'el-icon-warning-outline'"></i>
+                                            <span>{{ danmakuRetryLoading && danmakuRetryMode === 'force' ? '强制加入中' : '强制重新入队' }}</span>
                                         </button>
                                     </div>
                                     <transition name="danmaku-failed-hint-motion">

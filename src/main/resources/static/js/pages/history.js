@@ -37,6 +37,7 @@ new Vue({
         danmakuFailedHintShowTimer: null,
         danmakuFailedHintHideTimer: null,
         danmakuRetryLoading: false,
+        danmakuRetryMode: '',
         danmakuRetryFeedback: null,
         danmakuRetryFeedbackTimer: null,
         currentDetailParts: [],

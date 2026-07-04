@@ -383,27 +383,54 @@
             }
         },
         retryFailedDanmaku: function(item) {
+            this.submitDanmakuRetry(item, false);
+        },
+        forceRetryFailedDanmaku: function(item) {
+            const target = item || this.getMobileDanmakuStatsItem() || this.currentDetail || {};
+            if (!this.canRetryFailedDanmaku(target)) {
+                this.notifyDanmakuRetryResult('info', '当前没有可强制重新入队的未成功弹幕');
+                return;
+            }
+            this.$confirm(
+                '这会把当前稿件中仍保存在数据库里的未成功弹幕重新加入发送队列，不再区分失败原因。<br/><br/>' +
+                '<b>内容违规、时间不合法、账号限制或稿件状态问题可能会再次失败；操作仍会遵守稿件、分P/CID 和房间发送开关。</b><br/><br/>' +
+                '确定要强制重新入队吗？',
+                '强制重新入队确认',
+                {
+                    dangerouslyUseHTMLString: true,
+                    confirmButtonText: '强制重新入队',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }
+            ).then(() => {
+                this.submitDanmakuRetry(target, true);
+            }).catch(() => {});
+        },
+        submitDanmakuRetry: function(item, force) {
             const _this = this;
             const target = item || this.getMobileDanmakuStatsItem() || this.currentDetail || {};
             const historyId = target && target.id;
             if (!historyId || _this.danmakuRetryLoading) return;
             if (!_this.canRetryFailedDanmaku(target)) {
-                _this.notifyDanmakuRetryResult('info', '当前没有可重试的未成功弹幕');
+                _this.notifyDanmakuRetryResult('info', force ? '当前没有可强制重新入队的未成功弹幕' : '当前没有可重试的未成功弹幕');
                 return;
             }
             _this.danmakuRetryLoading = true;
+            _this.danmakuRetryMode = force ? 'force' : 'normal';
             if (_this.isMobileDanmakuStatsActive()) {
-                _this.setDanmakuRetryFeedback('info', '正在把仍满足条件的未成功弹幕加入队列...', false);
+                _this.setDanmakuRetryFeedback('info', force ? '正在强制把未成功弹幕加入队列...' : '正在把仍满足条件的未成功弹幕加入队列...', false);
             }
-            HistoryApi.retryFailedDanmaku(historyId, {
+            const retryApi = force ? HistoryApi.forceRetryFailedDanmaku : HistoryApi.retryFailedDanmaku;
+            retryApi(historyId, {
                 displayedFailed: _this.getDanmakuFailedCount(target),
                 displayedNormalFailed: _this.getNormalDanmakuFailedCount(target),
                 displayedHighFailed: _this.getHighDanmakuFailedCount(target)
             }, function(data) {
                 _this.danmakuRetryLoading = false;
+                _this.danmakuRetryMode = '';
                 _this.notifyDanmakuRetryResult(
                     (data && data.type) || 'success',
-                    (data && data.msg) || '重试请求已提交'
+                    (data && data.msg) || (force ? '强制重试请求已提交' : '重试请求已提交')
                 );
                 if (data && Number(data.retried) > 0) {
                     _this.applyDanmakuRetryResult(target, data);
@@ -418,7 +445,8 @@
                 _this.initTable(true);
             }, function() {
                 _this.danmakuRetryLoading = false;
-                _this.notifyDanmakuRetryResult('error', '重试请求失败，请稍后再试');
+                _this.danmakuRetryMode = '';
+                _this.notifyDanmakuRetryResult('error', force ? '强制重试请求失败，请稍后再试' : '重试请求失败，请稍后再试');
             });
         },
         toggleDanmakuFailedHint: function() {

@@ -30,6 +30,9 @@
         retryFailedDanmaku: function(id, data, callback, errorCallback) {
             ApiUtil.post('/history/' + encodeURIComponent(id) + '/danmaku/retryFailed', data || {}, callback, errorCallback);
         },
+        forceRetryFailedDanmaku: function(id, data, callback, errorCallback) {
+            ApiUtil.post('/history/' + encodeURIComponent(id) + '/danmaku/forceRetryFailed', data || {}, callback, errorCallback);
+        },
         previewMsgQueueCleanup: function(data, callback, errorCallback) {
             ApiUtil.post('/history/msgQueueCleanup/preview', data, callback, errorCallback);
         },

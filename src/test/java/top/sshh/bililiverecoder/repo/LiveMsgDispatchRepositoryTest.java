@@ -86,6 +86,43 @@ class LiveMsgDispatchRepositoryTest {
         assertEquals(1, liveMsgRepository.countByBvidAndPoolAndCode(bvid, 1, -1));
     }
 
+    @Test
+    void retryDispatchableFailedSkipsExcludedCodes() {
+        Long retryablePartId = createDispatchCase("room-retry-ok", true, true, true, 0, 0, 36705, 1L);
+        Long excludedPartId = createDispatchCase("room-retry-excluded", true, true, true, 0, 0, 36714, 1L);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        int updated = liveMsgRepository.retryDispatchableFailedByPartIdsAndPool(
+                List.of(retryablePartId, excludedPartId),
+                0,
+                List.of(36701, 36702, 36714)
+        );
+
+        assertEquals(1, updated);
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(retryablePartId, -1));
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(excludedPartId, 36714));
+    }
+
+    @Test
+    void forceRetryDispatchableFailedIncludesExcludedCodesButRespectsDispatchState() {
+        Long excludedPartId = createDispatchCase("room-force-ok", true, true, true, 0, 0, 36714, 1L);
+        Long disabledPartId = createDispatchCase("room-force-disabled", false, true, true, 0, 0, 36714, 1L);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        int updated = liveMsgRepository.forceRetryDispatchableFailedByPartIdsAndPool(
+                List.of(excludedPartId, disabledPartId),
+                0
+        );
+
+        assertEquals(1, updated);
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(excludedPartId, -1));
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(disabledPartId, 36714));
+    }
+
     private Long createDispatchCase(String roomId,
                                     boolean sendDm,
                                     boolean sendSc,
