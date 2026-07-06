@@ -2,6 +2,7 @@ package top.sshh.bililiverecoder.job;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
@@ -9,14 +10,20 @@ import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.data.BiliLiveMasterInfoResponse;
 import top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
+import top.sshh.bililiverecoder.notification.NotificationEvent;
+import top.sshh.bililiverecoder.notification.NotificationEventPublisher;
+import top.sshh.bililiverecoder.notification.NotificationEventType;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -31,8 +38,18 @@ public class RoomStatusSyncJob {
     @Autowired
     private ShutdownState shutdownState;
 
-    // 启动后10秒执行一次，之后每隔60分钟执行一次
-    @Scheduled(fixedDelay = 3600000, initialDelay = 10000)
+    @Autowired
+    private NotificationEventPublisher notificationEventPublisher;
+
+    @Value("${record.room-status-sync-room-delay-ms:10000}")
+    private long roomDelayMs;
+
+    private final Map<String, Boolean> observedLiveStates = new ConcurrentHashMap<>();
+
+    @Scheduled(
+            fixedDelayString = "${record.room-status-sync-fixed-delay-ms:300000}",
+            initialDelayString = "${record.room-status-sync-initial-delay-ms:10000}"
+    )
     public void syncRoomStatus() {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return;
@@ -45,11 +62,13 @@ public class RoomStatusSyncJob {
                 if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
                     return;
                 }
-                // 避免请求过快，每10秒请求一个房间，降低API请求压力
-                Thread.sleep(10000);
+                // 避免请求过快，降低API请求压力
+                Thread.sleep(roomDelayMs);
                 BiliLiveRoomInfoResponse response = BiliApi.getLiveRoomInfo(room.getRoomId());
                 if (response != null && response.getCode() == 0 && response.getData() != null) {
                     boolean isLive = response.getData().getLive_status() == 1;
+                    Boolean previousObservedLive = observedLiveStates.put(room.getRoomId(), isLive);
+                    boolean notifyLiveEnded = shouldPublishLiveEnded(previousObservedLive, isLive);
                     boolean changed = false;
 
                     if (room.isStreaming() != isLive) {
@@ -185,19 +204,22 @@ public class RoomStatusSyncJob {
                     if (changed) {
                         roomRepository.save(room);
                     }
+                    if (notifyLiveEnded) {
+                        publishLiveEnded(room);
+                    }
                     processedRooms++;
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 if (shutdownState.isShuttingDown()) {
                     log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.SleepInterrupted")
-                            .add("waitMs", 10000)
+                            .add("waitMs", roomDelayMs)
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname()));
                     return;
                 }
                 log.warn("[BLR] {}", LogKvs.event("RoomStatusSyncJob.SleepInterrupted")
-                        .add("waitMs", 10000)
+                        .add("waitMs", roomDelayMs)
                         .add("roomId", room.getRoomId())
                         .add("uname", room.getUname()), e);
                 return;
@@ -211,6 +233,44 @@ public class RoomStatusSyncJob {
         }
         log.info("[BLR] {}", LogKvs.event("RoomStatusSyncJob.Done")
             .addRoundCount("processedRoom", processedRooms)
-                .addStageCostMs("total", roundStartNs));
+            .addStageCostMs("total", roundStartNs));
+    }
+
+    boolean shouldPublishLiveEnded(Boolean previousObservedLive, boolean currentLive) {
+        return Boolean.TRUE.equals(previousObservedLive) && !currentLive;
+    }
+
+    private void publishLiveEnded(RecordRoom room) {
+        NotificationEvent event = NotificationEvent.of(room, NotificationEventType.LIVE_STREAM_ENDED)
+                .add("liveTitle", room == null ? null : room.getTitle())
+                .add("durationText", resolveLiveDurationText(room));
+        notificationEventPublisher.publish(event, room);
+    }
+
+    private String resolveLiveDurationText(RecordRoom room) {
+        if (room == null || room.getHistoryId() == null || room.getHistoryId() == -1L) {
+            return null;
+        }
+        return historyRepository.findById(room.getHistoryId())
+                .map(this::formatHistoryDuration)
+                .orElse(null);
+    }
+
+    private String formatHistoryDuration(RecordHistory history) {
+        if (history == null || history.getStartTime() == null) {
+            return null;
+        }
+        LocalDateTime endTime = history.getEndTime() == null ? LocalDateTime.now() : history.getEndTime();
+        long seconds = Math.max(0L, Duration.between(history.getStartTime(), endTime).getSeconds());
+        long hours = seconds / 3600L;
+        long minutes = seconds % 3600L / 60L;
+        long remainSeconds = seconds % 60L;
+        if (hours > 0) {
+            return "%d小时%d分%d秒".formatted(hours, minutes, remainSeconds);
+        }
+        if (minutes > 0) {
+            return "%d分%d秒".formatted(minutes, remainSeconds);
+        }
+        return "%d秒".formatted(remainSeconds);
     }
 }

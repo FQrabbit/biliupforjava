@@ -3,7 +3,6 @@ package top.sshh.bililiverecoder.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.jayway.jsonpath.JsonPath;
-import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
 import net.bramp.ffmpeg.FFmpeg;
 import net.bramp.ffmpeg.FFmpegExecutor;
@@ -23,7 +22,6 @@ import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
-import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.UploadRetryLogPolicy;
 import top.sshh.bililiverecoder.util.retry.UploadRetryBackoffPolicy;
@@ -74,16 +72,6 @@ public class HighEnergyCutPublishService {
     private String serverPort;
 
     public static final Map<Long, String> taskRunningMsg = new ConcurrentHashMap<>();
-    private static final String WX_MSG_FORMAT = """
-            结果: %s
-            主播%s高能切片事件
-            房间名: %s
-            时间: %s
-            原因: %s
-            """;
-
-    @Value("${record.work-path}")
-    private String wxToken;
 
     @Value("${record.upload.multipart-enabled:true}")
     private boolean multipartEnabled;
@@ -124,8 +112,6 @@ public class HighEnergyCutPublishService {
     public void process(RecordHistory history) throws IOException {
         List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
-        String wxuid = room.getWxuid();
-        String pushMsgTags = room.getPushMsgTags();
         // 初始化 FFmpeg
         FFmpeg ffmpeg = new FFmpeg();
         FFmpegExecutor executor = new FFmpegExecutor(ffmpeg);
@@ -245,15 +231,6 @@ public class HighEnergyCutPublishService {
                     .addIfNotBlank("title", history.getTitle())
                     .add("costSec", (System.currentTimeMillis() - currentTimeMillis) / 1000)
                     .add("output", output));
-            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                Message message = new Message();
-                message.setAppToken(wxToken);
-                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                message.setContent(WX_MSG_FORMAT.formatted("直播剪辑生成视频", room.getUname(), room.getTitle(),
-                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), "耗时" + (System.currentTimeMillis() - currentTimeMillis) / 1000) + "秒");
-                message.setUid(wxuid);
-                PushNotifyClient.sendParallel(room, message);
-            }
             taskRunningMsg.put(history.getId(), "开始上传");
             String upload = upload(room, output);
             taskRunningMsg.put(history.getId(), "开始投稿");
@@ -263,15 +240,6 @@ public class HighEnergyCutPublishService {
                     .add("historyId", history.getId())
                     .add("roomId", history.getRoomId())
                     .addIfNotBlank("title", history.getTitle()), e);
-            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                Message message = new Message();
-                message.setAppToken(wxToken);
-                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                message.setContent(WX_MSG_FORMAT.formatted("直播剪辑失败", room.getUname(), room.getTitle(),
-                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), e));
-                message.setUid(wxuid);
-                PushNotifyClient.sendParallel(room, message);
-            }
         } finally {
             taskRunningMsg.remove(history.getId());
             //删除所有生成的文件
@@ -284,8 +252,6 @@ public class HighEnergyCutPublishService {
 
     public void publish(RecordHistory history, String fileName) throws InterruptedException {
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
-        String wxuid = room.getWxuid();
-        String pushMsgTags = room.getPushMsgTags();
         Map<String, Object> map = new HashMap<>();
         LocalDateTime startTime = history.getStartTime();
         map.put("date", startTime);
@@ -435,15 +401,6 @@ public class HighEnergyCutPublishService {
                     .add("uname", room.getUname())
                     .add("historyId", history.getId())
                     .add("respLen", uploadRes == null ? 0 : uploadRes.length()));
-            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                Message message = new Message();
-                message.setAppToken(wxToken);
-                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                message.setContent(WX_MSG_FORMAT.formatted("直播剪辑投稿失败", room.getUname(), room.getTitle(),
-                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), uploadRes));
-                message.setUid(wxuid);
-                PushNotifyClient.sendParallel(room, message);
-            }
             throw new RuntimeException(uploadRes);
         }
         log.info("[BLR] {}", LogKvs.event("HighEnergyCut.Publish.Success")
@@ -453,15 +410,6 @@ public class HighEnergyCutPublishService {
                 .addIfNotBlank("title", history.getTitle())
                 .addIfNotBlank("bvid", bvid)
                 .addIfNotBlank("aid", aid));
-        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-            Message message = new Message();
-            message.setAppToken(wxToken);
-            message.setContentType(Message.CONTENT_TYPE_TEXT);
-            message.setContent(WX_MSG_FORMAT.formatted("直播剪辑投稿成功", room.getUname(), room.getTitle(),
-                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), uploadRes));
-            message.setUid(wxuid);
-            PushNotifyClient.sendParallel(room, message);
-        }
     }
 
     public String upload(RecordRoom room, String filePath) {

@@ -13,12 +13,10 @@ new Vue({
         pushMsgTagsArray: [],
         pushMsgTagsOptions: [
             { label: '开始直播', value: '开始直播' },
-            { label: '录制结束', value: '录制结束' },
-            { label: '分P上传', value: '分P上传' },
-            { label: '视频投稿', value: '视频投稿' },
-            { label: '高级弹幕', value: '高级弹幕' },
-            { label: '视频评论', value: '视频评论' },
-            { label: '云剪辑', value: '云剪辑' }
+            { label: '直播下播', value: '直播下播' },
+            { label: '审核通过', value: '审核通过' },
+            { label: '审核退回', value: '审核退回' },
+            { label: '稿件锁定', value: '稿件锁定' }
         ],
         sectionsList: [],
         typeList: window.BILIUPFORJAVA_PARTITIONS || [],

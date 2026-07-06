@@ -43,7 +43,8 @@ var answer = new Vue({
             eventTypes: [],
             channels: [],
             rules: [],
-            deliveries: []
+            deliveries: [],
+            workspaceUsageAlertThresholdPercent: 90
         },
         notificationChannelDrafts: [],
         notificationNewChannel: {
@@ -69,13 +70,34 @@ var answer = new Vue({
             webhookKey: '',
             messageType: 'text',
             mentionedList: '',
-            mentionedMobileList: ''
+            mentionedMobileList: '',
+            dingtalkWebhookUrl: '',
+            dingtalkSignSecret: '',
+            dingtalkMessageType: 'markdown',
+            dingtalkKeyword: '',
+            dingtalkAtAll: false,
+            dingtalkAtMobiles: '',
+            dingtalkAtUserIds: '',
+            ntfyTopic: '',
+            ntfyServerUrl: 'https://ntfy.sh',
+            ntfyPriority: 'default',
+            ntfyTags: '',
+            ntfyClick: '',
+            ntfyMarkdown: false,
+            ntfyAuthType: 'none',
+            ntfyToken: '',
+            ntfyUsername: '',
+            ntfyPassword: ''
         },
         notificationRuleDrafts: [],
         notificationRooms: [],
         notificationRuleModeOptions: [
             { value: 'all', label: '全部直播间' },
             { value: 'rooms', label: '指定直播间' },
+            { value: 'mute', label: '不推送' }
+        ],
+        notificationSystemRuleModeOptions: [
+            { value: 'all', label: '启用推送' },
             { value: 'mute', label: '不推送' }
         ],
         notificationRuleEditor: {
@@ -89,6 +111,7 @@ var answer = new Vue({
             channelIdList: [],
             roomKeyword: '',
             roomFilter: 'all',
+            workspaceUsageAlertThresholdPercent: 90,
             originalGlobalRuleId: null,
             originalRoomRules: []
         },
@@ -109,6 +132,8 @@ var answer = new Vue({
             { value: 'bark', label: 'Bark' },
             { value: 'wecom_app', label: '企业微信应用消息' },
             { value: 'wecom_webhook', label: '企业微信群机器人' },
+            { value: 'dingtalk_webhook', label: '钉钉群机器人' },
+            { value: 'ntfy', label: 'ntfy' },
             { value: 'serverchan3', label: 'Server酱3' }
         ],
         connectionLost: false,
@@ -292,7 +317,7 @@ var answer = new Vue({
                 eventIndex[eventType.key] = index;
             });
             return this.notificationRuleDrafts.filter(function(rule) {
-                return rule.roomId && rule.roomId !== '*';
+                return rule.roomId && rule.roomId !== '*' && !self.isNotificationSystemEvent(rule.eventType);
             }).slice().sort(function(a, b) {
                 var ai = eventIndex[a.eventType] == null ? 999 : eventIndex[a.eventType];
                 var bi = eventIndex[b.eventType] == null ? 999 : eventIndex[b.eventType];
@@ -563,6 +588,9 @@ var answer = new Vue({
             }
         },
         'notificationRuleEditor.eventType': function() {
+            if (this.isNotificationWorkspaceUsageEvent(this.notificationRuleEditor.eventType)) {
+                this.notificationRuleEditor.workspaceUsageAlertThresholdPercent = this.notificationConfig.workspaceUsageAlertThresholdPercent || 90;
+            }
             this.syncNotificationRuleEditor();
         },
         'notificationRuleEditor.scope': function() {
@@ -640,6 +668,12 @@ var answer = new Vue({
             if (type === 'wecom_webhook') {
                 return '企业微信群机器人';
             }
+            if (type === 'dingtalk_webhook') {
+                return '钉钉群机器人';
+            }
+            if (type === 'ntfy') {
+                return 'ntfy';
+            }
             if (type === 'serverchan3') {
                 return 'Server酱3';
             }
@@ -678,6 +712,23 @@ var answer = new Vue({
                 messageType: config.messageType || 'text',
                 mentionedList: config.mentionedList || '',
                 mentionedMobileList: config.mentionedMobileList || '',
+                dingtalkWebhookUrl: '',
+                dingtalkSignSecret: '',
+                dingtalkMessageType: config.messageType || 'markdown',
+                dingtalkKeyword: config.keyword || '',
+                dingtalkAtAll: config.atAll === true || config.atAll === 'true',
+                dingtalkAtMobiles: config.atMobiles || '',
+                dingtalkAtUserIds: config.atUserIds || '',
+                ntfyTopic: config.topic || '',
+                ntfyServerUrl: config.serverUrl || 'https://ntfy.sh',
+                ntfyPriority: config.priority || 'default',
+                ntfyTags: config.tags || '',
+                ntfyClick: config.click || '',
+                ntfyMarkdown: config.markdown === true || config.markdown === 'true',
+                ntfyAuthType: config.authType || 'none',
+                ntfyToken: '',
+                ntfyUsername: '',
+                ntfyPassword: '',
                 sendKey: '',
                 saving: false,
                 testing: false
@@ -708,7 +759,24 @@ var answer = new Vue({
                 webhookKey: '',
                 messageType: 'text',
                 mentionedList: '',
-                mentionedMobileList: ''
+                mentionedMobileList: '',
+                dingtalkWebhookUrl: '',
+                dingtalkSignSecret: '',
+                dingtalkMessageType: 'markdown',
+                dingtalkKeyword: '',
+                dingtalkAtAll: false,
+                dingtalkAtMobiles: '',
+                dingtalkAtUserIds: '',
+                ntfyTopic: '',
+                ntfyServerUrl: 'https://ntfy.sh',
+                ntfyPriority: 'default',
+                ntfyTags: '',
+                ntfyClick: '',
+                ntfyMarkdown: false,
+                ntfyAuthType: 'none',
+                ntfyToken: '',
+                ntfyUsername: '',
+                ntfyPassword: ''
             };
         },
         parseNotificationChannelIds: function(raw) {
@@ -789,7 +857,8 @@ var answer = new Vue({
                 channels: channels,
                 rules: rules,
                 rooms: rooms,
-                deliveries: config.deliveries || []
+                deliveries: config.deliveries || [],
+                workspaceUsageAlertThresholdPercent: parseInt(config.workspaceUsageAlertThresholdPercent) || 90
             };
             this.notificationChannelDrafts = channels.map(this.makeNotificationChannelDraft.bind(this));
             this.notificationRooms = rooms;
@@ -881,6 +950,38 @@ var answer = new Vue({
                 if (String(draft.webhookKey || '').trim()) {
                     secret = JSON.stringify({ webhookKey: String(draft.webhookKey || '').trim() });
                 }
+            } else if (type === 'dingtalk_webhook') {
+                config.messageType = String(draft.dingtalkMessageType || '').trim() === 'text' ? 'text' : 'markdown';
+                config.keyword = String(draft.dingtalkKeyword || '').trim();
+                config.atAll = draft.dingtalkAtAll === true;
+                config.atMobiles = String(draft.dingtalkAtMobiles || '').trim();
+                config.atUserIds = String(draft.dingtalkAtUserIds || '').trim();
+                if (String(draft.dingtalkWebhookUrl || '').trim() || String(draft.dingtalkSignSecret || '').trim()) {
+                    var dingtalkSecret = {};
+                    if (String(draft.dingtalkWebhookUrl || '').trim()) {
+                        dingtalkSecret.webhookUrl = String(draft.dingtalkWebhookUrl || '').trim();
+                    }
+                    if (String(draft.dingtalkSignSecret || '').trim()) {
+                        dingtalkSecret.signSecret = String(draft.dingtalkSignSecret || '').trim();
+                    }
+                    secret = JSON.stringify(dingtalkSecret);
+                }
+            } else if (type === 'ntfy') {
+                config.serverUrl = String(draft.ntfyServerUrl || '').trim() || 'https://ntfy.sh';
+                config.topic = String(draft.ntfyTopic || '').trim();
+                config.priority = String(draft.ntfyPriority || '').trim() || 'default';
+                config.tags = String(draft.ntfyTags || '').trim();
+                config.click = String(draft.ntfyClick || '').trim();
+                config.markdown = draft.ntfyMarkdown === true;
+                config.authType = ['bearer', 'basic'].indexOf(String(draft.ntfyAuthType || '').trim()) >= 0 ? String(draft.ntfyAuthType || '').trim() : 'none';
+                if (config.authType === 'bearer' && String(draft.ntfyToken || '').trim()) {
+                    secret = JSON.stringify({ token: String(draft.ntfyToken || '').trim() });
+                } else if (config.authType === 'basic' && (String(draft.ntfyUsername || '').trim() || String(draft.ntfyPassword || '').trim())) {
+                    secret = JSON.stringify({
+                        username: String(draft.ntfyUsername || '').trim(),
+                        password: String(draft.ntfyPassword || '')
+                    });
+                }
             }
             return {
                 id: draft.id || null,
@@ -926,6 +1027,26 @@ var answer = new Vue({
                 this.$message.warning('请填写企业微信群机器人 Webhook Key 或完整地址');
                 return false;
             }
+            if (draft.type === 'dingtalk_webhook') {
+                if (!draft.id && !String(draft.dingtalkWebhookUrl || '').trim()) {
+                    this.$message.warning('请填写钉钉机器人 Webhook 地址或 access_token');
+                    return false;
+                }
+            }
+            if (draft.type === 'ntfy') {
+                if (!String(draft.ntfyTopic || '').trim()) {
+                    this.$message.warning('请填写 ntfy Topic');
+                    return false;
+                }
+                if (String(draft.ntfyAuthType || '') === 'bearer' && !draft.id && !String(draft.ntfyToken || '').trim()) {
+                    this.$message.warning('请填写 ntfy Token');
+                    return false;
+                }
+                if (String(draft.ntfyAuthType || '') === 'basic' && !draft.id && !String(draft.ntfyUsername || '').trim() && !String(draft.ntfyPassword || '').trim()) {
+                    this.$message.warning('请填写 ntfy 用户名或密码');
+                    return false;
+                }
+            }
             return true;
         },
         saveNotificationChannel: function(draft, isNew) {
@@ -965,7 +1086,49 @@ var answer = new Vue({
                 self.$message.error('测试通知发送失败');
             });
         },
+        notificationEventDescriptor: function(eventType) {
+            return (this.notificationConfig.eventTypes || []).find(function(item) {
+                return item.key === eventType;
+            }) || null;
+        },
+        isNotificationSystemEvent: function(eventType) {
+            var descriptor = this.notificationEventDescriptor(eventType);
+            return descriptor && descriptor.scope === 'system';
+        },
+        isNotificationWorkspaceUsageEvent: function(eventType) {
+            return eventType === 'workspace.usage.alert';
+        },
+        notificationRuleEditorBadgeText: function() {
+            if (this.isNotificationSystemEvent(this.notificationRuleEditor.eventType)) {
+                return '系统级事件';
+            }
+            return this.notificationRoomSummaryText(this.notificationRuleEditor.roomIds);
+        },
+        notificationRuleScopeCardIcon: function(value) {
+            if (value === 'all') {
+                return this.isNotificationSystemEvent(this.notificationRuleEditor.eventType) ? 'el-icon-bell' : 'el-icon-s-home';
+            }
+            if (value === 'rooms') {
+                return 'el-icon-s-custom';
+            }
+            return 'el-icon-turn-off';
+        },
+        notificationRuleScopeCardDescription: function(value) {
+            if (this.isNotificationSystemEvent(this.notificationRuleEditor.eventType)) {
+                return value === 'all' ? '达到阈值后发送推送' : '该系统事件不发送推送';
+            }
+            if (value === 'all') {
+                return '所有直播间都按本规则推送';
+            }
+            if (value === 'rooms') {
+                return '只给选中的直播间推送';
+            }
+            return '该事件默认不发送推送';
+        },
         notificationRuleScopeText: function(rule) {
+            if (rule && this.isNotificationSystemEvent(rule.eventType)) {
+                return '系统级事件';
+            }
             if (!rule || !rule.roomId || rule.roomId === '*') {
                 return '全部直播间';
             }
@@ -975,9 +1138,7 @@ var answer = new Vue({
             return '房间 ' + rule.roomId;
         },
         notificationEventLabel: function(eventType) {
-            var found = (this.notificationConfig.eventTypes || []).find(function(item) {
-                return item.key === eventType;
-            });
+            var found = this.notificationEventDescriptor(eventType);
             return found ? found.label : eventType;
         },
         notificationRoomLabel: function(roomId) {
@@ -1012,6 +1173,9 @@ var answer = new Vue({
             return this.makeNotificationRuleDraft(null, event, true);
         },
         getNotificationRoomRuleDrafts: function(eventType) {
+            if (this.isNotificationSystemEvent(eventType)) {
+                return [];
+            }
             return this.notificationRuleDrafts.filter(function(rule) {
                 return rule && rule.eventType === eventType && rule.roomId && rule.roomId !== '*';
             });
@@ -1075,6 +1239,9 @@ var answer = new Vue({
             if (!rule) {
                 return '未配置';
             }
+            if (this.isNotificationSystemEvent(rule.eventType)) {
+                return rule.enabled ? '系统级事件' : '不推送';
+            }
             var roomRules = this.getNotificationRoomRuleDrafts(rule.eventType);
             var enabledRoomRules = roomRules.filter(function(item) {
                 return item.enabled && (item.channelIdList || []).length > 0;
@@ -1093,6 +1260,12 @@ var answer = new Vue({
         notificationRuleChannelSummary: function(rule) {
             if (!rule) {
                 return '未配置';
+            }
+            if (this.isNotificationSystemEvent(rule.eventType)) {
+                if (rule.enabled && (rule.channelIdList || []).length > 0) {
+                    return (rule.channelIdList || []).length + ' 个推送渠道';
+                }
+                return '不发送';
             }
             var roomRules = this.getNotificationRoomRuleDrafts(rule.eventType);
             var enabledRoomRules = roomRules.filter(function(item) {
@@ -1139,6 +1312,20 @@ var answer = new Vue({
             this.ensureNotificationRuleEditorDefaults();
             var editor = this.notificationRuleEditor;
             var globalRule = editor.eventType ? this.findNotificationRuleDraft('*', editor.eventType) : null;
+            editor.workspaceUsageAlertThresholdPercent = this.notificationConfig.workspaceUsageAlertThresholdPercent || 90;
+            if (this.isNotificationSystemEvent(editor.eventType)) {
+                if (globalRule && !globalRule.enabled) {
+                    editor.scope = 'mute';
+                    editor.channelIdList = [];
+                } else {
+                    editor.scope = 'all';
+                    editor.channelIdList = globalRule ? [].concat(globalRule.channelIdList || []) : [];
+                }
+                editor.roomIds = [];
+                this.syncNotificationRuleEditor();
+                this.notificationRuleEditor.visible = true;
+                return;
+            }
             var enabledRoomRules = editor.eventType ? this.getNotificationRoomRuleDrafts(editor.eventType).filter(function(rule) {
                 return rule.enabled && (rule.channelIdList || []).length > 0;
             }) : [];
@@ -1173,6 +1360,9 @@ var answer = new Vue({
             this.notificationRuleEditor.visible = false;
         },
         setNotificationRuleEditorScope: function(scope) {
+            if (this.isNotificationSystemEvent(this.notificationRuleEditor.eventType) && scope === 'rooms') {
+                scope = 'all';
+            }
             this.notificationRuleEditor.scope = scope;
             if (scope === 'all') {
                 this.notificationRuleEditor.roomIds = [];
@@ -1210,6 +1400,19 @@ var answer = new Vue({
             editor.eventLabel = editor.eventType ? this.notificationEventLabel(editor.eventType) : '';
             var globalRule = editor.eventType ? this.findNotificationRuleDraft('*', editor.eventType) : null;
             editor.originalGlobalRuleId = globalRule ? globalRule.id : null;
+            if (this.isNotificationSystemEvent(editor.eventType)) {
+                if (editor.scope === 'rooms') {
+                    editor.scope = 'all';
+                }
+                editor.roomIds = [];
+                if (editor.scope === 'all') {
+                    editor.channelIdList = globalRule ? [].concat(globalRule.channelIdList || []) : [];
+                }
+                if (editor.scope === 'mute') {
+                    editor.channelIdList = [];
+                }
+                return;
+            }
             if (editor.scope === 'all') {
                 editor.channelIdList = globalRule ? [].concat(globalRule.channelIdList || []) : [];
             }
@@ -1255,6 +1458,67 @@ var answer = new Vue({
             var self = this;
             if (!editor.eventType) {
                 this.$message.warning('请选择事件');
+                return;
+            }
+            var isSystemEvent = this.isNotificationSystemEvent(editor.eventType);
+            var isWorkspaceUsageEvent = this.isNotificationWorkspaceUsageEvent(editor.eventType);
+            var thresholdPercent = parseInt(editor.workspaceUsageAlertThresholdPercent) || 90;
+            if (isWorkspaceUsageEvent && (thresholdPercent < 1 || thresholdPercent > 99)) {
+                this.$message.warning('工作目录空间预警阈值需要在 1% 到 99% 之间');
+                return;
+            }
+            if (isSystemEvent) {
+                if (editor.scope !== 'mute' && (!editor.channelIdList || editor.channelIdList.length === 0)) {
+                    this.$message.warning('启用规则前请选择至少一个推送渠道');
+                    return;
+                }
+                editor.saving = true;
+                var systemPayload = {
+                    id: editor.originalGlobalRuleId || null,
+                    eventType: editor.eventType,
+                    eventLabel: editor.eventLabel,
+                    roomId: '*',
+                    roomName: '系统级事件',
+                    enabled: editor.scope !== 'mute',
+                    channelIds: editor.scope === 'mute' ? '' : (editor.channelIdList || []).join(',')
+                };
+                var currentRoomRulesForSystem = this.notificationRuleDrafts.filter(function(rule) {
+                    return rule && rule.eventType === editor.eventType && rule.roomId && rule.roomId !== '*' && rule.id;
+                });
+                var systemPending = Promise.resolve();
+                if (isWorkspaceUsageEvent) {
+                    systemPending = systemPending.then(function() {
+                        return new Promise(function(resolve, reject) {
+                            SystemApi.updateConfig({
+                                key: 'notification.workspace-usage-alert-threshold',
+                                value: String(thresholdPercent)
+                            }, resolve, reject);
+                        });
+                    });
+                }
+                systemPending = systemPending.then(function() {
+                    return new Promise(function(resolve, reject) {
+                        NotificationApi.saveRule(systemPayload, resolve, reject);
+                    });
+                });
+                currentRoomRulesForSystem.forEach(function(rule) {
+                    systemPending = systemPending.then(function() {
+                        return new Promise(function(resolve, reject) {
+                            NotificationApi.deleteRule(rule.id, resolve, reject);
+                        });
+                    });
+                });
+                systemPending.then(function() {
+                    editor.saving = false;
+                    editor.visible = false;
+                    self.notificationConfig.workspaceUsageAlertThresholdPercent = thresholdPercent;
+                    self.$message.success('系统级推送规则已保存');
+                    self.loadSystemConfig();
+                    self.loadNotificationConfig();
+                }).catch(function() {
+                    editor.saving = false;
+                    self.$message.error('系统级推送规则保存失败');
+                });
                 return;
             }
             var normalizedRoomIds = this.normalizeNotificationEditorRoomIds(editor.roomIds);

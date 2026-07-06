@@ -23,8 +23,6 @@ public class ServerChan3NotificationChannel implements NotificationChannelAdapte
 
     private static final String SERVER_CHAN3_SEND_URL = "https://%s.push.ft07.com/send/%s.send";
     private static final Pattern SERVER_CHAN3_UID_PATTERN = Pattern.compile("^sctp(\\d+)t.*$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern BV_ID_PATTERN = Pattern.compile("BV[0-9A-Za-z]+");
-
     @Override
     public String type() {
         return TYPE;
@@ -164,63 +162,7 @@ public class ServerChan3NotificationChannel implements NotificationChannelAdapte
             md.append("\n");
         }
 
-        appendUsefulLinks(md, message, kv);
-        appendMeta(md, message);
         return md.toString().trim();
-    }
-
-    private static void appendUsefulLinks(StringBuilder md, NotificationMessage message, Map<String, String> kv) {
-        String bv = extractBvId(kv);
-        String roomId = message == null ? null : message.getRoomId();
-        if (StringUtils.isBlank(bv) && StringUtils.isBlank(roomId)) {
-            return;
-        }
-        md.append("### 链接\n\n");
-        if (StringUtils.isNotBlank(bv)) {
-            md.append("- 视频: https://www.bilibili.com/video/").append(bv).append("\n");
-        }
-        if (StringUtils.isNotBlank(roomId)) {
-            md.append("- 直播间: https://live.bilibili.com/").append(roomId).append("\n");
-        }
-        md.append("\n");
-    }
-
-    private static void appendMeta(StringBuilder md, NotificationMessage message) {
-        md.append("---\n");
-        md.append("来自 biliupforjava");
-        if (message != null && StringUtils.isNotBlank(message.getRoomName())) {
-            md.append(" | 主播: ").append(escapeMarkdownInline(message.getRoomName()));
-        }
-        if (message != null && StringUtils.isNotBlank(message.getRoomId())) {
-            md.append(" | 房间ID: ").append(message.getRoomId());
-        }
-        md.append("\n");
-    }
-
-    private static String extractBvId(Map<String, String> kv) {
-        for (Map.Entry<String, String> entry : kv.entrySet()) {
-            String key = StringUtils.defaultString(entry.getKey());
-            String value = StringUtils.defaultString(entry.getValue());
-            if (key.toLowerCase().contains("bv")) {
-                String bv = findBvInText(value);
-                if (StringUtils.isNotBlank(bv)) {
-                    return bv;
-                }
-            }
-            String bv = findBvInText(value);
-            if (StringUtils.isNotBlank(bv)) {
-                return bv;
-            }
-        }
-        return null;
-    }
-
-    private static String findBvInText(String text) {
-        Matcher matcher = BV_ID_PATTERN.matcher(StringUtils.defaultString(text));
-        if (matcher.find()) {
-            return matcher.group();
-        }
-        return null;
     }
 
     private static int findKvSeparator(String line) {

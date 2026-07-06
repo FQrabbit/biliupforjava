@@ -1,6 +1,5 @@
 package top.sshh.bililiverecoder.service;
 
-import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,7 +22,6 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
-import top.sshh.bililiverecoder.util.PushNotifyClient;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -58,8 +56,6 @@ public class DanmakuSendScheduler {
     private final SystemConfigService systemConfigService;
     private final HistoryMsgQueueCleanupService msgQueueCleanupService;
 
-    @Value("${record.wx-push-token}")
-    private String wxToken;
 
     private final ArrayDeque<Long> highPartQueue = new ArrayDeque<>();
     private final ArrayDeque<Long> normalPartQueue = new ArrayDeque<>();
@@ -807,21 +803,6 @@ public class DanmakuSendScheduler {
 
     private void sendHighFailurePush(RecordRoom room, RecordHistoryPart part, LiveMsg msg, BiliBiliUser user, int code) {
         try {
-            if (PushNotifyClient.canSend(room, room.getWxuid(), room.getPushMsgTags(), "高级弹幕")) {
-                Message message = new Message();
-                message.setAppToken(wxToken);
-                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                message.setContent("High level danmaku send failed\n"
-                        + "room=" + room.getUname() + "\n"
-                        + "part=" + part.getTitle() + "\n"
-                        + "bvid=" + msg.getBvid() + "\n"
-                        + "time=" + LocalDateTime.now() + "\n"
-                        + "content=" + msg.getContext() + "\n"
-                        + "user=" + user.getUname() + "\n"
-                        + "code=" + code);
-                message.setUid(room.getWxuid());
-                PushNotifyClient.sendParallel(room, message);
-            }
         } catch (Exception ignored) {
         }
     }

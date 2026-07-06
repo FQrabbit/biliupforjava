@@ -1,7 +1,6 @@
 package top.sshh.bililiverecoder.job;
 
 import com.alibaba.fastjson.JSON;
-import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,12 +21,10 @@ import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
-import top.sshh.bililiverecoder.util.PushNotifyClient;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -40,18 +37,6 @@ import java.util.concurrent.locks.ReentrantLock;
 @Component
 public class LiveMsgSendSync {
 
-    @Value("${record.wx-push-token}")
-    private String wxToken;
-    private static final String WX_MSG_FORMAT = """
-            收到弹幕评论发送事件
-            主播名: %s
-            房间名: %s
-            BV号: %s
-            时间: %s
-            发送内容: %s
-            发送结果: %s
-            原因: %s
-            """;
     @Autowired
     private BiliUserRepository userRepository;
 
@@ -405,16 +390,6 @@ public class LiveMsgSendSync {
                             }
 
                             try {
-                                if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "视频评论")) {
-                                    Message message = new Message();
-                                    message.setAppToken(wxToken);
-                                    message.setContentType(Message.CONTENT_TYPE_TEXT);
-                                    message.setContent(WX_MSG_FORMAT.formatted(room.getUname(), history.getTitle(), history.getBvId(),
-                                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                            reply.getMessage(), "发送成功", user.getUname() + ""));
-                                    message.setUid(wxuid);
-                                    PushNotifyClient.sendParallel(room, message);
-                                }
                             } catch (Exception ignored) {
 
                             }
@@ -446,16 +421,6 @@ public class LiveMsgSendSync {
                             .addIfNotBlank("err", e.getMessage())
                             .add("ex", e.getClass().getSimpleName()), e);
                     try {
-                        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "视频评论")) {
-                            Message message = new Message();
-                            message.setAppToken(wxToken);
-                            message.setContentType(Message.CONTENT_TYPE_TEXT);
-                            message.setContent(WX_MSG_FORMAT.formatted(room.getUname(), history.getTitle(), history.getBvId(),
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                    JSON.toJSONString(replies), "发送失败", e.getMessage()));
-                            message.setUid(wxuid);
-                            PushNotifyClient.sendParallel(room, message);
-                        }
                     } catch (Exception ignored) {
 
                     }
@@ -631,16 +596,6 @@ public class LiveMsgSendSync {
                                         .add("partId", msg.getPartId())
                                         .add("contextLen", msg.getContext() == null ? 0 : msg.getContext().length()));
                                 try {
-                                    if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "高级弹幕")) {
-                                        Message message = new Message();
-                                        message.setAppToken(wxToken);
-                                        message.setContentType(Message.CONTENT_TYPE_TEXT);
-                                        message.setContent(WX_MSG_FORMAT.formatted(room.getUname(), part.getTitle(), msg.getBvid(),
-                                                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                                msg.getContext(), "发送失败", user.getUname() + "-->code: " + code));
-                                        message.setUid(wxuid);
-                                        PushNotifyClient.sendParallel(room, message);
-                                    }
                                 } catch (Exception ignored) {
 
                                 }
@@ -1187,32 +1142,12 @@ public class LiveMsgSendSync {
 
     private void sendReplyPush(RecordRoom room, RecordHistory history, BiliBiliUser user, BiliReply reply) {
         try {
-            if (room != null && PushNotifyClient.canSend(room, room.getWxuid(), room.getPushMsgTags(), "视频评论")) {
-                Message message = new Message();
-                message.setAppToken(wxToken);
-                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                message.setContent(WX_MSG_FORMAT.formatted(room.getUname(), history.getTitle(), history.getBvId(),
-                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
-                        reply.getMessage(), "发送成功", user.getUname()));
-                message.setUid(room.getWxuid());
-                PushNotifyClient.sendParallel(room, message);
-            }
         } catch (Exception ignored) {
         }
     }
 
     private void sendReplyFailurePush(RecordRoom room, RecordHistory history, List<BiliReply> replies, Exception error) {
         try {
-            if (room != null && PushNotifyClient.canSend(room, room.getWxuid(), room.getPushMsgTags(), "视频评论")) {
-                Message message = new Message();
-                message.setAppToken(wxToken);
-                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                message.setContent(WX_MSG_FORMAT.formatted(room.getUname(), history.getTitle(), history.getBvId(),
-                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
-                        JSON.toJSONString(replies), "发送失败", error == null ? "" : error.getMessage()));
-                message.setUid(room.getWxuid());
-                PushNotifyClient.sendParallel(room, message);
-            }
         } catch (Exception ignored) {
         }
     }

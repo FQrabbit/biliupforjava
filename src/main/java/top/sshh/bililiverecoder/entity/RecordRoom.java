@@ -110,7 +110,7 @@ public class RecordRoom {
     /**
      * 允许发送推送的tag
      */
-    private String pushMsgTags = "开始直播,录制结束,分P上传,视频投稿,高级弹幕,视频评论,云剪辑";
+    private String pushMsgTags = "开始直播,直播下播,审核通过,审核退回,稿件锁定";
 
 
     @Column(length = 2100)

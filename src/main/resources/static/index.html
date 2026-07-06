@@ -384,7 +384,7 @@
                                                     <h3>推送渠道</h3>
                                                 </div>
                                             </div>
-                                            <div class="notification-channel-form" :class="{ 'is-wecom': notificationNewChannel.type === 'wecom_app' }">
+                                            <div class="notification-channel-form" :class="{ 'is-wecom': notificationNewChannel.type === 'wecom_app', 'is-ntfy': notificationNewChannel.type === 'ntfy', 'is-dingtalk': notificationNewChannel.type === 'dingtalk_webhook' }">
                                                 <el-select v-model="notificationNewChannel.type" size="small" class="notification-type-select" placeholder="渠道类型">
                                                     <el-option v-for="item in notificationChannelTypeOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
                                                 </el-select>
@@ -424,6 +424,52 @@
                                                     </el-select>
                                                     <el-input v-model="notificationNewChannel.mentionedList" size="small" type="password" show-password autocomplete="new-password" name="notification-wecom-webhook-mentioned-list-new" data-lpignore="true" data-1p-ignore="true" placeholder="提醒成员 UserID，用 | 分隔，可填 @all" class="notification-input"></el-input>
                                                     <el-input v-model="notificationNewChannel.mentionedMobileList" size="small" type="password" show-password autocomplete="new-password" name="notification-wecom-webhook-mentioned-mobile-new" data-lpignore="true" data-1p-ignore="true" placeholder="提醒手机号，用 | 分隔" class="notification-input"></el-input>
+                                                </template>
+                                                <template v-if="notificationNewChannel.type === 'dingtalk_webhook'">
+                                                    <div class="notification-channel-group notification-channel-group-dingtalk-main">
+                                                        <el-input v-model="notificationNewChannel.dingtalkWebhookUrl" size="small" type="password" show-password autocomplete="new-password" name="notification-dingtalk-webhook-url-new" data-lpignore="true" data-1p-ignore="true" placeholder="Webhook 地址 / access_token" class="notification-input"></el-input>
+                                                        <el-input v-model="notificationNewChannel.dingtalkSignSecret" size="small" type="password" show-password autocomplete="new-password" name="notification-dingtalk-sign-secret-new" data-lpignore="true" data-1p-ignore="true" placeholder="加签 Secret，可留空" class="notification-input"></el-input>
+                                                        <el-select v-model="notificationNewChannel.dingtalkMessageType" size="small" class="notification-type-select" placeholder="消息类型">
+                                                            <el-option label="Markdown" value="markdown"></el-option>
+                                                            <el-option label="文本消息" value="text"></el-option>
+                                                        </el-select>
+                                                    </div>
+                                                    <div class="notification-channel-group notification-channel-group-dingtalk-extra">
+                                                        <el-input v-model="notificationNewChannel.dingtalkKeyword" size="small" placeholder="安全关键词，可留空" class="notification-input"></el-input>
+                                                        <el-input v-model="notificationNewChannel.dingtalkAtMobiles" size="small" type="password" show-password autocomplete="new-password" name="notification-dingtalk-at-mobiles-new" data-lpignore="true" data-1p-ignore="true" placeholder="@ 手机号，用 | 分隔" class="notification-input"></el-input>
+                                                        <el-input v-model="notificationNewChannel.dingtalkAtUserIds" size="small" type="password" show-password autocomplete="new-password" name="notification-dingtalk-at-user-ids-new" data-lpignore="true" data-1p-ignore="true" placeholder="@ UserID，用 | 分隔" class="notification-input"></el-input>
+                                                        <el-switch v-model="notificationNewChannel.dingtalkAtAll" active-text="@所有人" inactive-text="不@所有人"></el-switch>
+                                                    </div>
+                                                </template>
+                                                <template v-if="notificationNewChannel.type === 'ntfy'">
+                                                    <div class="notification-channel-group notification-channel-group-ntfy-main">
+                                                        <el-input v-model="notificationNewChannel.ntfyTopic" size="small" placeholder="Topic，例如 room-started" class="notification-input"></el-input>
+                                                        <el-input v-model="notificationNewChannel.ntfyServerUrl" size="small" placeholder="服务地址，默认 https://ntfy.sh" class="notification-input"></el-input>
+                                                        <el-select v-model="notificationNewChannel.ntfyPriority" size="small" class="notification-type-select" placeholder="优先级">
+                                                            <el-option label="默认" value="default"></el-option>
+                                                            <el-option label="最低" value="min"></el-option>
+                                                            <el-option label="较低" value="low"></el-option>
+                                                            <el-option label="较高" value="high"></el-option>
+                                                            <el-option label="紧急" value="urgent"></el-option>
+                                                        </el-select>
+                                                    </div>
+                                                    <div class="notification-channel-group notification-channel-group-ntfy-extra">
+                                                        <el-input v-model="notificationNewChannel.ntfyTags" size="small" placeholder="标签，用逗号分隔，可留空" class="notification-input"></el-input>
+                                                        <el-input v-model="notificationNewChannel.ntfyClick" size="small" placeholder="点击跳转链接，可留空" class="notification-input"></el-input>
+                                                        <el-select v-model="notificationNewChannel.ntfyAuthType" size="small" class="notification-type-select" placeholder="鉴权方式">
+                                                            <el-option label="无需鉴权" value="none"></el-option>
+                                                            <el-option label="Bearer Token" value="bearer"></el-option>
+                                                            <el-option label="Basic 账号密码" value="basic"></el-option>
+                                                        </el-select>
+                                                        <el-switch v-model="notificationNewChannel.ntfyMarkdown" active-text="Markdown" inactive-text="普通文本"></el-switch>
+                                                    </div>
+                                                    <div v-if="notificationNewChannel.ntfyAuthType === 'bearer'" class="notification-channel-group notification-channel-group-ntfy-secret">
+                                                        <el-input v-model="notificationNewChannel.ntfyToken" size="small" type="password" show-password autocomplete="new-password" name="notification-ntfy-token-new" data-lpignore="true" data-1p-ignore="true" placeholder="Bearer Token" class="notification-input"></el-input>
+                                                    </div>
+                                                    <div v-if="notificationNewChannel.ntfyAuthType === 'basic'" class="notification-channel-group notification-channel-group-ntfy-secret">
+                                                        <el-input v-model="notificationNewChannel.ntfyUsername" size="small" type="password" show-password autocomplete="new-password" name="notification-ntfy-username-new" data-lpignore="true" data-1p-ignore="true" placeholder="用户名" class="notification-input"></el-input>
+                                                        <el-input v-model="notificationNewChannel.ntfyPassword" size="small" type="password" show-password autocomplete="new-password" name="notification-ntfy-password-new" data-lpignore="true" data-1p-ignore="true" placeholder="密码" class="notification-input"></el-input>
+                                                    </div>
                                                 </template>
                                                 <el-input v-model="notificationNewChannel.name" size="small" placeholder="本地备注，仅在本插件显示" class="notification-input"></el-input>
                                                 <el-input v-if="notificationNewChannel.type === 'wxpusher'" v-model="notificationNewChannel.uid" size="small" type="password" show-password autocomplete="new-password" name="notification-wxpusher-uid-new" data-lpignore="true" data-1p-ignore="true" placeholder="WxPusher UID" class="notification-input"></el-input>
@@ -494,6 +540,52 @@
                                                             </el-select>
                                                             <el-input v-model="scope.row.mentionedList" size="mini" type="password" show-password autocomplete="new-password" name="notification-wecom-webhook-mentioned-list-edit" data-lpignore="true" data-1p-ignore="true" placeholder="提醒成员 UserID，用 | 分隔"></el-input>
                                                             <el-input v-model="scope.row.mentionedMobileList" size="mini" type="password" show-password autocomplete="new-password" name="notification-wecom-webhook-mentioned-mobile-edit" data-lpignore="true" data-1p-ignore="true" placeholder="提醒手机号，用 | 分隔"></el-input>
+                                                        </div>
+                                                        <div class="notification-inline-fields notification-inline-fields-dingtalk" v-else-if="scope.row.type === 'dingtalk_webhook'">
+                                                            <div class="notification-inline-cluster">
+                                                                <el-input v-model="scope.row.dingtalkWebhookUrl" size="mini" type="password" show-password autocomplete="new-password" name="notification-dingtalk-webhook-url-edit" data-lpignore="true" data-1p-ignore="true" placeholder="留空不修改 Webhook"></el-input>
+                                                                <el-input v-model="scope.row.dingtalkSignSecret" size="mini" type="password" show-password autocomplete="new-password" name="notification-dingtalk-sign-secret-edit" data-lpignore="true" data-1p-ignore="true" placeholder="留空不修改加签 Secret"></el-input>
+                                                                <el-select v-model="scope.row.dingtalkMessageType" size="mini" placeholder="消息类型">
+                                                                    <el-option label="Markdown" value="markdown"></el-option>
+                                                                    <el-option label="文本消息" value="text"></el-option>
+                                                                </el-select>
+                                                            </div>
+                                                            <div class="notification-inline-cluster">
+                                                                <el-input v-model="scope.row.dingtalkKeyword" size="mini" placeholder="安全关键词，可留空"></el-input>
+                                                                <el-input v-model="scope.row.dingtalkAtMobiles" size="mini" type="password" show-password autocomplete="new-password" name="notification-dingtalk-at-mobiles-edit" data-lpignore="true" data-1p-ignore="true" placeholder="@ 手机号，用 | 分隔"></el-input>
+                                                                <el-input v-model="scope.row.dingtalkAtUserIds" size="mini" type="password" show-password autocomplete="new-password" name="notification-dingtalk-at-user-ids-edit" data-lpignore="true" data-1p-ignore="true" placeholder="@ UserID，用 | 分隔"></el-input>
+                                                                <el-switch v-model="scope.row.dingtalkAtAll" active-text="@所有人" inactive-text="不@所有人"></el-switch>
+                                                            </div>
+                                                        </div>
+                                                        <div class="notification-inline-fields notification-inline-fields-ntfy" v-else-if="scope.row.type === 'ntfy'">
+                                                            <div class="notification-inline-cluster">
+                                                                <el-input v-model="scope.row.ntfyTopic" size="mini" placeholder="Topic"></el-input>
+                                                                <el-input v-model="scope.row.ntfyServerUrl" size="mini" placeholder="服务地址"></el-input>
+                                                                <el-select v-model="scope.row.ntfyPriority" size="mini" placeholder="优先级">
+                                                                    <el-option label="默认" value="default"></el-option>
+                                                                    <el-option label="最低" value="min"></el-option>
+                                                                    <el-option label="较低" value="low"></el-option>
+                                                                    <el-option label="较高" value="high"></el-option>
+                                                                    <el-option label="紧急" value="urgent"></el-option>
+                                                                </el-select>
+                                                            </div>
+                                                            <div class="notification-inline-cluster">
+                                                                <el-input v-model="scope.row.ntfyTags" size="mini" placeholder="标签，用逗号分隔"></el-input>
+                                                                <el-input v-model="scope.row.ntfyClick" size="mini" placeholder="点击跳转链接"></el-input>
+                                                                <el-select v-model="scope.row.ntfyAuthType" size="mini" placeholder="鉴权方式">
+                                                                    <el-option label="无需鉴权" value="none"></el-option>
+                                                                    <el-option label="Bearer Token" value="bearer"></el-option>
+                                                                    <el-option label="Basic 账号密码" value="basic"></el-option>
+                                                                </el-select>
+                                                                <el-switch v-model="scope.row.ntfyMarkdown" active-text="Markdown" inactive-text="普通文本"></el-switch>
+                                                            </div>
+                                                            <div v-if="scope.row.ntfyAuthType === 'bearer'" class="notification-inline-cluster">
+                                                                <el-input v-model="scope.row.ntfyToken" size="mini" type="password" show-password autocomplete="new-password" name="notification-ntfy-token-edit" data-lpignore="true" data-1p-ignore="true" placeholder="留空不修改 Token"></el-input>
+                                                            </div>
+                                                            <div v-if="scope.row.ntfyAuthType === 'basic'" class="notification-inline-cluster">
+                                                                <el-input v-model="scope.row.ntfyUsername" size="mini" type="password" show-password autocomplete="new-password" name="notification-ntfy-username-edit" data-lpignore="true" data-1p-ignore="true" placeholder="留空不修改用户名"></el-input>
+                                                                <el-input v-model="scope.row.ntfyPassword" size="mini" type="password" show-password autocomplete="new-password" name="notification-ntfy-password-edit" data-lpignore="true" data-1p-ignore="true" placeholder="留空不修改密码"></el-input>
+                                                            </div>
                                                         </div>
                                                         <div class="notification-inline-fields" v-else-if="scope.row.type === 'serverchan3'">
                                                             <el-input v-model="scope.row.tags" size="mini" placeholder="标签，可留空"></el-input>
@@ -700,9 +792,9 @@
             <div class="notification-editor-head">
                 <div>
                     <h3>{{ notificationRuleEditor.eventLabel || '推送规则' }}</h3>
-                    <p>先选择事件，再决定适用范围和推送渠道。</p>
+                    <p>先选择事件，再决定推送状态、适用范围和推送渠道。</p>
                 </div>
-                <el-tag size="small" effect="plain">{{ notificationRoomSummaryText(notificationRuleEditor.roomIds) }}</el-tag>
+                <el-tag size="small" effect="plain">{{ notificationRuleEditorBadgeText() }}</el-tag>
             </div>
             <el-form label-position="top" size="small" class="notification-editor-form">
                 <el-form-item label="事件">
@@ -710,10 +802,23 @@
                         <el-option v-for="item in notificationConfig.eventTypes" :key="item.key" :label="item.label" :value="item.key"></el-option>
                     </el-select>
                 </el-form-item>
-                <el-form-item label="适用范围" class="option-card-form-item">
-                    <div class="notification-scope-card-grid" role="radiogroup" aria-label="适用范围">
+                <el-form-item v-if="isNotificationWorkspaceUsageEvent(notificationRuleEditor.eventType)" label="预警阈值">
+                    <div class="notification-threshold-control">
+                        <el-input-number
+                            v-model="notificationRuleEditor.workspaceUsageAlertThresholdPercent"
+                            :min="1"
+                            :max="99"
+                            :step="1"
+                            controls-position="right">
+                        </el-input-number>
+                        <span>%</span>
+                        <em>工作目录所在磁盘使用率达到该比例时发送预警</em>
+                    </div>
+                </el-form-item>
+                <el-form-item :label="isNotificationSystemEvent(notificationRuleEditor.eventType) ? '事件状态' : '适用范围'" class="option-card-form-item">
+                    <div class="notification-scope-card-grid" :class="{ 'is-system': isNotificationSystemEvent(notificationRuleEditor.eventType) }" role="radiogroup" aria-label="适用范围">
                         <button
-                            v-for="item in notificationRuleModeOptions"
+                            v-for="item in (isNotificationSystemEvent(notificationRuleEditor.eventType) ? notificationSystemRuleModeOptions : notificationRuleModeOptions)"
                             :key="item.value"
                             type="button"
                             class="notification-scope-card"
@@ -722,19 +827,17 @@
                             :aria-checked="notificationRuleEditor.scope === item.value"
                             @click="setNotificationRuleEditorScope(item.value)">
                             <span class="notification-scope-card-icon">
-                                <i :class="item.value === 'all' ? 'el-icon-s-home' : (item.value === 'rooms' ? 'el-icon-s-custom' : 'el-icon-turn-off')"></i>
+                                <i :class="notificationRuleScopeCardIcon(item.value)"></i>
                             </span>
                             <span class="notification-scope-card-main">
                                 <strong>{{ item.label }}</strong>
-                                <em v-if="item.value === 'all'">所有直播间都按本规则推送</em>
-                                <em v-else-if="item.value === 'rooms'">只给选中的直播间推送</em>
-                                <em v-else>该事件默认不发送推送</em>
+                                <em>{{ notificationRuleScopeCardDescription(item.value) }}</em>
                             </span>
                             <i class="el-icon-check notification-scope-card-check"></i>
                         </button>
                     </div>
                 </el-form-item>
-                <el-form-item v-if="notificationRuleEditor.scope === 'rooms'" label="选择直播间">
+                <el-form-item v-if="!isNotificationSystemEvent(notificationRuleEditor.eventType) && notificationRuleEditor.scope === 'rooms'" label="选择直播间">
                     <div class="notification-room-picker">
                         <el-input
                             v-model="notificationRuleEditor.roomKeyword"

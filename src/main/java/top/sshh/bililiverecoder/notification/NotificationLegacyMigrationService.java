@@ -10,23 +10,25 @@ import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.NotificationChannelRepository;
 import top.sshh.bililiverecoder.repo.NotificationRuleRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
-import top.sshh.bililiverecoder.util.PushNotifyClient;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class NotificationLegacyMigrationService {
 
-    private static final String DEFAULT_LEGACY_PUSH_TAGS = NotificationEventType.orderedValues().stream()
+    private static final String DEFAULT_ACTIVE_PUSH_TAGS = NotificationEventType.activeValues().stream()
+            .filter(eventType -> !eventType.systemScope())
+            .map(NotificationEventType::label)
+            .collect(Collectors.joining(","));
+    private static final String DEFAULT_ALL_PUSH_TAGS = NotificationEventType.orderedValues().stream()
+            .filter(eventType -> !eventType.systemScope())
             .map(NotificationEventType::label)
             .collect(Collectors.joining(","));
 
@@ -86,7 +88,7 @@ public class NotificationLegacyMigrationService {
                 }
                 channelIds.add(channel.getId());
             }
-            Set<NotificationEventType> enabledEvents = new LinkedHashSet<>(enabledEvents(room));
+            Set<NotificationEventType> enabledEvents = new LinkedHashSet<>(activeEnabledEvents(room));
             if (!channelIds.isEmpty()) {
                 for (NotificationEventType eventType : enabledEvents) {
                     upsertRule(room, eventType, true, channelIds);
@@ -143,11 +145,21 @@ public class NotificationLegacyMigrationService {
         if (StringUtils.isBlank(rawTags)) {
             return false;
         }
-        String normalized = PushNotifyClient.normalizePushMsgTags(rawTags);
-        if (StringUtils.isBlank(normalized)) {
+        Set<NotificationEventType> allEnabled = NotificationLegacyTagParser.parseEnabledEvents(rawTags);
+        if (allEnabled.isEmpty()) {
             return true;
         }
-        return !DEFAULT_LEGACY_PUSH_TAGS.equals(normalized);
+        String normalizedAll = NotificationEventType.orderedValues().stream()
+                .filter(eventType -> !eventType.systemScope())
+                .filter(allEnabled::contains)
+                .map(NotificationEventType::label)
+                .collect(Collectors.joining(","));
+        if (DEFAULT_ALL_PUSH_TAGS.equals(normalizedAll)) {
+            return false;
+        }
+        String normalized = NotificationLegacyTagParser.normalizeActivePushMsgTags(rawTags);
+        boolean hasDeprecated = allEnabled.stream().anyMatch(eventType -> !eventType.active());
+        return hasDeprecated || !DEFAULT_ACTIVE_PUSH_TAGS.equals(normalized);
     }
 
     private Map<String, Object> describeRoom(RecordRoom room, boolean revealSecrets) {
@@ -159,7 +171,16 @@ public class NotificationLegacyMigrationService {
         map.put("serverChanSendKey", revealSecrets ? room.getServerChanSendKey() : mask(room.getServerChanSendKey()));
         map.put("serverChanChannel", room.getServerChanChannel());
         map.put("pushMsgTags", room.getPushMsgTags());
-        map.put("events", enabledEvents(room).stream().map(NotificationEventType::label).toList());
+        Set<NotificationEventType> enabledEvents = NotificationLegacyTagParser.parseEnabledEvents(room.getPushMsgTags());
+        map.put("events", enabledEvents.stream()
+                .filter(NotificationEventType::active)
+                .filter(eventType -> !eventType.systemScope())
+                .map(NotificationEventType::label)
+                .toList());
+        map.put("deprecatedEvents", enabledEvents.stream()
+                .filter(eventType -> !eventType.active())
+                .map(NotificationEventType::label)
+                .toList());
         List<String> channels = new ArrayList<>();
         if (StringUtils.isNotBlank(room.getWxuid())) {
             channels.add("WxPusher");
@@ -171,21 +192,16 @@ public class NotificationLegacyMigrationService {
         return map;
     }
 
-    private List<NotificationEventType> enabledEvents(RecordRoom room) {
-        String normalized = PushNotifyClient.normalizePushMsgTags(room.getPushMsgTags());
-        if (StringUtils.isBlank(normalized)) {
-            return List.of();
-        }
-        return Arrays.stream(normalized.split(","))
-                .map(StringUtils::trimToNull)
-                .filter(Objects::nonNull)
-                .map(label -> NotificationEventType.fromLegacyLabel(label).orElse(null))
-                .filter(Objects::nonNull)
+    private List<NotificationEventType> activeEnabledEvents(RecordRoom room) {
+        return NotificationLegacyTagParser.parseEnabledEvents(room.getPushMsgTags()).stream()
+                .filter(NotificationEventType::active)
+                .filter(eventType -> !eventType.systemScope())
                 .toList();
     }
 
     private List<NotificationEventType> disabledEvents(Set<NotificationEventType> enabledEvents) {
-        return NotificationEventType.orderedValues().stream()
+        return NotificationEventType.activeValues().stream()
+                .filter(eventType -> !eventType.systemScope())
                 .filter(eventType -> !enabledEvents.contains(eventType))
                 .toList();
     }

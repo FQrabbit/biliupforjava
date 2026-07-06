@@ -1,6 +1,5 @@
 package top.sshh.bililiverecoder.service.impl;
 
-import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,11 +16,9 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.util.LogKvs;
-import top.sshh.bililiverecoder.util.PushNotifyClient;
 
 import java.io.File;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -30,18 +27,7 @@ import java.util.Optional;
 @Component
 public class RecordEventRecordEndService implements RecordEventService {
 
-    @Value("${record.wx-push-token}")
-    private String wxToken;
 
-    private static final String WX_MSG_FORMAT= """
-            收到主播%s下播，录制结束
-            房间名: %s
-            父分区: %s
-            子分区: %s
-            时间: %s
-            若%d分钟(可配置)内未收到录制开始事件，
-            则在上传完成后发布视频。
-            """;
     @Autowired
     private RecordHistoryRepository historyRepository;
     @Autowired
@@ -173,19 +159,6 @@ public class RecordEventRecordEndService implements RecordEventService {
             log.info("[BLR] {}", LogKvs.event("RecordEnd.NoRecording")
                     .add("roomId", eventData.getRoomId())
                     .add("msg", "收到录制结束事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制。"));
-        }
-        String wxuid = room.getWxuid();
-        String pushMsgTags = room.getPushMsgTags();
-        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "录制结束")) {
-            int mergeIntervalMinutes = getMergeIntervalMinutes(eventData.getRoomId());
-            Message message = new Message();
-            message.setAppToken(wxToken);
-            message.setContentType(Message.CONTENT_TYPE_TEXT);
-            message.setContent(WX_MSG_FORMAT.formatted(room.getUname(),room.getTitle(),
-                    eventData.getAreaNameParent(),eventData.getAreaNameChild(),LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                    mergeIntervalMinutes));
-            message.setUid(wxuid);
-            PushNotifyClient.sendParallel(room, message);
         }
 //        recordBiliPublishService.publishRecordHistory(history);
     }

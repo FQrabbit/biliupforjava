@@ -72,7 +72,10 @@ class NotificationLegacyMigrationServiceTest {
 
         assertEquals(true, result.get("success"));
         assertEquals(1, result.get("rooms"));
-        assertEquals(NotificationEventType.orderedValues().size() - 1, result.get("rules"));
+        long roomScopedActiveEvents = NotificationEventType.activeValues().stream()
+                .filter(eventType -> !eventType.systemScope())
+                .count();
+        assertEquals((int) roomScopedActiveEvents - 1, result.get("rules"));
         verify(notificationRuleRepository, atLeastOnce()).save(any());
     }
 

@@ -10,19 +10,20 @@ class PushNotifyClientTest {
 
     @Test
     void normalizePushMsgTagsShouldPreserveKnownOrder() {
-        assertEquals("开始直播,分P上传,视频投稿",
+        assertEquals("开始直播,审核通过",
                 PushNotifyClient.normalizePushMsgTags("视频投稿，开始直播|分P上传"));
     }
 
     @Test
     void normalizePushMsgTagsShouldFallbackForCompactLegacyText() {
-        assertEquals("开始直播,录制结束",
+        assertEquals("开始直播",
                 PushNotifyClient.normalizePushMsgTags("开始直播录制结束"));
     }
 
     @Test
     void isTagEnabledShouldAcceptDifferentSeparators() {
         assertTrue(PushNotifyClient.isTagEnabled("开始直播；视频投稿", " 视频 投稿 "));
+        assertTrue(PushNotifyClient.isTagEnabled("开始直播；视频投稿", "审核通过"));
         assertFalse(PushNotifyClient.isTagEnabled("开始直播", "高级弹幕"));
     }
 }

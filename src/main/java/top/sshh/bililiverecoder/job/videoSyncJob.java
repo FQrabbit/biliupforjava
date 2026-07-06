@@ -11,13 +11,19 @@ import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.BiliVideoInfoResponse;
 import top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse;
+import top.sshh.bililiverecoder.notification.NotificationEvent;
+import top.sshh.bililiverecoder.notification.NotificationEventPublisher;
+import top.sshh.bililiverecoder.notification.NotificationEventType;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
+import top.sshh.bililiverecoder.service.StatsAggregationService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -64,6 +70,12 @@ public class videoSyncJob {
 
     @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
+    @Autowired
+    private NotificationEventPublisher notificationEventPublisher;
+    @Autowired
+    private StatsAggregationService statsAggregationService;
+    @Autowired
+    private RoomLiveSessionStatsRepository sessionStatsRepository;
 
     @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void syncVideo() {
@@ -215,6 +227,17 @@ public class videoSyncJob {
         } else {
             result.type = "warning";
             result.msg = "未获取到可更新的稿件状态";
+        }
+        if (result.statusSynced) {
+            publishArchiveStatusNotificationIfChanged(
+                    history,
+                    room,
+                    user,
+                    result.oldArchiveCode == null ? history.getCode() : result.oldArchiveCode,
+                    result.archiveCode == null ? history.getCode() : result.archiveCode,
+                    StringUtils.defaultIfBlank(result.lockReason, result.auditReason),
+                    true
+            );
         }
         return result;
     }
@@ -730,6 +753,7 @@ public class videoSyncJob {
             return;
         }
         BiliBiliUser user = resolvePublishAuthContext(next, room).user();
+        int oldCode = next.getCode();
 
         BiliVideoInfoResponse videoInfoResponse = BiliApi.getVideoInfo(user,next.getBvId());
         int code = videoInfoResponse.getCode();
@@ -792,6 +816,7 @@ public class videoSyncJob {
                             next.setBvId(confirm.getData().getBvid());
                             next.setCoverUrl(confirm.getData().getPic());
                             historyRepository.save(next);
+                            publishArchiveStatusNotificationIfChanged(next, room, user, oldCode, state, null, true);
                             log.info("[BLR] {}", LogKvs.event("VideoSync.Confirm.Success")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
@@ -820,7 +845,7 @@ public class videoSyncJob {
                                     .addIfNotBlank("msg", confirm.getMessage()));
                         }
 
-                        int oldCode = next.getCode();
+                        int fallbackOldCode = next.getCode();
                         if (room.getIsOnlySelf() == 1) {
                             // 保守策略：房间配置要求仅自己可见，但当前无法可靠读取状态时，避免误发普通弹幕。
                             next.setCode(-50);
@@ -830,7 +855,7 @@ public class videoSyncJob {
                                     .add("uname", room.getUname())
                                     .add("historyId", next.getId())
                                     .addIfNotBlank("bvid", next.getBvId())
-                                    .add("oldCode", oldCode)
+                                    .add("oldCode", fallbackOldCode)
                                     .add("newCode", -50));
                             return;
                         }
@@ -841,7 +866,7 @@ public class videoSyncJob {
                                 .add("uname", room.getUname())
                                 .add("historyId", next.getId())
                                 .addIfNotBlank("bvid", next.getBvId())
-                                .add("oldCode", oldCode));
+                                .add("oldCode", fallbackOldCode));
                         return;
                     } else {
                         log.warn("[BLR] {}", LogKvs.event("VideoSync.MemberApi.Unexpected")
@@ -874,10 +899,12 @@ public class videoSyncJob {
             return;
         }
         int state = videoInfoResponseData.getState();
+        String statusReason = null;
         if (state == -50) {
             LockedArchiveSnapshot locked = detectLockedArchive(user, next);
             if (locked.locked()) {
                 state = -4;
+                statusReason = locked.reason();
                 markHistoryLockedAndArchived(next);
                 log.warn("[BLR] {}", LogKvs.event("VideoSync.LockedArchive.AutoForceArchived")
                         .add("roomId", room.getRoomId())
@@ -887,6 +914,8 @@ public class videoSyncJob {
                         .addIfNotBlank("title", next.getTitle())
                         .addIfNotBlank("reason", locked.reason()));
             }
+        } else if (state == -2) {
+            statusReason = loadAuditReason(user, next);
         }
         next.setCode(state);
         next.setAvId(videoInfoResponseData.getAid());
@@ -904,6 +933,7 @@ public class videoSyncJob {
         // 0: 开放浏览, -50: 仅自己可见
         // 这两种状态都视为"发布成功"，可以进行后续的弹幕解析
         if(state != 0 && state != -50){
+            publishArchiveStatusNotificationIfChanged(next, room, user, oldCode, state, statusReason, false);
             if (doPostPublishProcessing
                     && room != null
                     && partFileCleanupPolicy.isPostAuditCleanupType(room.getDeleteType())
@@ -918,6 +948,7 @@ public class videoSyncJob {
         RecordRoom recordRoom = room;
         List<BiliVideoInfoResponse.BiliVideoInfoPart> pages = videoInfoResponseData.getPages();
         if (pages == null) {
+            publishArchiveStatusNotificationIfChanged(next, room, user, oldCode, state, statusReason, true);
             return;
         }
         List<OnlinePartSnapshot> onlineParts = new ArrayList<>();
@@ -984,6 +1015,7 @@ public class videoSyncJob {
             }
         }
         // 只有在自动同步（发布后处理）流程中才考虑删除文件
+        publishArchiveStatusNotificationIfChanged(next, room, user, oldCode, state, statusReason, true);
         liveMsgSendSync.enqueueHistoryDispatch(next.getId());
         if (doPostPublishProcessing) {
             for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
@@ -1100,6 +1132,144 @@ public class videoSyncJob {
                 }
             }
         }
+    }
+
+    private void publishArchiveStatusNotificationIfChanged(RecordHistory history,
+                                                           RecordRoom room,
+                                                           BiliBiliUser user,
+                                                           int oldCode,
+                                                           int newCode,
+                                                           String reason,
+                                                           boolean includeSummary) {
+        NotificationEventType eventType = resolveArchiveNotificationType(oldCode, newCode);
+        if (eventType == null) {
+            return;
+        }
+        String resolvedReason = reason;
+        if (StringUtils.isBlank(resolvedReason)
+                && (eventType == NotificationEventType.VIDEO_AUDIT_REJECTED || eventType == NotificationEventType.VIDEO_AUDIT_LOCKED)) {
+            resolvedReason = loadAuditReason(user, history);
+        }
+        NotificationEvent event = NotificationEvent.of(room, eventType)
+                .add("historyId", history == null ? null : history.getId())
+                .add("videoTitle", history == null ? null : history.getTitle())
+                .add("bvId", history == null ? null : history.getBvId())
+                .add("oldArchiveCode", oldCode)
+                .add("archiveCode", newCode)
+                .add("status", archiveStatusLabel(newCode))
+                .add("reason", resolvedReason);
+
+        if (eventType == NotificationEventType.VIDEO_PUBLISH && includeSummary) {
+            ArchiveNotificationSummary summary = buildArchiveNotificationSummary(history);
+            event.add("danmakuCount", summary.danmakuCount())
+                    .add("revenueText", formatMoney(summary.totalRevenueCny()))
+                    .add("giftAmountText", formatMoney(summary.giftAmountCny()))
+                    .add("scAmountText", formatMoney(summary.scAmount()))
+                    .add("durationSeconds", summary.durationSeconds())
+                    .add("durationText", formatDuration(summary.durationSeconds()))
+                    .add("partCount", summary.partCount());
+        }
+        notificationEventPublisher.publish(event, room);
+    }
+
+    private NotificationEventType resolveArchiveNotificationType(int oldCode, int newCode) {
+        if (isAuditPassedCode(newCode) && !isAuditPassedCode(oldCode)) {
+            return NotificationEventType.VIDEO_PUBLISH;
+        }
+        if (newCode == -2 && oldCode != -2) {
+            return NotificationEventType.VIDEO_AUDIT_REJECTED;
+        }
+        if (newCode == -4 && oldCode != -4) {
+            return NotificationEventType.VIDEO_AUDIT_LOCKED;
+        }
+        return null;
+    }
+
+    private boolean isAuditPassedCode(int code) {
+        return code == 0 || code == -50;
+    }
+
+    private ArchiveNotificationSummary buildArchiveNotificationSummary(RecordHistory history) {
+        if (history == null || history.getId() == null) {
+            return ArchiveNotificationSummary.empty();
+        }
+        try {
+            statsAggregationService.refreshHistoryStats(history.getId());
+        } catch (Exception e) {
+            log.debug("[BLR] {}", LogKvs.event("Notify.Publish.SummaryStatsRefreshFailed")
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("bvid", history.getBvId())
+                    .addIfNotBlank("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()));
+        }
+        RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
+        if (stats != null) {
+            BigDecimal giftAmount = safeMoney(stats.getGiftAmountCny());
+            BigDecimal scAmount = safeMoney(stats.getScAmount());
+            return new ArchiveNotificationSummary(
+                    stats.getMsgCount(),
+                    giftAmount,
+                    scAmount,
+                    giftAmount.add(scAmount),
+                    stats.getDurationSeconds(),
+                    stats.getPartCount()
+            );
+        }
+        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        List<Long> partIds = parts.stream()
+                .map(RecordHistoryPart::getId)
+                .filter(id -> id != null)
+                .toList();
+        long danmakuCount = partIds.isEmpty() ? 0L : msgRepository.countByPartIdIn(partIds);
+        long durationSeconds = fallbackDurationSeconds(history, parts);
+        return new ArchiveNotificationSummary(danmakuCount, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, durationSeconds, parts.size());
+    }
+
+    private long fallbackDurationSeconds(RecordHistory history, List<RecordHistoryPart> parts) {
+        if (history != null && history.getStartTime() != null && history.getEndTime() != null) {
+            return Math.max(0L, Duration.between(history.getStartTime(), history.getEndTime()).getSeconds());
+        }
+        double seconds = 0.0d;
+        if (parts != null) {
+            for (RecordHistoryPart part : parts) {
+                if (part != null && part.getDuration() > 0) {
+                    seconds += part.getDuration();
+                }
+            }
+        }
+        return Math.max(0L, Math.round(seconds));
+    }
+
+    private BigDecimal safeMoney(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private String formatMoney(BigDecimal value) {
+        return "¥" + safeMoney(value).setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String formatDuration(long seconds) {
+        long safe = Math.max(0L, seconds);
+        long hours = safe / 3600L;
+        long minutes = (safe % 3600L) / 60L;
+        long remainSeconds = safe % 60L;
+        if (hours > 0) {
+            return hours + "小时" + minutes + "分" + remainSeconds + "秒";
+        }
+        if (minutes > 0) {
+            return minutes + "分" + remainSeconds + "秒";
+        }
+        return remainSeconds + "秒";
+    }
+
+    private String archiveStatusLabel(int code) {
+        return switch (code) {
+            case 0 -> "公开浏览";
+            case -50 -> "仅自己可见";
+            case -2 -> "审核退回";
+            case -4 -> "稿件锁定";
+            default -> "Code:" + code;
+        };
     }
 
     private boolean shouldKeepPendingReviewAfterRecentEdit(RecordHistory history, int apiState) {
@@ -1242,6 +1412,17 @@ public class videoSyncJob {
 
         private static LockedArchiveSnapshot locked(String reason) {
             return new LockedArchiveSnapshot(true, reason);
+        }
+    }
+
+    private record ArchiveNotificationSummary(long danmakuCount,
+                                              BigDecimal giftAmountCny,
+                                              BigDecimal scAmount,
+                                              BigDecimal totalRevenueCny,
+                                              long durationSeconds,
+                                              int partCount) {
+        private static ArchiveNotificationSummary empty() {
+            return new ArchiveNotificationSummary(0L, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0L, 0);
         }
     }
 

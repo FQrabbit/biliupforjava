@@ -1,11 +1,9 @@
 package top.sshh.bililiverecoder.notification;
 
-import com.zjiecode.wxpusher.client.bean.Message;
-import lombok.extern.slf4j.Slf4j;
+import com.alibaba.fastjson.JSONObject;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.entity.NotificationChannel;
-import top.sshh.bililiverecoder.entity.NotificationDelivery;
 import top.sshh.bililiverecoder.entity.NotificationRule;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.NotificationChannelRepository;
@@ -13,24 +11,15 @@ import top.sshh.bililiverecoder.repo.NotificationDeliveryRepository;
 import top.sshh.bililiverecoder.repo.NotificationRuleRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.SystemConfigService;
-import top.sshh.bililiverecoder.util.LogKvs;
-import top.sshh.bililiverecoder.util.PushNotifyClient;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 public class NotificationService {
 
@@ -38,50 +27,21 @@ public class NotificationService {
     private final NotificationDeliveryRepository notificationDeliveryRepository;
     private final NotificationRuleRepository notificationRuleRepository;
     private final RecordRoomRepository recordRoomRepository;
-    private final NotificationRuleService notificationRuleService;
     private final SystemConfigService systemConfigService;
-    private final Map<String, NotificationChannelAdapter> adapters;
+    private final NotificationDispatchService dispatchService;
 
     public NotificationService(NotificationChannelRepository notificationChannelRepository,
                                NotificationDeliveryRepository notificationDeliveryRepository,
                                NotificationRuleRepository notificationRuleRepository,
                                RecordRoomRepository recordRoomRepository,
-                               NotificationRuleService notificationRuleService,
                                SystemConfigService systemConfigService,
-                               List<NotificationChannelAdapter> adapters) {
+                               NotificationDispatchService dispatchService) {
         this.notificationChannelRepository = notificationChannelRepository;
         this.notificationDeliveryRepository = notificationDeliveryRepository;
         this.notificationRuleRepository = notificationRuleRepository;
         this.recordRoomRepository = recordRoomRepository;
-        this.notificationRuleService = notificationRuleService;
         this.systemConfigService = systemConfigService;
-        this.adapters = adapters.stream().collect(Collectors.toMap(NotificationChannelAdapter::type, Function.identity()));
-    }
-
-    public boolean canSend(RecordRoom room, NotificationEventType eventType) {
-        if (!isEnabled() || eventType == null) {
-            return false;
-        }
-
-        List<NotificationRule> candidateRules = notificationRuleService.findCandidateRules(eventType, room);
-        if (!candidateRules.isEmpty()) {
-            return !notificationRuleService.findEnabledRules(eventType, room).isEmpty();
-        }
-
-        return canSendLegacy(room, eventType);
-    }
-
-    public void sendText(RecordRoom room, NotificationEventType eventType, String content) {
-        NotificationMessage message = NotificationMessage.text(room, eventType, content);
-        sendAsync(room, message);
-    }
-
-    public void sendWxPusherMessage(RecordRoom room, NotificationEventType eventType, Message message) {
-        if (message == null) {
-            return;
-        }
-        NotificationMessage notificationMessage = NotificationMessage.text(room, eventType, message.getContent());
-        sendAsync(room, notificationMessage);
+        this.dispatchService = dispatchService;
     }
 
     public NotificationSendResult sendTest(Long channelId) {
@@ -93,23 +53,27 @@ public class NotificationService {
         message.setEventType(NotificationEventType.LIVE_STREAM_STARTED);
         message.setTitle("biliupforjava测试通知");
         message.setContent("biliupforjava测试通知\n时间: " + LocalDateTime.now());
-        return sendToChannel(optional.get(), message);
+        return dispatchService.sendToChannel(optional.get(), message);
     }
 
     public boolean isEnabled() {
-        return systemConfigService.getAllConfigsMap().getOrDefault(SystemConfigService.KEY_NOTIFICATION_ENABLED, "true").equalsIgnoreCase("true");
+        return systemConfigService.getAllConfigsMap()
+                .getOrDefault(SystemConfigService.KEY_NOTIFICATION_ENABLED, "true")
+                .equalsIgnoreCase("true");
     }
 
     public Map<String, Object> configOverview() {
         Map<String, Object> result = new HashMap<>();
         result.put("enabled", isEnabled());
-        result.put("eventTypes", NotificationEventType.orderedValues().stream()
-                .map(type -> Map.of("key", type.key(), "label", type.label()))
+        result.put("eventTypes", NotificationEventCatalog.activeDescriptors());
+        result.put("deprecatedEventTypes", NotificationEventCatalog.allDescriptors().stream()
+                .filter(descriptor -> !descriptor.active())
                 .toList());
         result.put("channels", sanitizeChannels(notificationChannelRepository.findAll()));
-        result.put("rules", notificationRuleRepository.findAll());
+        result.put("rules", activeRules(notificationRuleRepository.findAll()));
         result.put("rooms", sanitizeRooms(recordRoomRepository.findAllOrderBySortOrder()));
         result.put("deliveries", notificationDeliveryRepository.findTop50ByOrderByCreateTimeDesc());
+        result.put("workspaceUsageAlertThresholdPercent", systemConfigService.getWorkspaceUsageAlertThresholdPercent());
         return result;
     }
 
@@ -122,7 +86,7 @@ public class NotificationService {
         channel.setEnabled(incoming.isEnabled());
         channel.setConfigJson(StringUtils.defaultString(incoming.getConfigJson(), "{}"));
         if (StringUtils.isNotBlank(incoming.getSecretJson())) {
-            channel.setSecretJson(incoming.getSecretJson());
+            channel.setSecretJson(mergeSecretJson(channel.getSecretJson(), incoming.getSecretJson()));
         } else if (channel.getId() == null) {
             channel.setSecretJson("{}");
         }
@@ -135,14 +99,24 @@ public class NotificationService {
     }
 
     public NotificationRule saveRule(NotificationRule incoming) {
-        String normalizedRoomId = normalizeRuleRoomId(incoming.getRoomId());
+        Optional<NotificationEventType> eventType = NotificationEventType.fromKey(incoming.getEventType());
+        boolean systemEvent = eventType.map(NotificationEventType::systemScope).orElse(false);
+        String normalizedRoomId = systemEvent ? "*" : normalizeRuleRoomId(incoming.getRoomId());
+        if (systemEvent) {
+            deleteRoomScopedRules(incoming.getEventType());
+        }
         NotificationRule rule = incoming.getId() == null
                 ? findExistingRule(incoming.getEventType(), normalizedRoomId).orElse(new NotificationRule())
                 : notificationRuleRepository.findById(incoming.getId()).orElseGet(() -> findExistingRule(incoming.getEventType(), normalizedRoomId).orElse(new NotificationRule()));
+        if (systemEvent && !NotificationRuleService.isGlobalRoomId(rule.getRoomId())) {
+            rule = findExistingRule(incoming.getEventType(), "*").orElse(new NotificationRule());
+        }
         rule.setEventType(incoming.getEventType());
-        rule.setEventLabel(NotificationEventType.fromKey(incoming.getEventType()).map(NotificationEventType::label).orElse(incoming.getEventLabel()));
+        rule.setEventLabel(NotificationEventCatalog.activeDescriptor(incoming.getEventType())
+                .map(NotificationEventDescriptor::label)
+                .orElse(incoming.getEventLabel()));
         rule.setRoomId(normalizedRoomId);
-        rule.setRoomName(StringUtils.trimToNull(incoming.getRoomName()));
+        rule.setRoomName(systemEvent ? "系统级事件" : StringUtils.trimToNull(incoming.getRoomName()));
         rule.setEnabled(incoming.isEnabled());
         rule.setChannelIds(StringUtils.defaultString(incoming.getChannelIds()));
         LocalDateTime now = LocalDateTime.now();
@@ -180,6 +154,12 @@ public class NotificationService {
         return copy;
     }
 
+    private List<NotificationRule> activeRules(List<NotificationRule> rules) {
+        return rules.stream()
+                .filter(rule -> NotificationEventCatalog.isActiveKey(rule.getEventType()))
+                .toList();
+    }
+
     private List<Map<String, Object>> sanitizeRooms(List<RecordRoom> rooms) {
         return rooms.stream().map(room -> {
             Map<String, Object> item = new LinkedHashMap<>();
@@ -201,113 +181,30 @@ public class NotificationService {
                 .findFirst();
     }
 
+    private void deleteRoomScopedRules(String eventType) {
+        notificationRuleRepository.findByEventType(eventType).stream()
+                .filter(rule -> !NotificationRuleService.isGlobalRoomId(rule.getRoomId()))
+                .forEach(notificationRuleRepository::delete);
+    }
+
     private String normalizeRuleRoomId(String roomId) {
         String normalized = StringUtils.trimToNull(roomId);
         return normalized == null ? "*" : normalized;
     }
 
-    private void sendAsync(RecordRoom room, NotificationMessage message) {
-        CompletableFuture.runAsync(() -> dispatch(room, message));
-    }
-
-    private void dispatch(RecordRoom room, NotificationMessage message) {
-        try {
-            if (message == null || message.getEventType() == null || !isEnabled()) {
-                return;
+    private String mergeSecretJson(String currentSecretJson, String incomingSecretJson) {
+        JSONObject merged = NotificationJson.parse(currentSecretJson);
+        JSONObject incoming = NotificationJson.parse(incomingSecretJson);
+        for (Map.Entry<String, Object> entry : incoming.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof String str && StringUtils.isBlank(str)) {
+                continue;
             }
-            Set<NotificationChannel> channels = resolveChannels(room, message.getEventType());
-            for (NotificationChannel channel : channels) {
-                sendToChannel(channel, message);
+            if (value != null) {
+                merged.put(entry.getKey(), value);
             }
-        } catch (Exception e) {
-            log.warn("[BLR] {}", LogKvs.event("Notify.Dispatch.Failed")
-                    .addIfNotBlank("eventType", message == null || message.getEventType() == null ? null : message.getEventType().key())
-                    .addIfNotBlank("roomId", room == null ? null : room.getRoomId())
-                    .addIfNotBlank("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
         }
-    }
-
-    private Set<NotificationChannel> resolveChannels(RecordRoom room, NotificationEventType eventType) {
-        List<NotificationRule> candidateRules = notificationRuleService.findCandidateRules(eventType, room);
-        if (!candidateRules.isEmpty()) {
-            Set<Long> channelIds = notificationRuleService.collectChannelIds(
-                    candidateRules.stream()
-                            .filter(NotificationRule::isEnabled)
-                            .toList()
-            );
-            Set<Long> wanted = new HashSet<>(channelIds);
-            return notificationChannelRepository.findAllById(wanted).stream()
-                    .filter(NotificationChannel::isEnabled)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-        }
-        return resolveLegacyChannels(room, eventType);
-    }
-
-    private Set<NotificationChannel> resolveLegacyChannels(RecordRoom room, NotificationEventType eventType) {
-        Set<NotificationChannel> channels = new LinkedHashSet<>();
-        if (!canSendLegacy(room, eventType)) {
-            return channels;
-        }
-        if (StringUtils.isNotBlank(room.getWxuid())) {
-            NotificationChannel channel = new NotificationChannel();
-            channel.setName("旧版WxPusher-" + room.getRoomId());
-            channel.setType(WxPusherNotificationChannel.TYPE);
-            channel.setEnabled(true);
-            channel.setConfigJson(NotificationJson.object("uid", room.getWxuid()));
-            channel.setSecretJson("{}");
-            channels.add(channel);
-        }
-        if (StringUtils.isNotBlank(room.getServerChanSendKey())) {
-            NotificationChannel channel = new NotificationChannel();
-            channel.setName("旧版Server酱3-" + room.getRoomId());
-            channel.setType(ServerChan3NotificationChannel.TYPE);
-            channel.setEnabled(true);
-            channel.setConfigJson(NotificationJson.object("tags", StringUtils.defaultString(room.getServerChanChannel())));
-            channel.setSecretJson(NotificationJson.object("sendKey", room.getServerChanSendKey()));
-            channels.add(channel);
-        }
-        return channels;
-    }
-
-    private boolean canSendLegacy(RecordRoom room, NotificationEventType eventType) {
-        if (room == null || eventType == null) {
-            return false;
-        }
-        if (!PushNotifyClient.isTagEnabled(room.getPushMsgTags(), eventType.label())) {
-            return false;
-        }
-        return StringUtils.isNotBlank(room.getWxuid()) || StringUtils.isNotBlank(room.getServerChanSendKey());
-    }
-
-    private NotificationSendResult sendToChannel(NotificationChannel channel, NotificationMessage message) {
-        NotificationDelivery delivery = new NotificationDelivery();
-        delivery.setEventType(message.getEventType() == null ? null : message.getEventType().key());
-        delivery.setEventLabel(message.getEventType() == null ? null : message.getEventType().label());
-        delivery.setRoomId(message.getRoomId());
-        delivery.setRoomName(message.getRoomName());
-        delivery.setChannelId(channel.getId());
-        delivery.setChannelType(channel.getType());
-        delivery.setChannelName(channel.getName());
-        delivery.setTitle(message.getTitle());
-        delivery.setContent(message.getContent());
-        delivery.setStatus("PENDING");
-        delivery.setCreateTime(LocalDateTime.now());
-        delivery = notificationDeliveryRepository.save(delivery);
-
-        NotificationChannelAdapter adapter = adapters.get(channel.getType());
-        NotificationSendResult result;
-        if (adapter == null) {
-            result = NotificationSendResult.failed("unsupported channel type: " + channel.getType());
-        } else {
-            result = adapter.send(channel, message);
-        }
-
-        delivery.setSentTime(LocalDateTime.now());
-        delivery.setStatus(result.success() ? "SUCCESS" : "FAILED");
-        delivery.setErrorMessage(result.errorMessage());
-        notificationDeliveryRepository.save(delivery);
-        return result;
+        return merged.toJSONString();
     }
 
     private String defaultChannelName(String type) {
@@ -316,6 +213,18 @@ public class NotificationService {
         }
         if (WeComNotificationChannel.TYPE.equals(type)) {
             return "企业微信应用消息";
+        }
+        if (WeComWebhookNotificationChannel.TYPE.equals(type)) {
+            return "企业微信群机器人";
+        }
+        if (DingTalkWebhookNotificationChannel.TYPE.equals(type)) {
+            return "钉钉群机器人";
+        }
+        if (NtfyNotificationChannel.TYPE.equals(type)) {
+            return "ntfy";
+        }
+        if (BarkNotificationChannel.TYPE.equals(type)) {
+            return "Bark";
         }
         if (ServerChan3NotificationChannel.TYPE.equals(type)) {
             return "Server酱3";

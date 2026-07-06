@@ -765,6 +765,185 @@
                                                     </el-input>
                                                 </div>
                                             </template>
+                                            <template v-if="channel.type === 'dingtalk_webhook'">
+                                                <div class="mobile-notification-channel-fieldset">
+                                                    <el-input
+                                                        v-model="channel.dingtalkWebhookUrl"
+                                                        size="small"
+                                                        type="password"
+                                                        show-password
+                                                        autocomplete="new-password"
+                                                        name="mobile-notification-dingtalk-webhook-url"
+                                                        data-lpignore="true"
+                                                        data-1p-ignore="true"
+                                                        clearable
+                                                        placeholder="留空不修改 Webhook"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                    <el-input
+                                                        v-model="channel.dingtalkSignSecret"
+                                                        size="small"
+                                                        type="password"
+                                                        show-password
+                                                        autocomplete="new-password"
+                                                        name="mobile-notification-dingtalk-sign-secret"
+                                                        data-lpignore="true"
+                                                        data-1p-ignore="true"
+                                                        clearable
+                                                        placeholder="留空不修改加签 Secret"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                </div>
+                                                <div class="mobile-notification-channel-fieldset">
+                                                    <el-select
+                                                        v-model="channel.dingtalkMessageType"
+                                                        size="small"
+                                                        placeholder="消息类型"
+                                                        class="mobile-notification-channel-input">
+                                                        <el-option label="Markdown" value="markdown"></el-option>
+                                                        <el-option label="文本消息" value="text"></el-option>
+                                                    </el-select>
+                                                    <el-input
+                                                        v-model="channel.dingtalkKeyword"
+                                                        size="small"
+                                                        clearable
+                                                        placeholder="安全关键词，可留空"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                </div>
+                                                <div class="mobile-notification-channel-fieldset">
+                                                    <el-input
+                                                        v-model="channel.dingtalkAtMobiles"
+                                                        size="small"
+                                                        type="password"
+                                                        show-password
+                                                        autocomplete="new-password"
+                                                        name="mobile-notification-dingtalk-at-mobiles"
+                                                        data-lpignore="true"
+                                                        data-1p-ignore="true"
+                                                        clearable
+                                                        placeholder="@ 手机号，用 | 分隔"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                    <el-input
+                                                        v-model="channel.dingtalkAtUserIds"
+                                                        size="small"
+                                                        type="password"
+                                                        show-password
+                                                        autocomplete="new-password"
+                                                        name="mobile-notification-dingtalk-at-user-ids"
+                                                        data-lpignore="true"
+                                                        data-1p-ignore="true"
+                                                        clearable
+                                                        placeholder="@ UserID，用 | 分隔"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                </div>
+                                                <div class="mobile-notification-channel-toggle">
+                                                    <span>@所有人</span>
+                                                    <el-switch v-model="channel.dingtalkAtAll"></el-switch>
+                                                </div>
+                                            </template>
+                                            <template v-if="channel.type === 'ntfy'">
+                                                <div class="mobile-notification-channel-fieldset">
+                                                    <el-input
+                                                        v-model="channel.ntfyTopic"
+                                                        size="small"
+                                                        clearable
+                                                        placeholder="Topic，例如 room-started"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                    <el-input
+                                                        v-model="channel.ntfyServerUrl"
+                                                        size="small"
+                                                        clearable
+                                                        placeholder="服务地址，默认 https://ntfy.sh"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                    <el-select
+                                                        v-model="channel.ntfyPriority"
+                                                        size="small"
+                                                        placeholder="优先级"
+                                                        class="mobile-notification-channel-input">
+                                                        <el-option label="默认" value="default"></el-option>
+                                                        <el-option label="最低" value="min"></el-option>
+                                                        <el-option label="较低" value="low"></el-option>
+                                                        <el-option label="较高" value="high"></el-option>
+                                                        <el-option label="紧急" value="urgent"></el-option>
+                                                    </el-select>
+                                                    <el-input
+                                                        v-model="channel.ntfyTags"
+                                                        size="small"
+                                                        clearable
+                                                        placeholder="标签，用逗号分隔，可留空"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                    <el-input
+                                                        v-model="channel.ntfyClick"
+                                                        size="small"
+                                                        clearable
+                                                        placeholder="点击跳转链接，可留空"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                </div>
+                                                <div class="mobile-notification-channel-fieldset">
+                                                    <el-select
+                                                        v-model="channel.ntfyAuthType"
+                                                        size="small"
+                                                        placeholder="鉴权方式"
+                                                        class="mobile-notification-channel-input">
+                                                        <el-option label="无需鉴权" value="none"></el-option>
+                                                        <el-option label="Bearer Token" value="bearer"></el-option>
+                                                        <el-option label="Basic 账号密码" value="basic"></el-option>
+                                                    </el-select>
+                                                    <el-input
+                                                        v-if="channel.ntfyAuthType === 'bearer'"
+                                                        v-model="channel.ntfyToken"
+                                                        size="small"
+                                                        type="password"
+                                                        show-password
+                                                        autocomplete="new-password"
+                                                        name="mobile-notification-ntfy-token"
+                                                        data-lpignore="true"
+                                                        data-1p-ignore="true"
+                                                        clearable
+                                                        placeholder="留空不修改 Token"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                    <el-input
+                                                        v-if="channel.ntfyAuthType === 'basic'"
+                                                        v-model="channel.ntfyUsername"
+                                                        size="small"
+                                                        type="password"
+                                                        show-password
+                                                        autocomplete="new-password"
+                                                        name="mobile-notification-ntfy-username"
+                                                        data-lpignore="true"
+                                                        data-1p-ignore="true"
+                                                        clearable
+                                                        placeholder="留空不修改用户名"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                    <el-input
+                                                        v-if="channel.ntfyAuthType === 'basic'"
+                                                        v-model="channel.ntfyPassword"
+                                                        size="small"
+                                                        type="password"
+                                                        show-password
+                                                        autocomplete="new-password"
+                                                        name="mobile-notification-ntfy-password"
+                                                        data-lpignore="true"
+                                                        data-1p-ignore="true"
+                                                        clearable
+                                                        placeholder="留空不修改密码"
+                                                        class="mobile-notification-channel-input">
+                                                    </el-input>
+                                                </div>
+                                                <div class="mobile-notification-channel-toggle">
+                                                    <span>Markdown</span>
+                                                    <el-switch v-model="channel.ntfyMarkdown"></el-switch>
+                                                </div>
+                                            </template>
                                             <template v-if="channel.type === 'serverchan3'">
                                                 <el-input
                                                     v-model="channel.tags"
@@ -917,9 +1096,9 @@
             <div class="notification-editor-head">
                 <div>
                     <h3>{{ notificationRuleEditor.eventLabel || '推送规则' }}</h3>
-                    <p>先选择事件，再决定适用范围和推送渠道。</p>
+                    <p>先选择事件，再决定推送状态、适用范围和推送渠道。</p>
                 </div>
-                <el-tag size="small" effect="plain">{{ notificationRoomSummaryText(notificationRuleEditor.roomIds) }}</el-tag>
+                <el-tag size="small" effect="plain">{{ notificationRuleEditorBadgeText() }}</el-tag>
             </div>
             <el-form label-position="top" size="small" class="notification-editor-form">
                 <el-form-item label="事件">
@@ -927,10 +1106,23 @@
                         <el-option v-for="item in notificationConfig.eventTypes" :key="item.key" :label="item.label" :value="item.key"></el-option>
                     </el-select>
                 </el-form-item>
-                <el-form-item label="适用范围" class="option-card-form-item">
-                    <div class="notification-scope-card-grid" role="radiogroup" aria-label="适用范围">
+                <el-form-item v-if="isNotificationWorkspaceUsageEvent(notificationRuleEditor.eventType)" label="预警阈值">
+                    <div class="notification-threshold-control">
+                        <el-input-number
+                            v-model="notificationRuleEditor.workspaceUsageAlertThresholdPercent"
+                            :min="1"
+                            :max="99"
+                            :step="1"
+                            controls-position="right">
+                        </el-input-number>
+                        <span>%</span>
+                        <em>工作目录所在磁盘使用率达到该比例时发送预警</em>
+                    </div>
+                </el-form-item>
+                <el-form-item :label="isNotificationSystemEvent(notificationRuleEditor.eventType) ? '事件状态' : '适用范围'" class="option-card-form-item">
+                    <div class="notification-scope-card-grid" :class="{ 'is-system': isNotificationSystemEvent(notificationRuleEditor.eventType) }" role="radiogroup" aria-label="适用范围">
                         <button
-                            v-for="item in notificationRuleModeOptions"
+                            v-for="item in (isNotificationSystemEvent(notificationRuleEditor.eventType) ? notificationSystemRuleModeOptions : notificationRuleModeOptions)"
                             :key="item.value"
                             type="button"
                             class="notification-scope-card"
@@ -939,19 +1131,17 @@
                             :aria-checked="notificationRuleEditor.scope === item.value"
                             @click="setNotificationRuleEditorScope(item.value)">
                             <span class="notification-scope-card-icon">
-                                <i :class="item.value === 'all' ? 'el-icon-s-home' : (item.value === 'rooms' ? 'el-icon-s-custom' : 'el-icon-turn-off')"></i>
+                                <i :class="notificationRuleScopeCardIcon(item.value)"></i>
                             </span>
                             <span class="notification-scope-card-main">
                                 <strong>{{ item.label }}</strong>
-                                <em v-if="item.value === 'all'">所有直播间都按本规则推送</em>
-                                <em v-else-if="item.value === 'rooms'">只给选中的直播间推送</em>
-                                <em v-else>该事件默认不发送推送</em>
+                                <em>{{ notificationRuleScopeCardDescription(item.value) }}</em>
                             </span>
                             <i class="el-icon-check notification-scope-card-check"></i>
                         </button>
                     </div>
                 </el-form-item>
-                <el-form-item v-if="notificationRuleEditor.scope === 'rooms'" label="选择直播间">
+                <el-form-item v-if="!isNotificationSystemEvent(notificationRuleEditor.eventType) && notificationRuleEditor.scope === 'rooms'" label="选择直播间">
                     <div class="notification-room-picker">
                         <el-input
                             v-model="notificationRuleEditor.roomKeyword"

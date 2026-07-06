@@ -6,6 +6,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import top.sshh.bililiverecoder.notification.NotificationEvent;
+import top.sshh.bililiverecoder.notification.NotificationEventPublisher;
+import top.sshh.bililiverecoder.notification.NotificationEventType;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.util.TaskUtil;
 
@@ -30,23 +33,29 @@ public class WorkspaceUsageService {
     @Value("${record.work-path}")
     private String workPath;
 
-    @Value("${record.workspace-usage-alert-threshold:95}")
+    @Value("${record.workspace-usage-alert-threshold:90}")
     private int alertThresholdPercent;
 
     private final UploadUserSerialScheduler uploadUserSerialScheduler;
     private final RecordHistoryPartRepository partRepository;
     private final DataSource dataSource;
     private final Environment environment;
+    private final NotificationEventPublisher notificationEventPublisher;
+    private final SystemConfigService systemConfigService;
     private volatile WorkspaceUsageSnapshot latestSnapshot;
 
     public WorkspaceUsageService(UploadUserSerialScheduler uploadUserSerialScheduler,
                                  RecordHistoryPartRepository partRepository,
                                  DataSource dataSource,
-                                 Environment environment) {
+                                 Environment environment,
+                                 NotificationEventPublisher notificationEventPublisher,
+                                 SystemConfigService systemConfigService) {
         this.uploadUserSerialScheduler = uploadUserSerialScheduler;
         this.partRepository = partRepository;
         this.dataSource = dataSource;
         this.environment = environment;
+        this.notificationEventPublisher = notificationEventPublisher;
+        this.systemConfigService = systemConfigService;
     }
 
     @PostConstruct
@@ -68,16 +77,46 @@ public class WorkspaceUsageService {
             refreshSnapshotSafely();
             snapshot = latestSnapshot;
         }
-        return snapshot == null ? WorkspaceUsageSnapshot.empty(workPath, alertThresholdPercent).toMap() : snapshot.toMap();
+        return snapshot == null ? WorkspaceUsageSnapshot.empty(workPath, currentAlertThresholdPercent()).toMap() : snapshot.toMap();
     }
 
     private void refreshSnapshotSafely() {
         try {
-            this.latestSnapshot = collectSnapshot();
+            WorkspaceUsageSnapshot previous = this.latestSnapshot;
+            WorkspaceUsageSnapshot snapshot = collectSnapshot();
+            this.latestSnapshot = snapshot;
+            if (shouldPublishWorkspaceAlert(previous, snapshot)) {
+                publishWorkspaceAlert(snapshot);
+            }
         } catch (Exception e) {
             log.warn("[BLR] collect workspace usage failed, workPath={}, err={}", workPath, e.getMessage());
-            this.latestSnapshot = WorkspaceUsageSnapshot.error(workPath, alertThresholdPercent, e.getMessage());
+            this.latestSnapshot = WorkspaceUsageSnapshot.error(workPath, currentAlertThresholdPercent(), e.getMessage());
         }
+    }
+
+    private boolean shouldPublishWorkspaceAlert(WorkspaceUsageSnapshot previous, WorkspaceUsageSnapshot current) {
+        return current != null
+                && current.valid
+                && current.alert
+                && (previous == null || !previous.alert);
+    }
+
+    private void publishWorkspaceAlert(WorkspaceUsageSnapshot snapshot) {
+        NotificationEvent event = new NotificationEvent();
+        event.setEventType(NotificationEventType.WORKSPACE_USAGE_ALERT);
+        event.add("workPath", snapshot.workPath)
+                .add("probePath", snapshot.probePath)
+                .add("usedPercent", snapshot.usedPercent)
+                .add("alertThresholdPercent", snapshot.alertThresholdPercent)
+                .add("totalBytes", snapshot.totalBytes)
+                .add("usedBytes", snapshot.usedBytes)
+                .add("freeBytes", snapshot.freeBytes)
+                .add("totalSize", formatBytes(snapshot.totalBytes))
+                .add("freeSize", formatBytes(snapshot.freeBytes))
+                .add("pendingUploadCount", snapshot.pendingUploadCount)
+                .add("queuedUploadCount", snapshot.queuedUploadCount)
+                .add("activeUploadCount", snapshot.activeUploadCount);
+        notificationEventPublisher.publish(event, null);
     }
 
     private WorkspaceUsageSnapshot collectSnapshot() throws Exception {
@@ -92,7 +131,8 @@ public class WorkspaceUsageService {
         double usedPercent = totalBytes <= 0L ? 0.0d : (usedBytes * 100.0d / totalBytes);
         usedPercent = round2(usedPercent);
 
-        boolean alert = usedPercent >= alertThresholdPercent;
+        int currentAlertThresholdPercent = currentAlertThresholdPercent();
+        boolean alert = usedPercent >= currentAlertThresholdPercent;
         int pendingUploadCount = partRepository.countPendingUploadPartsWithHistoryUploadEnabled();
         int queuedUploadCount = uploadUserSerialScheduler.getTotalPendingUploadCount();
         int activeUploadCount = TaskUtil.partUploadTask.size();
@@ -104,7 +144,7 @@ public class WorkspaceUsageService {
                 usedBytes,
                 freeBytes,
                 usedPercent,
-                alertThresholdPercent,
+                currentAlertThresholdPercent,
                 alert,
                 pendingUploadCount,
                 queuedUploadCount,
@@ -221,6 +261,13 @@ public class WorkspaceUsageService {
 
     private static double round2(double value) {
         return Math.round(value * 100.0d) / 100.0d;
+    }
+
+    private int currentAlertThresholdPercent() {
+        if (systemConfigService == null) {
+            return alertThresholdPercent;
+        }
+        return systemConfigService.getWorkspaceUsageAlertThresholdPercent();
     }
 
     private static final class WorkspaceUsageSnapshot {

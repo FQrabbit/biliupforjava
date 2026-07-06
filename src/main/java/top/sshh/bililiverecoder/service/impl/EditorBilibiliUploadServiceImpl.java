@@ -1,7 +1,6 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
-import com.zjiecode.wxpusher.client.bean.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +21,6 @@ import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
-import top.sshh.bililiverecoder.util.PushNotifyClient;
 import top.sshh.bililiverecoder.util.UploadRetryLogPolicy;
 import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.WebCookie;
@@ -38,7 +36,6 @@ import top.sshh.bililiverecoder.util.bili.user.UserMyRootBean;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -48,19 +45,6 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
     public static final String OS = "editor";
 
-    @Value("${record.wx-push-token}")
-    private String wxToken;
-    private static final String WX_MSG_FORMAT = """
-            上传结果: %s
-            收到主播%s云剪辑上传%s事件
-            房间名: %s
-            时间: %s
-            文件路径: %s
-            文件录制开始时间: %s
-            文件录制时长: %s 分钟
-            文件录制大小: %.3f GB
-            原因: %s
-            """;
     @Autowired
     private BiliUserRepository biliUserRepository;
     @Autowired
@@ -148,8 +132,6 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
             if (room != null) {
                 UploadEnums uploadEnums = UploadEnums.find(room.getLine());
-                String wxuid = room.getWxuid();
-                String pushMsgTags = room.getPushMsgTags();
                 // 上传任务入队列
                 String filePath = part.getFilePath().intern();
                 File uploadFile = new File(filePath);
@@ -231,16 +213,6 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             biliBiliUser.setLogin(false);
                             biliBiliUser = biliUserRepository.save(biliBiliUser);
                             TaskUtil.partUploadTask.remove(part.getId());
-                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                                Message message = new Message();
-                                message.setAppToken(wxToken);
-                                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                                message.setContent(WX_MSG_FORMAT.formatted("上传失败", room.getUname(), "开始", room.getTitle(),
-                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                        part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "登录已过期，请重新登录\n" + "线路：" + uploadEnums.getLine()));
-                                message.setUid(wxuid);
-                                PushNotifyClient.sendParallel(room, message);
-                            }
                             throw new RuntimeException("{}登录已过期，请重新登录! " + biliBiliUser.getUname());
                         }
                         // 登录验证结束
@@ -365,16 +337,6 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                         }
 
                         //并发上传
-                        Message message = new Message();
-                        if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                            message.setAppToken(wxToken);
-                            message.setContentType(Message.CONTENT_TYPE_TEXT);
-                            message.setContent(WX_MSG_FORMAT.formatted("开始上传", room.getUname(), "开始", room.getTitle(),
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                    part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "\n线路：无"));
-                            message.setUid(wxuid);
-                            PushNotifyClient.sendParallel(room, message);
-                        }
 
                         runnableList.stream().parallel().forEach(Runnable::run);
                         if (tryCount.get() >= 200) {
@@ -398,15 +360,6 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             }
                             //存在异常
                             TaskUtil.partUploadTask.remove(part.getId());
-                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                                message.setAppToken(wxToken);
-                                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                                message.setContent(WX_MSG_FORMAT.formatted("上传失败", room.getUname(), "开始", room.getTitle(),
-                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                        part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), biliBiliUser.getUname() + "并发上传失败，存在异常\n" + "线路：" + uploadEnums.getLine()));
-                                message.setUid(wxuid);
-                                PushNotifyClient.sendParallel(room, message);
-                            }
                             throw new RuntimeException(part.getFileName() + "===并发上传失败，存在异常");
                         }
                         //通知服务器上传完成
@@ -441,25 +394,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             .add("title", part.getTitle())
                             .add("payload", page));
                         if (Integer.valueOf(0).equals(completeUploadBean.getCode())) {
-                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                                message.setAppToken(wxToken);
-                                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                                message.setContent(WX_MSG_FORMAT.formatted("上传成功", room.getUname(), "结束", room.getTitle(),
-                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                        part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), ""));
-                                message.setUid(wxuid);
-                                PushNotifyClient.sendParallel(room, message);
-                            }
                         } else {
-                            if (PushNotifyClient.canSend(room, wxuid, pushMsgTags, "云剪辑")) {
-                                message.setAppToken(wxToken);
-                                message.setContentType(Message.CONTENT_TYPE_TEXT);
-                                message.setContent(WX_MSG_FORMAT.formatted("上传失败", room.getUname(), "结束", room.getTitle(),
-                                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")),
-                                        part.getFilePath(), part.getStartTime().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分ss秒")), (int)part.getDuration() / 60, ((float)part.getFileSize() / 1024 / 1024 / 1024), ""));
-                                message.setUid(wxuid);
-                                PushNotifyClient.sendParallel(room, message);
-                            }
                         }
                         }
                     }

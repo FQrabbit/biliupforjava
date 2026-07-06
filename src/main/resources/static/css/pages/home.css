@@ -1489,7 +1489,24 @@
     align-items: stretch;
 }
 
+.notification-channel-form.is-ntfy {
+    grid-template-columns: minmax(170px, 210px) minmax(0, 2fr) minmax(0, 2fr) minmax(180px, 240px) auto;
+    align-items: stretch;
+}
+
+.notification-channel-form.is-dingtalk {
+    grid-template-columns: minmax(170px, 210px) minmax(0, 2fr) minmax(0, 2fr) minmax(180px, 240px) auto;
+    align-items: stretch;
+}
+
 .notification-channel-form.is-wecom > .notification-type-select {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+}
+
+.notification-channel-form.is-ntfy > .notification-type-select,
+.notification-channel-form.is-dingtalk > .notification-type-select {
     grid-column: 1;
     grid-row: 1 / span 2;
     align-self: start;
@@ -1526,6 +1543,48 @@
     grid-row: 2;
 }
 
+.notification-channel-group-ntfy-extra,
+.notification-channel-group-dingtalk-extra {
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
+}
+
+.notification-channel-group-ntfy-main {
+    grid-template-columns: repeat(3, minmax(130px, 1fr));
+}
+
+.notification-channel-group-dingtalk-main {
+    grid-template-columns: minmax(180px, 1.25fr) minmax(160px, 1fr) minmax(130px, 0.8fr);
+}
+
+.notification-channel-group-ntfy-secret {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.notification-channel-form.is-ntfy .notification-channel-group-ntfy-main {
+    grid-column: 2 / span 2;
+    grid-row: 1;
+}
+
+.notification-channel-form.is-ntfy .notification-channel-group-ntfy-extra {
+    grid-column: 2 / span 2;
+    grid-row: 2;
+}
+
+.notification-channel-form.is-ntfy .notification-channel-group-ntfy-secret {
+    grid-column: 4;
+    grid-row: 2;
+}
+
+.notification-channel-form.is-dingtalk .notification-channel-group-dingtalk-main {
+    grid-column: 2 / span 2;
+    grid-row: 1;
+}
+
+.notification-channel-form.is-dingtalk .notification-channel-group-dingtalk-extra {
+    grid-column: 2 / span 2;
+    grid-row: 2;
+}
+
 .notification-channel-flags,
 .notification-channel-actions {
     display: flex;
@@ -1551,17 +1610,43 @@
     align-self: center;
 }
 
-.notification-channel-form:not(.is-wecom) .notification-channel-actions {
+.notification-channel-form.is-ntfy .notification-channel-actions {
+    grid-column: 5;
+    grid-row: 1 / span 2;
+    align-self: center;
+}
+
+.notification-channel-form.is-dingtalk .notification-channel-actions {
+    grid-column: 5;
+    grid-row: 1 / span 2;
+    align-self: center;
+}
+
+.notification-channel-form:not(.is-wecom):not(.is-ntfy):not(.is-dingtalk) .notification-channel-actions {
     display: contents;
 }
 
-.notification-channel-form:not(.is-wecom) .notification-channel-actions .el-switch,
-.notification-channel-form:not(.is-wecom) .notification-channel-actions .el-button {
+.notification-channel-form:not(.is-wecom):not(.is-ntfy):not(.is-dingtalk) .notification-channel-actions .el-switch,
+.notification-channel-form:not(.is-wecom):not(.is-ntfy):not(.is-dingtalk) .notification-channel-actions .el-button {
     justify-self: start;
     min-width: max-content;
 }
 
 .notification-channel-form.is-wecom > .notification-input {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: start;
+    min-width: 180px;
+}
+
+.notification-channel-form.is-ntfy > .notification-input {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: start;
+    min-width: 180px;
+}
+
+.notification-channel-form.is-dingtalk > .notification-input {
     grid-column: 4;
     grid-row: 1;
     align-self: start;
@@ -1674,6 +1759,21 @@
 .notification-inline-fields-wecom {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
+}
+
+.notification-inline-fields-ntfy {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+}
+
+.notification-inline-fields-dingtalk {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+}
+
+.notification-inline-fields-ntfy .notification-inline-cluster,
+.notification-inline-fields-dingtalk .notification-inline-cluster {
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
 }
 
 .notification-inline-cluster {
@@ -1916,6 +2016,35 @@
     gap: 10px;
     width: 100%;
     min-width: 0;
+}
+
+.notification-scope-card-grid.is-system {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.notification-threshold-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.notification-threshold-control .el-input-number {
+    width: 142px;
+}
+
+.notification-threshold-control > span {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 760;
+}
+
+.notification-threshold-control > em {
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    font-style: normal;
 }
 
 .notification-scope-card {
@@ -2263,8 +2392,17 @@
     }
 
     .notification-channel-form.is-wecom,
+    .notification-channel-form.is-ntfy,
+    .notification-channel-form.is-dingtalk,
     .notification-channel-group-auth,
     .notification-channel-group-target,
+    .notification-channel-group-ntfy-main,
+    .notification-channel-group-ntfy-extra,
+    .notification-channel-group-ntfy-secret,
+    .notification-channel-group-dingtalk-main,
+    .notification-channel-group-dingtalk-extra,
+    .notification-inline-fields-ntfy .notification-inline-cluster,
+    .notification-inline-fields-dingtalk .notification-inline-cluster,
     .notification-inline-cluster {
         grid-template-columns: 1fr;
     }
@@ -2279,7 +2417,18 @@
     .notification-channel-form.is-wecom .notification-channel-group-target,
     .notification-channel-form.is-wecom .notification-channel-flags,
     .notification-channel-form.is-wecom .notification-channel-actions,
-    .notification-channel-form.is-wecom > .notification-input {
+    .notification-channel-form.is-wecom > .notification-input,
+    .notification-channel-form.is-ntfy > .notification-type-select,
+    .notification-channel-form.is-ntfy .notification-channel-group-ntfy-main,
+    .notification-channel-form.is-ntfy .notification-channel-group-ntfy-extra,
+    .notification-channel-form.is-ntfy .notification-channel-group-ntfy-secret,
+    .notification-channel-form.is-ntfy .notification-channel-actions,
+    .notification-channel-form.is-ntfy > .notification-input,
+    .notification-channel-form.is-dingtalk > .notification-type-select,
+    .notification-channel-form.is-dingtalk .notification-channel-group-dingtalk-main,
+    .notification-channel-form.is-dingtalk .notification-channel-group-dingtalk-extra,
+    .notification-channel-form.is-dingtalk .notification-channel-actions,
+    .notification-channel-form.is-dingtalk > .notification-input {
         grid-column: auto;
         grid-row: auto;
     }
@@ -2296,8 +2445,17 @@
         grid-template-columns: 1fr;
     }
 
-    .notification-scope-card-grid {
+    .notification-scope-card-grid,
+    .notification-scope-card-grid.is-system {
         grid-template-columns: 1fr;
+    }
+
+    .notification-threshold-control {
+        flex-wrap: wrap;
+    }
+
+    .notification-threshold-control > em {
+        flex-basis: 100%;
     }
 
     .notification-room-picker-tools,

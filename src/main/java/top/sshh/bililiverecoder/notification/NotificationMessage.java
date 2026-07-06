@@ -4,6 +4,8 @@ import lombok.Data;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Data
 public class NotificationMessage {
@@ -20,6 +22,8 @@ public class NotificationMessage {
 
     private LocalDateTime occurredAt = LocalDateTime.now();
 
+    private Map<String, Object> metadata = new LinkedHashMap<>();
+
     public static NotificationMessage text(RecordRoom room, NotificationEventType eventType, String content) {
         NotificationMessage message = new NotificationMessage();
         message.setEventType(eventType);
@@ -28,6 +32,20 @@ public class NotificationMessage {
         if (room != null) {
             message.setRoomId(room.getRoomId());
             message.setRoomName(room.getUname());
+        }
+        return message;
+    }
+
+    public static NotificationMessage text(NotificationEvent event, String content) {
+        NotificationMessage message = new NotificationMessage();
+        message.setEventType(event.getEventType());
+        message.setContent(content);
+        message.setTitle(extractTitle(content));
+        message.setRoomId(event.getRoomId());
+        message.setRoomName(event.getRoomName());
+        message.setOccurredAt(event.getOccurredAt());
+        if (event.getAttributes() != null) {
+            message.setMetadata(new LinkedHashMap<>(event.getAttributes()));
         }
         return message;
     }

@@ -31,6 +31,7 @@ public class SystemConfigService {
     public static final String KEY_DANMAKU_DISPATCH_BATCH_SIZE = "bili.dm.dispatch-batch-size";
     public static final String KEY_DANMAKU_MAX_NORMAL_WORKERS = "bili.dm.max-normal-workers";
     public static final String KEY_NOTIFICATION_ENABLED = "notification.enabled";
+    public static final String KEY_WORKSPACE_USAGE_ALERT_THRESHOLD = "notification.workspace-usage-alert-threshold";
 
     // 录播姬 Cookie 自动同步配置
     public static final String KEY_BREC_SYNC_ENABLED = "brec.cookie-sync.enabled";
@@ -49,6 +50,7 @@ public class SystemConfigService {
     private static final long DEFAULT_DANMAKU_RECONCILE_INTERVAL_SECONDS = 300L;
     private static final int DEFAULT_DANMAKU_DISPATCH_BATCH_SIZE = 200;
     private static final int DEFAULT_DANMAKU_MAX_NORMAL_WORKERS = 2;
+    private static final int DEFAULT_WORKSPACE_USAGE_ALERT_THRESHOLD = 90;
 
     @Autowired
     private SystemConfigRepository systemConfigRepository;
@@ -83,6 +85,7 @@ public class SystemConfigService {
 
     private void initNotificationConfig() {
         loadOrInitConfig(KEY_NOTIFICATION_ENABLED, "true", "是否启用统一推送通知模块");
+        loadOrInitConfig(KEY_WORKSPACE_USAGE_ALERT_THRESHOLD, String.valueOf(DEFAULT_WORKSPACE_USAGE_ALERT_THRESHOLD), "工作目录空间预警阈值 (%)");
     }
 
     private void initBrecCookieSyncConfig() {
@@ -172,6 +175,7 @@ public class SystemConfigService {
             if (KEY_NORMAL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("弹幕发送间隔(秒)：普通弹幕与SC/上舰高级弹幕共用的全局发送节拍");
             if (KEY_HIGH_LEVEL_DANMAKU_INTERVAL_SECONDS.equals(key)) config.setDescription("评论发送间隔(秒)：SC/上舰列表评论与礼物评论共用的全局发送节拍");
             if (KEY_NOTIFICATION_ENABLED.equals(key)) config.setDescription("是否启用统一推送通知模块");
+            if (KEY_WORKSPACE_USAGE_ALERT_THRESHOLD.equals(key)) config.setDescription("工作目录空间预警阈值 (%)");
         }
         systemConfigRepository.save(config);
         
@@ -274,6 +278,16 @@ public class SystemConfigService {
                 }
                 if (iv > 8) {
                     return "8";
+                }
+                return String.valueOf(iv);
+            }
+            if (KEY_WORKSPACE_USAGE_ALERT_THRESHOLD.equals(key)) {
+                int iv = (int) Math.round(v);
+                if (iv < 1) {
+                    return "1";
+                }
+                if (iv > 99) {
+                    return "99";
                 }
                 return String.valueOf(iv);
             }
@@ -383,6 +397,10 @@ public class SystemConfigService {
 
     public int getDanmakuMaxNormalWorkers() {
         return (int) getLongConfig(KEY_DANMAKU_MAX_NORMAL_WORKERS, DEFAULT_DANMAKU_MAX_NORMAL_WORKERS, 1L, 8L);
+    }
+
+    public int getWorkspaceUsageAlertThresholdPercent() {
+        return (int) getLongConfig(KEY_WORKSPACE_USAGE_ALERT_THRESHOLD, DEFAULT_WORKSPACE_USAGE_ALERT_THRESHOLD, 1L, 99L);
     }
 
     private long getLongConfig(String key, long defaultValue, long minValue, long maxValue) {
