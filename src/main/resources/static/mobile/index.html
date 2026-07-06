@@ -547,6 +547,10 @@
                                         <span><strong>{{ notificationDeliveryCount }}</strong><em>最近投递</em></span>
                                     </div>
                                     <div class="mobile-notification-actions">
+                                        <button type="button" class="is-primary" @click="openNotificationMobileChannelDrawer">
+                                            <i class="el-icon-plus"></i>
+                                            <span>新增</span>
+                                        </button>
                                         <button type="button" @click="loadNotificationConfig">
                                             <i class="el-icon-refresh"></i>
                                             <span>刷新</span>
@@ -1205,6 +1209,400 @@
         <div class="drawer-footer notification-rule-drawer-footer">
             <el-button class="modern-btn" size="small" @click="closeNotificationRuleEditor">取消</el-button>
             <el-button class="modern-btn" type="primary" size="small" icon="el-icon-check" :loading="notificationRuleEditor.saving" @click="saveNotificationRoomRules">保存规则</el-button>
+        </div>
+    </el-drawer>
+
+    <el-drawer
+        :title="'新增推送渠道'"
+        :visible.sync="notificationMobileChannelDrawer.visible"
+        direction="rtl"
+        :size="notificationRuleEditorSize"
+        append-to-body
+        custom-class="notification-mobile-channel-drawer"
+        @closed="resetNotificationNewChannel(false)">
+        <div class="notification-mobile-channel-editor">
+            <div class="notification-editor-head">
+                <div>
+                    <h3>{{ notificationTypeLabel(notificationNewChannel.type) }}</h3>
+                    <p>先选择渠道类型，再填写当前渠道需要的参数。</p>
+                </div>
+                <el-tag size="small" effect="plain">新渠道</el-tag>
+            </div>
+            <el-form label-position="top" size="small" class="notification-editor-form">
+                <el-form-item label="渠道类型">
+                    <el-select v-model="notificationNewChannel.type" placeholder="选择渠道类型" class="notification-editor-control">
+                        <el-option v-for="item in notificationChannelTypeOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="本地备注">
+                    <el-input v-model="notificationNewChannel.name" clearable placeholder="仅在本插件显示" class="notification-editor-control"></el-input>
+                </el-form-item>
+                <el-form-item label="渠道状态">
+                    <div class="notification-mobile-channel-toggle">
+                        <span>{{ notificationNewChannel.enabled ? '启用' : '停用' }}</span>
+                        <el-switch v-model="notificationNewChannel.enabled"></el-switch>
+                    </div>
+                </el-form-item>
+
+                <template v-if="notificationNewChannel.type === 'wxpusher'">
+                    <el-form-item label="WxPusher UID">
+                        <el-input
+                            v-model="notificationNewChannel.uid"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            name="mobile-notification-wxpusher-uid-new"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            clearable
+                            placeholder="填写 WxPusher UID"
+                            class="notification-editor-control">
+                        </el-input>
+                    </el-form-item>
+                </template>
+
+                <template v-if="notificationNewChannel.type === 'bark'">
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="Bark 密钥">
+                            <el-input
+                                v-model="notificationNewChannel.deviceKey"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-bark-device-key-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="密钥 / 测试链接"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                        <el-form-item label="服务地址">
+                            <el-input v-model="notificationNewChannel.serverUrl" clearable placeholder="默认 https://api.day.app" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                    </div>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="推送分组">
+                            <el-input v-model="notificationNewChannel.group" clearable placeholder="例如 biliupforjava" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                        <el-form-item label="通知级别">
+                            <el-select v-model="notificationNewChannel.level" placeholder="通知级别" class="notification-editor-control">
+                                <el-option label="普通提醒" value="active"></el-option>
+                                <el-option label="时效提醒" value="timeSensitive"></el-option>
+                                <el-option label="静默收取" value="passive"></el-option>
+                                <el-option label="重要警告" value="critical"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </div>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="铃声">
+                            <el-input v-model="notificationNewChannel.sound" clearable placeholder="可留空" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                        <el-form-item label="图标链接">
+                            <el-input v-model="notificationNewChannel.icon" clearable placeholder="可留空" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                    </div>
+                </template>
+
+                <template v-if="notificationNewChannel.type === 'wecom_app'">
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="企业 ID">
+                            <el-input v-model="notificationNewChannel.corpId" clearable placeholder="企业微信企业 ID" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                        <el-form-item label="应用 AgentId">
+                            <el-input v-model="notificationNewChannel.agentId" clearable placeholder="应用 AgentId" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                    </div>
+                    <el-form-item label="应用 Secret">
+                        <el-input
+                            v-model="notificationNewChannel.corpSecret"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            name="mobile-notification-wecom-corp-secret-new"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            clearable
+                            placeholder="企业微信应用 Secret"
+                            class="notification-editor-control">
+                        </el-input>
+                    </el-form-item>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="成员 UserID">
+                            <el-input
+                                v-model="notificationNewChannel.toUser"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-wecom-to-user-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="默认 @all"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                        <el-form-item label="部门 ID">
+                            <el-input v-model="notificationNewChannel.toParty" clearable placeholder="可留空" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                    </div>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="标签 ID">
+                            <el-input v-model="notificationNewChannel.toTag" clearable placeholder="可留空" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                        <el-form-item label="保密消息">
+                            <div class="notification-mobile-channel-toggle">
+                                <span>{{ notificationNewChannel.safe ? '保密消息' : '普通消息' }}</span>
+                                <el-switch v-model="notificationNewChannel.safe"></el-switch>
+                            </div>
+                        </el-form-item>
+                    </div>
+                </template>
+
+                <template v-if="notificationNewChannel.type === 'wecom_webhook'">
+                    <el-form-item label="Webhook Key / 地址">
+                        <el-input
+                            v-model="notificationNewChannel.webhookKey"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            name="mobile-notification-wecom-webhook-key-new"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            clearable
+                            placeholder="Webhook Key / 完整机器人地址"
+                            class="notification-editor-control">
+                        </el-input>
+                    </el-form-item>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="消息类型">
+                            <el-select v-model="notificationNewChannel.messageType" placeholder="消息类型" class="notification-editor-control">
+                                <el-option label="文本消息" value="text"></el-option>
+                                <el-option label="Markdown" value="markdown"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="提醒手机号">
+                            <el-input
+                                v-model="notificationNewChannel.mentionedMobileList"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-wecom-webhook-mentioned-mobile-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="用 | 分隔"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                    </div>
+                    <el-form-item label="提醒成员 UserID">
+                        <el-input
+                            v-model="notificationNewChannel.mentionedList"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            name="mobile-notification-wecom-webhook-mentioned-list-new"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            clearable
+                            placeholder="用 | 分隔，可填 @all"
+                            class="notification-editor-control">
+                        </el-input>
+                    </el-form-item>
+                </template>
+
+                <template v-if="notificationNewChannel.type === 'dingtalk_webhook'">
+                    <el-form-item label="Webhook 地址 / access_token">
+                        <el-input
+                            v-model="notificationNewChannel.dingtalkWebhookUrl"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            name="mobile-notification-dingtalk-webhook-url-new"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            clearable
+                            placeholder="Webhook 地址 / access_token"
+                            class="notification-editor-control">
+                        </el-input>
+                    </el-form-item>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="加签 Secret">
+                            <el-input
+                                v-model="notificationNewChannel.dingtalkSignSecret"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-dingtalk-sign-secret-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="可留空"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                        <el-form-item label="消息类型">
+                            <el-select v-model="notificationNewChannel.dingtalkMessageType" placeholder="消息类型" class="notification-editor-control">
+                                <el-option label="Markdown" value="markdown"></el-option>
+                                <el-option label="文本消息" value="text"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </div>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="安全关键词">
+                            <el-input v-model="notificationNewChannel.dingtalkKeyword" clearable placeholder="可留空" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                        <el-form-item label="@所有人">
+                            <div class="notification-mobile-channel-toggle">
+                                <span>{{ notificationNewChannel.dingtalkAtAll ? '@所有人' : '不@所有人' }}</span>
+                                <el-switch v-model="notificationNewChannel.dingtalkAtAll"></el-switch>
+                            </div>
+                        </el-form-item>
+                    </div>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="@ 手机号">
+                            <el-input
+                                v-model="notificationNewChannel.dingtalkAtMobiles"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-dingtalk-at-mobiles-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="用 | 分隔"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                        <el-form-item label="@ UserID">
+                            <el-input
+                                v-model="notificationNewChannel.dingtalkAtUserIds"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-dingtalk-at-user-ids-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="用 | 分隔"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                    </div>
+                </template>
+
+                <template v-if="notificationNewChannel.type === 'ntfy'">
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="Topic">
+                            <el-input v-model="notificationNewChannel.ntfyTopic" clearable placeholder="例如 room-started" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                        <el-form-item label="服务地址">
+                            <el-input v-model="notificationNewChannel.ntfyServerUrl" clearable placeholder="默认 https://ntfy.sh" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                    </div>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="优先级">
+                            <el-select v-model="notificationNewChannel.ntfyPriority" placeholder="优先级" class="notification-editor-control">
+                                <el-option label="默认" value="default"></el-option>
+                                <el-option label="最低" value="min"></el-option>
+                                <el-option label="较低" value="low"></el-option>
+                                <el-option label="较高" value="high"></el-option>
+                                <el-option label="紧急" value="urgent"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="标签">
+                            <el-input v-model="notificationNewChannel.ntfyTags" clearable placeholder="用逗号分隔，可留空" class="notification-editor-control"></el-input>
+                        </el-form-item>
+                    </div>
+                    <el-form-item label="点击跳转链接">
+                        <el-input v-model="notificationNewChannel.ntfyClick" clearable placeholder="可留空" class="notification-editor-control"></el-input>
+                    </el-form-item>
+                    <div class="notification-mobile-channel-fieldset">
+                        <el-form-item label="鉴权方式">
+                            <el-select v-model="notificationNewChannel.ntfyAuthType" placeholder="鉴权方式" class="notification-editor-control">
+                                <el-option label="无需鉴权" value="none"></el-option>
+                                <el-option label="Bearer Token" value="bearer"></el-option>
+                                <el-option label="Basic 账号密码" value="basic"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="Markdown">
+                            <div class="notification-mobile-channel-toggle">
+                                <span>{{ notificationNewChannel.ntfyMarkdown ? 'Markdown' : '普通文本' }}</span>
+                                <el-switch v-model="notificationNewChannel.ntfyMarkdown"></el-switch>
+                            </div>
+                        </el-form-item>
+                    </div>
+                    <el-form-item v-if="notificationNewChannel.ntfyAuthType === 'bearer'" label="Bearer Token">
+                        <el-input
+                            v-model="notificationNewChannel.ntfyToken"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            name="mobile-notification-ntfy-token-new"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            clearable
+                            placeholder="Bearer Token"
+                            class="notification-editor-control">
+                        </el-input>
+                    </el-form-item>
+                    <div v-if="notificationNewChannel.ntfyAuthType === 'basic'" class="notification-mobile-channel-fieldset">
+                        <el-form-item label="用户名">
+                            <el-input
+                                v-model="notificationNewChannel.ntfyUsername"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-ntfy-username-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="用户名"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                        <el-form-item label="密码">
+                            <el-input
+                                v-model="notificationNewChannel.ntfyPassword"
+                                type="password"
+                                show-password
+                                autocomplete="new-password"
+                                name="mobile-notification-ntfy-password-new"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                clearable
+                                placeholder="密码"
+                                class="notification-editor-control">
+                            </el-input>
+                        </el-form-item>
+                    </div>
+                </template>
+
+                <template v-if="notificationNewChannel.type === 'serverchan3'">
+                    <el-form-item label="Server酱3 SendKey">
+                        <el-input
+                            v-model="notificationNewChannel.sendKey"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            name="mobile-notification-serverchan-send-key-new"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            clearable
+                            placeholder="Server酱3 SendKey"
+                            class="notification-editor-control">
+                        </el-input>
+                    </el-form-item>
+                    <el-form-item label="标签">
+                        <el-input v-model="notificationNewChannel.tags" clearable placeholder="可留空" class="notification-editor-control"></el-input>
+                    </el-form-item>
+                </template>
+            </el-form>
+        </div>
+        <div class="drawer-footer notification-rule-drawer-footer notification-mobile-channel-drawer-footer">
+            <el-button class="modern-btn" size="small" @click="closeNotificationMobileChannelDrawer">取消</el-button>
+            <el-button class="modern-btn" type="primary" size="small" icon="el-icon-plus" :loading="notificationNewChannel.saving" @click="saveNotificationChannel(notificationNewChannel, true)">新增渠道</el-button>
         </div>
     </el-drawer>
 

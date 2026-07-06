@@ -1960,6 +1960,73 @@
     overflow: auto;
 }
 
+.notification-mobile-channel-drawer .el-drawer__header {
+    margin-bottom: 0;
+    padding: 18px 20px 12px;
+    color: var(--text-primary);
+}
+
+.notification-mobile-channel-drawer .el-drawer__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.notification-mobile-channel-editor {
+    flex: 1;
+    min-height: 0;
+    padding: 0 20px 16px;
+    overflow: auto;
+}
+
+.notification-mobile-channel-fieldset {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    min-width: 0;
+}
+
+.notification-mobile-channel-toggle {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 74%, transparent);
+    box-sizing: border-box;
+}
+
+.notification-mobile-channel-toggle span {
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.35;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.notification-mobile-channel-drawer .notification-editor-form .el-form-item {
+    margin-bottom: 12px;
+}
+
+.notification-mobile-channel-drawer .notification-editor-control .el-input__inner,
+.notification-mobile-channel-drawer .notification-editor-control .el-textarea__inner {
+    min-height: 44px;
+}
+
+.notification-mobile-channel-drawer-footer .modern-btn {
+    min-width: 104px;
+}
+
+[data-theme="dark"] .notification-mobile-channel-toggle {
+    border-color: var(--border-color);
+    background: color-mix(in srgb, var(--bg-tertiary) 78%, transparent);
+}
+
 .notification-editor-head {
     display: flex;
     align-items: flex-start;
@@ -2462,6 +2529,10 @@
     .notification-editor-head {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .notification-mobile-channel-fieldset {
+        grid-template-columns: 1fr;
     }
 
     .notification-room-option {

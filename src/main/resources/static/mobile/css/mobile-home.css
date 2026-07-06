@@ -1000,7 +1000,7 @@
 
 .mobile-shell .mobile-notification-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     margin-top: 10px;
 }
@@ -1015,6 +1015,13 @@
     font-size: 13px;
     font-weight: 760;
     cursor: pointer;
+}
+
+.mobile-shell .mobile-notification-actions button.is-primary {
+    border-color: color-mix(in srgb, var(--mobile-accent-1) 34%, var(--mobile-border));
+    color: var(--mobile-on-accent);
+    background: linear-gradient(135deg, var(--mobile-accent-1), var(--mobile-accent-2));
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--mobile-accent-1) 18%, transparent);
 }
 
 .mobile-shell .mobile-notification-actions button i,

@@ -89,6 +89,9 @@ var answer = new Vue({
             ntfyUsername: '',
             ntfyPassword: ''
         },
+        notificationMobileChannelDrawer: {
+            visible: false
+        },
         notificationRuleDrafts: [],
         notificationRooms: [],
         notificationRuleModeOptions: [
@@ -779,6 +782,13 @@ var answer = new Vue({
                 ntfyPassword: ''
             };
         },
+        openNotificationMobileChannelDrawer: function() {
+            this.resetNotificationNewChannel(false);
+            this.notificationMobileChannelDrawer.visible = true;
+        },
+        closeNotificationMobileChannelDrawer: function() {
+            this.notificationMobileChannelDrawer.visible = false;
+        },
         parseNotificationChannelIds: function(raw) {
             if (raw == null || raw === '') {
                 return [];
@@ -1059,6 +1069,9 @@ var answer = new Vue({
                 self.$message.success('推送渠道已保存');
                 if (isNew) {
                     self.resetNotificationNewChannel(true);
+                    if (self.notificationMobileChannelDrawer) {
+                        self.notificationMobileChannelDrawer.visible = false;
+                    }
                 }
                 self.loadNotificationConfig();
             }, function() {
