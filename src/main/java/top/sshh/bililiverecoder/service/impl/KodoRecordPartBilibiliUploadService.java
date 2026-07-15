@@ -201,6 +201,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                         return;
                     }
                     RecordHistory history = historyOptional.get();
+                    final String historyTitle = history.getTitle();
                     File uploadFile = new File(filePath);
                     if (!uploadFile.exists()) {
                         log.error("[BLR] {}", LogKvs.event("Upload.Part.FileMissing")
@@ -424,7 +425,8 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
-                                                    .add("title", room.getTitle())
+                                                    .add("roomTitle", room.getTitle())
+                                                    .addIfNotBlank("historyTitle", historyTitle)
                                                     .add("partId", partId)
                                                     .add("historyId", historyId)
                                                     .add("chunkIndex", finalI)
@@ -443,7 +445,8 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 LogKvs chunkErrorLog = LogKvs.event("Upload.Chunk.Error")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
-                                                    .add("title", room.getTitle())
+                                                    .add("roomTitle", room.getTitle())
+                                                    .addIfNotBlank("historyTitle", historyTitle)
                                                     .add("partId", partId)
                                                     .add("historyId", historyId)
                                                     .add("chunkIndex", finalI)

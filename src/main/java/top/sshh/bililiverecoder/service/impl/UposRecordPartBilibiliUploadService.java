@@ -257,6 +257,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                         return;
                     }
                     RecordHistory history = historyOptional.get();
+                    final String historyTitle = history.getTitle();
                     File uploadFile = new File(filePath);
                         if (!uploadFile.exists()) {
                         log.error("[BLR] {}", LogKvs.event("Upload.Part.FileMissing")
@@ -877,7 +878,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 uploadProgressTracker.updateChunkDone(partId, historyId, partPage, count, (int) effectiveChunkNum);
                                                 log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
                                                         .add("roomId", room.getRoomId())
-                                                        .add("title", room.getTitle())
+                                                        .add("roomTitle", room.getTitle())
+                                                        .addIfNotBlank("historyTitle", historyTitle)
                                                         .add("partId", partId)
                                                         .add("historyId", historyId)
                                                         .add("chunkIndex", finalI)
@@ -986,7 +988,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                 uploadProgressTracker.markRetryWait(partId, e.getMessage(), chunkRetryCount, backoffMs);
                                                 LogKvs chunkErrorLog = LogKvs.event("Upload.Chunk.Error")
                                                         .add("roomId", room.getRoomId())
-                                                        .add("title", room.getTitle())
+                                                        .add("roomTitle", room.getTitle())
+                                                        .addIfNotBlank("historyTitle", historyTitle)
                                                     .add("partId", partId)
                                                     .add("historyId", historyId)
                                                         .add("chunkIndex", finalI)

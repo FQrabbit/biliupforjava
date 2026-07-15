@@ -140,6 +140,27 @@ public class RecordBiliPublishService {
         return parts;
     }
 
+    Map<String, Object> buildHistoryTemplateMap(RecordHistory history, RecordRoom room) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("date", history == null ? null : history.getStartTime());
+        map.put("${uname}", room == null ? "" : StringUtils.defaultString(room.getUname()));
+        map.put("${title}", history == null ? "直播录像" : StringUtils.defaultIfBlank(history.getTitle(), "直播录像"));
+        map.put("${roomId}", room == null ? null : room.getRoomId());
+        map.put("${areaName}", "");
+        return map;
+    }
+
+    Map<String, Object> buildPartTemplateMap(Map<String, Object> historyTemplateMap, RecordHistoryPart uploadPart, int index) {
+        Map<String, Object> map = new HashMap<>(historyTemplateMap);
+        map.put("${title}", uploadPart == null ? "直播录像" : StringUtils.defaultIfBlank(uploadPart.getLiveTitle(), "直播录像"));
+        map.put("date", uploadPart == null ? null : uploadPart.getStartTime());
+        map.put("${index}", index);
+        map.put("${areaName}", uploadPart == null ? "" : uploadPart.getAreaName());
+        String filePath = uploadPart == null ? null : normalizeFilePath(uploadPart.getFilePath());
+        map.put("${fileName}", extractFileNameNoExt(filePath));
+        return map;
+    }
+
     @Async
     public void asyncRepublishRecordHistory(RecordHistory history) {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
@@ -276,35 +297,16 @@ public class RecordBiliPublishService {
                 return;
             }
             biliBiliUser = userOptional.get();
-            Map<String, Object> map = new HashMap<>();
-            LocalDateTime startTime = history.getStartTime();
-            map.put("date", startTime);
-
-            String uname = room.getUname();
-            if (uname == null) {
-                map.put("${uname}", "");
-            } else {
-                map.put("${uname}", uname);
-            }
-            String title = StringUtils.isNotBlank(history.getTitle()) ? history.getTitle() : "直播录像";
-            map.put("${title}", title);
-            map.put("${roomId}", room.getRoomId());
-            map.put("${areaName}", "");
+            Map<String, Object> historyTemplateMap = buildHistoryTemplateMap(history, room);
             List<SingleVideoDto> dtos = new ArrayList<>();
             for (int i = 0; i < uploadParts.size(); i++) {
                 RecordHistoryPart uploadPart = uploadParts.get(i);
                 SingleVideoDto dto = new SingleVideoDto();
-                title = StringUtils.isNotBlank(uploadPart.getLiveTitle()) ? uploadPart.getLiveTitle() : "直播录像";
-                map.put("${title}", title);
-                map.put("date", uploadPart.getStartTime());
-                map.put("${index}", Integer.valueOf(i + 1));
-                map.put("${areaName}", uploadPart.getAreaName());
-                String filePath = normalizeFilePath(uploadPart.getFilePath());
-                String fileName = extractFileNameNoExt(filePath);
-                map.put("${fileName}", fileName);
-                dto.setTitle(this.template(room.getPartTitleTemplate(), map).getDesc());
+                Map<String, Object> partTemplateMap = buildPartTemplateMap(historyTemplateMap, uploadPart, i + 1);
+                String partTitle = this.template(room.getPartTitleTemplate(), partTemplateMap).getDesc();
+                dto.setTitle(partTitle);
                 //同步标题
-                uploadPart.setTitle(this.template(room.getPartTitleTemplate(), map).getDesc());
+                uploadPart.setTitle(partTitle);
                 uploadPart = partRepository.save(uploadPart);
                 dto.setDesc("");
                 dto.setFilename(uploadPart.getFileName());
@@ -315,20 +317,19 @@ public class RecordBiliPublishService {
             }
             VideoEditUploadDto videoUploadDto = new VideoEditUploadDto();
 
-            map.put("date", startTime);
             videoUploadDto.setTid(room.getTid());
             videoUploadDto.setCover(history.getCoverUrl());
             videoUploadDto.setCopyright(room.getCopyright());
-            videoUploadDto.setTitle(this.template(room.getTitleTemplate(), map).getDesc());
+            videoUploadDto.setTitle(this.template(room.getTitleTemplate(), historyTemplateMap).getDesc());
             if (videoUploadDto.getCopyright() == 2) {
-                videoUploadDto.setSource(this.template(videoUploadDto.getSource(), map).getDesc());
+                videoUploadDto.setSource(this.template(videoUploadDto.getSource(), historyTemplateMap).getDesc());
             }
-            videoUploadDto.setDesc(this.template(room.getDescTemplate(), map).getDesc());
-            videoUploadDto.setDesc_v2(this.template(room.getDescTemplate(), map).getDescV2Dtos());
-            videoUploadDto.setDynamic(this.template(room.getDescTemplate(), map).getDesc());
-            videoUploadDto.setDynamic_v2(this.template(room.getDescTemplate(), map).getDescV2Dtos());
+            videoUploadDto.setDesc(this.template(room.getDescTemplate(), historyTemplateMap).getDesc());
+            videoUploadDto.setDesc_v2(this.template(room.getDescTemplate(), historyTemplateMap).getDescV2Dtos());
+            videoUploadDto.setDynamic(this.template(room.getDescTemplate(), historyTemplateMap).getDesc());
+            videoUploadDto.setDynamic_v2(this.template(room.getDescTemplate(), historyTemplateMap).getDescV2Dtos());
             videoUploadDto.setVideos(dtos);
-            videoUploadDto.setTag(this.template(room.getTags(), map).getDesc());
+            videoUploadDto.setTag(this.template(room.getTags(), historyTemplateMap).getDesc());
             videoUploadDto.setIs_only_self(room.getIsOnlySelf());
             videoUploadDto.setAid(Long.parseLong(history.getAvId()));
             String republishRes = BiliApi.editPublish(biliBiliUser, videoUploadDto);
@@ -1527,35 +1528,16 @@ public class RecordBiliPublishService {
                     }
 
 
-                    Map<String, Object> map = new HashMap<>();
-                    LocalDateTime startTime = history.getStartTime();
-                    map.put("date", startTime);
-
-                    String uname = room.getUname();
-                    if (uname == null) {
-                        map.put("${uname}", "");
-                    } else {
-                        map.put("${uname}", uname);
-                    }
-                    String title = StringUtils.isNotBlank(history.getTitle()) ? history.getTitle() : "直播录像";
-                    map.put("${title}", title);
-                    map.put("${roomId}", room.getRoomId());
-                    map.put("${areaName}", "");
+                    Map<String, Object> historyTemplateMap = buildHistoryTemplateMap(history, room);
                     List<SingleVideoDto> dtos = new ArrayList<>();
                     for (int i = 0; i < uploadParts.size(); i++) {
                         RecordHistoryPart uploadPart = uploadParts.get(i);
                         SingleVideoDto dto = new SingleVideoDto();
-                        title = StringUtils.isNotBlank(uploadPart.getLiveTitle()) ? uploadPart.getLiveTitle() : "直播录像";
-                        map.put("${title}", title);
-                        map.put("date", uploadPart.getStartTime());
-                        map.put("${index}", i + 1);
-                        map.put("${areaName}", uploadPart.getAreaName());
-                        String filePath = normalizeFilePath(uploadPart.getFilePath());
-                        String fileName = extractFileNameNoExt(filePath);
-                        map.put("${fileName}", fileName);
-                        dto.setTitle(this.template(room.getPartTitleTemplate(), map).getDesc());
+                        Map<String, Object> partTemplateMap = buildPartTemplateMap(historyTemplateMap, uploadPart, i + 1);
+                        String partTitle = this.template(room.getPartTitleTemplate(), partTemplateMap).getDesc();
+                        dto.setTitle(partTitle);
                         //同步标题
-                        uploadPart.setTitle(this.template(room.getPartTitleTemplate(), map).getDesc());
+                        uploadPart.setTitle(partTitle);
                         uploadPart = partRepository.save(uploadPart);
                         dto.setDesc("");
                         dto.setFilename(uploadPart.getFileName());
@@ -1680,24 +1662,23 @@ public class RecordBiliPublishService {
                     }
                     VideoUploadDto videoUploadDto = new VideoUploadDto();
 
-                    map.put("date", startTime);
                     videoUploadDto.setTid(room.getTid());
                     videoUploadDto.setCover(coverUrl);
                     videoUploadDto.setCopyright(room.getCopyright());
                     videoUploadDto.setNo_disturbance(room.getNoDisturbance());
                     videoUploadDto.setIs_only_self(room.getIsOnlySelf());
-                    videoUploadDto.setTitle(this.template(room.getTitleTemplate(), map).getDesc());
+                    videoUploadDto.setTitle(this.template(room.getTitleTemplate(), historyTemplateMap).getDesc());
                     if (videoUploadDto.getCopyright() == 2) {
-                        videoUploadDto.setSource(this.template(videoUploadDto.getSource(), map).getDesc());
+                        videoUploadDto.setSource(this.template(videoUploadDto.getSource(), historyTemplateMap).getDesc());
                     }
-                    videoUploadDto.setDesc(this.template(room.getDescTemplate(), map).getDesc());
-                    videoUploadDto.setDesc_v2(this.template(room.getDescTemplate(), map).getDescV2Dtos());
+                    videoUploadDto.setDesc(this.template(room.getDescTemplate(), historyTemplateMap).getDesc());
+                    videoUploadDto.setDesc_v2(this.template(room.getDescTemplate(), historyTemplateMap).getDescV2Dtos());
                     if (StringUtils.isNotBlank(room.getDynamicTemplate())) {
-                        videoUploadDto.setDynamic(this.template(room.getDynamicTemplate(), map).getDesc());
-                        videoUploadDto.setDynamic_v2(this.template(room.getDynamicTemplate(), map).getDescV2Dtos());
+                        videoUploadDto.setDynamic(this.template(room.getDynamicTemplate(), historyTemplateMap).getDesc());
+                        videoUploadDto.setDynamic_v2(this.template(room.getDynamicTemplate(), historyTemplateMap).getDescV2Dtos());
                     }
                     videoUploadDto.setVideos(dtos);
-                    videoUploadDto.setTag(this.template(room.getTags(), map).getDesc());
+                    videoUploadDto.setTag(this.template(room.getTags(), historyTemplateMap).getDesc());
                     log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.UploadPartsReady")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
@@ -2325,13 +2306,7 @@ public class RecordBiliPublishService {
             BiliVideoPartInfoResponse videoPartInfo,
             Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle,
             Map<Integer, BiliVideoPartInfoResponse.Video> onlineByPage) {
-        Map<String, Object> map = new HashMap<>();
-        LocalDateTime startTime = history.getStartTime();
-        map.put("date", startTime);
-        map.put("${uname}", StringUtils.defaultString(room.getUname()));
-        map.put("${title}", StringUtils.defaultIfBlank(history.getTitle(), "直播录像"));
-        map.put("${roomId}", room.getRoomId());
-        map.put("${areaName}", "");
+        Map<String, Object> historyTemplateMap = buildHistoryTemplateMap(history, room);
 
         List<SingleVideoDto> dtos = new ArrayList<>();
         Map<String, SingleVideoDto> dtoByOnlineKey = new HashMap<>();
@@ -2360,14 +2335,8 @@ public class RecordBiliPublishService {
         for (int i = 0; i < uploadParts.size(); i++) {
             RecordHistoryPart uploadPart = uploadParts.get(i);
             SingleVideoDto dto = null;
-            String title = StringUtils.defaultIfBlank(uploadPart.getLiveTitle(), "直播录像");
-            map.put("${title}", title);
-            map.put("date", uploadPart.getStartTime());
-            map.put("${index}", Integer.valueOf(i + 1));
-            map.put("${areaName}", uploadPart.getAreaName());
-            String filePath = normalizeFilePath(uploadPart.getFilePath());
-            map.put("${fileName}", extractFileNameNoExt(filePath));
-            String partTitle = this.template(room.getPartTitleTemplate(), map).getDesc();
+            Map<String, Object> partTemplateMap = buildPartTemplateMap(historyTemplateMap, uploadPart, i + 1);
+            String partTitle = this.template(room.getPartTitleTemplate(), partTemplateMap).getDesc();
             uploadPart.setTitle(partTitle);
             BiliVideoPartInfoResponse.Video onlineVideo = resolveOnlineVideo(uploadPart, onlineByTitle, onlineByPage);
             if (StringUtils.isBlank(uploadPart.getFileName()) && onlineVideo != null && StringUtils.isNotBlank(onlineVideo.getFilename())) {
@@ -2436,13 +2405,7 @@ public class RecordBiliPublishService {
     }
 
     private VideoEditUploadDto buildVideoEditUploadDto(RecordHistory history, RecordRoom room, long aid, List<SingleVideoDto> videos) {
-        Map<String, Object> map = new HashMap<>();
-        LocalDateTime startTime = history.getStartTime();
-        map.put("date", startTime);
-        map.put("${uname}", StringUtils.defaultString(room.getUname()));
-        map.put("${title}", StringUtils.defaultIfBlank(history.getTitle(), "鐩存挱褰曞儚"));
-        map.put("${roomId}", room.getRoomId());
-        map.put("${areaName}", "");
+        Map<String, Object> map = buildHistoryTemplateMap(history, room);
         VideoEditUploadDto videoUploadDto = new VideoEditUploadDto();
         videoUploadDto.setTid(room.getTid());
         videoUploadDto.setCover(history.getCoverUrl());

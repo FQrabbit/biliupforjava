@@ -170,6 +170,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                         return;
                     }
                     RecordHistory history = historyOptional.get();
+                    final String historyTitle = history.getTitle();
                     if (room.getUploadUserId() == null) {
                         log.warn("[BLR] {}", LogKvs.event("Upload.Part.NoUploadUser")
                                 .add("os", OS)
@@ -273,7 +274,8 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                                 log.debug("[BLR] {}", LogKvs.event("Upload.Chunk.Progress")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
-                                                    .add("title", room.getTitle())
+                                                    .add("roomTitle", room.getTitle())
+                                                    .addIfNotBlank("historyTitle", historyTitle)
                                                     .add("partId", partId)
                                                     .add("historyId", historyId)
                                                     .add("chunkIndex", finalI)
@@ -286,7 +288,8 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                                 LogKvs chunkErrorLog = LogKvs.event("Upload.Chunk.Error")
                                                     .add("os", OS)
                                                     .add("roomId", room.getRoomId())
-                                                    .add("title", room.getTitle())
+                                                    .add("roomTitle", room.getTitle())
+                                                    .addIfNotBlank("historyTitle", historyTitle)
                                                     .add("partId", partId)
                                                     .add("historyId", historyId)
                                                     .add("chunkIndex", finalI)
