@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BiliApi {
 
+    // Spring 启动时会从配置里覆盖这里的默认值，单独调用时也能正常工作
     // TODO: 从配置文件读取
     private static String appKey = "4409e2ce8ffd12b8";
     private static String appSecret = "59b43e04ad6965f34319062b478f83dd";
@@ -812,17 +813,6 @@ public class BiliApi {
 
     private static void removeBlank(com.alibaba.fastjson.JSONObject jsonObject, String key) {
         if (StringUtils.isBlank(jsonObject.getString(key))) {
-            jsonObject.remove(key);
-        }
-    }
-
-    private static void removeNullOrEmpty(com.alibaba.fastjson.JSONObject jsonObject, String key) {
-        Object value = jsonObject.get(key);
-        if (value == null) {
-            jsonObject.remove(key);
-            return;
-        }
-        if (value instanceof Collection && ((Collection<?>) value).isEmpty()) {
             jsonObject.remove(key);
         }
     }

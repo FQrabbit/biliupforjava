@@ -1712,28 +1712,6 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
         return h.contains("cdn");
     }
 
-    private String buildMultipartUploadId(Long uid, Long partId) {
-        long now = System.currentTimeMillis();
-        String uidPart = uid == null ? "0" : String.valueOf(uid);
-        String partSuffix = partId == null ? "0" : String.valueOf(Math.abs(partId % 10000));
-        return uidPart + "_" + now + "_" + partSuffix;
-    }
-
-    private String extractMultipartUploadToken(PreUploadBean preUploadBean) {
-        if (preUploadBean == null) {
-            return null;
-        }
-        String raw = preUploadBean.getRawUptoken();
-        if (StringUtils.isNotBlank(raw)) {
-            return raw;
-        }
-        String withPrefix = preUploadBean.getUptoken();
-        if (StringUtils.isBlank(withPrefix)) {
-            return null;
-        }
-        return StringUtils.removeStart(withPrefix, "UpToken ").trim();
-    }
-
     private void scheduleRetryEnqueue(RecordRoom room,
                                       RecordHistoryPart part,
                                       String filePath,

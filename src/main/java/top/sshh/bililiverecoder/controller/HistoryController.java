@@ -1069,7 +1069,7 @@ public class HistoryController {
             return List.of();
         }
         Object raw = request.get("ids");
-        if (!(raw instanceof Collection<?> values)) {
+        if (!(raw instanceof Collection<?>)) {
             raw = request.get("historyIds");
         }
         if (!(raw instanceof Collection<?> values)) {

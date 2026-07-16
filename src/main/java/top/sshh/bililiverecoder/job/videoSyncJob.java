@@ -159,6 +159,7 @@ public class videoSyncJob {
         result.videoInfoCode = videoInfoResponse == null ? null : videoInfoResponse.getCode();
         result.videoInfoMessage = videoInfoResponse == null ? "null-response" : videoInfoResponse.getMessage();
         LockedArchiveSnapshot lockedSnapshot = detectLockedArchive(user, history, result);
+        boolean keepPendingReview = false;
         boolean publicViewMissingButMemberVisible = videoInfoResponse != null
                 && videoInfoResponse.getCode() == -404
                 && result.memberPartInfoCode != null
@@ -173,17 +174,27 @@ public class videoSyncJob {
                 result.lockReason = lockedSnapshot.reason();
                 result.forceArchived = true;
             }
-            result.archiveCode = state;
-            history.setCode(state);
-            history.setAvId(data.getAid());
-            history.setBvId(data.getBvid());
-            history.setCoverUrl(data.getPic());
-            if (state == -4) {
-                markHistoryLockedAndArchived(history);
+            if (shouldKeepPendingReviewAfterRecentEdit(history, state)) {
+                keepPendingReview = true;
+                result.archiveCode = history.getCode();
+                log.info("[BLR] {}", LogKvs.event("VideoSync.ManualRefresh.KeepPendingAfterRecentEdit")
+                        .add("historyId", history.getId())
+                        .addIfNotBlank("bvid", history.getBvId())
+                        .add("apiState", data.getState())
+                        .add("localCode", history.getCode()));
+            } else {
+                result.archiveCode = state;
+                history.setCode(state);
+                history.setAvId(data.getAid());
+                history.setBvId(data.getBvid());
+                history.setCoverUrl(data.getPic());
+                if (state == -4) {
+                    markHistoryLockedAndArchived(history);
+                }
+                history.setUpdateTime(LocalDateTime.now());
+                history = historyRepository.save(history);
+                result.statusSynced = true;
             }
-            history.setUpdateTime(LocalDateTime.now());
-            history = historyRepository.save(history);
-            result.statusSynced = true;
         } else if (videoInfoResponse != null && videoInfoResponse.getCode() == 62002) {
             result.oldArchiveCode = history.getCode();
             result.archiveCode = videoInfoResponse.getCode();
@@ -209,8 +220,15 @@ public class videoSyncJob {
         List<OnlinePartSnapshot> onlineParts = loadOnlinePartSnapshotsForManualRefresh(user, history, videoInfoResponse, result);
         SyncStatusResult orderResult = syncOnlinePartOrder(history, onlineParts);
         result.mergePartOrder(orderResult);
-        result.success = result.statusSynced || result.partOrderSynced;
-        if (result.locked) {
+        result.success = keepPendingReview || result.statusSynced || result.partOrderSynced;
+        if (keepPendingReview) {
+            result.type = result.partOrderAnomaly ? "warning" : "info";
+            result.msg = result.partOrderAnomaly
+                    ? "稿件仍处于二次提交审核中，已忽略平台短时间返回的旧退回状态；线上分P顺序存在异常"
+                    : result.partOrderChanged
+                    ? "稿件仍处于二次提交审核中，已忽略平台短时间返回的旧退回状态；线上分P顺序已同步"
+                    : "稿件仍处于二次提交审核中，已忽略平台短时间返回的旧退回状态";
+        } else if (result.locked) {
             result.type = "warning";
             result.msg = StringUtils.isBlank(result.lockReason)
                     ? "稿件已被平台锁定，已按强制归档处理，后续任务不会再触发"
@@ -294,15 +312,6 @@ public class videoSyncJob {
                     .add("ex", e.getClass().getSimpleName()));
         }
         return LockedArchiveSnapshot.unlocked();
-    }
-
-    private String resolveLockedReason(BiliBiliUser user, RecordHistory history, String fallback) {
-        return resolveLockedReason(user, history, fallback, null);
-    }
-
-    private String resolveLockedReason(BiliBiliUser user, RecordHistory history, String fallback, SyncStatusResult result) {
-        String auditReason = loadAuditReason(user, history, result);
-        return StringUtils.defaultIfBlank(auditReason, fallback);
     }
 
     private String loadAuditReason(BiliBiliUser user, RecordHistory history) {
@@ -494,8 +503,7 @@ public class videoSyncJob {
                                 StringUtils.defaultIfBlank(video.getTitle(), video.getPart()),
                                 video.getFilename(),
                                 video.getCid(),
-                                video.getDuration(),
-                                "member"));
+                                video.getDuration()));
                         fallbackPage++;
                     }
                 }
@@ -520,7 +528,7 @@ public class videoSyncJob {
                     continue;
                 }
                 int pageNo = page.getPage() > 0 ? page.getPage() : fallbackPage;
-                onlineParts.add(new OnlinePartSnapshot(pageNo, page.getPart(), null, page.getCid(), page.getDuration(), "public"));
+                onlineParts.add(new OnlinePartSnapshot(pageNo, page.getPart(), null, page.getCid(), page.getDuration()));
                 fallbackPage++;
             }
             onlineParts.sort((a, b) -> Integer.compare(a.page, b.page));
@@ -811,6 +819,17 @@ public class videoSyncJob {
                         BiliVideoInfoResponse confirm = BiliApi.getVideoInfo(user, next.getBvId());
                         if (confirm != null && confirm.getCode() == 0 && confirm.getData() != null) {
                             int state = confirm.getData().getState();
+                            if (shouldKeepPendingReviewAfterRecentEdit(next, state)) {
+                                log.info("[BLR] {}", LogKvs.event("VideoSync.KeepPendingAfterRecentEdit")
+                                        .add("roomId", room.getRoomId())
+                                        .add("uname", room.getUname())
+                                        .add("historyId", next.getId())
+                                        .addIfNotBlank("bvid", next.getBvId())
+                                        .add("apiState", state)
+                                        .add("localCode", next.getCode())
+                                        .add("source", "member-confirm"));
+                                return;
+                            }
                             next.setCode(state);
                             next.setAvId(confirm.getData().getAid());
                             next.setBvId(confirm.getData().getBvid());
@@ -958,7 +977,7 @@ public class videoSyncJob {
                 continue;
             }
             int pageNo = page.getPage() > 0 ? page.getPage() : fallbackPage;
-            onlineParts.add(new OnlinePartSnapshot(pageNo, page.getPart(), null, page.getCid(), page.getDuration(), "public"));
+            onlineParts.add(new OnlinePartSnapshot(pageNo, page.getPart(), null, page.getCid(), page.getDuration()));
             fallbackPage++;
         }
         SyncStatusResult orderResult = syncOnlinePartOrder(next, onlineParts);
@@ -1172,7 +1191,7 @@ public class videoSyncJob {
         notificationEventPublisher.publish(event, room);
     }
 
-    private NotificationEventType resolveArchiveNotificationType(int oldCode, int newCode) {
+    NotificationEventType resolveArchiveNotificationType(int oldCode, int newCode) {
         if (isAuditPassedCode(newCode) && !isAuditPassedCode(oldCode)) {
             return NotificationEventType.VIDEO_PUBLISH;
         }
@@ -1272,7 +1291,7 @@ public class videoSyncJob {
         };
     }
 
-    private boolean shouldKeepPendingReviewAfterRecentEdit(RecordHistory history, int apiState) {
+    boolean shouldKeepPendingReviewAfterRecentEdit(RecordHistory history, int apiState) {
         if (history == null || history.getCode() != -1 || apiState != -2 || history.getUpdateTime() == null) {
             return false;
         }
@@ -1293,15 +1312,13 @@ public class videoSyncJob {
         private final String fileName;
         private final long cid;
         private final int duration;
-        private final String source;
 
-        private OnlinePartSnapshot(int page, String title, String fileName, long cid, int duration, String source) {
+        private OnlinePartSnapshot(int page, String title, String fileName, long cid, int duration) {
             this.page = page;
             this.title = title;
             this.fileName = fileName;
             this.cid = cid;
             this.duration = duration;
-            this.source = source;
         }
 
         private String label() {

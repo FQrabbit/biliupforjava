@@ -11,18 +11,15 @@ import top.sshh.bililiverecoder.util.bili.Cookie;
 import top.sshh.bililiverecoder.util.bili.HttpClientResult;
 import top.sshh.bililiverecoder.util.bili.HttpClientUtils;
 
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class MultipartInitRequest {
 
     private static final Logger log = LogManager.getLogger(MultipartInitRequest.class);
     private static final String NEW_URL = "https://member.bilibili.com/upload/multipart/new";
-    private static final String LEGACY_URL = "https://member.bilibili.com/x/vupre/web/archive/types/upload";
 
     private final Cookie cookie;
 
@@ -145,103 +142,6 @@ public class MultipartInitRequest {
         int timeout = data.getIntValue("timeout");
 
         return new MultipartInitInfo(resolvedUploadId, uploadToken, uri, profile, bizId, metaUposUri, chunkSize, threads, timeout);
-    }
-
-    private MultipartInitInfo initByLegacy(String uploadId,
-                                           String filename,
-                                           String zipUrl,
-                                           String fallbackProfile,
-                                           long fallbackBizId) throws Exception {
-        HashMap<String, String> headers = new HashMap<>();
-        cookie.toHeaderCookie(headers);
-        headers.put("referer", "https://member.bilibili.com/platform/upload/video/frame?page_from=creative_home_top_upload");
-        headers.put("origin", "https://member.bilibili.com");
-
-        Map<String, String> params = new HashMap<>();
-        params.put("upload_id", uploadId);
-        params.put("filename", filename);
-        params.put("zip_url", zipUrl);
-        params.put("mobi_app", "");
-        params.put("platform", "pc");
-        params.put("build", "");
-        params.put("device", "");
-        params.put("t", String.valueOf(System.currentTimeMillis()));
-
-        if (MultipartDebugSupport.isEnabled()) {
-            log.info("[BLR] {}", LogKvs.event("Upload.MultipartDebug.InitLegacy.Request")
-                    .addIfNotBlank("uploadId", uploadId)
-                    .addIfNotBlank("filename", filename)
-                    .addIfNotBlank("zipUrl", abbreviateZipUrl(zipUrl)));
-        }
-
-        HttpClientResult result = HttpClientUtils.doGet(LEGACY_URL, headers, params);
-        String content = result.getContent();
-        JSONObject root = JSON.parseObject(content);
-        if (MultipartDebugSupport.isEnabled()) {
-            JSONObject debugData = root == null ? null : root.getJSONObject("data");
-            log.info("[BLR] {}", LogKvs.event("Upload.MultipartDebug.InitLegacy.Response")
-                    .add("httpCode", result.getCode())
-                    .add("bizCode", root == null ? null : root.getInteger("code"))
-                    .addIfNotBlank("bizMsg", root == null ? null : root.getString("message"))
-                    .addIfNotBlank("rootKeys", root == null ? "" : String.join(",", root.keySet()))
-                    .addIfNotBlank("dataKeys", debugData == null ? "" : String.join(",", debugData.keySet()))
-                    .addIfNotBlank("respSnippet", MultipartDebugSupport.abbreviate(content, 320)));
-        }
-        if (root == null) {
-            throw buildDiagnosticException("multipart init empty response", result.getCode(), uploadId, filename, zipUrl, null, null, content);
-        }
-
-        if (root.containsKey("code") && root.getIntValue("code") != 0) {
-            throw buildDiagnosticException("multipart init failed", result.getCode(), uploadId, filename, zipUrl, root, root.getJSONObject("data"), content);
-        }
-
-        JSONObject data = root.getJSONObject("data");
-        if (data == null && root.containsKey("OK")) {
-            data = root;
-        }
-        if (data == null) {
-            data = root;
-        }
-
-        String uploadToken = firstNotBlank(
-                data.getString("upload_token"),
-                data.getString("uptoken")
-        );
-        String uri = firstNotBlank(
-                data.getString("uri"),
-                data.getString("upos_uri"),
-                zipUrl
-        );
-
-        String profile = fallbackProfile;
-        String putQuery = data.getString("put_query");
-        if (StringUtils.isNotBlank(putQuery)) {
-            for (String kv : putQuery.split("&")) {
-                String[] pair = kv.split("=", 2);
-                if (pair.length == 2 && "profile".equals(pair[0])) {
-                    String decoded = URLDecoder.decode(pair[1], StandardCharsets.UTF_8);
-                    if (StringUtils.isNotBlank(decoded)) {
-                        profile = decoded;
-                    }
-                }
-            }
-        }
-        profile = MultipartSessionValidator.preferProfileByUri(profile, uri);
-
-        long bizId = fallbackBizId;
-        if (data.containsKey("biz_id")) {
-            bizId = data.getLongValue("biz_id");
-        }
-
-        if (StringUtils.isBlank(uploadToken) || StringUtils.isBlank(uri)) {
-            throw buildDiagnosticException("multipart init missing upload_token or uri", result.getCode(), uploadId, filename, zipUrl, root, data, content);
-        }
-
-        long chunkSize = data.getLongValue("chunk_size");
-        int threads = data.getIntValue("threads");
-        int timeout = data.getIntValue("timeout");
-
-        return new MultipartInitInfo(uploadId, uploadToken, uri, profile, bizId, deriveMetaUposUri(zipUrl, fallbackProfile), chunkSize, threads, timeout);
     }
 
     private String deriveMetaUposUri(String zipUrl, String profile) {

@@ -9,7 +9,6 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -1674,12 +1673,6 @@ public class StatsAggregationService {
         map.put("name", name);
         map.put("value", count);
         return map;
-    }
-
-    private <T> List<T> reverseList(List<T> values) {
-        List<T> result = new ArrayList<>(values);
-        Collections.reverse(result);
-        return result;
     }
 
     private LocalDateTime resolveStartTime(RecordHistory history, List<RecordHistoryPart> parts) {

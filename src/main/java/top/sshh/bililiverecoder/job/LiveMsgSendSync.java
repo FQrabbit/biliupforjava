@@ -1,9 +1,7 @@
 package top.sshh.bililiverecoder.job;
 
-import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,7 +22,6 @@ import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -183,12 +180,8 @@ public class LiveMsgSendSync {
 
             //如果没有发送评论
             if (!history.isSendReply()) {
-                String wxuid = null;
-                String pushMsgTags = null;
                 BiliBiliUser user = null;
                 if (room != null) {
-                    wxuid = room.getWxuid();
-                    pushMsgTags = room.getPushMsgTags();
                     Long uploadUserId = room.getUploadUserId();
                     Optional<BiliBiliUser> userOptional = userRepository.findById(uploadUserId);
                     if (userOptional.isPresent()) {
@@ -578,8 +571,6 @@ public class LiveMsgSendSync {
                         if (!Boolean.TRUE.equals(room.getSendSc())) {
                             continue;
                         }
-                        String wxuid = room.getWxuid();
-                        String pushMsgTags = room.getPushMsgTags();
                         Long uploadUserId = room.getUploadUserId();
                         Optional<BiliBiliUser> userOptional = userRepository.findById(uploadUserId);
                         if (userOptional.isPresent()) {

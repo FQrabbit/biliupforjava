@@ -8,7 +8,6 @@ import top.sshh.bililiverecoder.util.ContainerUtils;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.stream.Collectors;
 
 public class SetupWizardServer {

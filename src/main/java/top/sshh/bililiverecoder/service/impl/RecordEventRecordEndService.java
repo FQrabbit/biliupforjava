@@ -3,7 +3,6 @@ package top.sshh.bililiverecoder.service.impl;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordEventData;
@@ -14,7 +13,6 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
-import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
@@ -35,10 +33,6 @@ public class RecordEventRecordEndService implements RecordEventService {
 
     @Autowired
     private RecordHistoryPartRepository partRepository;
-
-    @Autowired
-    private SystemConfigService systemConfigService;
-
 
     @Override
     public void processing(RecordEventDTO event) {
@@ -163,25 +157,6 @@ public class RecordEventRecordEndService implements RecordEventService {
 //        recordBiliPublishService.publishRecordHistory(history);
     }
 
-    private int getMergeIntervalMinutes(String roomId) {
-        int mergeIntervalMinutes = 20;
-        try {
-            String mergeIntervalConfig = systemConfigService.getAllConfigsMap().get(SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
-            if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
-                mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
-                if (mergeIntervalMinutes < 1) {
-                    mergeIntervalMinutes = 1;
-                } else if (mergeIntervalMinutes > 1440) {
-                    mergeIntervalMinutes = 1440;
-                }
-            }
-        } catch (Exception e) {
-            log.warn("[BLR] {}", LogKvs.event("RecordEnd.ParseMergeIntervalFailed")
-                    .add("roomId", roomId)
-                    .add("error", e.getMessage()));
-        }
-        return mergeIntervalMinutes;
-    }
 }
 
 

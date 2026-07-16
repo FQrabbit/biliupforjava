@@ -1188,35 +1188,6 @@ public class HighEnergyCutPublishService {
         return template;
     }
 
-    private String buildMultipartUploadId(Long uid, Object roomId) {
-        long now = System.currentTimeMillis();
-        String uidPart = uid == null ? "0" : String.valueOf(uid);
-        String roomSuffix;
-        if (roomId instanceof Number) {
-            roomSuffix = String.valueOf(Math.abs(((Number) roomId).longValue() % 10000));
-        } else if (roomId != null) {
-            roomSuffix = String.valueOf(Math.abs(roomId.toString().hashCode() % 10000));
-        } else {
-            roomSuffix = "0";
-        }
-        return uidPart + "_" + now + "_" + roomSuffix;
-    }
-
-    private String extractMultipartUploadToken(PreUploadBean preUploadBean) {
-        if (preUploadBean == null) {
-            return null;
-        }
-        String raw = preUploadBean.getRawUptoken();
-        if (StringUtils.isNotBlank(raw)) {
-            return raw;
-        }
-        String withPrefix = preUploadBean.getUptoken();
-        if (StringUtils.isBlank(withPrefix)) {
-            return null;
-        }
-        return StringUtils.removeStart(withPrefix, "UpToken ").trim();
-    }
-
     private String buildMultipartSessionDigest(String uploadId,
                                                String multipartUri,
                                                String uploadToken,
