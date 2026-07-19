@@ -24,6 +24,7 @@ import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.RecordPartPathService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -112,6 +113,8 @@ public class RecordBiliPublishService {
     private PartFileLocationService partFileLocationService;
     @Autowired
     private StorageRootService storageRootService;
+    @Autowired
+    private RecordPartPathService partPathService;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -1291,7 +1294,7 @@ public class RecordBiliPublishService {
                 }
                 throw e;
             }
-            int preSize = (int) uploadParts.stream().filter(p -> !isSkippedPart(p)).count();
+            int preSize = uploadParts.size();
             //重新加载上传列表
             uploadParts = filterPublishableParts(partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()));
             if (preSize != uploadParts.size()) {
@@ -2904,11 +2907,25 @@ public class RecordBiliPublishService {
         return "SKIPPED_THRESHOLD".equals(type) || "MANUAL_SKIP".equals(type);
     }
 
-    private static List<RecordHistoryPart> filterPublishableParts(List<RecordHistoryPart> parts) {
+    private List<RecordHistoryPart> filterPublishableParts(List<RecordHistoryPart> parts) {
         if (parts == null || parts.isEmpty()) {
             return new ArrayList<>();
         }
-        return parts.stream().filter(p -> !isSkippedPart(p)).collect(Collectors.toList());
+        List<RecordHistoryPart> candidates = parts.stream().filter(p -> !isSkippedPart(p)).collect(Collectors.toList());
+        RecordPartPathService.PartSelection selection = partPathService.selectPreferredParts(candidates);
+        if (!selection.suppressed().isEmpty()) {
+            Long historyId = selection.selected().isEmpty() ? null : selection.selected().get(0).getHistoryId();
+            log.warn("[BLR] {}", LogKvs.event("Publish.Parts.DuplicatePhysicalFileFiltered")
+                    .add("historyId", historyId)
+                    .add("keptPartIds", joinPartIds(selection.selected()))
+                    .add("filteredPartIds", joinPartIds(selection.suppressed())));
+        }
+        return selection.selected();
+    }
+
+    private static String joinPartIds(List<RecordHistoryPart> parts) {
+        return parts.stream().map(RecordHistoryPart::getId).filter(Objects::nonNull)
+                .map(String::valueOf).collect(Collectors.joining(","));
     }
 
     private static String normalizeFilePath(String filePath) {

@@ -34,11 +34,14 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
     @Autowired
     private PartFileLocationService partFileLocationService;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordPartPathService partPathService;
+
     @Override
     public void processing(BlrecEventDTO event) {
         BlrecDataDTO eventData = event.getData();
         String roomId = eventData.getRoomInfo().getRoomId();
-        String filePath = eventData.getPath();
+        String filePath = partPathService.resolveWebhookPath(eventData.getPath());
 
         RecordRoom room = roomRepository.findByRoomId(roomId);
         if (room == null || !room.isRecording()) {
@@ -60,7 +63,8 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
         RecordHistory history = historyOpt.get();
 
         // 检查文件是否已存在，防止重复处理
-        if (partRepository.existsByFilePath(filePath)) {
+        if (partRepository.existsByFilePath(filePath)
+                || findByCanonicalPath(partRepository.findByHistoryId(history.getId()), filePath) != null) {
             log.warn("[BLR] {}", LogKvs.event("Blrec.VideoFileCompleted.PartExists")
                     .add("roomId", roomId)
                     .add("historyId", history.getId())
@@ -90,5 +94,17 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
                 .add("historyId", history.getId())
                 .add("partId", part.getId())
                 .add("filePath", filePath));
+    }
+
+    private RecordHistoryPart findByCanonicalPath(Iterable<RecordHistoryPart> parts, String filePath) {
+        if (parts == null) {
+            return null;
+        }
+        for (RecordHistoryPart part : parts) {
+            if (part != null && partPathService.sameFile(part.getFilePath(), filePath)) {
+                return part;
+            }
+        }
+        return null;
     }
 }

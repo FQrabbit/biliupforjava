@@ -106,10 +106,11 @@ public class RecordWebHook {
             try {
                 if ("SessionEnded".equals(recordEvent.getEventType())) {
                     lock = "brec:" + recordEvent.getEventType();
-                } else if ("FileClosed".equals(recordEvent.getEventType())) {
-                    lock = "brec:" + recordEvent.getEventData().getRelativePath();
-                } else if ("FileOpening".equals(recordEvent.getEventType())) {
-                    lock = "brec:" + recordEvent.getEventData().getRelativePath();
+                } else if ("FileClosed".equals(recordEvent.getEventType()) || "FileOpening".equals(recordEvent.getEventType())) {
+                    String roomId = recordEvent.getEventData().getRoomId();
+                    lock = roomId == null || roomId.isBlank()
+                            ? "brec:" + recordEvent.getEventData().getRelativePath()
+                            : "brec:room:" + roomId;
                 } else {
                     lock = "brec:" + recordEvent.getEventData().getSessionId();
                 }

@@ -20,6 +20,7 @@ import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.RecordPartPathService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -71,6 +73,9 @@ public class publishJob {
 
     @Autowired
     StorageRootService storageRootService;
+
+    @Autowired
+    RecordPartPathService partPathService;
 
     @Autowired
     @Qualifier("myAsyncPool")
@@ -496,6 +501,9 @@ public class publishJob {
                 if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
                     return;
                 }
+                if (!isPreferredPhysicalPart(part)) {
+                    continue;
+                }
                 if (uploadUserSerialScheduler.hasPendingPart(part.getId())) {
                     log.debug("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.AlreadyQueued")
                             .add("roomId", room.getRoomId())
@@ -813,5 +821,31 @@ public class publishJob {
             return true;
         }
         return isRejectedException(t.getCause());
+    }
+
+    private boolean isPreferredPhysicalPart(RecordHistoryPart part) {
+        if (part == null || part.getId() == null || part.getHistoryId() == null) {
+            return true;
+        }
+        List<RecordHistoryPart> candidates = partRepository.findByHistoryId(part.getHistoryId()).stream()
+                .filter(p -> !isSkippedPart(p))
+                .toList();
+        RecordPartPathService.PartSelection selection = partPathService.selectPreferredParts(candidates);
+        boolean selected = selection.selected().stream().anyMatch(p -> Objects.equals(p.getId(), part.getId()));
+        if (!selected) {
+            log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.DuplicatePhysicalFileSkipped")
+                    .add("historyId", part.getHistoryId())
+                    .add("roomId", part.getRoomId())
+                    .add("partId", part.getId()));
+        }
+        return selected;
+    }
+
+    private static boolean isSkippedPart(RecordHistoryPart part) {
+        if (part == null) {
+            return false;
+        }
+        String type = part.getDeleteFailType();
+        return "SKIPPED_THRESHOLD".equals(type) || "MANUAL_SKIP".equals(type);
     }
 }

@@ -18,7 +18,6 @@ import top.sshh.bililiverecoder.service.RecordHistoryMergeService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
-import java.io.File;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -45,6 +44,9 @@ public class RecordEventFileOpenService implements RecordEventService {
 
     @Autowired
     private PartFileLocationService partFileLocationService;
+
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordPartPathService partPathService;
 
     @PostConstruct
     public void initWorkPath() {
@@ -146,12 +148,10 @@ public class RecordEventFileOpenService implements RecordEventService {
                     return;
                 }
 
-                if ("blrec".equals(incomingSessionId)) {
-                    relativePath = relativePath.replace(workPath, "");
-                }
-                String filePath = workPath + File.separator + relativePath;
+                String filePath = partPathService.resolveWebhookPath(relativePath);
 
-                if (historyPartRepository.existsByFilePath(filePath)) {
+                if (historyPartRepository.existsByFilePath(filePath)
+                        || findByCanonicalPath(historyPartRepository.findByHistoryId(history.getId()), filePath) != null) {
                     log.warn("[BLR] {}", LogKvs.event("FileOpen.PartExists.Skip")
                             .add("roomId", roomId)
                             .add("historyId", history.getId())
@@ -185,7 +185,8 @@ public class RecordEventFileOpenService implements RecordEventService {
                 history.setTitle(eventData.getTitle());
                 history.setRecording(true);
                 history.setStreaming(eventData.isStreaming());
-                history.setFilePath(workPath + File.separator + relativePath.substring(0, relativePath.lastIndexOf('/')));
+                int lastSlash = filePath.lastIndexOf('/');
+                history.setFilePath(lastSlash > 0 ? filePath.substring(0, lastSlash) : filePath);
                 history.setEndTime(LocalDateTime.now());
                 historyRepository.save(history);
 
@@ -204,5 +205,17 @@ public class RecordEventFileOpenService implements RecordEventService {
             return fallback;
         }
         return eventData.getFileOpenTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+    }
+
+    private RecordHistoryPart findByCanonicalPath(Iterable<RecordHistoryPart> parts, String filePath) {
+        if (parts == null) {
+            return null;
+        }
+        for (RecordHistoryPart part : parts) {
+            if (part != null && partPathService.sameFile(part.getFilePath(), filePath)) {
+                return part;
+            }
+        }
+        return null;
     }
 }

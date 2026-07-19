@@ -94,6 +94,7 @@ public final class LogKvs {
         EVENT_ZH.put("Upload.SerialScheduler.RequeueOnRejected", "分P上传串行调度：线程池拒绝，已兜底重排队");
         EVENT_ZH.put("Upload.SerialScheduler.RequeueGiveUp", "分P上传串行调度：重排队次数过多，放弃");
         EVENT_ZH.put("Upload.SerialScheduler.DuplicatePartSkipped", "分P上传串行调度：分P已在队列中，跳过重复入队");
+        EVENT_ZH.put("Publish.Parts.DuplicatePhysicalFileFiltered", "投稿：检测到同一物理文件的重复分P，已按规则过滤");
 
         // 文件检测
         EVENT_ZH.put("FileProbe.Remove.Missing", "文件检测：文件丢失，移除监控");
@@ -161,6 +162,7 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.UnhandledException", "文件打开事件：发生未捕获异常");
         EVENT_ZH.put("FileClosed", "收到文件关闭事件(分P文件写入结束)");
         EVENT_ZH.put("FileClosed.NoRecording", "文件关闭事件：本地无活跃录制记录");
+        EVENT_ZH.put("FileClosed.PartMatchedNormalizedPath", "文件关闭事件：按规范化路径命中已有分P记录");
         EVENT_ZH.put("FileClosed.PartMissing", "文件关闭事件：找不到分P记录");
         EVENT_ZH.put("FileClosed.FileMissing", "文件关闭事件：文件不存在");
         EVENT_ZH.put("FileClosed.MoveSuccess", "文件关闭后移动文件成功");
@@ -391,6 +393,7 @@ public final class LogKvs {
         EVENT_ZH.put("PublishJob.PartCompensate.SkipBelowDurationLimit", "补偿任务：文件小于时长阈值，跳过");
         EVENT_ZH.put("PublishJob.PartCompensate.TriggerUpload", "补偿任务：触发分P上传");
         EVENT_ZH.put("PublishJob.PartCompensate.DuplicateRejected", "补偿任务：分P重复触发被去重拒绝");
+        EVENT_ZH.put("PublishJob.PartCompensate.DuplicatePhysicalFileSkipped", "补偿任务：同一物理文件已有更优分P，跳过重复上传");
         EVENT_ZH.put("PublishJob.PartCompensate.UploadFailed", "补偿任务：触发上传失败");
         EVENT_ZH.put("PublishJob.PartCompensate.UploadRejectedRetryLater", "补偿任务：线程池拥塞导致触发被拒，稍后重试");
         EVENT_ZH.put("PublishJob.PartCompensate.SkipByAsyncPoolPressure", "补偿任务：线程池压力过高，跳过本轮触发");

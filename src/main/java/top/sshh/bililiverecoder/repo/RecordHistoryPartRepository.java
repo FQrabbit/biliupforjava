@@ -26,6 +26,9 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     RecordHistoryPart findByFilePathStartingWith(String path);
 
+    @Query("select p from RecordHistoryPart p where p.roomId = ?1 and (p.recording = true or p.endTime is null) order by p.id desc")
+    List<RecordHistoryPart> findOpenCandidatesByRoomId(String roomId);
+
     @Query("""
             select p from RecordHistoryPart p
             where p.historyId = ?1

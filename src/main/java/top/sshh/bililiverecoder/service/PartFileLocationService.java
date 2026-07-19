@@ -116,8 +116,6 @@ public class PartFileLocationService {
             locationRepository.save(location);
             if (location.getRole() != PartFileLocation.LocationRole.PRIMARY) {
                 promote(part, primary, location, path);
-            } else {
-                syncLegacyPath(part, path, false);
             }
             return new FileResolution(root.getRootType() == StorageRoot.RootType.WORK
                     ? LocalFileState.AVAILABLE_WORK : LocalFileState.AVAILABLE_ARCHIVE,

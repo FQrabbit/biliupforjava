@@ -1,9 +1,7 @@
 package top.sshh.bililiverecoder.service.impl;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordEventData;
@@ -19,20 +17,14 @@ import java.io.File;
 @Component
 public class RecordEventFilePostService implements RecordEventService {
 
-    @Value("${record.work-path}")
-    private String workPath;
-
     @Autowired
     private RecordHistoryPartRepository historyPartRepository;
 
     @Autowired
     private PartFileLocationService partFileLocationService;
 
-    @PostConstruct
-    public void initWorkPath() {
-        workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
-        workPath = workPath.replace("\\", "/");
-    }
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordPartPathService partPathService;
 
 
     @Override
@@ -45,10 +37,7 @@ public class RecordEventFilePostService implements RecordEventService {
                 .add("sessionId", sessionId)
                 .add("relativePath", relativePath)
                 .add("roomId", eventData.getRoomId()));
-        if ("blrec".equals(sessionId)) {
-            relativePath = relativePath.replace(workPath, "");
-        }
-        String filePath = workPath + File.separator + relativePath;
+        String filePath = partPathService.resolveWebhookPath(relativePath);
         // 正常逻辑
         String name = filePath.substring(0, filePath.lastIndexOf('.'));
         RecordHistoryPart part = historyPartRepository.findByFilePathStartingWith(name);

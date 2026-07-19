@@ -70,6 +70,9 @@ public class RecordEventFileClosedService implements RecordEventService {
     @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordPartPathService partPathService;
+
     @PostConstruct
     public void initWorkPath() {
         workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
@@ -103,11 +106,13 @@ public class RecordEventFileClosedService implements RecordEventService {
                     .add("msg", "收到文件关闭事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制。"));
             return;
         }
-        if ("blrec".equals(sessionId)) {
-            relativePath = relativePath.replace(workPath, "");
-        }
-        String filePath = workPath + File.separator + relativePath;
+        String filePath = partPathService.resolveWebhookPath(relativePath);
         RecordHistoryPart partByPath = historyPartRepository.findByFilePath(filePath);
+        boolean matchedByCanonicalPath = false;
+        if (partByPath == null) {
+            partByPath = findByCanonicalPath(historyPartRepository.findOpenCandidatesByRoomId(eventData.getRoomId()), filePath);
+            matchedByCanonicalPath = partByPath != null;
+        }
         if (partByPath != null && partByPath.getHistoryId() != null && !partByPath.getHistoryId().equals(room.getHistoryId())) {
             log.info("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByPart")
                     .add("roomId", eventData.getRoomId())
@@ -171,7 +176,16 @@ public class RecordEventFileClosedService implements RecordEventService {
                         .add("filePath", relativePath));
                 return;
             }
-            RecordHistoryPart part = historyPartRepository.findByFilePath(filePath);
+            RecordHistoryPart part = partByPath != null && Objects.equals(partByPath.getHistoryId(), history.getId())
+                    ? partByPath
+                    : findByCanonicalPath(historyPartRepository.findByHistoryId(history.getId()), filePath);
+            if (part != null && matchedByCanonicalPath) {
+                log.info("[BLR] {}", LogKvs.event("FileClosed.PartMatchedNormalizedPath")
+                        .add("roomId", eventData.getRoomId())
+                        .add("historyId", history.getId())
+                        .add("partId", part.getId())
+                        .add("filePath", relativePath));
+            }
             if (part == null) {
                 log.info("[BLR] {}", LogKvs.event("FileClosed.PartMissing")
                         .add("roomId", eventData.getRoomId())
@@ -314,5 +328,17 @@ public class RecordEventFileClosedService implements RecordEventService {
         part.setDeleteFailType("SKIPPED_THRESHOLD");
         part.setDeleteFailReason("文件低于阈值(大小/时长)已跳过上传，可在前端手动补救");
         historyPartRepository.save(part);
+    }
+
+    private RecordHistoryPart findByCanonicalPath(Iterable<RecordHistoryPart> parts, String filePath) {
+        if (parts == null) {
+            return null;
+        }
+        for (RecordHistoryPart part : parts) {
+            if (part != null && partPathService.sameFile(part.getFilePath(), filePath)) {
+                return part;
+            }
+        }
+        return null;
     }
 }
