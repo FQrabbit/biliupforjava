@@ -77,15 +77,23 @@ public class RoomLiveEventParseService {
     }
 
     public ParseResult parsePart(RecordHistoryPart part, boolean force) {
+        return parsePart(part, force, true);
+    }
+
+    public ParseResult parsePartQuietly(RecordHistoryPart part, boolean force) {
+        return parsePart(part, force, false);
+    }
+
+    private ParseResult parsePart(RecordHistoryPart part, boolean force, boolean logFailedCached) {
         if (part == null || part.getId() == null) {
             return ParseResult.skipped("invalid part");
         }
         synchronized (partParseLocks[lockIndex(part.getId())]) {
-            return parsePartLocked(part, force);
+            return parsePartLocked(part, force, logFailedCached);
         }
     }
 
-    private ParseResult parsePartLocked(RecordHistoryPart part, boolean force) {
+    private ParseResult parsePartLocked(RecordHistoryPart part, boolean force, boolean logFailedCached) {
         if (!force && (part.isRecording() || part.getEndTime() == null)) {
             log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipActive")
                     .add("roomId", part.getRoomId())
@@ -126,12 +134,14 @@ public class RoomLiveEventParseService {
             if (state.isSuccess()) {
                 return ParseResult.skipped("up to date");
             }
-            log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipFailedCached")
-                    .add("roomId", part.getRoomId())
-                    .add("historyId", part.getHistoryId())
-                    .add("partId", part.getId())
-                    .add("filePath", xmlFile.getPath())
-                    .add("err", state.getErrorMessage()));
+            if (logFailedCached) {
+                log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipFailedCached")
+                        .add("roomId", part.getRoomId())
+                        .add("historyId", part.getHistoryId())
+                        .add("partId", part.getId())
+                        .add("filePath", xmlFile.getPath())
+                        .add("err", state.getErrorMessage()));
+            }
             return ParseResult.skipped("parse failed cached");
         }
 

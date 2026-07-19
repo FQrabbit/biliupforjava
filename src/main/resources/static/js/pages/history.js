@@ -308,11 +308,30 @@ new Vue({
             if (this.form.from || this.form.to) count++;
             return count;
         },
+        effectiveDetailParts: function() {
+            return this.buildEffectivePartList(this.currentDetailParts);
+        },
+        duplicatePartCount: function() {
+            var rawCount = Array.isArray(this.currentDetailParts) ? this.currentDetailParts.length : 0;
+            return Math.max(rawCount - this.effectiveDetailParts.length, 0);
+        },
+        effectiveBlockingIssueCount: function() {
+            return this.effectiveDetailParts.filter(function(part) {
+                return part && part.blocking;
+            }).length;
+        },
+        hasEffectiveBlockingIssues: function() {
+            return this.effectiveBlockingIssueCount > 0;
+        },
+        allEffectivePartsUploaded: function() {
+            var total = this.getEffectiveTotalParts();
+            return total > 0 && this.getEffectiveUploadedParts() >= total;
+        },
         mergedParts: function() {
-            if (!this.currentDetailParts || this.currentDetailParts.length === 0) return [];
+            if (!this.effectiveDetailParts || this.effectiveDetailParts.length === 0) return [];
 
             // 映射为基础对象
-            let parts = this.currentDetailParts.map((p, index) => {
+            let parts = this.effectiveDetailParts.map((p, index) => {
                 const issueCode = p.issueCode || null;
                 const issueMessage = p.issueMessage || null;
                 const actions = Array.isArray(p.actions) ? p.actions : [];
@@ -334,8 +353,9 @@ new Vue({
                 }
                 return {
                     partId: p.id,
+                    mergedPartIds: Array.isArray(p.mergedPartIds) ? p.mergedPartIds.slice() : [p.id],
                     // 如果线上顺序无效 (<=0)，则使用 index + 1 作为备选
-                    page: (p.partOrder && p.partOrder > 0) ? p.partOrder : ((p.page && p.page > 0) ? p.page : (index + 1)),
+                    page: (p.displayPartOrder && p.displayPartOrder > 0) ? p.displayPartOrder : ((p.partOrder && p.partOrder > 0) ? p.partOrder : ((p.page && p.page > 0) ? p.page : (index + 1))),
                     title: p.title,
                     fileName: p.fileName,
                     upload: p.upload,
@@ -383,8 +403,13 @@ new Vue({
                 this.historyUploadProgress.items.forEach(active => {
                     // 尝试通过 ID 匹配
                     let match = parts.find(p => p.partId === active.partId);
+                    const mergedIntoOtherPart = !match && parts.some(p => {
+                        return p.partId !== active.partId
+                            && Array.isArray(p.mergedPartIds)
+                            && p.mergedPartIds.indexOf(active.partId) !== -1;
+                    });
                     // 如果 ID 匹配不到，尝试通过 page 匹配 (fallback)
-                    if (!match && active.page) {
+                    if (!match && !mergedIntoOtherPart && active.page) {
                         match = parts.find(p => p.page === active.page);
                     }
 

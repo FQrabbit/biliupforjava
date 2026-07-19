@@ -6383,6 +6383,16 @@
 
 }
 
+.waiting-tip--merged {
+
+    color: var(--primary-color);
+
+    background: var(--brand-soft-bg-faint);
+
+    border-color: var(--brand-accent-border-light);
+
+}
+
 .waiting-tip--blocking {
 
     color: var(--danger-color);

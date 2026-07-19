@@ -699,8 +699,8 @@
                 <div class="stat-card">
                     <div class="stat-label">分P数量</div>
                     <div class="stat-value">
-                        {{ currentDetail.partCount }}
-                        <span class="stat-sub">录:{{currentDetail.recordPartCount}} / 传:{{currentDetail.uploadPartCount}}</span>
+                        {{ getEffectiveTotalParts() }}
+                        <span class="stat-sub">录:{{ getEffectiveRecordingParts() }} / 传:{{ getEffectiveUploadedParts() }}</span>
                     </div>
                 </div>
                 <div class="stat-card stat-card--danmaku">
@@ -969,9 +969,13 @@
                     <i class="el-icon-info"></i>
                     <span>正在等待其他稿件分P上传...</span>
                 </div>
-                <div v-if="partListMeta && partListMeta.hasBlockingIssues" class="waiting-tip waiting-tip--blocking">
+                <div v-if="duplicatePartCount > 0" class="waiting-tip waiting-tip--merged" role="status">
+                    <i class="el-icon-connection"></i>
+                    <span>已自动合并 {{ duplicatePartCount }} 条重复分P记录，进度和投稿按唯一文件计算</span>
+                </div>
+                <div v-if="hasEffectiveBlockingIssues" class="waiting-tip waiting-tip--blocking" role="alert">
                     <i class="el-icon-warning"></i>
-                    <span>暂停投稿：存在 {{ partListMeta.blockingIssueCount }} 个异常分P，需要处理后继续</span>
+                    <span>暂停投稿：存在 {{ effectiveBlockingIssueCount }} 个异常分P，需要处理后继续</span>
                 </div>
 
                 <!-- 分P进度展开/收起按钮 -->
@@ -1058,7 +1062,7 @@
                             <span class="action-group-label">发布管理</span>
                             <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
                             <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
-                            <el-button v-if="!currentDetail.forceArchived && currentDetail.upload && !currentDetail.publish && currentDetail.partCount > 0 && currentDetail.uploadPartCount === currentDetail.partCount" class="modern-btn" @click="retryPublishOnly(currentDetail.id)" size="mini" type="primary" plain icon="el-icon-refresh">重试发布</el-button>
+                            <el-button v-if="!currentDetail.forceArchived && currentDetail.upload && !currentDetail.publish && allEffectivePartsUploaded" class="modern-btn" @click="retryPublishOnly(currentDetail.id)" size="mini" type="primary" plain icon="el-icon-refresh">重试发布</el-button>
                             <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
                             <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
                             <el-button v-if="currentDetail.forceArchived" class="modern-btn" @click="restoreForceArchive(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">恢复处理</el-button>

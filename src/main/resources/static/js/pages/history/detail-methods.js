@@ -2039,8 +2039,93 @@
                 if (callback) callback(null);
             });
         },
+        getPartPhysicalIdentity: function(part) {
+            if (!part || !part.filePath) return '';
+            var rawPath = String(part.filePath).trim();
+            var windowsPath = rawPath.indexOf('\\') !== -1 || /^[a-zA-Z]:[\\/]/.test(rawPath);
+            var normalized = rawPath
+                .trim()
+                .replace(/\\/g, '/')
+                .replace(/\/+/g, '/');
+            return windowsPath ? normalized.toLowerCase() : normalized;
+        },
+        getPartLogicalOrder: function(part, index) {
+            var partOrder = Number(part && part.partOrder);
+            if (isFinite(partOrder) && partOrder > 0) return partOrder;
+            var page = Number(part && part.page);
+            if (isFinite(page) && page > 0) return page;
+            return index + 1;
+        },
+        isPartPreferredForDisplay: function(candidate, current, candidateIndex, currentIndex) {
+            if (!current) return true;
+            var candidateUploaded = !!(candidate && candidate.upload && candidate.fileName);
+            var currentUploaded = !!(current && current.upload && current.fileName);
+            if (candidateUploaded !== currentUploaded) return candidateUploaded;
+
+            var candidateCompleted = !!(candidate && !candidate.recording && candidate.endTime);
+            var currentCompleted = !!(current && !current.recording && current.endTime);
+            if (candidateCompleted !== currentCompleted) return candidateCompleted;
+
+            var candidateMetadata = (Number(candidate && candidate.fileSize) > 0 ? 2 : 0)
+                + (Number(candidate && candidate.duration) > 0 ? 1 : 0);
+            var currentMetadata = (Number(current && current.fileSize) > 0 ? 2 : 0)
+                + (Number(current && current.duration) > 0 ? 1 : 0);
+            if (candidateMetadata !== currentMetadata) return candidateMetadata > currentMetadata;
+
+            var candidateOrder = this.getPartLogicalOrder(candidate, candidateIndex);
+            var currentOrder = this.getPartLogicalOrder(current, currentIndex);
+            if (candidateOrder !== currentOrder) return candidateOrder < currentOrder;
+
+            var candidateId = Number(candidate && candidate.id);
+            var currentId = Number(current && current.id);
+            if (!isFinite(candidateId)) return false;
+            if (!isFinite(currentId)) return true;
+            return candidateId < currentId;
+        },
+        buildEffectivePartList: function(parts) {
+            if (!Array.isArray(parts) || parts.length === 0) return [];
+            var groups = Object.create(null);
+            var orderedGroups = [];
+
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i];
+                if (!part) continue;
+                var identity = this.getPartPhysicalIdentity(part);
+                var key = identity || ('part:' + (part.id == null ? i : part.id));
+                var order = this.getPartLogicalOrder(part, i);
+                var group = groups[key];
+                if (!group) {
+                    group = {
+                        preferred: part,
+                        preferredIndex: i,
+                        displayOrder: order,
+                        partIds: part.id == null ? [] : [part.id]
+                    };
+                    groups[key] = group;
+                    orderedGroups.push(group);
+                    continue;
+                }
+                group.displayOrder = Math.min(group.displayOrder, order);
+                if (part.id != null) group.partIds.push(part.id);
+                if (this.isPartPreferredForDisplay(part, group.preferred, i, group.preferredIndex)) {
+                    group.preferred = part;
+                    group.preferredIndex = i;
+                }
+            }
+
+            return orderedGroups.map(function(group) {
+                return Object.assign({}, group.preferred, {
+                    displayPartOrder: group.displayOrder,
+                    duplicateRecordCount: Math.max(group.partIds.length - 1, 0),
+                    mergedPartIds: group.partIds.slice()
+                });
+            });
+        },
         getEffectiveTotalParts: function() {
-            return Array.isArray(this.currentDetailParts) ? this.currentDetailParts.length : 0;
+            if (Array.isArray(this.currentDetailParts) && this.currentDetailParts.length > 0) {
+                return this.effectiveDetailParts.length;
+            }
+            return Math.max(Number(this.currentDetail && this.currentDetail.partCount) || 0, 0);
         },
         isSkipPartRaw: function(p) {
             if (!p) return false;
@@ -2053,10 +2138,12 @@
             return false;
         },
         getEffectiveDoneParts: function() {
-            if (!Array.isArray(this.currentDetailParts)) return 0;
+            if (!Array.isArray(this.currentDetailParts) || this.currentDetailParts.length === 0) {
+                return Math.max(Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0, 0);
+            }
             var done = 0;
-            for (var i = 0; i < this.currentDetailParts.length; i++) {
-                var p = this.currentDetailParts[i];
+            for (var i = 0; i < this.effectiveDetailParts.length; i++) {
+                var p = this.effectiveDetailParts[i];
                 if (p && p.upload) {
                     done++;
                 } else if (this.isSkipPartRaw(p)) {
@@ -2064,6 +2151,39 @@
                 }
             }
             return done;
+        },
+        getEffectiveUploadedParts: function() {
+            if (!Array.isArray(this.currentDetailParts) || this.currentDetailParts.length === 0) {
+                return Math.max(Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0, 0);
+            }
+            return this.effectiveDetailParts.filter(function(part) {
+                return part && part.upload;
+            }).length;
+        },
+        getEffectiveRecordingParts: function() {
+            if (!Array.isArray(this.currentDetailParts) || this.currentDetailParts.length === 0) {
+                return Math.max(Number(this.currentDetail && this.currentDetail.recordPartCount) || 0, 0);
+            }
+            return this.effectiveDetailParts.filter(function(part) {
+                return part && part.recording;
+            }).length;
+        },
+        getEffectiveProgressItems: function() {
+            var items = this.historyUploadProgress && Array.isArray(this.historyUploadProgress.items)
+                ? this.historyUploadProgress.items
+                : [];
+            if (!Array.isArray(this.currentDetailParts) || this.currentDetailParts.length === 0) return items;
+            var selectedIds = new Set(this.effectiveDetailParts
+                .map(function(part) { return part && part.id; })
+                .filter(function(id) { return id != null; }));
+            return items.filter(function(item) {
+                return item && selectedIds.has(item.partId);
+            });
+        },
+        getEffectiveActivePartCount: function() {
+            return this.getEffectiveProgressItems().filter(function(item) {
+                return item && (item.state === 'UPLOADING' || item.state === 'RETRY_WAIT');
+            }).length;
         },
         onDetailClosed: function() {
             // 窗口关闭动画结束后，清理数据以释放内存并重置状态
@@ -2358,7 +2478,7 @@
             if (total <= 0) return 0;
 
             const uploaded = this.getEffectiveDoneParts();
-            const items = (this.historyUploadProgress && Array.isArray(this.historyUploadProgress.items)) ? this.historyUploadProgress.items : [];
+            const items = this.getEffectiveProgressItems();
 
             // 将“正在上传/等待重试”的分P按百分比折算为 0~1 的完成度
             let uploadingFraction = 0;
@@ -2376,10 +2496,10 @@
             return Math.floor(overall);
         },
         calcOverallUploadStatus: function() {
-            const total = Number(this.currentDetail && this.currentDetail.partCount) || 0;
+            const total = this.getEffectiveTotalParts();
             if (total <= 0) return null;
 
-            const items = (this.historyUploadProgress && Array.isArray(this.historyUploadProgress.items)) ? this.historyUploadProgress.items : [];
+            const items = this.getEffectiveProgressItems();
             for (let i = 0; i < items.length; i++) {
                 const p = items[i] || {};
                 if (p.state === 'FAILED') return 'exception';
@@ -2393,7 +2513,7 @@
         calcOverallUploadText: function() {
             const total = this.getEffectiveTotalParts();
             const uploaded = this.getEffectiveDoneParts();
-            const active = Number(this.historyUploadProgress && this.historyUploadProgress.activeCount) || 0;
+            const active = this.getEffectiveActivePartCount();
             const pending = Math.max(total - uploaded - active, 0);
             if (total <= 0) {
                 return active > 0 ? ('上传中：' + active + ' 个分P') : '当前无上传中的分P';

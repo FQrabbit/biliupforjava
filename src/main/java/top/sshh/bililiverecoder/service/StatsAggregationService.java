@@ -90,13 +90,21 @@ public class StatsAggregationService {
             int safeLimit = Math.max(1, limit);
             List<RecordHistory> histories = historyRepository.findCompletedOrderByEndTimeDesc(PageRequest.of(0, safeLimit));
             int updated = 0;
+            EventParseSummary parseSummary = new EventParseSummary();
             for (RecordHistory history : histories) {
                 if (history == null || history.getId() == null) {
                     continue;
                 }
-                if (aggregateHistory(history)) {
+                if (aggregateHistory(history, parseSummary)) {
                     updated++;
                 }
+            }
+            if (parseSummary.failedCached > 0) {
+                log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipFailedCachedSummary")
+                        .add("historyLimit", safeLimit)
+                        .add("historyCount", histories.size())
+                        .add("partCount", parseSummary.checked)
+                        .add("skipped", parseSummary.failedCached));
             }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
@@ -673,6 +681,10 @@ public class StatsAggregationService {
     }
 
     private boolean aggregateHistory(RecordHistory history) {
+        return aggregateHistory(history, null);
+    }
+
+    private boolean aggregateHistory(RecordHistory history, EventParseSummary parseSummary) {
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
         if (!isHistoryReadyForStats(history, parts)) {
             log.debug("[BLR] {}", LogKvs.event("Stats.Aggregate.SkipActive")
@@ -702,7 +714,12 @@ public class StatsAggregationService {
                 .collect(Collectors.toList());
         giftCatalogService.syncRoomGiftCatalog(history.getRoomId(), false);
         for (RecordHistoryPart part : parts) {
-            roomLiveEventParseService.parsePart(part, false);
+            RoomLiveEventParseService.ParseResult parseResult = parseSummary == null
+                    ? roomLiveEventParseService.parsePart(part, false)
+                    : roomLiveEventParseService.parsePartQuietly(part, false);
+            if (parseSummary != null) {
+                parseSummary.accept(parseResult);
+            }
         }
         EventStats eventStats = buildEventStats(history.getId(), partIds);
 
@@ -750,6 +767,18 @@ public class StatsAggregationService {
         sessionStatsRepository.save(stats);
         recomputeDailyStats(history.getRoomId(), liveDate, room, now);
         return true;
+    }
+
+    private static class EventParseSummary {
+        private int checked;
+        private int failedCached;
+
+        private void accept(RoomLiveEventParseService.ParseResult result) {
+            checked++;
+            if (result != null && "parse failed cached".equals(result.reason())) {
+                failedCached++;
+            }
+        }
     }
 
     private boolean isHistoryReadyForStats(RecordHistory history, List<RecordHistoryPart> parts) {
