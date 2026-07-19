@@ -42,6 +42,9 @@ public class SetupController {
         config.put("cachePath", env.getProperty("record.preview.cache-path", ""));
         config.put("jvmArgs", env.getProperty("app.jvm-args", ""));
         config.put("containerized", ContainerUtils.isRunningInContainer());
+        config.put("h2DatabaseFollowsWorkPath", true);
+        config.put("databasePath", normalizePath(env.getProperty("record.work-path", "")) + "/db");
+        config.put("workPathChangeWarning", "本地H2数据库位于 work-path/db，本次不会自动迁移数据库");
         return config;
     }
 
@@ -55,6 +58,20 @@ public class SetupController {
         String timezone = extractJsonValue(body, "timezone");
         String cachePath = normalizePath(extractJsonValue(body, "cachePath"));
         String jvmArgs = extractJsonValue(body, "jvmArgs");
+        String workPathChangeMode = extractJsonValue(body, "workPathChangeMode");
+        boolean confirmH2WorkPathRisk = Boolean.parseBoolean(extractJsonValue(body, "confirmH2WorkPathRisk"));
+
+        String oldWorkPath = normalizePath(env.getProperty("record.work-path", ""));
+        boolean workPathChanged = workPath != null && !workPath.isBlank()
+                && oldWorkPath != null && !oldWorkPath.isBlank()
+                && !sameConfiguredPath(workPath, oldWorkPath);
+        if (workPathChanged && !confirmH2WorkPathRisk) {
+            return errorResult("修改工作目录不会自动迁移 work-path/db 中的H2数据库，请确认已迁移数据库或正在使用MySQL");
+        }
+        if (workPathChanged && !"FUTURE_ONLY".equals(workPathChangeMode)
+                && !"RELOCATE_EXISTING".equals(workPathChangeMode)) {
+            return errorResult("修改工作目录时必须选择仅影响新文件或迁移现有目录");
+        }
 
         // 路径安全校验
         String pathError = validatePath(workPath);
@@ -133,6 +150,11 @@ public class SetupController {
         if (workPath != null && !workPath.isEmpty()) {
             yml.append("  work-path: \"").append(escapeYamlValue(workPath)).append("\"\n");
         }
+        if (workPathChanged) {
+            yml.append("  work-path-change-mode: \"").append(workPathChangeMode).append("\"\n");
+            yml.append("  work-path-change-from: \"").append(escapeYamlValue(oldWorkPath)).append("\"\n");
+            yml.append("  work-path-change-to: \"").append(escapeYamlValue(workPath)).append("\"\n");
+        }
         if (username != null && !username.isEmpty()) {
             yml.append("  userName: \"").append(escapeYamlValue(username)).append("\"\n");
         }
@@ -180,6 +202,12 @@ public class SetupController {
         }
     }
 
+    private static boolean sameConfiguredPath(String left, String right) {
+        String a = java.nio.file.Paths.get(left).toAbsolutePath().normalize().toString();
+        String b = java.nio.file.Paths.get(right).toAbsolutePath().normalize().toString();
+        return File.separatorChar == '\\' ? a.equalsIgnoreCase(b) : a.equals(b);
+    }
+
     private static File getProcessDir() {
         try {
             String path = SetupController.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
@@ -201,6 +229,11 @@ public class SetupController {
         }
         pattern = "\"" + key + "\"\\s*:\\s*(\\d+)";
         m = Pattern.compile(pattern).matcher(json);
+        if (m.find()) {
+            return m.group(1);
+        }
+        pattern = "\"" + key + "\"\\s*:\\s*(true|false)";
+        m = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(json);
         if (m.find()) {
             return m.group(1);
         }

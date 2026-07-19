@@ -14,6 +14,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -56,6 +57,9 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
 
     @Autowired
     private UploadUserSerialScheduler uploadUserSerialScheduler;
+
+    @Autowired
+    private PartFileLocationService partFileLocationService;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -131,7 +135,14 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
             if (room != null) {
                 UploadEnums uploadEnums = UploadEnums.find(room.getLine());
                 // 上传任务入队列
-                String filePath = part.getFilePath().intern();
+                PartFileLocationService.FileResolution fileResolution = partFileLocationService.resolveReadable(part.getId());
+                if (!fileResolution.available()) {
+                    log.warn("[BLR] {}", LogKvs.event("Publish.Edit.PartUpload.LocalFileUnavailable")
+                            .add("partId", part.getId()).add("localFileState", fileResolution.state()));
+                    TaskUtil.partUploadTask.remove(part.getId());
+                    return;
+                }
+                String filePath = fileResolution.path().toString().replace('\\', '/').intern();
                 File uploadFile = new File(filePath);
                 if (!uploadFile.exists()) {
                     log.error("[BLR] {}", LogKvs.event("Upload.Part.FileMissing")

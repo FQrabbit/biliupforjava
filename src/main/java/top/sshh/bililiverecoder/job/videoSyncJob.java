@@ -5,7 +5,6 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import top.sshh.bililiverecoder.entity.*;
@@ -16,17 +15,14 @@ import top.sshh.bililiverecoder.notification.NotificationEventPublisher;
 import top.sshh.bililiverecoder.notification.NotificationEventType;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
+import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.StatsAggregationService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
-import java.io.File;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -42,9 +38,6 @@ import java.util.Set;
 @Slf4j
 @Component
 public class videoSyncJob {
-
-    @Value("${record.work-path}")
-    private String workPath;
 
     @Autowired
     private RecordRoomRepository roomRepository;
@@ -70,6 +63,8 @@ public class videoSyncJob {
 
     @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
+    @Autowired
+    private PartFileOperationService partFileOperationService;
     @Autowired
     private NotificationEventPublisher notificationEventPublisher;
     @Autowired
@@ -1040,7 +1035,7 @@ public class videoSyncJob {
             for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
                 RecordHistoryPart part = partRepository.findByHistoryIdAndTitle(next.getId(), page.getPart());
                 if (part != null) {
-                    //如果配置成发布完成后删除则删除文件
+                    // 审核完成后的文件处理统一交给可恢复的生命周期服务。
                     String filePath = part.getFilePath();
                     if (recordRoom != null
                             && partFileCleanupPolicy.isPostAuditCleanupType(recordRoom.getDeleteType())
@@ -1048,105 +1043,11 @@ public class videoSyncJob {
                         continue;
                     }
                     if (recordRoom != null && recordRoom.getDeleteType() == 2) {
-                        File file = new File(filePath);
-                        boolean delete = file.delete();
-                        if (delete) {
-                            log.info("[BLR] {}", LogKvs.event("VideoSync.File.DeleteSuccess")
-                                    .add("roomId", room.getRoomId())
-                                    .add("uname", room.getUname())
-                                    .add("historyId", next.getId())
-                                    .addIfNotBlank("bvid", next.getBvId())
-                                    .add("partId", part.getId())
-                                    .addIfNotBlank("filePath", filePath));
-                        } else {
-                            log.warn("[BLR] {}", LogKvs.event("VideoSync.File.DeleteFailed")
-                                    .add("roomId", room.getRoomId())
-                                    .add("uname", room.getUname())
-                                    .add("historyId", next.getId())
-                                    .addIfNotBlank("bvid", next.getBvId())
-                                    .add("partId", part.getId())
-                                    .addIfNotBlank("filePath", filePath));
-                        }
+                        partFileOperationService.delete(part.getId());
                     } else if (recordRoom != null && StringUtils.isNotBlank(recordRoom.getMoveDir()) && recordRoom.getDeleteType() == 5) {
-                        String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                        String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                        String toDirPath = recordRoom.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
-                        File toDir = new File(toDirPath);
-                        if (!toDir.exists()) {
-                            toDir.mkdirs();
-                        }
-                        File startDir = new File(startDirPath);
-                        File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                        if (files != null) {
-                            for (File file : files) {
-                                if (!filePath.startsWith(workPath)) {
-                                    part.setFileDelete(true);
-                                    part = partRepository.save(part);
-                                    continue;
-                                }
-                                try {
-                                    Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                            StandardCopyOption.REPLACE_EXISTING);
-                                    log.info("[BLR] {}", LogKvs.event("VideoSync.File.MoveSuccess")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("historyId", next.getId())
-                                            .add("partId", part.getId())
-                                            .add("from", file.getPath())
-                                            .add("to", toDirPath + file.getName()));
-                                } catch (Exception e) {
-                                    log.error("[BLR] {}", LogKvs.event("VideoSync.File.MoveFailed")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("historyId", next.getId())
-                                            .add("partId", part.getId())
-                                            .add("from", file.getPath())
-                                            .add("to", toDirPath + file.getName())
-                                            .addIfNotBlank("err", e.getMessage())
-                                            .add("ex", e.getClass().getSimpleName()), e);
-                                }
-                            }
-                        }
-
-                        part.setFilePath(toDirPath + filePath.substring(filePath.lastIndexOf("/") + 1));
-                        part.setFileDelete(true);
-                        part = partRepository.save(part);
+                        partFileOperationService.move(part.getId(), recordRoom.getMoveDir());
                     } else if (recordRoom != null && StringUtils.isNotBlank(recordRoom.getMoveDir()) && recordRoom.getDeleteType() == 11) {
-                        String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                        String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                        String toDirPath = recordRoom.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
-                        File toDir = new File(toDirPath);
-                        if (!toDir.exists()) {
-                            toDir.mkdirs();
-                        }
-                        File startDir = new File(startDirPath);
-                        File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                        if (files != null) {
-                            for (File file : files) {
-                                try {
-                                    Files.copy(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                            StandardCopyOption.REPLACE_EXISTING);
-                                    log.info("[BLR] {}", LogKvs.event("VideoSync.File.CopySuccess")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("historyId", next.getId())
-                                            .add("partId", part.getId())
-                                            .add("from", file.getPath())
-                                            .add("to", toDirPath + file.getName()));
-                                } catch (Exception e) {
-                                    log.error("[BLR] {}", LogKvs.event("VideoSync.File.CopyFailed")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("historyId", next.getId())
-                                            .add("partId", part.getId())
-                                            .add("from", file.getPath())
-                                            .add("to", toDirPath + file.getName())
-                                            .addIfNotBlank("err", e.getMessage())
-                                            .add("ex", e.getClass().getSimpleName()), e);
-                                }
-                            }
-                        }
-                        part = partRepository.save(part);
+                        partFileOperationService.copy(part.getId(), recordRoom.getMoveDir());
                     }
                 }
             }

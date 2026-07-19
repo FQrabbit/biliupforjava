@@ -13,6 +13,10 @@ import top.sshh.bililiverecoder.util.LogKvs;
 @Service
 public class PartFileCleanupPolicy {
 
+    public enum CleanupMilestone {
+        NONE, AFTER_UPLOAD, AFTER_AUDIT, AFTER_RECORD_CLOSE, SCHEDULED, AFTER_PUBLISH
+    }
+
     @Autowired
     private RecordHistoryRepository historyRepository;
 
@@ -59,15 +63,34 @@ public class PartFileCleanupPolicy {
     }
 
     public boolean isPostUploadCleanupType(int deleteType) {
-        return deleteType == 1 || deleteType == 4;
+        return milestoneFor(deleteType) == CleanupMilestone.AFTER_UPLOAD;
     }
 
     public boolean isPostPublishCleanupType(int deleteType) {
-        return deleteType == 9 || deleteType == 10;
+        return milestoneFor(deleteType) == CleanupMilestone.AFTER_PUBLISH;
     }
 
     public boolean isPostAuditCleanupType(int deleteType) {
-        return deleteType == 2 || deleteType == 5;
+        return milestoneFor(deleteType) == CleanupMilestone.AFTER_AUDIT;
+    }
+
+    public boolean isPostRecordCloseCleanupType(int deleteType) {
+        return milestoneFor(deleteType) == CleanupMilestone.AFTER_RECORD_CLOSE;
+    }
+
+    public boolean isScheduledCleanupType(int deleteType) {
+        return milestoneFor(deleteType) == CleanupMilestone.SCHEDULED;
+    }
+
+    public CleanupMilestone milestoneFor(int deleteType) {
+        return switch (deleteType) {
+            case 1, 4 -> CleanupMilestone.AFTER_UPLOAD;
+            case 2, 5, 11 -> CleanupMilestone.AFTER_AUDIT;
+            case 6, 7 -> CleanupMilestone.AFTER_RECORD_CLOSE;
+            case 3, 8 -> CleanupMilestone.SCHEDULED;
+            case 9, 10 -> CleanupMilestone.AFTER_PUBLISH;
+            default -> CleanupMilestone.NONE;
+        };
     }
 
     private RecordHistory resolveHistory(RecordHistoryPart part) {

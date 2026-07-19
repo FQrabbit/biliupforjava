@@ -3,12 +3,10 @@ package top.sshh.bililiverecoder.controller;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
@@ -17,6 +15,7 @@ import top.sshh.bililiverecoder.entity.data.BiliVideoPartInfoResponse;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
+import top.sshh.bililiverecoder.entity.PartFileOperation;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
@@ -25,6 +24,9 @@ import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadPauseService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.PartFileOperationService;
+import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -35,7 +37,7 @@ import top.sshh.bililiverecoder.util.bili.upload.pojo.EditorSpaceBean;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,9 +58,6 @@ public class PartController {
     private static final long ARCHIVE_PROGRESS_FAIL_COOLDOWN_MS = 1500L;
     private static final int ARCHIVE_PROGRESS_XCODE_PART_LIMIT = 50;
 
-    @Value("${record.work-path}")
-    private String workPath;
-
     @Autowired
     private BiliUserRepository userRepository;
     @Autowired
@@ -75,6 +74,12 @@ public class PartController {
     private ShutdownState shutdownState;
     @Autowired
     private UploadPauseService uploadPauseService;
+    @Autowired
+    private PartFileLocationService partFileLocationService;
+    @Autowired
+    private PartFileOperationService partFileOperationService;
+    @Autowired
+    private StorageRootService storageRootService;
 
     @Lazy
     @Autowired
@@ -84,12 +89,6 @@ public class PartController {
     private final Map<Long, Object> reviewInfoLocks = new ConcurrentHashMap<>();
     private final Map<Long, ArchiveProgressCacheEntry> archiveProgressCache = new ConcurrentHashMap<>();
     private final Map<Long, Object> archiveProgressLocks = new ConcurrentHashMap<>();
-
-    @PostConstruct
-    public void initWorkPath() {
-        workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
-        workPath = workPath.replace("\\", "/");
-    }
 
     @PostMapping("/list/{id}")
     public List<RecordHistoryPart> list(@PathVariable("id") Long id) {
@@ -188,6 +187,7 @@ public class PartController {
         long stableThresholdMs = 10L * 60L * 1000L;
 
         for (RecordHistoryPart p : parts) {
+            PartFileLocationService.LocalFileView localFile = partFileLocationService.describe(p.getId());
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", p.getId());
             m.put("roomId", p.getRoomId());
@@ -210,6 +210,25 @@ public class PartController {
             m.put("uploadPaused", Boolean.TRUE.equals(p.getUploadPaused()));
             m.put("uploadPausedAt", p.getUploadPausedAt());
             m.put("uploadPauseReason", p.getUploadPauseReason());
+            m.put("localFileState", localFile.state().name());
+            m.put("localFileAvailable", localFile.available());
+            m.put("localFileExpected", localFile.expected());
+            m.put("storageType", localFile.storageType());
+            m.put("rootStatus", localFile.rootStatus());
+            m.put("primaryPath", localFile.primaryPath());
+            m.put("replicaCount", localFile.replicaCount());
+            var latestFileOperation = partFileOperationService.latest(p.getId()).orElse(null);
+            m.put("fileOperationKey", latestFileOperation == null ? null : latestFileOperation.getOperationKey());
+            m.put("fileOperationStatus", latestFileOperation == null ? null : latestFileOperation.getStatus());
+            m.put("fileOperationError", latestFileOperation == null ? null : latestFileOperation.getErrorMessage());
+            if (localFile.state() != PartFileLocationService.LocalFileState.ROOT_OFFLINE && latestFileOperation != null) {
+                if (latestFileOperation.getStatus() == PartFileOperation.OperationStatus.FAILED) {
+                    m.put("localFileState", PartFileLocationService.LocalFileState.PROCESS_FAILED.name());
+                } else if (latestFileOperation.getStatus() == PartFileOperation.OperationStatus.PENDING
+                        || latestFileOperation.getStatus() == PartFileOperation.OperationStatus.RUNNING) {
+                    m.put("localFileState", PartFileLocationService.LocalFileState.PROCESSING.name());
+                }
+            }
 
             String issueCode = null;
             String issueMessage = null;
@@ -239,7 +258,31 @@ public class PartController {
                 m.put("reviewReasonSource", null);
             }
 
-            if (!isBlank(p.getDeleteFailType()) || p.getUploadRetryCount() >= 9999) {
+            boolean intentionallyDeleted = localFile.state() == PartFileLocationService.LocalFileState.DELETED_BY_POLICY;
+            boolean rootOffline = localFile.state() == PartFileLocationService.LocalFileState.ROOT_OFFLINE;
+            boolean processing = localFile.state() == PartFileLocationService.LocalFileState.PROCESSING
+                    || (latestFileOperation != null && (latestFileOperation.getStatus() == PartFileOperation.OperationStatus.PENDING
+                    || latestFileOperation.getStatus() == PartFileOperation.OperationStatus.RUNNING));
+            boolean processFailed = localFile.state() == PartFileLocationService.LocalFileState.PROCESS_FAILED
+                    || (latestFileOperation != null && latestFileOperation.getStatus() == PartFileOperation.OperationStatus.FAILED);
+            if (intentionallyDeleted) {
+                issueCode = "FILE_DELETED_BY_POLICY";
+                issueMessage = historyRejected ? "素材已按规则删除，无法自动重新上传" : "本地素材已按配置规则清理";
+            } else if (rootOffline) {
+                issueCode = "ROOT_OFFLINE";
+                issueMessage = "存储目录当前离线，恢复挂载后会自动重新检查";
+            } else if (processing) {
+                issueCode = "FILE_PROCESSING";
+                issueMessage = "本地素材正在执行移动、复制或删除";
+            } else if (processFailed) {
+                issueCode = "FILE_PROCESS_FAILED";
+                issueMessage = latestFileOperation != null && !isBlank(latestFileOperation.getErrorMessage())
+                        ? latestFileOperation.getErrorMessage()
+                        : isBlank(localFile.message()) ? "文件移动、复制或删除失败" : localFile.message();
+                actionable = latestFileOperation != null;
+                blockingIssue = !p.isUpload() && !historyPublished;
+                if (actionable) actions.add("RETRY_FILE_PROCESS");
+            } else if (!isBlank(p.getDeleteFailType()) || p.getUploadRetryCount() >= 9999) {
                 issueCode = isBlank(p.getDeleteFailType()) ? "GIVE_UP" : p.getDeleteFailType();
                 issueMessage = isBlank(p.getDeleteFailReason()) ? "该分P已被标记为跳过/放弃上传" : p.getDeleteFailReason();
                 actionable = "SKIPPED_THRESHOLD".equals(issueCode)
@@ -253,9 +296,9 @@ public class PartController {
                     }
                 }
             } else if (!historyPublished || historyEditableOnline) {
-                String fp = p.getFilePath();
+                String fp = localFile.primaryPath();
                 File f = fp == null ? null : new File(fp);
-                boolean fileExists = f != null && f.exists();
+                boolean fileExists = localFile.available() && f != null && f.exists();
                 boolean fileStable = fileExists && f.lastModified() > 0 && f.lastModified() < (nowMs - stableThresholdMs);
 
                 if (p.isRecording() || p.getEndTime() == null) {
@@ -273,7 +316,7 @@ public class PartController {
                     issueCode = "FILE_MISSING";
                     issueMessage = "分P文件不存在或路径为空";
                     actionable = true;
-                    blockingIssue = true;
+                    blockingIssue = !p.isUpload() && !historyPublished;
                     actions.add("BIND_FILE");
                     if (!historyPublished) {
                         actions.add("MARK_FINISHED");
@@ -416,17 +459,14 @@ public class PartController {
             return result;
         }
         RecordHistoryPart part = partOptional.get();
-        if (isBlank(part.getFilePath())) {
+        PartFileLocationService.FileResolution resolution = partFileLocationService.resolveReadable(id);
+        if (!resolution.available()) {
             result.put("type", "warning");
-            result.put("msg", "分P文件路径为空，请先补全文件");
+            result.put("msg", resolution.state() == PartFileLocationService.LocalFileState.ROOT_OFFLINE
+                    ? "存储目录离线，请恢复挂载后再试" : "分P文件不存在，请先补全文件");
             return result;
         }
-        File file = new File(part.getFilePath());
-        if (!file.exists()) {
-            result.put("type", "warning");
-            result.put("msg", "分P文件不存在，请先补全文件");
-            return result;
-        }
+        File file = resolution.path().toFile();
         long stableThresholdMs = 10L * 60L * 1000L;
         long nowMs = System.currentTimeMillis();
         if (file.lastModified() > nowMs - stableThresholdMs) {
@@ -511,14 +551,12 @@ public class PartController {
         if (part.getEndTime() == null) {
             part.setEndTime(LocalDateTime.now());
         }
-        if (part.getFilePath() != null) {
-            try {
-                File f = new File(part.getFilePath());
-                if (f.exists() && part.getFileSize() <= 0) {
-                    part.setFileSize(f.length());
-                }
-            } catch (Exception ignored) {
+        try {
+            PartFileLocationService.FileResolution resolution = partFileLocationService.resolveReadable(part.getId());
+            if (resolution.available() && part.getFileSize() <= 0) {
+                part.setFileSize(Files.size(resolution.path()));
             }
+        } catch (Exception ignored) {
         }
         part.setUpload(false);
         part.setUploadRetryCount(9999);
@@ -571,12 +609,13 @@ public class PartController {
             result.put("msg", "请选择文件");
             return result;
         }
-        String realPath = resolveRealPathUnderWorkPath(filePath);
-        if (realPath == null) {
+        StorageRootService.RootMatch trusted = storageRootService.matchTrustedExisting(Path.of(filePath)).orElse(null);
+        if (trusted == null) {
             result.put("type", "warning");
-            result.put("msg", "文件不在工作目录下，已拒绝");
+            result.put("msg", "文件不在已登记的工作或归档目录下，已拒绝");
             return result;
         }
+        String realPath = trusted.resolvedPath().toString().replace("\\", "/");
         File file = new File(realPath);
         if (!file.isFile()) {
             result.put("type", "warning");
@@ -596,7 +635,9 @@ public class PartController {
         part.setUploadRetryCount(0);
         part.setDeleteFailType(null);
         part.setDeleteFailReason(null);
-        partRepository.save(part);
+        part.setFileDelete(false);
+        part = partRepository.save(part);
+        partFileLocationService.registerPrimary(part);
 
         boolean triggered = false;
         if (triggerUpload && !shutdownState.isShuttingDown() && historyOptional.isPresent() && historyOptional.get().isUpload()) {
@@ -631,19 +672,6 @@ public class PartController {
         result.put("type", "success");
         result.put("msg", triggered ? "已补全文件并触发上传" : "已补全文件");
         return result;
-    }
-
-    private String resolveRealPathUnderWorkPath(String filePath) {
-        try {
-            Path workReal = Paths.get(workPath).toRealPath();
-            Path targetReal = Paths.get(filePath).toRealPath();
-            if (targetReal.startsWith(workReal)) {
-                return targetReal.toString().replace("\\", "/");
-            }
-        } catch (Exception e) {
-            // reject on any resolution failure
-        }
-        return null;
     }
 
     private Map<String, Object> loadArchiveProgressInfo(Long historyId, String bvId, BiliBiliUser reviewAuthUser, boolean forceRefresh) {
@@ -1110,9 +1138,9 @@ public class PartController {
         Optional<RecordHistoryPart> partOptional = partRepository.findById(id);
         if (partOptional.isPresent()) {
             RecordHistoryPart part = partOptional.get();
-            String filePath = part.getFilePath();
-            File file = new File(filePath);
-            if(file.exists()){
+            PartFileLocationService.FileResolution resolution = partFileLocationService.resolveReadable(part.getId());
+            File file = resolution.available() ? resolution.path().toFile() : null;
+            if(file != null && file.exists()){
                 RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
                 if(room.getUploadUserId() == null){
                     result.put("type", "warning");
@@ -1151,7 +1179,8 @@ public class PartController {
 
             }else {
                 result.put("type", "warning");
-                result.put("msg", "分p文件不存在");
+                result.put("msg", resolution.state() == PartFileLocationService.LocalFileState.ROOT_OFFLINE
+                        ? "存储目录离线" : "分p文件不存在");
                 return result;
             }
         } else {

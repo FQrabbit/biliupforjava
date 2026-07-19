@@ -15,6 +15,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.service.RecordHistoryMergeService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
@@ -41,6 +42,9 @@ public class RecordEventFileOpenService implements RecordEventService {
 
     @Autowired
     private RecordHistoryMergeService historyMergeService;
+
+    @Autowired
+    private PartFileLocationService partFileLocationService;
 
     @PostConstruct
     public void initWorkPath() {
@@ -170,6 +174,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                 part.setStartTime(LocalDateTime.now());
                 part.setEndTime(null);
                 part = historyPartRepository.save(part);
+                partFileLocationService.registerPrimary(part);
 
                 log.info("[BLR] {}", LogKvs.event("FileOpen.PartSaved")
                         .add("roomId", roomId)

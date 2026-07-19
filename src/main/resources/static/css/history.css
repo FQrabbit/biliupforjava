@@ -6229,6 +6229,26 @@
 
 .part-status.SKIPPED { color: var(--text-secondary); }
 
+.local-file-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 7px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    background: var(--background-color);
+    font-size: 11px;
+    font-style: normal;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.local-file-badge.is-available { color: var(--success-color); border-color: rgba(103, 194, 58, 0.4); }
+.local-file-badge.is-cleaned { color: var(--text-secondary); background: rgba(144, 147, 153, 0.09); }
+.local-file-badge.is-warning { color: var(--warning-color); border-color: rgba(230, 162, 60, 0.45); background: rgba(230, 162, 60, 0.08); }
+.local-file-badge.is-danger { color: var(--danger-color); border-color: rgba(245, 108, 108, 0.45); background: rgba(245, 108, 108, 0.08); }
+
 
 
 .part-meta {

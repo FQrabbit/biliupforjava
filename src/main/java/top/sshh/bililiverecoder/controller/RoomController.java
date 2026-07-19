@@ -26,7 +26,11 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.repo.SystemConfigRepository;
+import top.sshh.bililiverecoder.repo.StorageRootRepository;
+import top.sshh.bililiverecoder.repo.PartFileLocationRepository;
 import top.sshh.bililiverecoder.service.SystemConfigService;
+import top.sshh.bililiverecoder.service.StorageRootService;
+import top.sshh.bililiverecoder.service.StorageLifecycleMigrationService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.ImageDimensionsReader;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -46,6 +50,8 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -82,6 +88,18 @@ public class RoomController {
 
     @Autowired
     private LiveMsgRepository liveMsgRepository;
+
+    @Autowired
+    private StorageRootService storageRootService;
+
+    @Autowired
+    private StorageRootRepository storageRootRepository;
+
+    @Autowired
+    private PartFileLocationRepository partFileLocationRepository;
+
+    @Autowired
+    private StorageLifecycleMigrationService storageLifecycleMigrationService;
 
     private final Cache<String, CachedImage> imageCache = CacheBuilder.newBuilder()
             .maximumSize(1000)
@@ -261,7 +279,8 @@ public class RoomController {
         long total = 1;
         if (params.isExportRoom()) total += roomRepository.count();
         if (params.isExportUser()) total += userRepository.count();
-        if (params.isExportHistory()) total += historyRepository.count() + partRepository.count();
+        if (params.isExportHistory()) total += historyRepository.count() + partRepository.count()
+                + storageRootRepository.count() + partFileLocationRepository.count();
         if (params.isExportSystemConfig()) total += systemConfigRepository.count();
         if (params.isExportLiveMsg()) total += liveMsgRepository.count();
         long processed = 0;
@@ -300,10 +319,16 @@ public class RoomController {
                 updateConfigTask("导出房间", "房间 " + count + " 条", processed);
             }
             if(params.isExportHistory()){
+                updateConfigTask("导出存储根", "正在读取存储根", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "storageRootList");
+                int count = writeEntityStream(writer, storageRootRepository.streamAll(), null);
+                processed += count;
+                writer.write("]");
+
                 updateConfigTask("导出历史", "正在读取录制历史", processed);
                 firstSection[0] = writeSectionKey(writer, firstSection[0], "historyList");
                 long[] localProcessed = {processed};
-                int count = writeEntityStream(writer, historyRepository.streamAll(),
+                count = writeEntityStream(writer, historyRepository.streamAll(),
                         idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
                             updateConfigTask("导出历史", "已读取 " + idx + " 场历史", localProcessed[0]); });
                 processed = localProcessed[0];
@@ -311,7 +336,7 @@ public class RoomController {
                 updateConfigTask("导出历史", "历史 " + count + " 条", processed);
 
                 updateConfigTask("导出分P", "正在读取分P记录", processed);
-                firstSection[0] = writeSectionKey(writer, false, "partList");
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "partList");
                 localProcessed[0] = processed;
                 count = writeEntityStream(writer, partRepository.streamAll(),
                         idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
@@ -319,6 +344,16 @@ public class RoomController {
                 processed = localProcessed[0];
                 writer.write("]");
                 updateConfigTask("导出分P", "分P " + count + " 条", processed);
+
+                updateConfigTask("导出文件位置", "正在读取分P文件位置", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "partFileLocationList");
+                localProcessed[0] = processed;
+                count = writeEntityStream(writer, partFileLocationRepository.streamCompleted(
+                                PartFileLocation.LocationState.PROCESSING),
+                        idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
+                            updateConfigTask("导出文件位置", "已读取 " + idx + " 个位置", localProcessed[0]); });
+                processed = localProcessed[0];
+                writer.write("]");
             }
             if(params.isExportSystemConfig()){
                 updateConfigTask("导出系统配置", "正在读取系统配置", processed);
@@ -429,6 +464,8 @@ public class RoomController {
         int importedRoomCount = 0;
         int importedHistoryCount = 0;
         int importedPartCount = 0;
+        int importedStorageRootCount = 0;
+        int importedFileLocationCount = 0;
         int importedSystemConfigCount = 0;
         int importedLiveMsgCount = 0;
         int skippedPartCount = 0;
@@ -444,6 +481,7 @@ public class RoomController {
             Map<Long, Long> userIdConverMap = new HashMap<>();
             Map<Long, Long> historyIdConverMap = new HashMap<>();
             Map<Long, Long> partIdConverMap = new HashMap<>();
+            Map<Long, Long> storageRootIdConverMap = new HashMap<>();
 
             // 兼容旧导出文件：roomList 可能在 userList 之前（新导出已修复为 userList 优先）
             List<RecordRoom> pendingRooms = null;
@@ -454,6 +492,10 @@ public class RoomController {
             while (reader.hasNext()) {
                 String key = reader.readString();
                 switch (key) {
+                    case "storageRootList" -> {
+                        importedStorageRootCount = importStorageRootSection(reader, storageRootIdConverMap);
+                        importProcessed += importedStorageRootCount;
+                    }
                     case "userList" -> {
                         importUsersStartNs = System.nanoTime();
                         updateConfigTask("导入用户", "正在导入用户配置", importProcessed);
@@ -522,6 +564,14 @@ public class RoomController {
                                     .add("count", importedPartCount));
                         }
                     }
+                    case "partFileLocationList" -> {
+                        if (partIdConverMap.isEmpty()) {
+                            throw new IllegalArgumentException("partFileLocationList 必须位于 partList 之后");
+                        }
+                        importedFileLocationCount = importPartFileLocationSection(
+                                reader, partIdConverMap, storageRootIdConverMap);
+                        importProcessed += importedFileLocationCount;
+                    }
                     case "systemConfigList" -> {
                         importSystemConfigsStartNs = System.nanoTime();
                         updateConfigTask("导入系统配置", "正在导入系统配置", importProcessed);
@@ -570,6 +620,9 @@ public class RoomController {
                 log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
                         .add("count", importedPartCount));
             }
+            for (Long importedPartId : partIdConverMap.values()) {
+                partRepository.findById(importedPartId).ifPresent(storageLifecycleMigrationService::migratePart);
+            }
             reader.endObject();
 
             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Done")
@@ -577,6 +630,8 @@ public class RoomController {
                     .addRoundCount("importedRoom", importedRoomCount)
                     .addRoundCount("importedHistory", importedHistoryCount)
                     .addRoundCount("importedPart", importedPartCount)
+                    .addRoundCount("importedStorageRoot", importedStorageRootCount)
+                    .addRoundCount("importedFileLocation", importedFileLocationCount)
                     .addRoundCount("importedSystemConfig", importedSystemConfigCount)
                     .addRoundCount("importedLiveMsg", importedLiveMsgCount)
                     .addRoundCount("skippedPart", skippedPartCount)
@@ -681,6 +736,9 @@ public class RoomController {
             room.setSortOrder(nextSortOrder());
         }
         normalizeGiftReplySettings(room);
+        if (StringUtils.isNotBlank(room.getMoveDir())) {
+            storageRootService.getOrCreateArchiveRoot(room.getMoveDir());
+        }
     }
 
     /** 批量导入已缓存的房间列表（兼容旧导出文件） */
@@ -886,6 +944,69 @@ public class RoomController {
         return new int[]{imported, skipped, imported + skipped};
     }
 
+    private int importStorageRootSection(JSONReader reader, Map<Long, Long> rootIdMap) {
+        reader.startArray();
+        int imported = 0;
+        while (reader.hasNext()) {
+            StorageRoot incoming = reader.readObject(StorageRoot.class);
+            Long oldId = incoming.getId();
+            StorageRoot target = StringUtils.isBlank(incoming.getRootKey()) ? null
+                    : storageRootRepository.findByRootKey(incoming.getRootKey()).orElse(null);
+            if (target == null) {
+                incoming.setId(null);
+                incoming.setStatus(StorageRoot.RootStatus.OFFLINE);
+                incoming.setWritable(false);
+                incoming.setActiveForNewFiles(false);
+                incoming.setLastCheckedAt(null);
+                target = storageRootRepository.save(incoming);
+                imported++;
+            }
+            if (oldId != null) rootIdMap.put(oldId, target.getId());
+        }
+        reader.endArray();
+        return imported;
+    }
+
+    private int importPartFileLocationSection(JSONReader reader, Map<Long, Long> partIdMap,
+                                              Map<Long, Long> rootIdMap) {
+        reader.startArray();
+        int imported = 0;
+        while (reader.hasNext()) {
+            PartFileLocation location = reader.readObject(PartFileLocation.class);
+            Long partId = partIdMap.get(location.getPartId());
+            Long rootId = location.getStorageRootId() == null ? null : rootIdMap.get(location.getStorageRootId());
+            if (partId == null || (location.getStorageRootId() != null && rootId == null)) continue;
+            Path relative;
+            try {
+                relative = Paths.get(location.getRelativePath()).normalize();
+            } catch (Exception e) {
+                continue;
+            }
+            if (relative.isAbsolute() || relative.startsWith("..")
+                    || location.getState() == PartFileLocation.LocationState.PROCESSING) {
+                continue;
+            }
+            location.setId(null);
+            location.setPartId(partId);
+            location.setStorageRootId(rootId);
+            location.setRelativePath(relative.toString().replace('\\', '/'));
+            if (location.getRole() == PartFileLocation.LocationRole.PRIMARY) {
+                for (PartFileLocation current : partFileLocationRepository.findByPartIdOrderByIdAsc(partId)) {
+                    if (current.getRole() == PartFileLocation.LocationRole.PRIMARY) {
+                        current.setRole(PartFileLocation.LocationRole.REPLICA);
+                        partFileLocationRepository.save(current);
+                    }
+                }
+            }
+            if (partFileLocationRepository.findByPartIdAndStorageRootIdAndRelativePath(
+                    partId, rootId, location.getRelativePath()).isPresent()) continue;
+            partFileLocationRepository.save(location);
+            imported++;
+        }
+        reader.endArray();
+        return imported;
+    }
+
     private Integer nextSortOrder() {
         Integer maxSortOrder = roomRepository.findMaxSortOrder();
         return (maxSortOrder == null ? 0 : maxSortOrder) + 1;
@@ -928,6 +1049,9 @@ public class RoomController {
             dbRoom.setSendGiftReply(Boolean.TRUE.equals(room.getSendGiftReply()));
             dbRoom.setGiftReplyMinPriceCny(normalizeGiftReplyMinPrice(room.getGiftReplyMinPriceCny()));
             roomRepository.save(dbRoom);
+            if (StringUtils.isNotBlank(dbRoom.getMoveDir())) {
+                storageRootService.getOrCreateArchiveRoot(dbRoom.getMoveDir());
+            }
             log.info("[BLR] {}", LogKvs.event("Room.Update.SeasonSection.Fixed")
                     .add("roomId", dbRoom.getRoomId())
                     .add("id", dbRoom.getId())
@@ -1597,7 +1721,6 @@ public class RoomController {
                             lastRequestTime.set(System.currentTimeMillis());
                         }
                     }
-
                     CachedImage loaded = loadImageFromUpstream(url, uri);
                     placeholder.complete(loaded);
                     return buildImageResponse(loaded);

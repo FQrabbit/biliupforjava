@@ -795,6 +795,18 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.EditParts.StalePartDeleteFailed", "分P编辑：删除过期分P记录失败");
         EVENT_ZH.put("Upload.Part.Paused", "分P上传：上传任务已暂停");
         EVENT_ZH.put("Upload.SerialScheduler.SkipPaused", "分P上传串行调度：上传已暂停，跳过本次任务");
+        EVENT_ZH.put("StorageRoot.HealthChanged", "存储目录：在线状态发生变化");
+        EVENT_ZH.put("StorageRoot.WorkPathChange.Applied", "工作目录变更：已按用户选择应用");
+        EVENT_ZH.put("StorageRoot.WorkPathChange.Failed", "工作目录变更：验证或应用失败");
+        EVENT_ZH.put("StorageLifecycle.Migration.Done", "本地素材位置迁移：旧数据迁移完成");
+        EVENT_ZH.put("StorageLifecycle.Migration.Failed", "本地素材位置迁移：旧数据迁移失败");
+        EVENT_ZH.put("PartFile.Operation.Pending", "本地素材处理：等待存储目录恢复或确认");
+        EVENT_ZH.put("PartFile.Operation.Succeeded", "本地素材处理：操作完成");
+        EVENT_ZH.put("PartFile.Operation.Failed", "本地素材处理：操作失败");
+        EVENT_ZH.put("PartFile.Operation.RecoveryFailed", "本地素材处理：中断恢复失败");
+        EVENT_ZH.put("PublishJob.PartCompensate.SkipLocalFileState", "分P补偿上传：按本地素材状态跳过");
+        EVENT_ZH.put("Upload.Part.LocalFileUnavailable", "分P上传：本地素材当前不可读取");
+        EVENT_ZH.put("Publish.Edit.PartUpload.LocalFileUnavailable", "分P编辑上传：本地素材当前不可读取");
     }
 
     private LogKvs() {

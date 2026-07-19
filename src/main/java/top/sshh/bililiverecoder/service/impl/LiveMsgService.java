@@ -22,6 +22,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.StatsAggregationService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
@@ -52,6 +53,9 @@ public class LiveMsgService {
 
     @Autowired
     RecordHistoryPartRepository partRepository;
+
+    @Autowired
+    PartFileLocationService partFileLocationService;
 
     @Autowired
     private StatsAggregationService statsAggregationService;
@@ -126,10 +130,10 @@ public class LiveMsgService {
         } else {
             EXCLUSION_DM = new String[0];
         }
-        String filePath = part.getFilePath();
-        String xmlFilePath = filePath.substring(0, filePath.lastIndexOf(".")) + ".xml";
-        File file = new File(xmlFilePath);
-        boolean exists = file.exists();
+        Optional<java.nio.file.Path> xmlPath = partFileLocationService.resolveCompanion(part.getId(), ".xml");
+        String xmlFilePath = xmlPath.map(java.nio.file.Path::toString).orElse(null);
+        File file = xmlFilePath == null ? null : new File(xmlFilePath);
+        boolean exists = file != null && file.exists();
         if (exists) {
             long parseStartNs = System.nanoTime();
             long cleanStartNs = System.nanoTime();

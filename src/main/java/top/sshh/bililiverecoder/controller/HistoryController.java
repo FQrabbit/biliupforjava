@@ -1,7 +1,6 @@
 package top.sshh.bililiverecoder.controller;
 
 
-import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
@@ -15,7 +14,6 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.*;
@@ -38,6 +36,9 @@ import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
 import top.sshh.bililiverecoder.service.HistoryMsgRetryService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
+import top.sshh.bililiverecoder.service.StorageRootService;
+import top.sshh.bililiverecoder.service.PartFileOperationService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 
 import java.io.File;
@@ -45,7 +46,6 @@ import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
@@ -56,9 +56,6 @@ import java.util.*;
 @RequestMapping("/history")
 public class HistoryController {
 
-
-    @Value("${record.work-path}")
-    private String workPath;
     @Autowired
     private RecordHistoryRepository historyRepository;
     @Autowired
@@ -95,14 +92,14 @@ public class HistoryController {
     private HistoryMsgRetryService msgRetryService;
     @Autowired
     private LiveMsgSendSync liveMsgSendSync;
+    @Autowired
+    private StorageRootService storageRootService;
+    @Autowired
+    private PartFileOperationService partFileOperationService;
+    @Autowired
+    private PartFileLocationService partFileLocationService;
     @PersistenceContext
     private EntityManager entityManager;
-
-    @PostConstruct
-    public void initWorkPath() {
-        workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
-        workPath = workPath.replace("\\", "/");
-    }
 
     @PostMapping("/list")
     public Map<String, Object> list(@RequestBody RecordHistoryDTO request) {
@@ -348,16 +345,18 @@ public class HistoryController {
 
         String roomId = history.getRoomId();
         if (StringUtils.isNotBlank(roomId)) {
-            addCandidateSearchRoot(roots, workPath + "/" + roomId);
             RecordRoom room = roomRepository.findByRoomId(roomId);
-            if (room != null && StringUtils.isNotBlank(room.getUname())) {
-                addCandidateSearchRoot(roots, workPath + "/" + roomId + "-" + room.getUname());
-            }
-            File workDir = new File(workPath);
-            File[] roomDirs = workDir.listFiles(file -> file.isDirectory() && file.getName().startsWith(roomId + "-"));
-            if (roomDirs != null) {
-                for (File roomDir : roomDirs) {
-                    addCandidateSearchRoot(roots, roomDir.getPath());
+            for (StorageRoot storageRoot : storageRootService.findAll()) {
+                if (storageRoot.getStatus() != StorageRoot.RootStatus.ONLINE) continue;
+                String base = storageRoot.getPath();
+                addCandidateSearchRoot(roots, base + "/" + roomId);
+                if (room != null && StringUtils.isNotBlank(room.getUname())) {
+                    addCandidateSearchRoot(roots, base + "/" + roomId + "-" + room.getUname());
+                }
+                File rootDir = new File(base);
+                File[] roomDirs = rootDir.listFiles(file -> file.isDirectory() && file.getName().startsWith(roomId + "-"));
+                if (roomDirs != null) {
+                    for (File roomDir : roomDirs) addCandidateSearchRoot(roots, roomDir.getPath());
                 }
             }
         }
@@ -374,16 +373,11 @@ public class HistoryController {
                     .add("root", normalized));
             return;
         }
-        String normalizedWork = normalizeFsPath(workPath);
-        if (normalizedWork != null
-                && normalized.equalsIgnoreCase(normalizedWork.endsWith("/") ? normalizedWork.substring(0, normalizedWork.length() - 1) : normalizedWork)) {
-            return;
-        }
         File dir = new File(normalized);
         if (!dir.exists() || !dir.isDirectory()) {
             return;
         }
-        if (!isExistingPathUnderWorkPath(dir.getPath())) {
+        if (storageRootService.matchTrustedExisting(dir.toPath()).isEmpty()) {
             return;
         }
         roots.add(dir.getPath().replace("\\", "/"));
@@ -431,7 +425,7 @@ public class HistoryController {
         Path realPath;
         try {
             realPath = path.toRealPath();
-            if (!isExistingPathUnderWorkPath(realPath.toString())) {
+            if (storageRootService.matchTrustedExisting(realPath).isEmpty()) {
                 return;
             }
         } catch (Exception e) {
@@ -471,16 +465,6 @@ public class HistoryController {
             }
         }
         return false;
-    }
-
-    private boolean isExistingPathUnderWorkPath(String path) {
-        try {
-            Path workReal = Paths.get(workPath).toRealPath();
-            Path targetReal = Paths.get(path).toRealPath();
-            return targetReal.startsWith(workReal);
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     private String normalizeFsPath(String path) {
@@ -709,67 +693,34 @@ public class HistoryController {
             if (deleteAnyLocal) {
                 List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
                 for (RecordHistoryPart part : partList) {
-                    String filePath = part.getFilePath();
-                    if (filePath == null) {
-                        continue;
-                    }
-                    int lastSlash = filePath.lastIndexOf('/');
-                    if (lastSlash < 0) {
-                        continue;
-                    }
-                    String startDirPath = filePath.substring(0, lastSlash + 1);
-                    String fileName = filePath.substring(lastSlash + 1, filePath.lastIndexOf("."));
-                    if (!isExistingPathUnderWorkPath(startDirPath)) {
-                        Map<String, Object> entry = new LinkedHashMap<>();
-                        entry.put("path", filePath);
-                        entry.put("kind", "unknown");
-                        entry.put("status", "skipped");
-                        entry.put("reason", "父目录不在 workPath 下，出于安全跳过");
-                        notDeletedFiles.add(entry);
-                        continue;
-                    }
-                    File startDir = new File(startDirPath);
-                    File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                    if (files == null) {
-                        Map<String, Object> entry = new LinkedHashMap<>();
-                        entry.put("path", startDirPath);
-                        entry.put("kind", "unknown");
-                        entry.put("status", "missing");
-                        entry.put("reason", "目录不存在或无法读取");
-                        notDeletedFiles.add(entry);
-                    } else {
-                        if (files.length == 0) {
+                    if (deleteVideo) {
+                        localDeleteAttempt++;
+                        List<String> failures = partFileOperationService.deleteAllAvailable(part.getId());
+                        if (failures.isEmpty()) localDeleteSuccess++;
+                        else for (String failure : failures) {
                             Map<String, Object> entry = new LinkedHashMap<>();
-                            entry.put("path", filePath);
-                            entry.put("kind", "unknown");
-                            entry.put("status", "missing");
-                            entry.put("reason", "未找到匹配的本地文件");
+                            entry.put("path", part.getFilePath());
+                            entry.put("kind", "video");
+                            entry.put("status", "failed");
+                            entry.put("reason", failure);
                             notDeletedFiles.add(entry);
                         }
-                        for (File file : files) {
-                            if (!shouldDeleteFile(file, deleteVideo, deleteDanmaku, deleteCover)) {
-                                continue;
-                            }
+                    }
+                    List<String> suffixes = new ArrayList<>();
+                    if (deleteDanmaku) suffixes.add(".xml");
+                    if (deleteCover) {
+                        suffixes.add(".cover.jpg");
+                        suffixes.add(".jpg");
+                    }
+                    for (String suffix : suffixes) {
+                        for (Path path : partFileLocationService.resolveCompanions(part.getId(), suffix)) {
                             localDeleteAttempt++;
-                            Path path = file.toPath();
-                            String lowerName = file.getName() == null ? "" : file.getName().toLowerCase();
-                            String kind = fileKindByLowerName(lowerName);
-                            if (!Files.exists(path)) {
-                                Map<String, Object> entry = new LinkedHashMap<>();
-                                entry.put("path", path.toString().replace("\\", "/"));
-                                entry.put("kind", kind);
-                                entry.put("status", "missing");
-                                entry.put("reason", "文件不存在");
-                                notDeletedFiles.add(entry);
-                                continue;
-                            }
                             try {
-                                Files.delete(path);
-                                localDeleteSuccess++;
+                                if (Files.deleteIfExists(path)) localDeleteSuccess++;
                             } catch (Exception ex) {
                                 Map<String, Object> entry = new LinkedHashMap<>();
                                 entry.put("path", path.toString().replace("\\", "/"));
-                                entry.put("kind", kind);
+                                entry.put("kind", suffix.equals(".xml") ? "danmaku" : "cover");
                                 entry.put("status", "failed");
                                 entry.put("reason", ex.getClass().getSimpleName() + ": " + String.valueOf(ex.getMessage()));
                                 notDeletedFiles.add(entry);
@@ -782,6 +733,9 @@ public class HistoryController {
             long localDeleteCostMs = toCostMs(localDeleteStartNs);
 
             long partDeleteStartNs = System.nanoTime();
+            for (RecordHistoryPart part : partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId())) {
+                partFileOperationService.purgeMetadata(part.getId());
+            }
             int deletedPartCount = partRepository.deleteByHistoryId(history.getId());
             long partDeleteCostMs = toCostMs(partDeleteStartNs);
 
@@ -881,41 +835,6 @@ public class HistoryController {
 
     private long toCostMs(long startNs) {
         return (System.nanoTime() - startNs) / 1_000_000;
-    }
-
-    private String fileKindByLowerName(String lowerName) {
-        if (lowerName == null) return "unknown";
-        if (lowerName.endsWith(".mp4") || lowerName.endsWith(".flv") || lowerName.endsWith(".mkv") || lowerName.endsWith(".ts") || lowerName.endsWith(".mov") || lowerName.endsWith(".avi")) {
-            return "video";
-        }
-        if (lowerName.endsWith(".xml") || lowerName.endsWith(".ass")) {
-            return "danmaku";
-        }
-        if (lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp") || lowerName.endsWith(".gif")) {
-            return "cover";
-        }
-        return "other";
-    }
-
-    private boolean shouldDeleteFile(File file, boolean deleteVideo, boolean deleteDanmaku, boolean deleteCover) {
-        if (!deleteVideo && !deleteDanmaku && !deleteCover) {
-            return false;
-        }
-        String name = file.getName().toLowerCase();
-        // 视频文件扩展名
-        if (name.endsWith(".mp4") || name.endsWith(".flv") || name.endsWith(".mkv") || name.endsWith(".ts") || name.endsWith(".mov") || name.endsWith(".avi")) {
-            return deleteVideo;
-        }
-        // 弹幕文件扩展名
-        if (name.endsWith(".xml") || name.endsWith(".ass")) {
-            return deleteDanmaku;
-        }
-        // 封面文件扩展名
-        if (name.endsWith(".jpg") || name.endsWith(".png") || name.endsWith(".jpeg") || name.endsWith(".webp") || name.endsWith(".gif")) {
-            return deleteCover;
-        }
-        // 其他文件默认删除
-        return true;
     }
 
     @GetMapping("/deleteMsg/{id}")
@@ -1126,10 +1045,8 @@ public class HistoryController {
                 if (restartAdvanced) {
                     top.sshh.bililiverecoder.job.LiveMsgSendSync.skipAdvancedPartIds.add(part.getId());
                 }
-                String filePath = part.getFilePath();
-                filePath = filePath.substring(0, filePath.lastIndexOf(".")) + ".xml";
-                File file = new File(filePath);
-                if (file.exists()) {
+                Optional<Path> xmlPath = partFileLocationService.resolveCompanion(part.getId(), ".xml");
+                if (xmlPath.isPresent()) {
                     List<LiveMsg> liveMsgs = msgRepository.queryByCid(part.getCid());
                     deletedMsgCount += liveMsgs.size();
                     msgRepository.deleteAll(liveMsgs);

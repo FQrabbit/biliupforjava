@@ -19,6 +19,8 @@ import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
@@ -63,6 +65,12 @@ public class publishJob {
 
     @Autowired
     ShutdownState shutdownState;
+
+    @Autowired
+    PartFileLocationService partFileLocationService;
+
+    @Autowired
+    StorageRootService storageRootService;
 
     @Autowired
     @Qualifier("myAsyncPool")
@@ -260,11 +268,13 @@ public class publishJob {
                             .thenComparing(p -> p.isRecording() ? 0 : 1))
                         .limit(3)
                         .forEach(p -> {
-                            String fp = p.getFilePath();
+                            PartFileLocationService.FileResolution resolution =
+                                    partFileLocationService.resolveReadable(p.getId());
+                            String fp = resolution.path() == null ? p.getFilePath() : resolution.path().toString();
                             long lm = -1;
                             try {
-                                if (fp != null) {
-                                    File f = new File(fp);
+                                if (resolution.available()) {
+                                    File f = resolution.path().toFile();
                                     if (f.exists()) {
                                         lm = f.lastModified();
                                     }
@@ -307,11 +317,13 @@ public class publishJob {
                     if (p.isUpload()) {
                         continue;
                     }
-                    String fp = p.getFilePath();
-                    if (fp == null || fp.isBlank()) {
+                    PartFileLocationService.FileResolution resolution =
+                            partFileLocationService.resolveReadable(p.getId());
+                    if (!resolution.available()) {
                         continue;
                     }
-                    File f = new File(fp);
+                    String fp = resolution.path().toString();
+                    File f = resolution.path().toFile();
                     if (isFileStillWriting(f, fp, nowMs)) {
                         log.info("[BLR] {}", LogKvs.event("PublishJob.Skip.FileStillWriting")
                                 .add("historyId", history.getId())
@@ -370,6 +382,7 @@ public class publishJob {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return;
         }
+        if (storageRootService.hasPendingWorkPathChange()) return;
         long roundStartNs = System.nanoTime();
         int roomCount = 0;
         int roundTriggeredCount = 0;
@@ -512,28 +525,18 @@ public class publishJob {
                     continue;
                 }
 
-                String filePath = part.getFilePath();
-                if (filePath == null || filePath.isBlank()) {
-                    log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FilePathMissing")
-                            .add("roomId", room.getRoomId())
-                            .add("uname", room.getUname())
-                            .add("partId", part.getId())
-                            .add("historyId", part.getHistoryId()));
-                    part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
-                    String errorMsg = "稿件分P文件路径为空，已放弃补偿上传: partId=" + part.getId();
-                    part.setDeleteFailReason(errorMsg);
-                    part.setDeleteFailType("FILE_PATH_MISSING");
-                    try {
-                        partRepository.save(part);
-                        LogAnalyzeService.getInstance().processLog(errorMsg, "ERROR");
-                    } catch (Exception ignored) {
-                    }
+                PartFileLocationService.FileResolution fileResolution = partFileLocationService.resolveReadable(part.getId());
+                if (fileResolution.state() == PartFileLocationService.LocalFileState.DELETED_BY_POLICY
+                        || fileResolution.state() == PartFileLocationService.LocalFileState.ROOT_OFFLINE
+                        || fileResolution.state() == PartFileLocationService.LocalFileState.PROCESSING
+                        || fileResolution.state() == PartFileLocationService.LocalFileState.PROCESS_FAILED) {
+                    log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipLocalFileState")
+                            .add("roomId", room.getRoomId()).add("partId", part.getId())
+                            .add("localFileState", fileResolution.state()));
                     continue;
                 }
-
-                // 检查文件是否存在
-                File file = new File(filePath);
-                if (!file.exists()) {
+                if (!fileResolution.available()) {
+                    String filePath = part.getFilePath();
                     log.error("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.FileMissing")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
@@ -550,6 +553,8 @@ public class publishJob {
                     }
                     continue;
                 }
+                String filePath = fileResolution.path().toString();
+                File file = fileResolution.path().toFile();
 
                 if (isFileStillWriting(file, filePath, System.currentTimeMillis())) {
                     log.info("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.Skip.FileStillWriting")

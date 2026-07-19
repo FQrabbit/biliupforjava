@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.entity.RecordEventData;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
@@ -23,6 +24,9 @@ public class RecordEventFilePostService implements RecordEventService {
 
     @Autowired
     private RecordHistoryPartRepository historyPartRepository;
+
+    @Autowired
+    private PartFileLocationService partFileLocationService;
 
     @PostConstruct
     public void initWorkPath() {
@@ -70,9 +74,15 @@ public class RecordEventFilePostService implements RecordEventService {
             fileSize = eventData.getFileSize();
         }
         part.setRecording(false);
-        part.setFilePath(filePath);
+        PartFileLocationService.LocalFileView currentLocation = partFileLocationService.describe(part.getId());
+        if (currentLocation.state() != PartFileLocationService.LocalFileState.AVAILABLE_ARCHIVE
+                && currentLocation.state() != PartFileLocationService.LocalFileState.DELETED_BY_POLICY
+                && currentLocation.state() != PartFileLocationService.LocalFileState.PROCESSING) {
+            part.setFilePath(filePath);
+        }
         part.setFileSize(fileSize);
         part = historyPartRepository.save(part);
+        partFileLocationService.registerPrimary(part);
         log.info("[BLR] {}", LogKvs.event("FilePost.Saved")
             .add("eventId", event.getEventId())
             .add("sessionId", sessionId)

@@ -6,7 +6,7 @@
 
     window.HistoryPagePreviewMethods = {
         canPreviewPart: function(p) {
-            return !!(p && p.partId && this.getPartFilePath(p));
+            return !!(p && p.partId && p.localFileAvailable);
         },
         getStaticJsUrl: function(fileName) {
             var path = (window.location && window.location.pathname) || '/';

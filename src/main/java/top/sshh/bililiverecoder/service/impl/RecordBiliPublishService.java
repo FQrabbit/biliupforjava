@@ -22,6 +22,9 @@ import top.sshh.bililiverecoder.job.videoSyncJob;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
+import top.sshh.bililiverecoder.service.PartFileOperationService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -103,6 +106,12 @@ public class RecordBiliPublishService {
     private LiveMsgSendSync liveMsgSendSync;
     @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
+    @Autowired
+    private PartFileOperationService partFileOperationService;
+    @Autowired
+    private PartFileLocationService partFileLocationService;
+    @Autowired
+    private StorageRootService storageRootService;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -863,11 +872,13 @@ public class RecordBiliPublishService {
                     uploadPart.setFileName(null);
                     uploadPart = partRepository.save(uploadPart);
                 }
-                String filePath = normalizeFilePath(uploadPart.getFilePath());
+                PartFileLocationService.FileResolution fileResolution = partFileLocationService.resolveReadable(uploadPart.getId());
+                String filePath = fileResolution.available() ? normalizeFilePath(fileResolution.path().toString()) : null;
                 if (StringUtils.isBlank(filePath)) {
                     log.warn("[BLR] {}", LogKvs.event("Publish.Edit.PartUpload.SkipNoFilePath")
                             .add("historyId", history.getId())
-                            .add("partId", uploadPart.getId()));
+                            .add("partId", uploadPart.getId())
+                            .add("localFileState", fileResolution.state()));
                     editBlocked = true;
                     continue;
                 }
@@ -1101,13 +1112,15 @@ public class RecordBiliPublishService {
                 if (isSkippedPart(uploadPart)) {
                     continue;
                 }
-                String filePath = normalizeFilePath(uploadPart.getFilePath());
+                PartFileLocationService.FileResolution fileResolution = partFileLocationService.resolveReadable(uploadPart.getId());
+                String filePath = fileResolution.available() ? normalizeFilePath(fileResolution.path().toString()) : null;
                 if (StringUtils.isBlank(filePath)) {
                     log.error("[BLR] {}", LogKvs.event("Publish.Part.FilePathInvalid")
                             .add("roomId", room.getRoomId())
                             .add("uname", room.getUname())
                             .add("historyId", history.getId())
-                            .add("partId", uploadPart.getId()));
+                            .add("partId", uploadPart.getId())
+                            .add("localFileState", fileResolution.state()));
                     TaskUtil.publishTask.remove(history.getId());
                     return false;
                 }
@@ -1745,7 +1758,7 @@ public class RecordBiliPublishService {
                                     .addIfNotBlank("aid", aid), e);
                         }
 
-                        //如果配置成投稿完成后删除则删除文件
+                        // 投稿完成后的文件处理统一交给可恢复的生命周期服务。
                         try {
                             for (RecordHistoryPart part : uploadParts) {
                                 String filePath = part.getFilePath();
@@ -1754,58 +1767,9 @@ public class RecordBiliPublishService {
                                     continue;
                                 }
                                 if (room.getDeleteType() == 9) {
-                                    File file = new File(filePath);
-                                    boolean delete = file.delete();
-                                    if (delete) {
-                                        log.info("[BLR] {}", LogKvs.event("Publish.File.DeleteSuccess")
-                                                .add("historyId", history.getId())
-                                                .add("partId", part.getId())
-                                                .add("filePath", filePath));
-                                    } else {
-                                        log.error("[BLR] {}", LogKvs.event("Publish.File.DeleteFailed")
-                                                .add("historyId", history.getId())
-                                                .add("partId", part.getId())
-                                                .add("filePath", filePath));
-                                    }
+                                    partFileOperationService.delete(part.getId());
                                 } else if (StringUtils.isNotBlank(room.getMoveDir()) && room.getDeleteType() == 10) {
-
-                                    String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                                    String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                                    String toDirPath = room.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
-                                    File toDir = new File(toDirPath);
-                                    if (!toDir.exists()) {
-                                        toDir.mkdirs();
-                                    }
-                                    File startDir = new File(startDirPath);
-                                    File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                                    if (files != null) {
-                                        for (File file : files) {
-                                            if (!filePath.startsWith(workPath)) {
-                                                part.setFileDelete(true);
-                                                part = partRepository.save(part);
-                                                continue;
-                                            }
-                                            try {
-                                                Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                                        StandardCopyOption.REPLACE_EXISTING);
-                                                log.info("[BLR] {}", LogKvs.event("Publish.File.MoveSuccess")
-                                                    .add("historyId", history.getId())
-                                                    .add("partId", part.getId())
-                                                    .add("fileName", file.getName())
-                                                    .add("toDir", toDirPath));
-                                            } catch (Exception e) {
-                                                log.error("[BLR] {}", LogKvs.event("Publish.File.MoveFailed")
-                                                    .add("historyId", history.getId())
-                                                    .add("partId", part.getId())
-                                                    .add("fileName", file.getName())
-                                                    .add("toDir", toDirPath), e);
-                                            }
-                                        }
-                                    }
-
-                                    part.setFilePath(toDirPath + filePath.substring(filePath.lastIndexOf("/") + 1));
-                                    part.setFileDelete(true);
-                                    part = partRepository.save(part);
+                                    partFileOperationService.move(part.getId(), room.getMoveDir());
                                 }
                             }
                         } catch (Exception de) {
@@ -2379,7 +2343,7 @@ public class RecordBiliPublishService {
         part.setSourceType("EDIT_PART");
         String path = normalizeFilePath(StringUtils.defaultIfBlank(item.filePath, item.fileRef));
         if (StringUtils.isNotBlank(path)) {
-            String realPath = resolveRealPathUnderWorkPath(path);
+            String realPath = resolveTrustedLocalFile(path);
             if (realPath == null) {
                 log.warn("[BLR] {}", LogKvs.event("Publish.EditParts.FileNotUnderWorkPath")
                         .add("historyId", history.getId())
@@ -2404,7 +2368,9 @@ public class RecordBiliPublishService {
         part.setDeleteFailType(null);
         part.setDeleteFailReason(null);
         part.setRecording(false);
-        return partRepository.save(part);
+        RecordHistoryPart saved = partRepository.save(part);
+        partFileLocationService.registerPrimary(saved);
+        return saved;
     }
 
     private RecordHistoryPart syncEditUploadResult(RecordHistory history, EditPartSubmitItem item, RecordHistoryPart uploadPart,
@@ -2462,7 +2428,11 @@ public class RecordBiliPublishService {
         part.setUploadRetryCount(0);
         part.setDeleteFailType(null);
         part.setDeleteFailReason(null);
-        return partRepository.save(part);
+        RecordHistoryPart saved = partRepository.save(part);
+        if (StringUtils.isNotBlank(filePath)) {
+            partFileLocationService.registerPrimary(saved);
+        }
+        return saved;
     }
 
     private RecordHistoryPart syncExistingOnlinePart(RecordHistory history, EditPartSubmitItem item, int page, SingleVideoDto dto) {
@@ -2948,13 +2918,12 @@ public class RecordBiliPublishService {
         return filePath.replace("\\", "/");
     }
 
-    private String resolveRealPathUnderWorkPath(String filePath) {
+    private String resolveTrustedLocalFile(String filePath) {
         try {
-            Path workReal = Paths.get(workPath).toRealPath();
-            Path targetReal = Paths.get(filePath).toRealPath();
-            if (targetReal.startsWith(workReal) && Files.isRegularFile(targetReal)) {
-                return targetReal.toString().replace("\\", "/");
-            }
+            return storageRootService.matchTrustedExisting(Paths.get(filePath))
+                    .filter(match -> Files.isRegularFile(match.resolvedPath()))
+                    .map(match -> match.resolvedPath().toString().replace("\\", "/"))
+                    .orElse(null);
         } catch (Exception e) {
             // reject on any resolution failure
         }

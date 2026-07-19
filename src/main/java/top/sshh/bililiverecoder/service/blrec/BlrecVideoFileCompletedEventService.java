@@ -11,6 +11,7 @@ import top.sshh.bililiverecoder.entity.blrec.BlrecEventDTO;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.time.LocalDateTime;
@@ -29,6 +30,9 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
 
     @Autowired
     private RecordHistoryPartRepository partRepository;
+
+    @Autowired
+    private PartFileLocationService partFileLocationService;
 
     @Override
     public void processing(BlrecEventDTO event) {
@@ -78,7 +82,8 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
         part.setEndTime(LocalDateTime.now());
         part.setRecording(false); // 文件已完成
         
-        partRepository.save(part);
+        part = partRepository.save(part);
+        partFileLocationService.registerPrimary(part);
 
         log.info("[BLR] {}", LogKvs.event("Blrec.VideoFileCompleted.PartSaved")
                 .add("roomId", roomId)

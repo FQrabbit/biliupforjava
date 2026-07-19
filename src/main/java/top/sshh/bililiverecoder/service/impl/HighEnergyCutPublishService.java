@@ -20,6 +20,8 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.UploadEnums;
@@ -93,6 +95,12 @@ public class HighEnergyCutPublishService {
     @Autowired
     private UploadFairShareService uploadFairShareService;
 
+    @Autowired
+    private PartFileLocationService partFileLocationService;
+
+    @Autowired
+    private StorageRootService storageRootService;
+
     private final UploadRetryBackoffPolicy uploadRetryBackoffPolicy = new UploadRetryBackoffPolicy();
     private static final long LEGACY_CHUNK_SIZE = 1024L * 1024L * 5L;
     private static final String BROWSER_MULTIPART_PROFILE = "ugcfx/bup";
@@ -115,7 +123,9 @@ public class HighEnergyCutPublishService {
         // 初始化 FFmpeg
         FFmpeg ffmpeg = new FFmpeg();
         FFmpegExecutor executor = new FFmpegExecutor(ffmpeg);
-        Path outputPath = Path.of(history.getFilePath(), "cut");
+        Path outputPath = storageRootService.activeWorkRoot()
+                .map(root -> Path.of(root.getPath(), "_high_energy_cut", String.valueOf(history.getId())))
+                .orElseThrow(() -> new IOException("active work storage root missing"));
         if (taskRunningMsg.get(history.getId()) != null) {
             return;
         }
@@ -138,17 +148,22 @@ public class HighEnergyCutPublishService {
             int i = 0;
             int count = 0;
             for (RecordHistoryPart part : partList) {
+                PartFileLocationService.FileResolution fileResolution = partFileLocationService.resolveReadable(part.getId());
+                if (!fileResolution.available()) {
+                    throw new IOException("part local file unavailable: " + part.getId() + " state=" + fileResolution.state());
+                }
+                String sourcePath = fileResolution.path().toString();
                 Map<Integer, Integer> highEnergyCut = getHighEnergyCut(part, room.getPercentileRank());
                 List<Integer> cutList = highEnergyCut.keySet().stream().sorted().toList();
                 count += cutList.size();
                 for (Integer time : cutList) {
                     i++;
-                    String output = Path.of(outputPath.toString(), String.format("%05d", i) + "." + part.getFilePath().substring(part.getFilePath().lastIndexOf(".") + 1)).toString();
+                    String output = Path.of(outputPath.toString(), String.format("%05d", i) + "." + sourcePath.substring(sourcePath.lastIndexOf(".") + 1)).toString();
                     int startTime = time;
                     int duration = highEnergyCut.get(time);
 
                     FFmpegBuilder builder = new FFmpegBuilder()
-                            .setInput(part.getFilePath())
+                            .setInput(sourcePath)
                             .setStartOffset(startTime, TimeUnit.SECONDS)
                             .addExtraArgs("-t", String.valueOf(duration))
                             .overrideOutputFiles(true)

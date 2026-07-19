@@ -13,6 +13,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
@@ -33,6 +34,8 @@ public class RecordEventRecordEndService implements RecordEventService {
 
     @Autowired
     private RecordHistoryPartRepository partRepository;
+    @Autowired
+    private PartFileLocationService partFileLocationService;
 
     @Override
     public void processing(RecordEventDTO event) {
@@ -98,14 +101,12 @@ public class RecordEventRecordEndService implements RecordEventService {
                         if (!part.isRecording() && part.getEndTime() != null) {
                             continue;
                         }
-                        String filePath = part.getFilePath();
-                        if (filePath == null) {
+                        PartFileLocationService.FileResolution resolution =
+                                partFileLocationService.resolveReadable(part.getId());
+                        if (!resolution.available()) {
                             continue;
                         }
-                        File file = new File(filePath);
-                        if (!file.exists()) {
-                            continue;
-                        }
+                        File file = resolution.path().toFile();
                         if (file.lastModified() > nowMs - thresholdMs) {
                             continue;
                         }

@@ -49,6 +49,8 @@ public class RoomLiveEventParseService {
     @Lazy
     @Autowired
     private StatsAggregationService statsAggregationService;
+    @Autowired
+    private PartFileLocationService partFileLocationService;
 
     public Map<String, Object> parseHistory(Long historyId, boolean force) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -75,7 +77,7 @@ public class RoomLiveEventParseService {
     }
 
     public ParseResult parsePart(RecordHistoryPart part, boolean force) {
-        if (part == null || part.getId() == null || StringUtils.isBlank(part.getFilePath())) {
+        if (part == null || part.getId() == null) {
             return ParseResult.skipped("invalid part");
         }
         synchronized (partParseLocks[lockIndex(part.getId())]) {
@@ -101,9 +103,9 @@ public class RoomLiveEventParseService {
         }
         state.setHistoryId(part.getHistoryId());
         state.setRoomId(part.getRoomId());
-        state.setXmlPath(xmlFile.getPath());
+        state.setXmlPath(xmlFile == null ? null : xmlFile.getPath());
 
-        if (!xmlFile.exists() || !xmlFile.isFile()) {
+        if (xmlFile == null || !xmlFile.exists() || !xmlFile.isFile()) {
             state.setSuccess(false);
             state.setErrorMessage("xml not found");
             state.setParsedAt(LocalDateTime.now());
@@ -431,9 +433,9 @@ public class RoomLiveEventParseService {
     }
 
     private File resolveXmlFile(RecordHistoryPart part) {
-        String filePath = part.getFilePath();
-        int dot = filePath.lastIndexOf(".");
-        return new File((dot > 0 ? filePath.substring(0, dot) : filePath) + ".xml");
+        return partFileLocationService.resolveCompanion(part.getId(), ".xml")
+                .map(java.nio.file.Path::toFile)
+                .orElse(null);
     }
 
     private String attr(Element element, String name) {

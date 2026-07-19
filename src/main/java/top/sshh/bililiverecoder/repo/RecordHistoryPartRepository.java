@@ -72,6 +72,8 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     List<RecordHistoryPart> findByIdIn(List<Long> ids);
 
+    List<RecordHistoryPart> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
+
     @Query("""
             select p from RecordHistoryPart p
             where p.historyId in ?1
@@ -80,6 +82,16 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     List<RecordHistoryPart> findByHistoryIdIn(List<Long> historyIds);
 
     List<RecordHistoryPart> findByRoomIdAndFileDeleteIsFalseAndEndTimeIsBefore(String roomId, LocalDateTime deleteTime);
+
+    @Query("""
+            select p from RecordHistoryPart p
+            where p.roomId = ?1 and p.endTime < ?2
+              and exists (select 1 from PartFileLocation l
+                          where l.partId = p.id and l.state = ?3)
+            order by p.endTime asc
+            """)
+    List<RecordHistoryPart> findFileCleanupCandidates(String roomId, LocalDateTime deleteTime,
+                                                       top.sshh.bililiverecoder.entity.PartFileLocation.LocationState state);
 
     List<RecordHistoryPart> findByHistoryIdAndCidIsNotNullOrderByPageAsc(Long historyId);
 
@@ -157,6 +169,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and p.upload = false
           and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
+          and (p.deleteFailType is null or p.deleteFailType not in ('SKIPPED_THRESHOLD', 'MANUAL_SKIP'))
           and p.endTime between :startTime and :endTime
           and exists (
               select 1 from RecordHistory h
@@ -177,6 +190,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and p.upload = false
           and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
+          and (p.deleteFailType is null or p.deleteFailType not in ('SKIPPED_THRESHOLD', 'MANUAL_SKIP'))
           and p.endTime between :startTime and :endTime
           and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
@@ -198,11 +212,15 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and p.upload = false
           and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
+          and (p.deleteFailType is null or p.deleteFailType not in ('SKIPPED_THRESHOLD', 'MANUAL_SKIP'))
           and p.endTime between :startTime and :endTime
           and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
+                and h.upload = true
+                and h.forceArchived = false
+                and h.code not in (-2, -4)
                 and (h.avId is not null and trim(h.avId) <> ''
                      or h.bvId is not null and trim(h.bvId) <> '')
           )

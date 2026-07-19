@@ -53,6 +53,9 @@
         },
         rescan: function(partId, callback, errorCallback) {
             ApiUtil.post('/part/rescan/' + encodeURIComponent(partId), {}, callback, errorCallback);
+        },
+        retryFileOperation: function(operationKey, callback, errorCallback) {
+            ApiUtil.post('/storage-roots/operations/' + encodeURIComponent(operationKey) + '/retry', {}, callback, errorCallback);
         }
     };
 })(window);

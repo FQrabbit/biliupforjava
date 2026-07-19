@@ -1600,6 +1600,11 @@
     border-color: color-mix(in srgb, var(--mobile-teal) 30%, var(--mobile-page-border));
 }
 
+.mobile-history-detail-part-actions button.is-danger {
+    color: #f56c6c;
+    border-color: color-mix(in srgb, #f56c6c 30%, var(--mobile-page-border));
+}
+
 .mobile-history-detail-section-toggle {
     width: 100%;
     justify-content: space-between;
@@ -1630,6 +1635,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mobile-history-detail-part-head .local-file-badge {
+    margin-left: auto;
 }
 
 .mobile-history-detail-part-head span {

@@ -28,6 +28,7 @@
     <script src="js/theme-tokens.js"></script>
     <script src="js/api.js"></script>
     <script src="js/api/system-api.js"></script>
+    <script src="js/api/storage-api.js"></script>
     <script src="js/api/notification-api.js"></script>
     <script src="js/api/log-api.js"></script>
     <script src="js/api/user-api.js"></script>
@@ -355,6 +356,33 @@
                                     向导参数配置
                                 </el-button>
                             </div>
+                                </el-tab-pane>
+                                <el-tab-pane label="存储目录" name="storage">
+                                    <div class="storage-root-panel" v-loading="storageLoading">
+                                        <div v-if="workPathChange && workPathChange.pending" class="storage-change-warning" role="alert">
+                                            <div>
+                                                <strong><i class="el-icon-warning-outline"></i> 工作目录变更待确认</strong>
+                                                <p>当前活动目录：{{ workPathChange.activeRoot ? workPathChange.activeRoot.path : '-' }}</p>
+                                                <p>配置文件目录：{{ workPathChange.configuredPath || '-' }}</p>
+                                                <p>{{ workPathChange.h2Warning }}</p>
+                                            </div>
+                                            <div class="storage-change-actions">
+                                                <el-button size="small" type="primary" plain :loading="storageResolving" @click="resolveWorkPathChange('FUTURE_ONLY')">仅影响新文件</el-button>
+                                                <el-button size="small" type="warning" plain :loading="storageResolving" @click="resolveWorkPathChange('RELOCATE_EXISTING')">迁移现有目录</el-button>
+                                            </div>
+                                        </div>
+                                        <div class="storage-root-list">
+                                            <div v-for="root in storageRoots" :key="root.id" class="storage-root-row">
+                                                <div class="storage-root-main">
+                                                    <span class="storage-root-type">{{ root.rootType === 'WORK' ? '工作目录' : '归档目录' }}</span>
+                                                    <strong>{{ root.path }}</strong>
+                                                    <span class="storage-root-status" :class="{ 'is-online': root.status === 'ONLINE', 'is-warning': root.status !== 'ONLINE' }">{{ storageRootStatusLabel(root) }}</span>
+                                                </div>
+                                                <el-button v-if="!root.lastCheckedAt || root.status === 'OFFLINE'" type="text" icon="el-icon-folder-opened" @click="remapStorageRoot(root)">重新映射</el-button>
+                                            </div>
+                                            <el-empty v-if="!storageLoading && storageRoots.length === 0" description="暂无存储根"></el-empty>
+                                        </div>
+                                    </div>
                                 </el-tab-pane>
                                 <el-tab-pane label="推送配置" name="notification">
                                     <div class="notification-config" v-loading="notificationConfigLoading">

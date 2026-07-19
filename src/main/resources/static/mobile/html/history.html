@@ -1150,6 +1150,7 @@
                             <div class="mobile-history-detail-part-head">
                                 <span>P{{ p.page }}</span>
                                 <strong>{{ formatProgressState(p.state) }}</strong>
+                                <em class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</em>
                             </div>
                             <div class="mobile-history-detail-progress-track">
                                 <div :style="{ width: (p.state === 'SKIPPED' ? 0 : (p.percent || 0)) + '%' }"></div>
@@ -1169,6 +1170,7 @@
                                 <button v-if="p.actions && p.actions.indexOf('BIND_FILE') !== -1" type="button" @click.stop="openBindFileDialog(p)">补全</button>
                                 <button v-if="p.actions && p.actions.indexOf('MARK_FINISHED') !== -1" type="button" class="is-warning" @click.stop="confirmMarkFinished(p)">结束</button>
                                 <button v-if="p.actions && p.actions.indexOf('RESCAN') !== -1" type="button" @click.stop="rescanPart(p)">重试</button>
+                                <button v-if="p.actions && p.actions.indexOf('RETRY_FILE_PROCESS') !== -1" type="button" class="is-danger" :disabled="!!p.fileOperationRetrying" @click.stop="retryFileProcess(p)">重试文件处理</button>
                             </div>
                         </article>
                     </div>
@@ -1631,6 +1633,7 @@
                         <div class="progress-info-mini">
                             <span class="part-badge">P{{ p.page }}</span>
                             <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
+                            <span class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</span>
                             <span class="part-meta">
                                  <span v-if="p.state === 'SUCCESS' || p.percent >= 100">{{ formatSize(p.fileSize) }}</span>
                                  <span v-else-if="p.state === 'SKIPPED'">{{ formatSize(p.fileSize) }}</span>
@@ -1665,6 +1668,7 @@
                             <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
                             <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">标记结束</el-button>
                             <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
+                            <el-button v-if="p.actions.indexOf('RETRY_FILE_PROCESS') !== -1" class="part-action-btn" size="mini" type="danger" plain icon="el-icon-refresh" :loading="!!p.fileOperationRetrying" @click.stop="retryFileProcess(p)">重试文件处理</el-button>
                         </div>
                     </div>
                 </div>

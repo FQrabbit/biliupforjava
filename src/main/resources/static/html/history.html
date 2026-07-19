@@ -989,6 +989,7 @@
                         <div class="progress-info-mini">
                             <span class="part-badge">P{{ p.page }}</span>
                             <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
+                            <span class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</span>
                             <span class="part-meta">
                                  <span v-if="p.state === 'SUCCESS' || p.percent >= 100">{{ formatSize(p.fileSize) }}</span>
                                  <span v-else-if="p.state === 'SKIPPED'">{{ formatSize(p.fileSize) }}</span>
@@ -1023,6 +1024,7 @@
                             <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
                             <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">标记结束</el-button>
                             <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
+                            <el-button v-if="p.actions.indexOf('RETRY_FILE_PROCESS') !== -1" class="part-action-btn" size="mini" type="danger" plain icon="el-icon-refresh" :loading="!!p.fileOperationRetrying" @click.stop="retryFileProcess(p)">重试文件处理</el-button>
                         </div>
                     </div>
                 </div>

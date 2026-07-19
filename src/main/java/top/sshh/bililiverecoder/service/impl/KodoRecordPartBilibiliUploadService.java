@@ -1,7 +1,6 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +18,8 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
+import top.sshh.bililiverecoder.service.PartFileOperationService;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
@@ -46,9 +47,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.RandomAccessFile;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -69,20 +67,16 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
     @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
 
+    @Autowired
+    private PartFileOperationService partFileOperationService;
+
+    @Autowired
+    private PartFileLocationService partFileLocationService;
+
     @Value("${server.port:8080}")
     private String serverPort;
 
     public static final String OS = "kodo";
-
-    @Value("${record.work-path}")
-    private String workPath;
-
-    @PostConstruct
-    public void initWorkPath() {
-        workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
-        workPath = workPath.replace("\\", "/");
-    }
-
 
     @Value("${record.upload.probe-version:20250923}")
     private String probeVersion;
@@ -187,7 +181,14 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                     return;
                 }
                 // 上传任务入队列
-                String filePath = part.getFilePath().intern();
+                PartFileLocationService.FileResolution fileResolution = partFileLocationService.resolveReadable(part.getId());
+                if (!fileResolution.available()) {
+                    log.warn("[BLR] {}", LogKvs.event("Upload.Part.LocalFileUnavailable")
+                            .add("os", OS).add("partId", part.getId()).add("localFileState", fileResolution.state()));
+                    TaskUtil.partUploadTask.remove(part.getId());
+                    return;
+                }
+                String filePath = fileResolution.path().toString().replace('\\', '/').intern();
                 synchronized (filePath) {
                     Optional<RecordHistory> historyOptional = historyRepository.findById(part.getHistoryId());
                     if (!historyOptional.isPresent()) {
@@ -680,76 +681,14 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                     part.setFileName(preUploadBean.getBili_filename());
                                     part.setUpdateTime(LocalDateTime.now());
                                     part = partRepository.save(part);
-                                    //如果配置上传完成删除，则删除文件
+                                    // 上传完成后的文件处理统一交给可恢复的生命周期服务。
                                     if (partFileCleanupPolicy.isPostUploadCleanupType(room.getDeleteType())
                                             && partFileCleanupPolicy.shouldSkipProtectedArchive(room, part, filePath, "Upload", "postUploadCleanup")) {
                                         // 保留退回/锁定稿件的本地分P文件，方便后续检查和编辑。
                                     } else if (room.getDeleteType() == 1) {
-                                        boolean delete = uploadFile.delete();
-                                        if (delete) {
-                                            log.info("[BLR] {}", LogKvs.event("Upload.Post.DeleteSuccess")
-                                                    .add("os", OS)
-                                                    .add("roomId", room.getRoomId())
-                                                    .add("uname", room.getUname())
-                                                    .add("partId", part.getId())
-                                                    .add("historyId", part.getHistoryId())
-                                                    .add("filePath", filePath));
-                                        } else {
-                                            log.error("[BLR] {}", LogKvs.event("Upload.Post.DeleteFailed")
-                                                    .add("os", OS)
-                                                    .add("roomId", room.getRoomId())
-                                                    .add("uname", room.getUname())
-                                                    .add("partId", part.getId())
-                                                    .add("historyId", part.getHistoryId())
-                                                    .add("filePath", filePath));
-                                        }
+                                        partFileOperationService.delete(part.getId());
                                     } else if (StringUtils.isNotBlank(room.getMoveDir()) && room.getDeleteType() == 4) {
-                                        String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                                        String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                                        String toDirPath = room.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
-                                        File toDir = new File(toDirPath);
-                                        if (!toDir.exists()) {
-                                            toDir.mkdirs();
-                                        }
-                                        File startDir = new File(startDirPath);
-                                        File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                                        if (files != null) {
-                                            for (File file : files) {
-                                                if (!filePath.startsWith(workPath)) {
-                                                    part = partRepository.findById(part.getId()).get();
-                                                    part.setFileDelete(true);
-                                                    part = partRepository.save(part);
-                                                    continue;
-                                                }
-                                                try {
-                                                    Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                                            StandardCopyOption.REPLACE_EXISTING);
-                                                    log.info("[BLR] {}", LogKvs.event("Upload.Post.MoveSuccess")
-                                                            .add("os", OS)
-                                                            .add("roomId", room.getRoomId())
-                                                            .add("uname", room.getUname())
-                                                            .add("partId", part.getId())
-                                                            .add("historyId", part.getHistoryId())
-                                                            .add("fileName", file.getName())
-                                                            .add("toDir", toDirPath));
-                                                } catch (Exception e) {
-                                                    log.error("[BLR] {}", LogKvs.event("Upload.Post.MoveFailed")
-                                                            .add("os", OS)
-                                                            .add("roomId", room.getRoomId())
-                                                            .add("uname", room.getUname())
-                                                            .add("partId", part.getId())
-                                                            .add("historyId", part.getHistoryId())
-                                                            .add("fileName", file.getName())
-                                                            .add("toDir", toDirPath)
-                                                            .add("err", e.getMessage())
-                                                            .add("ex", e.getClass().getSimpleName()), e);
-                                                }
-                                            }
-                                        }
-                                        part = partRepository.findById(part.getId()).get();
-                                        part.setFilePath(toDirPath + filePath.substring(filePath.lastIndexOf("/") + 1));
-                                        part.setFileDelete(true);
-                                        part = partRepository.save(part);
+                                        partFileOperationService.move(part.getId(), room.getMoveDir());
                                     }
                                     TaskUtil.partUploadTask.remove(part.getId());
                                     uploadProgressTracker.markSuccessAndRemove(part.getId());

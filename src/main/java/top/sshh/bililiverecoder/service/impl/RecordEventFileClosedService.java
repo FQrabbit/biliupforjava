@@ -15,14 +15,14 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
+import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
+import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.StatsAggregationService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -60,6 +60,15 @@ public class RecordEventFileClosedService implements RecordEventService {
 
     @Autowired
     private StatsAggregationService statsAggregationService;
+
+    @Autowired
+    private PartFileLocationService partFileLocationService;
+
+    @Autowired
+    private PartFileOperationService partFileOperationService;
+
+    @Autowired
+    private PartFileCleanupPolicy partFileCleanupPolicy;
 
     @PostConstruct
     public void initWorkPath() {
@@ -221,6 +230,7 @@ public class RecordEventFileClosedService implements RecordEventService {
             part.setAreaName(eventData.getAreaNameChild());
             part.setUpdateTime(LocalDateTime.now());
             part = historyPartRepository.save(part);
+            partFileLocationService.registerPrimary(part);
 
             history.setFileSize(history.getFileSize() + part.getFileSize());
             history.setTitle(eventData.getTitle());
@@ -234,109 +244,29 @@ public class RecordEventFileClosedService implements RecordEventService {
             if (!vidleFile.exists()) {
                 return;
             }
-            if (StringUtils.isNotBlank(room.getMoveDir()) && (room.getDeleteType() == 6 || room.getDeleteType() == 7)) {
-                String fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.lastIndexOf("."));
-                String startDirPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
-                String toDirPath = room.getMoveDir() + filePath.substring(0, filePath.lastIndexOf('/') + 1).replace(workPath, "");
-                File toDir = new File(toDirPath);
-                if (!toDir.exists()) {
-                    toDir.mkdirs();
-                }
+            if (StringUtils.isNotBlank(room.getMoveDir())
+                    && partFileCleanupPolicy.isPostRecordCloseCleanupType(room.getDeleteType())) {
                 Long id = part.getId();
                 if (!shutdownState.isShuttingDown()) {
-                taskExecutor.execute(() -> {
-                    if (shutdownState.isShuttingDown()) {
-                        return;
-                    }
-                    Optional<RecordHistoryPart> partOptional = historyPartRepository.findById(id);
-                    if (!partOptional.isPresent()) {
-                        return;
-                    }
-                    RecordHistoryPart part2 = partOptional.get();
-                    File startDir = new File(startDirPath);
-                    File[] files = startDir.listFiles((file, s) -> s.startsWith(fileName));
-                    if (files != null) {
-                        for (File file : files) {
-                            if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
-                                return;
-                            }
-                            if (!filePath.startsWith(workPath)) {
-                                part2.setFileDelete(true);
-                                part2 = historyPartRepository.save(part2);
-                                continue;
-                            }
-                            if (room.getDeleteType() == 6) {
-                                try {
-                                    Files.move(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                            StandardCopyOption.REPLACE_EXISTING);
-                                        log.info("[BLR] {}", LogKvs.event("FileClosed.MoveSuccess")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("fileName", file.getName())
-                                            .add("toDir", toDirPath));
-                                } catch (Exception e) {
-                                        log.error("[BLR] {}", LogKvs.event("FileClosed.MoveFailed")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("fileName", file.getName())
-                                            .add("toDir", toDirPath)
-                                            .add("err", e.getMessage()), e);
-                                }
-                            } else if (room.getDeleteType() == 7) {
-                                try {
-                                    Files.copy(Paths.get(file.getPath()), Paths.get(toDirPath + file.getName()),
-                                            StandardCopyOption.REPLACE_EXISTING);
-                                        log.info("[BLR] {}", LogKvs.event("FileClosed.CopySuccess")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("fileName", file.getName())
-                                            .add("toDir", toDirPath));
-                                } catch (Exception e) {
-                                        log.error("[BLR] {}", LogKvs.event("FileClosed.CopyFailed")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("fileName", file.getName())
-                                            .add("toDir", toDirPath)
-                                            .add("err", e.getMessage()), e);
-                                }
-                            }
-
+                    Long historyId = history.getId();
+                    long closedFileSize = fileSize;
+                    taskExecutor.execute(() -> {
+                        if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) return;
+                        RecordHistoryPart currentPart = historyPartRepository.findById(id).orElse(null);
+                        RecordHistory currentHistory = historyRepository.findById(historyId).orElse(null);
+                        if (currentPart == null || currentHistory == null) return;
+                        if (!partFileCleanupPolicy.shouldSkipProtectedArchive(room, currentHistory, currentPart,
+                                currentPart.getFilePath(), "FileClosed", "postRecordCleanup")) {
+                            if (room.getDeleteType() == 6) partFileOperationService.move(id, room.getMoveDir());
+                            else partFileOperationService.copy(id, room.getMoveDir());
                         }
-                    }
-
-                    part2.setFilePath(toDirPath + filePath.substring(filePath.lastIndexOf("/") + 1));
-                    part2.setFileDelete(true);
-                    part2 = historyPartRepository.save(part2);
-                });
+                        currentPart = historyPartRepository.findById(id).orElse(currentPart);
+                        startUploadOrMarkSkipped(room, currentHistory, currentPart, closedFileSize);
+                    });
                 }
-            }
-            // 文件上传操作
-            //开始上传该视频分片，异步上传任务。
-            // 小于设定文件大小和时长不上传
-            if (fileSize > 1024 * 1024 * room.getFileSizeLimit() && part.getDuration() > room.getDurationLimit()) {
-                if (!shutdownState.isShuttingDown()) {
-                    uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
-                }
-            } else {
-                double fileSizeMb = fileSize / 1024d / 1024d;
-                double durationSec = part.getDuration();
-                log.info("[BLR] {}", LogKvs.event("Upload.SkipBelowThreshold")
-                    .add("roomId", room.getRoomId())
-                    .add("uname", room.getUname())
-                    .add("historyId", history.getId())
-                    .add("bvid", history.getBvId())
-                    .add("partId", part.getId())
-                    .add("fileSizeMb", String.format(java.util.Locale.ROOT, "%.3f", fileSizeMb))
-                    .add("limitMb", room.getFileSizeLimit())
-                    .add("durationSec", String.format(java.util.Locale.ROOT, "%.3f", durationSec))
-                    .add("limitSec", room.getDurationLimit()));
-                part.setUpload(false);
-                part.setUploadRetryCount(9999);
-                part.setDeleteFailType("SKIPPED_THRESHOLD");
-                part.setDeleteFailReason("文件低于阈值(大小/时长)已跳过上传，可在前端手动补救");
-                historyPartRepository.save(part);
                 return;
             }
+            startUploadOrMarkSkipped(room, history, part, fileSize);
         } else {
                 log.error("[BLR] {}", LogKvs.event("FileClosed.MissingHistory")
                     .add("roomId", eventData.getRoomId())
@@ -355,8 +285,34 @@ public class RecordEventFileClosedService implements RecordEventService {
             part.setSessionId(sessionId);
             part.setRecording(eventData.isRecording());
             part.setEndTime(LocalDateTime.now());
-            historyPartRepository.save(part);
+            part = historyPartRepository.save(part);
+            partFileLocationService.registerPrimary(part);
         }
 
+    }
+
+    private void startUploadOrMarkSkipped(RecordRoom room, RecordHistory history,
+                                          RecordHistoryPart part, long fileSize) {
+        if (fileSize > 1024 * 1024 * room.getFileSizeLimit() && part.getDuration() > room.getDurationLimit()) {
+            if (!shutdownState.isShuttingDown()) {
+                uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
+            }
+            return;
+        }
+        double fileSizeMb = fileSize / 1024d / 1024d;
+        double durationSec = part.getDuration();
+        log.info("[BLR] {}", LogKvs.event("Upload.SkipBelowThreshold")
+                .add("roomId", room.getRoomId()).add("uname", room.getUname())
+                .add("historyId", history.getId()).add("bvid", history.getBvId())
+                .add("partId", part.getId())
+                .add("fileSizeMb", String.format(java.util.Locale.ROOT, "%.3f", fileSizeMb))
+                .add("limitMb", room.getFileSizeLimit())
+                .add("durationSec", String.format(java.util.Locale.ROOT, "%.3f", durationSec))
+                .add("limitSec", room.getDurationLimit()));
+        part.setUpload(false);
+        part.setUploadRetryCount(9999);
+        part.setDeleteFailType("SKIPPED_THRESHOLD");
+        part.setDeleteFailReason("文件低于阈值(大小/时长)已跳过上传，可在前端手动补救");
+        historyPartRepository.save(part);
     }
 }

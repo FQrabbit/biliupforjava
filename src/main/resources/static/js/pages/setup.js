@@ -13,7 +13,9 @@ new Vue({
                 encoding: 'UTF-8',
                 timezone: 'Asia/Shanghai',
                 cachePath: '',
-                jvmArgs: ''
+                jvmArgs: '',
+                workPathChangeMode: 'FUTURE_ONLY',
+                confirmH2WorkPathRisk: false
             },
             rules: {
                 port: [
@@ -63,6 +65,8 @@ new Vue({
             },
             loading: false,
             containerized: false,
+            originalWorkPath: '',
+            workPathChangeWarning: '本地H2数据库位于 work-path/db，本次不会自动迁移数据库',
             theme: localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'ocean',
             _parallaxRaf: null,
@@ -71,6 +75,12 @@ new Vue({
         }
     },
     computed: {
+        workPathChanged: function() {
+            var normalize = function(value) {
+                return String(value || '').trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+            };
+            return !!this.originalWorkPath && normalize(this.form.workPath) !== normalize(this.originalWorkPath);
+        },
         themePaletteOptions: function () {
             if (window.ThemeTokens && typeof window.ThemeTokens.getThemeOptions === 'function') {
                 return window.ThemeTokens.getThemeOptions();
@@ -94,13 +104,17 @@ new Vue({
                     if (data) {
                         // 回填已有配置
                         if (data.port) this.form.port = Number(data.port);
-                        if (data.workPath) this.form.workPath = data.workPath;
+                        if (data.workPath) {
+                            this.form.workPath = data.workPath;
+                            this.originalWorkPath = data.workPath;
+                        }
                         if (data.username) this.form.username = data.username;
                         if (data.password) this.form.password = data.password;
                         if (data.encoding) this.form.encoding = data.encoding;
                         if (data.timezone) this.form.timezone = data.timezone;
                         if (data.cachePath) this.form.cachePath = data.cachePath;
                         if (data.jvmArgs) this.form.jvmArgs = data.jvmArgs;
+                        if (data.workPathChangeWarning) this.workPathChangeWarning = data.workPathChangeWarning;
                         if (data.containerized !== undefined) this.containerized = data.containerized;
                     }
                 })
@@ -172,6 +186,10 @@ new Vue({
         handleSave() {
             this.$refs.setupForm.validate(async valid => {
                 if (valid) {
+                    if (this.workPathChanged && !this.form.confirmH2WorkPathRisk) {
+                        this.$message.warning('请确认 H2 数据库迁移风险');
+                        return;
+                    }
                     this.loading = true;
                     try {
                         const res = await SetupApi.save(this.form);

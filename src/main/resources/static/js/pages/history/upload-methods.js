@@ -166,7 +166,45 @@
         },
         getPartFilePath: function(p) {
             if (!p) return '';
-            return p.filePath || p.path || p.file || p.localPath || '';
+            return p.primaryPath || p.filePath || p.path || p.file || p.localPath || '';
+        },
+        getLocalFileLabel: function(p) {
+            var state = p && p.localFileState;
+            if (state === 'AVAILABLE_ARCHIVE') return '归档可用';
+            if (state === 'AVAILABLE_WORK') return '本地可用';
+            if (state === 'DELETED_BY_POLICY') return '已按规则清理';
+            if (state === 'ROOT_OFFLINE') return '存储目录离线';
+            if (state === 'MISSING_UNEXPECTED') return '素材意外丢失';
+            if (state === 'PROCESSING') return '文件处理中';
+            if (state === 'PROCESS_FAILED') return '文件处理失败';
+            return '本地状态未知';
+        },
+        getLocalFileClass: function(p) {
+            var state = p && p.localFileState;
+            if (state === 'AVAILABLE_ARCHIVE' || state === 'AVAILABLE_WORK') return 'is-available';
+            if (state === 'DELETED_BY_POLICY') return 'is-cleaned';
+            if (state === 'ROOT_OFFLINE' || state === 'PROCESSING') return 'is-warning';
+            if (state === 'MISSING_UNEXPECTED' || state === 'PROCESS_FAILED') return 'is-danger';
+            return 'is-unknown';
+        },
+        retryFileProcess: function(p) {
+            var _this = this;
+            if (!p || !p.fileOperationKey || p.fileOperationRetrying) return;
+            _this.$set(p, 'fileOperationRetrying', true);
+            PartApi.retryFileOperation(p.fileOperationKey, function(resp) {
+                _this.$set(p, 'fileOperationRetrying', false);
+                var success = !!(resp && resp.success);
+                _this.$message({
+                    message: success ? '文件处理已完成' : ((resp && resp.message) || '文件处理尚未完成'),
+                    type: success ? 'success' : 'warning'
+                });
+                if (_this.currentDetail && _this.currentDetail.id) {
+                    _this.fetchPartList(_this.currentDetail.id, function () {});
+                }
+            }, function() {
+                _this.$set(p, 'fileOperationRetrying', false);
+                _this.$message({ message: '重试文件处理失败', type: 'warning' });
+            });
         },
         getPartFileName: function(p) {
             const fp = this.getPartFilePath(p);

@@ -58,6 +58,10 @@ public class PartPreviewService {
 
     @Autowired
     private RecordHistoryPartRepository partRepository;
+    @Autowired
+    private PartFileLocationService partFileLocationService;
+    @Autowired
+    private StorageRootService storageRootService;
 
     private ExecutorService executor;
     private String resolvedFfmpegPath;
@@ -325,18 +329,22 @@ public class PartPreviewService {
             return PreviewFile.unavailableStatic("分P不存在");
         }
         RecordHistoryPart part = partOptional.get();
-        if (StringUtils.isBlank(part.getFilePath())) {
-            return PreviewFile.unavailableStatic("分P文件路径为空");
+        PartFileLocationService.FileResolution resolution = partFileLocationService.resolveReadable(partId);
+        if (!resolution.available()) {
+            return PreviewFile.unavailableStatic(switch (resolution.state()) {
+                case ROOT_OFFLINE -> "存储目录离线";
+                case DELETED_BY_POLICY -> "本地素材已按规则清理";
+                case PROCESSING -> "文件正在处理中";
+                case PROCESS_FAILED -> "文件处理失败";
+                default -> "分P文件不存在";
+            });
         }
-        Path sourceNominal = Paths.get(part.getFilePath()).normalize().toAbsolutePath();
+        Path sourceNominal = resolution.path();
         String lowerName = sourceNominal.getFileName() == null ? "" : sourceNominal.getFileName().toString().toLowerCase(Locale.ROOT);
         if (ALLOWED_EXT.stream().noneMatch(lowerName::endsWith)) {
             return PreviewFile.unavailableStatic("不支持该文件格式");
         }
-        Path source = resolveRealPathUnderWorkPath(sourceNominal);
-        if (source == null) {
-            return PreviewFile.unavailableStatic("文件不在工作目录内");
-        }
+        Path source = sourceNominal;
         if (!Files.isRegularFile(source)) {
             return PreviewFile.unavailableStatic("分P文件不存在");
         }
@@ -366,19 +374,6 @@ public class PartPreviewService {
         );
     }
 
-    private Path resolveRealPathUnderWorkPath(Path source) {
-        try {
-            Path workReal = Paths.get(workPath).toRealPath();
-            Path targetReal = source.toRealPath();
-            if (targetReal.startsWith(workReal)) {
-                return targetReal;
-            }
-        } catch (Exception e) {
-            // reject on any resolution failure
-        }
-        return null;
-    }
-
     private Path resolveDanmakuFile(PreviewFile previewFile) {
         try {
             if (previewFile == null || !previewFile.available || previewFile.sourceFile == null) {
@@ -396,7 +391,8 @@ public class PartPreviewService {
                 return null;
             }
             Path danmaku = parent.resolve(name.substring(0, dot) + ".xml");
-            Path danmakuReal = resolveRealPathUnderWorkPath(danmaku);
+            StorageRootService.RootMatch trusted = storageRootService.matchTrustedExisting(danmaku).orElse(null);
+            Path danmakuReal = trusted == null ? null : trusted.resolvedPath();
             if (danmakuReal == null || !Files.isRegularFile(danmakuReal)) {
                 return null;
             }
