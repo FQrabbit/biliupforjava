@@ -25,6 +25,7 @@ import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartPathService;
+import top.sshh.bililiverecoder.service.RoomLiveEventXmlIssueService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -115,6 +116,8 @@ public class RecordBiliPublishService {
     private StorageRootService storageRootService;
     @Autowired
     private RecordPartPathService partPathService;
+    @Autowired
+    private RoomLiveEventXmlIssueService xmlIssueService;
 
     @Async
     public void asyncPublishRecordHistory(RecordHistory history) {
@@ -568,14 +571,14 @@ public class RecordBiliPublishService {
                 continue;
             }
             if ("EDIT_PART".equals(part.getSourceType())) {
-                partRepository.delete(part);
+                deletePartAndXmlIssue(part);
                 deletedTemp++;
             } else if ("ONLINE_PART".equals(part.getSourceType()) && part.getPage() > 0
                     && onlineVideos.stream().anyMatch(v -> v != null && v.getPage() == part.getPage())) {
-                partRepository.delete(part);
+                deletePartAndXmlIssue(part);
                 deletedTemp++;
             } else if (shouldDeleteUnmatchedLocalPartAfterRestore(part, onlineVideos)) {
-                partRepository.delete(part);
+                deletePartAndXmlIssue(part);
                 deletedPolluted++;
             }
         }
@@ -2395,7 +2398,7 @@ public class RecordBiliPublishService {
         target = syncEditPartLocalState(target, page, title, filePath, fileName, cid, fileSize);
         if (uploadPart != null && uploadPart.getId() != null && !uploadPart.getId().equals(target.getId())) {
             try {
-                partRepository.delete(uploadPart);
+                deletePartAndXmlIssue(uploadPart);
             } catch (Exception e) {
                 log.debug("[BLR] {}", LogKvs.event("Publish.EditParts.TempPartDeleteFailed")
                         .add("historyId", history.getId())
@@ -2471,13 +2474,23 @@ public class RecordBiliPublishService {
                 continue;
             }
             try {
-                partRepository.delete(part);
+                deletePartAndXmlIssue(part);
             } catch (Exception e) {
                 log.debug("[BLR] {}", LogKvs.event("Publish.EditParts.StalePartDeleteFailed")
                         .add("historyId", history.getId())
                         .add("partId", part.getId())
                         .addIfNotBlank("err", e.getMessage()));
             }
+        }
+    }
+
+    private void deletePartAndXmlIssue(RecordHistoryPart part) {
+        if (part == null) {
+            return;
+        }
+        partRepository.delete(part);
+        if (part.getId() != null) {
+            xmlIssueService.clear(part.getId());
         }
     }
 

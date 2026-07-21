@@ -14,6 +14,15 @@ new Vue({
             xmlRepairing: false,
             xmlRepairDialogVisible: false,
             xmlRepairResult: null,
+            xmlIssueSummary: {},
+            xmlIssueDialogVisible: false,
+            xmlIssuesLoading: false,
+            xmlIssueActionLoading: false,
+            xmlIssuePageData: { items: [], total: 0, page: 0, size: 25 },
+            xmlIssueStatus: 'PENDING',
+            xmlIssueKeyword: '',
+            xmlIssueHistoryId: null,
+            xmlIssueSelection: [],
             moreActionsVisible: false,
             maintenancePoller: null,
             statsTaskPoller: null,
@@ -181,6 +190,21 @@ new Vue({
         },
         mobileTopGiftUsers: function () {
             return (this.activeGiftUsers || []).slice(0, 10);
+        },
+        showXmlIssueBanner: function () {
+            return Number(this.xmlIssueSummary.attentionCount || 0) > 0;
+        },
+        xmlIssueItems: function () {
+            return (this.xmlIssuePageData && this.xmlIssuePageData.items) || [];
+        },
+        xmlIssueTotal: function () {
+            return Number((this.xmlIssuePageData && this.xmlIssuePageData.total) || 0);
+        },
+        xmlIssuePageCount: function () {
+            return Math.max(1, Math.ceil(this.xmlIssueTotal / 25));
+        },
+        selectedXmlIssueIds: function () {
+            return (this.xmlIssueSelection || []).map(function (item) { return item.partId; }).filter(Boolean);
         }
     },
     methods: {
@@ -218,6 +242,7 @@ new Vue({
                 } else {
                     self.renderCharts();
                 }
+                self.loadXmlIssueSummary();
                 self.notifyParentReady(false);
             }).fail(function () {
                 self.notifyParentReady(true);
@@ -298,6 +323,192 @@ new Vue({
         toggleMoreActions: function () {
             this.moreActionsVisible = !this.moreActionsVisible;
         },
+        loadXmlIssueSummary: function () {
+            var self = this;
+            StatsApi.xmlIssueSummary(function (summary) {
+                self.xmlIssueSummary = summary || {};
+            });
+        },
+        openXmlIssueManager: function (historyId) {
+            this.moreActionsVisible = false;
+            this.xmlIssueHistoryId = historyId || null;
+            this.xmlIssueStatus = 'PENDING';
+            this.xmlIssueKeyword = '';
+            this.xmlIssueSelection = [];
+            this.xmlIssueDialogVisible = true;
+            this.loadXmlIssues(1);
+        },
+        loadXmlIssues: function (page) {
+            var self = this;
+            if (!this.xmlIssueDialogVisible) {
+                return;
+            }
+            this.xmlIssuesLoading = true;
+            var currentPage = page === undefined || page === null
+                ? Number((this.xmlIssuePageData && this.xmlIssuePageData.page) || 0) + 1
+                : Number(page);
+            StatsApi.xmlIssues({
+                status: this.xmlIssueStatus,
+                historyId: this.xmlIssueHistoryId,
+                keyword: this.xmlIssueKeyword,
+                page: Math.max(0, currentPage - 1),
+                size: 25
+            }, function (data) {
+                self.xmlIssuePageData = data || { items: [], total: 0, page: 0, size: 25 };
+                self.xmlIssueSelection = [];
+                if (data && data.summary) {
+                    self.xmlIssueSummary = data.summary;
+                }
+                self.xmlIssuesLoading = false;
+            }, function () {
+                self.$message.error('XML 问题列表加载失败');
+                self.xmlIssuesLoading = false;
+            });
+        },
+        changeXmlIssueStatus: function (status) {
+            this.xmlIssueStatus = status;
+            this.loadXmlIssues(1);
+        },
+        onXmlIssueSelectionChange: function (rows) {
+            this.xmlIssueSelection = rows || [];
+        },
+        xmlIssueLabel: function (type) {
+            var labels = {
+                MISSING_UNEXPECTED: '文件缺失',
+                INVALID_XML: '解析失败',
+                READ_FAILED: '读取失败',
+                ROOT_OFFLINE: '存储离线',
+                PATH_UNRESOLVED: '路径待确认',
+                INTERNAL_ERROR: '内部异常'
+            };
+            return labels[type] || '待处理';
+        },
+        xmlIssueTagType: function (type) {
+            if (type === 'ROOT_OFFLINE') return 'info';
+            if (type === 'MISSING_UNEXPECTED' || type === 'PATH_UNRESOLVED') return 'warning';
+            return 'danger';
+        },
+        xmlIssueCanRepair: function (item) {
+            return item && item.issueType === 'INVALID_XML';
+        },
+        xmlIssueFilterPayload: function () {
+            return {
+                selectionMode: 'FILTER',
+                confirmAll: true,
+                status: this.xmlIssueStatus,
+                historyId: this.xmlIssueHistoryId,
+                keyword: this.xmlIssueKeyword
+            };
+        },
+        xmlIssueIdsPayload: function () {
+            return { selectionMode: 'IDS', partIds: this.selectedXmlIssueIds };
+        },
+        copyXmlIssuePath: function (path) {
+            if (!path) return;
+            var self = this;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(path).then(function () {
+                    self.$message.success('XML 路径已复制');
+                }).catch(function () {
+                    self.$message.info(path);
+                });
+                return;
+            }
+            self.$message.info(path);
+        },
+        ignoreXmlIssues: function (filterAll) {
+            var self = this;
+            var payload = filterAll ? this.xmlIssueFilterPayload() : this.xmlIssueIdsPayload();
+            if (!filterAll && !payload.partIds.length) {
+                this.$message.warning('请选择需要停止检查的记录');
+                return;
+            }
+            var countText = filterAll ? '当前筛选的全部记录' : payload.partIds.length + ' 条记录';
+            this.$confirm('停止检查不会删除文件或现有统计，但缺失内容不会自动补齐。确定处理' + countText + '吗？', '停止检查 XML', {
+                confirmButtonText: '停止检查',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(function () {
+                self.xmlIssueActionLoading = true;
+                StatsApi.ignoreXmlIssues(payload, function (result) {
+                    if (!result || result.success === false) {
+                        self.$message.error((result && result.message) || '停止检查失败');
+                        self.xmlIssueActionLoading = false;
+                        return;
+                    }
+                    var message = '已停止检查 ' + (result.affectedCount || 0) + ' 条记录';
+                    if (result.skippedOfflineCount) {
+                        message += '，离线存储的 ' + result.skippedOfflineCount + ' 条会保留自动检查';
+                    }
+                    self.$message.success(message);
+                    self.xmlIssueSummary = result.summary || self.xmlIssueSummary;
+                    self.loadXmlIssues(1);
+                    self.xmlIssueActionLoading = false;
+                }, function () {
+                    self.$message.error('停止检查失败');
+                    self.xmlIssueActionLoading = false;
+                });
+            }).catch(function () {});
+        },
+        resumeXmlIssues: function (filterAll) {
+            var self = this;
+            var payload = filterAll ? this.xmlIssueFilterPayload() : this.xmlIssueIdsPayload();
+            if (!filterAll && !payload.partIds.length) {
+                this.$message.warning('请选择需要恢复的记录');
+                return;
+            }
+            this.xmlIssueActionLoading = true;
+            StatsApi.resumeXmlIssues(payload, function (result) {
+                if (!result || result.success === false) {
+                    self.$message.error((result && result.message) || '恢复检查失败');
+                    self.xmlIssueActionLoading = false;
+                    return;
+                }
+                self.$message.success('已恢复 ' + (result.affectedCount || 0) + ' 条记录');
+                self.xmlIssueSummary = result.summary || self.xmlIssueSummary;
+                self.loadXmlIssues(1);
+                self.xmlIssueActionLoading = false;
+            }, function () {
+                self.$message.error('恢复检查失败');
+                self.xmlIssueActionLoading = false;
+            });
+        },
+        recheckXmlIssues: function (partIds) {
+            var self = this;
+            var ids = (partIds || this.selectedXmlIssueIds || []).filter(Boolean);
+            if (!ids.length) {
+                this.$message.warning('请选择需要重新检查的记录');
+                return;
+            }
+            if (ids.length > 100) {
+                this.$message.warning('一次最多重新检查 100 条记录');
+                return;
+            }
+            this.xmlIssueActionLoading = true;
+            this.startOperationProgress('重新检查 XML', '正在启动检查任务', '文件恢复或修复后会重新解析并刷新相关统计');
+            StatsApi.recheckXmlIssues({ partIds: ids }, function (result) {
+                if (!result || result.success === false || result.busy) {
+                    self.$message.warning((result && result.message) || '重新检查任务暂时无法启动');
+                    self.failOperationProgress('重新检查被占用', (result && result.message) || '');
+                    self.xmlIssueActionLoading = false;
+                    return;
+                }
+                self.pollStatsTaskStatus('xmlRecheck');
+                self.xmlIssueActionLoading = false;
+            }, function () {
+                self.$message.error('启动 XML 重新检查失败');
+                self.failOperationProgress('启动 XML 重新检查失败');
+                self.xmlIssueActionLoading = false;
+            });
+        },
+        ignoreOneXmlIssue: function (item) {
+            this.xmlIssueSelection = item ? [item] : [];
+            this.ignoreXmlIssues(false);
+        },
+        resumeOneXmlIssue: function (item) {
+            this.xmlIssueSelection = item ? [item] : [];
+            this.resumeXmlIssues(false);
+        },
         notifyParentIframeModal: function (active, source) {
             if (window.PageBootstrap && typeof window.PageBootstrap.setIframeModalState === 'function') {
                 window.PageBootstrap.setIframeModalState(!!active, source || 'stats');
@@ -314,11 +525,12 @@ new Vue({
             } catch (e) {}
         },
         syncParentIframeModalState: function () {
-            this.notifyParentIframeModal(!!(this.moreActionsVisible || this.xmlRepairDialogVisible), 'stats');
+            this.notifyParentIframeModal(!!(this.moreActionsVisible || this.xmlRepairDialogVisible || this.xmlIssueDialogVisible), 'stats');
         },
         chooseXmlRepairFile: function () {
             var self = this;
             this.moreActionsVisible = false;
+            this.xmlIssueDialogVisible = false;
             this.xmlRepairDialogVisible = true;
             this.$nextTick(function () {
                 if (self.$refs.xmlRepairInput) {
@@ -704,6 +916,9 @@ new Vue({
                 this.finishOperationProgress(status.message || '处理完成', detail, true);
                 if (!recovering) {
                     this.reload();
+                    if (this.xmlIssueDialogVisible) {
+                        this.loadXmlIssues(1);
+                    }
                 }
             } else {
                 if (!recovering) {
@@ -720,11 +935,13 @@ new Vue({
             this.backfilling = running && task === 'backfill';
             this.rebuilding = running && task === 'rebuild';
             this.cleaning = running && task === 'cleanup';
+            this.xmlIssueActionLoading = running && task === 'xmlRecheck';
         },
         statsTaskTitle: function (task) {
             if (task === 'backfill') return '补全未统计';
             if (task === 'rebuild') return '重建统计';
             if (task === 'cleanup') return '清理缓存';
+            if (task === 'xmlRecheck') return '重新检查 XML';
             return '统计任务';
         },
         statsTaskDetail: function (status) {
@@ -739,6 +956,10 @@ new Vue({
                 if (result.updated !== undefined) extra.push('更新 ' + result.updated + ' 场');
                 if (result.deletedTotalStats !== undefined) extra.push('清理统计缓存 ' + result.deletedTotalStats + ' 条');
                 if (result.deletedParseStates !== undefined) extra.push('清空解析标记 ' + result.deletedParseStates + ' 条');
+                if (result.checked !== undefined) extra.push('检查 ' + result.checked + ' 个 XML');
+                if (result.resolved !== undefined) extra.push('恢复 ' + result.resolved + ' 个');
+                if (result.missing !== undefined && result.missing > 0) extra.push('仍缺失 ' + result.missing + ' 个');
+                if (result.offline !== undefined && result.offline > 0) extra.push('存储离线 ' + result.offline + ' 个');
                 if (extra.length) {
                     detail = (detail ? detail + ' · ' : '') + extra.join('，');
                 }
@@ -1458,6 +1679,9 @@ new Vue({
             this.syncParentIframeModalState();
         },
         xmlRepairDialogVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        xmlIssueDialogVisible: function () {
             this.syncParentIframeModalState();
         }
     },

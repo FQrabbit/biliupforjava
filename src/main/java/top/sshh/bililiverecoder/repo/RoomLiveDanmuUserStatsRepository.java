@@ -21,6 +21,11 @@ public interface RoomLiveDanmuUserStatsRepository extends CrudRepository<RoomLiv
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
+    @Query("delete from RoomLiveDanmuUserStats s where not exists (select i from RoomLiveEventXmlIssue i where i.partId = s.partId)")
+    int deleteAllRowsWithoutXmlIssue();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
     void deleteByPartId(Long partId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

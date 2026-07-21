@@ -60,6 +60,8 @@ public class StatsAggregationService {
     @Autowired
     private RoomLiveEventParseService roomLiveEventParseService;
     @Autowired
+    private RoomLiveEventXmlIssueService xmlIssueService;
+    @Autowired
     @Qualifier("myAsyncPool")
     private TaskExecutor taskExecutor;
 
@@ -99,12 +101,18 @@ public class StatsAggregationService {
                     updated++;
                 }
             }
-            if (parseSummary.failedCached > 0) {
-                log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipFailedCachedSummary")
+            if (parseSummary.issueSkipped > 0) {
+                log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.IssueSummary")
                         .add("historyLimit", safeLimit)
                         .add("historyCount", histories.size())
                         .add("partCount", parseSummary.checked)
-                        .add("skipped", parseSummary.failedCached));
+                        .add("skipped", parseSummary.issueSkipped)
+                        .add("missing", parseSummary.count(RoomLiveEventXmlIssue.IssueType.MISSING_UNEXPECTED))
+                        .add("invalid", parseSummary.count(RoomLiveEventXmlIssue.IssueType.INVALID_XML))
+                        .add("readFailed", parseSummary.count(RoomLiveEventXmlIssue.IssueType.READ_FAILED))
+                        .add("offline", parseSummary.count(RoomLiveEventXmlIssue.IssueType.ROOT_OFFLINE))
+                        .add("unresolved", parseSummary.count(RoomLiveEventXmlIssue.IssueType.PATH_UNRESOLVED))
+                        .add("internal", parseSummary.count(RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR)));
             }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
@@ -213,6 +221,24 @@ public class StatsAggregationService {
         return startStatsTask("rebuild", "重建统计", this::runRebuildAllStatsTask);
     }
 
+    public Map<String, Object> startXmlIssueRecheck(List<Long> partIds) {
+        List<Long> safeIds = normalizePartIds(partIds);
+        if (safeIds.isEmpty()) {
+            throw new IllegalArgumentException("请选择需要重新检查的 XML 记录");
+        }
+        if (safeIds.size() > 100) {
+            throw new IllegalArgumentException("一次最多重新检查 100 个 XML 记录");
+        }
+        return startXmlIssueRecheckTask(safeIds, "重新检查 XML");
+    }
+
+    public void startXmlIssueRecheckByRoot(Long storageRootId) {
+        List<Long> partIds = xmlIssueService.activePartIdsByRoot(storageRootId);
+        if (!partIds.isEmpty()) {
+            startXmlIssueRecheckTask(partIds, "存储恢复后重新检查 XML");
+        }
+    }
+
     public Map<String, Object> cleanupStats() {
         if (databaseMaintenanceState.isMaintenanceActive()) {
             return statsBusyResult("cleanup", null);
@@ -273,6 +299,69 @@ public class StatsAggregationService {
         return taskStatus.toMap();
     }
 
+    private Map<String, Object> startXmlIssueRecheckTask(List<Long> partIds, String title) {
+        return startStatsTask("xmlRecheck", title, () -> runXmlIssueRecheckTask(partIds));
+    }
+
+    private void runXmlIssueRecheckTask(List<Long> partIds) {
+        if (!statsWriteLock.tryLock()) {
+            updateTaskBusy("已有统计任务正在执行");
+            return;
+        }
+        try {
+            List<Long> safeIds = normalizePartIds(partIds);
+            Map<RoomLiveEventXmlIssue.IssueType, Integer> unresolved = new EnumMap<>(RoomLiveEventXmlIssue.IssueType.class);
+            Set<Long> historyIds = new LinkedHashSet<>();
+            int resolved = 0;
+            int processed = 0;
+            for (Long partId : safeIds) {
+                RecordHistoryPart part = partRepository.findById(partId).orElse(null);
+                if (part == null) {
+                    processed++;
+                    continue;
+                }
+                updateTaskProgress("正在检查 XML", processed, safeIds.size(), part.getRoomId() + " / " + partId);
+                RoomLiveEventParseService.ParseResult parseResult = roomLiveEventParseService.parsePart(part, true);
+                if (parseResult.parsed()) {
+                    resolved++;
+                } else if (parseResult.issueType() != null) {
+                    unresolved.merge(parseResult.issueType(), 1, Integer::sum);
+                }
+                if (part.getHistoryId() != null) {
+                    historyIds.add(part.getHistoryId());
+                }
+                processed++;
+                updateTaskProgress("正在检查 XML", processed, safeIds.size(), part.getRoomId() + " / " + partId);
+            }
+            int refreshed = 0;
+            for (Long historyId : historyIds) {
+                RecordHistory history = historyRepository.findById(historyId).orElse(null);
+                if (history != null && aggregateHistory(history)) {
+                    refreshed++;
+                }
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("checked", processed);
+            result.put("resolved", resolved);
+            result.put("refreshedHistories", refreshed);
+            result.put("missing", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.MISSING_UNEXPECTED, 0));
+            result.put("invalid", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.INVALID_XML, 0));
+            result.put("readFailed", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.READ_FAILED, 0));
+            result.put("offline", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.ROOT_OFFLINE, 0));
+            result.put("unresolved", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.PATH_UNRESOLVED, 0));
+            result.put("internal", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR, 0));
+            updateTaskDone("XML 重新检查完成", result);
+        } catch (Throwable e) {
+            updateTaskFailed("XML 重新检查失败：" + e.getMessage());
+            log.warn("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.RecheckFailed")
+                    .add("err", e.getMessage())
+                    .add("ex", e.getClass().getSimpleName()), e);
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
     private void runBackfillMissingStatsTask() {
         if (!statsWriteLock.tryLock()) {
             updateTaskBusy("已有统计任务正在执行");
@@ -319,8 +408,8 @@ public class StatsAggregationService {
         }
         try {
             updateTaskProgress("正在清理旧缓存", 0, 1, "清理统计缓存表");
-            StatsCleanupResult cleanup = cleanupStatsRows();
-            int deletedParseStates = eventParseStateRepository.deleteAllRows();
+            StatsCleanupResult cleanup = cleanupStatsRowsPreservingXmlIssueCaches();
+            int deletedParseStates = eventParseStateRepository.deleteAllRowsWithoutXmlIssue();
             List<RecordHistory> histories = historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc().stream()
                     .filter(history -> history != null && history.getId() != null)
                     .collect(Collectors.toList());
@@ -580,6 +669,14 @@ public class StatsAggregationService {
         return new StatsCleanupResult(deletedBuckets, deletedDailyStats, deletedSessionStats, deletedDanmuUserStats);
     }
 
+    private StatsCleanupResult cleanupStatsRowsPreservingXmlIssueCaches() {
+        int deletedBuckets = bucketStatsRepository.deleteAllRows();
+        int deletedDailyStats = dailyStatsRepository.deleteAllRows();
+        int deletedSessionStats = sessionStatsRepository.deleteAllRows();
+        int deletedDanmuUserStats = danmuUserStatsRepository.deleteAllRowsWithoutXmlIssue();
+        return new StatsCleanupResult(deletedBuckets, deletedDailyStats, deletedSessionStats, deletedDanmuUserStats);
+    }
+
     private record StatsCleanupResult(int deletedBucketStats,
                                       int deletedDailyStats,
                                       int deletedSessionStats,
@@ -771,14 +868,26 @@ public class StatsAggregationService {
 
     private static class EventParseSummary {
         private int checked;
-        private int failedCached;
+        private int issueSkipped;
+        private final Map<RoomLiveEventXmlIssue.IssueType, Integer> issueCounts =
+                new EnumMap<>(RoomLiveEventXmlIssue.IssueType.class);
 
         private void accept(RoomLiveEventParseService.ParseResult result) {
             checked++;
-            if (result != null && "parse failed cached".equals(result.reason())) {
-                failedCached++;
+            if (result != null && result.issueType() != null) {
+                issueSkipped++;
+                issueCounts.merge(result.issueType(), 1, Integer::sum);
             }
         }
+
+        private int count(RoomLiveEventXmlIssue.IssueType type) {
+            return issueCounts.getOrDefault(type, 0);
+        }
+    }
+
+    private List<Long> normalizePartIds(Collection<Long> partIds) {
+        if (partIds == null) return List.of();
+        return partIds.stream().filter(Objects::nonNull).distinct().toList();
     }
 
     private boolean isHistoryReadyForStats(RecordHistory history, List<RecordHistoryPart> parts) {
@@ -1151,9 +1260,13 @@ public class StatsAggregationService {
         Map<String, Object> result = new LinkedHashMap<>();
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(historyId);
         List<RoomLiveEventParseState> states = eventParseStateRepository.findByHistoryId(historyId);
+        List<RoomLiveEventXmlIssue> xmlIssues = xmlIssueService.findByHistoryId(historyId);
         Map<Long, RoomLiveEventParseState> stateByPartId = states.stream()
                 .filter(state -> state.getPartId() != null)
                 .collect(Collectors.toMap(RoomLiveEventParseState::getPartId, state -> state, (a, b) -> a));
+        Map<Long, RoomLiveEventXmlIssue> issueByPartId = xmlIssues.stream()
+                .filter(issue -> issue.getPartId() != null)
+                .collect(Collectors.toMap(RoomLiveEventXmlIssue::getPartId, issue -> issue, (a, b) -> a));
 
         int partCount = parts.size();
         int stateCount = states.size();
@@ -1163,11 +1276,14 @@ public class StatsAggregationService {
         int xmlExistsCount = 0;
         int xmlMissingCount = 0;
         int xmlUnknownCount = 0;
+        int activeIssueCount = 0;
+        int ignoredIssueCount = 0;
         long parsedDanmuCount = 0L;
         List<Map<String, Object>> partDetails = new ArrayList<>();
 
         for (RecordHistoryPart part : parts) {
             RoomLiveEventParseState state = part.getId() == null ? null : stateByPartId.get(part.getId());
+            RoomLiveEventXmlIssue issue = part.getId() == null ? null : issueByPartId.get(part.getId());
             Map<String, Object> detail = new LinkedHashMap<>();
             detail.put("partId", part.getId());
             detail.put("filePath", part.getFilePath());
@@ -1183,10 +1299,9 @@ public class StatsAggregationService {
                 } else {
                     failedStateCount++;
                 }
-                XmlFileStatus xmlStatus = xmlFileStatus(state.getXmlPath());
-                if (xmlStatus.exists()) {
+                if (issue == null) {
                     xmlExistsCount++;
-                } else if (xmlStatus.known()) {
+                } else if (issue.getIssueType() == RoomLiveEventXmlIssue.IssueType.MISSING_UNEXPECTED) {
                     xmlMissingCount++;
                 } else {
                     xmlUnknownCount++;
@@ -1196,8 +1311,21 @@ public class StatsAggregationService {
                 detail.put("parserVersion", state.getParserVersion());
                 detail.put("parsedAt", state.getParsedAt());
                 detail.put("xmlPath", state.getXmlPath());
-                detail.put("xmlExists", xmlStatus.exists());
+                detail.put("xmlExists", issue == null);
                 detail.put("errorMessage", state.getErrorMessage());
+            }
+            if (issue != null) {
+                boolean ignored = issue.getIgnoredAt() != null;
+                if (ignored) {
+                    ignoredIssueCount++;
+                } else {
+                    activeIssueCount++;
+                }
+                detail.put("xmlIssueType", issue.getIssueType() == null ? null : issue.getIssueType().name());
+                detail.put("xmlIssueIgnoredAt", issue.getIgnoredAt());
+                detail.put("xmlIssueSuggestion", issue.getIssueType());
+                detail.put("xmlPath", issue.getXmlPath() == null ? detail.get("xmlPath") : issue.getXmlPath());
+                detail.put("errorMessage", issue.getErrorMessage() == null ? detail.get("errorMessage") : issue.getErrorMessage());
             }
             partDetails.add(detail);
         }
@@ -1209,7 +1337,10 @@ public class StatsAggregationService {
         String status;
         String message;
         boolean rebuildMayHelp = false;
-        if (failedStateCount > 0) {
+        if (activeIssueCount > 0) {
+            status = xmlMissingCount > 0 ? "missing_xml" : "parse_failed";
+            message = "检测到 " + activeIssueCount + " 个 XML 问题，系统已停止自动重试，可在 XML 问题管理中处理";
+        } else if (failedStateCount > 0) {
             status = "parse_failed";
             message = "检测到 XML 解析失败，损坏或未完整的 XML 不会反复重试；该场部分弹幕趋势或用户 Top 可能缺失";
             rebuildMayHelp = false;
@@ -1248,19 +1379,10 @@ public class StatsAggregationService {
         result.put("xmlExistsCount", xmlExistsCount);
         result.put("xmlMissingCount", xmlMissingCount);
         result.put("xmlUnknownCount", xmlUnknownCount);
+        result.put("xmlIssueCount", activeIssueCount);
+        result.put("xmlIgnoredIssueCount", ignoredIssueCount);
         result.put("parts", partDetails);
         return result;
-    }
-
-    private XmlFileStatus xmlFileStatus(String xmlPath) {
-        if (xmlPath == null || xmlPath.isBlank()) {
-            return new XmlFileStatus(false, false);
-        }
-        File file = new File(xmlPath);
-        return new XmlFileStatus(true, file.exists() && file.isFile());
-    }
-
-    private record XmlFileStatus(boolean known, boolean exists) {
     }
 
     private Map<String, Object> buildGiftPriceDiagnostics(Long historyId,

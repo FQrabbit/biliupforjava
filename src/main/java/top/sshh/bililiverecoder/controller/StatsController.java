@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import top.sshh.bililiverecoder.service.DatabaseMaintenanceService;
+import top.sshh.bililiverecoder.service.RoomLiveEventXmlIssueService;
 import top.sshh.bililiverecoder.service.StatsAggregationService;
 import top.sshh.bililiverecoder.util.XmlRepairTool;
 
@@ -23,6 +24,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +41,9 @@ public class StatsController {
 
     @Autowired
     private DatabaseMaintenanceService databaseMaintenanceService;
+
+    @Autowired
+    private RoomLiveEventXmlIssueService xmlIssueService;
 
     @GetMapping("/overview")
     public Map<String, Object> overview(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -103,6 +109,49 @@ public class StatsController {
         return statsAggregationService.cleanupStaleRecordingStates();
     }
 
+    @GetMapping("/xml/issues/summary")
+    public Map<String, Object> xmlIssueSummary() {
+        return xmlIssueService.summary();
+    }
+
+    @GetMapping("/xml/issues")
+    public Map<String, Object> xmlIssues(@RequestParam(required = false) String status,
+                                         @RequestParam(required = false) String type,
+                                         @RequestParam(required = false) String roomId,
+                                         @RequestParam(required = false) Long historyId,
+                                         @RequestParam(required = false) String keyword,
+                                         @RequestParam(defaultValue = "0") int page,
+                                         @RequestParam(defaultValue = "25") int size) {
+        return xmlIssueService.list(status, type, roomId, historyId, keyword, page, size);
+    }
+
+    @PostMapping("/xml/issues/ignore")
+    public Map<String, Object> ignoreXmlIssues(@RequestBody(required = false) Map<String, Object> request) {
+        try {
+            return xmlIssueService.ignore(request == null ? Map.of() : request);
+        } catch (IllegalArgumentException e) {
+            return invalidXmlIssueRequest(e);
+        }
+    }
+
+    @PostMapping("/xml/issues/resume")
+    public Map<String, Object> resumeXmlIssues(@RequestBody(required = false) Map<String, Object> request) {
+        try {
+            return xmlIssueService.resume(request == null ? Map.of() : request);
+        } catch (IllegalArgumentException e) {
+            return invalidXmlIssueRequest(e);
+        }
+    }
+
+    @PostMapping("/xml/issues/recheck")
+    public Map<String, Object> recheckXmlIssues(@RequestBody(required = false) Map<String, Object> request) {
+        try {
+            return statsAggregationService.startXmlIssueRecheck(requestPartIds(request));
+        } catch (IllegalArgumentException e) {
+            return invalidXmlIssueRequest(e);
+        }
+    }
+
     @GetMapping("/maintenance/status")
     public Map<String, Object> maintenanceStatus() {
         return databaseMaintenanceService.status();
@@ -111,6 +160,28 @@ public class StatsController {
     @PostMapping("/maintenance/compact")
     public Map<String, Object> compactDatabase() {
         return databaseMaintenanceService.compactAsync();
+    }
+
+    private Map<String, Object> invalidXmlIssueRequest(IllegalArgumentException e) {
+        return Map.of("success", false, "message", e.getMessage());
+    }
+
+    private List<Long> requestPartIds(Map<String, Object> request) {
+        if (request == null || !(request.get("partIds") instanceof Collection<?> values)) {
+            return List.of();
+        }
+        List<Long> result = new ArrayList<>();
+        for (Object value : values) {
+            if (value instanceof Number number) {
+                result.add(number.longValue());
+                continue;
+            }
+            try {
+                result.add(Long.parseLong(String.valueOf(value)));
+            } catch (Exception ignored) {
+            }
+        }
+        return result;
     }
 
     @PostMapping(value = "/xml/repair", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

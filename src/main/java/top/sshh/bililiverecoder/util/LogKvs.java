@@ -582,6 +582,10 @@ public final class LogKvs {
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipActive", "直播事件解析：跳过仍在写入的分P");
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipFailedCached", "直播事件解析：跳过已确认失败且未变化的 XML");
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipFailedCachedSummary", "直播事件解析：已汇总跳过未变化的失败 XML");
+        EVENT_ZH.put("RoomLiveEvent.Parse.IssueDetected", "直播事件解析：发现需要处理的 XML 问题");
+        EVENT_ZH.put("RoomLiveEvent.Parse.IssueMigration", "直播事件解析：已迁移旧 XML 问题状态");
+        EVENT_ZH.put("RoomLiveEvent.Parse.IssueSummary", "直播事件解析：已汇总跳过待处理 XML");
+        EVENT_ZH.put("RoomLiveEvent.Parse.RecheckFailed", "直播事件解析：重新检查任务失败");
         EVENT_ZH.put("RoomLiveEvent.Parse.DisableSecureFailed", "直播事件解析：关闭 XML 安全处理失败");
         EVENT_ZH.put("RoomLiveEvent.Backfill.Done", "直播事件解析：历史统计回填完成");
         

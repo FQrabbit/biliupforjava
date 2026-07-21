@@ -39,6 +39,7 @@ import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.RoomLiveEventXmlIssueService;
 import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 
 import java.io.File;
@@ -98,6 +99,8 @@ public class HistoryController {
     private PartFileOperationService partFileOperationService;
     @Autowired
     private PartFileLocationService partFileLocationService;
+    @Autowired
+    private RoomLiveEventXmlIssueService xmlIssueService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -733,6 +736,7 @@ public class HistoryController {
             long localDeleteCostMs = toCostMs(localDeleteStartNs);
 
             long partDeleteStartNs = System.nanoTime();
+            xmlIssueService.deleteByHistoryId(history.getId());
             for (RecordHistoryPart part : partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId())) {
                 partFileOperationService.purgeMetadata(part.getId());
             }

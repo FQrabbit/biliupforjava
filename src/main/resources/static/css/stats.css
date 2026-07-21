@@ -149,6 +149,200 @@ body {
     padding-top: 12px;
 }
 
+.xml-issue-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--warning-color, #e6a23c) 38%, var(--border-color, #dcdfe6));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--warning-color, #e6a23c) 9%, var(--bg-primary, #ffffff));
+    color: var(--text-primary, #303133);
+}
+
+.xml-issue-banner-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: var(--warning-color, #e6a23c);
+    background: color-mix(in srgb, var(--warning-color, #e6a23c) 14%, transparent);
+    font-size: 18px;
+}
+
+.xml-issue-banner-main {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    flex: 1 1 auto;
+}
+
+.xml-issue-banner-main strong {
+    font-size: 14px;
+}
+
+.xml-issue-banner-main span {
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.stats-xml-issue-dialog {
+    max-width: calc(100vw - 32px);
+}
+
+.stats-xml-issue-dialog .el-dialog__body {
+    padding: 16px 20px 14px;
+}
+
+.xml-issue-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.xml-issue-toolbar .el-radio-group {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.xml-issue-toolbar .el-radio-button {
+    margin: 0;
+}
+
+.xml-issue-toolbar .el-radio-button__inner {
+    border-left: 1px solid var(--border-color, #dcdfe6) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+
+.xml-issue-toolbar-actions {
+    display: flex;
+    flex: 0 1 380px;
+    gap: 8px;
+}
+
+.xml-issue-toolbar-actions .el-input {
+    min-width: 160px;
+}
+
+.xml-issue-action-bar,
+.xml-issue-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.xml-issue-action-bar {
+    min-height: 42px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color-light, #ebeef5);
+    border-radius: 6px;
+    background: var(--bg-secondary, #f5f7fb);
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+}
+
+.xml-issue-action-bar > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.xml-issue-action-bar .el-button {
+    margin-left: 0;
+}
+
+.xml-issue-table {
+    width: 100%;
+}
+
+.xml-issue-table .cell {
+    min-width: 0;
+}
+
+.xml-issue-title,
+.xml-issue-subtitle,
+.xml-issue-file-name {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.xml-issue-title {
+    color: var(--text-primary, #303133);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.xml-issue-subtitle,
+.xml-issue-file-name {
+    margin-top: 3px;
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.xml-issue-expanded {
+    display: grid;
+    gap: 8px;
+    padding: 8px 12px;
+    color: var(--text-primary, #303133);
+}
+
+.xml-issue-expanded > div {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+    line-height: 1.5;
+}
+
+.xml-issue-expanded > div > span {
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+}
+
+.xml-issue-expanded code,
+.xml-issue-expanded strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+    color: var(--text-primary, #303133);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.xml-issue-pagination {
+    margin-top: 12px;
+    color: var(--text-secondary, #606266);
+    font-size: 12px;
+}
+
+.xml-issue-pagination .el-pagination {
+    padding: 0;
+}
+
+.xml-issue-toolbar .el-button:focus-visible,
+.xml-issue-action-bar .el-button:focus-visible,
+.xml-issue-banner .el-button:focus-visible,
+.xml-issue-expanded .el-button:focus-visible {
+    outline: 2px solid var(--primary-color, #409eff);
+    outline-offset: 2px;
+}
+
 .xml-repair-result {
     display: grid;
     gap: 10px;
@@ -1652,6 +1846,30 @@ html[data-theme="dark"] .stats-scope-line em,
     .coverage-pending-head > div {
         align-items: flex-start;
         flex-direction: column;
+    }
+    .xml-issue-banner,
+    .xml-issue-toolbar,
+    .xml-issue-action-bar,
+    .xml-issue-pagination {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .xml-issue-toolbar-actions {
+        flex-basis: auto;
+        flex-wrap: wrap;
+    }
+    .xml-issue-toolbar-actions .el-input {
+        flex: 1 1 180px;
+    }
+    .xml-issue-action-bar > div {
+        justify-content: flex-start;
+    }
+    .xml-issue-expanded > div {
+        grid-template-columns: 1fr;
+        gap: 3px;
+    }
+    .xml-issue-pagination .el-pagination {
+        align-self: center;
     }
 }
 

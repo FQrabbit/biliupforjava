@@ -51,6 +51,8 @@ public class RoomLiveEventParseService {
     private StatsAggregationService statsAggregationService;
     @Autowired
     private PartFileLocationService partFileLocationService;
+    @Autowired
+    private RoomLiveEventXmlIssueService xmlIssueService;
 
     public Map<String, Object> parseHistory(Long historyId, boolean force) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -103,7 +105,6 @@ public class RoomLiveEventParseService {
                     .add("endTimeNull", part.getEndTime() == null));
             return ParseResult.skipped("part active");
         }
-        File xmlFile = resolveXmlFile(part);
         RoomLiveEventParseState state = parseStateRepository.findByPartId(part.getId());
         if (state == null) {
             state = new RoomLiveEventParseState();
@@ -111,16 +112,41 @@ public class RoomLiveEventParseService {
         }
         state.setHistoryId(part.getHistoryId());
         state.setRoomId(part.getRoomId());
-        state.setXmlPath(xmlFile == null ? null : xmlFile.getPath());
-
-        if (xmlFile == null || !xmlFile.exists() || !xmlFile.isFile()) {
-            state.setSuccess(false);
-            state.setErrorMessage("xml not found");
-            state.setParsedAt(LocalDateTime.now());
-            state.setParserVersion(PARSER_VERSION);
-            parseStateRepository.save(state);
-            return ParseResult.skipped("xml not found");
+        if (force) {
+            xmlIssueService.prepareRecheck(part.getId());
+        } else {
+            RoomLiveEventXmlIssue issue = xmlIssueService.find(part.getId()).orElse(null);
+            if (issue != null) {
+            return ParseResult.skipped("xml issue cached:" + issue.getIssueType(), issue.getIssueType());
+            }
+            if (!state.isSuccess() && state.getParserVersion() >= PARSER_VERSION) {
+                RoomLiveEventXmlIssue legacyIssue = xmlIssueService.ensureFromParseState(part, state);
+                return ParseResult.skipped("xml issue cached:" + legacyIssue.getIssueType(), legacyIssue.getIssueType());
+            }
         }
+
+        PartFileLocationService.CompanionResolution resolution = partFileLocationService
+                .resolveCompanionState(part.getId(), ".xml");
+        if (!resolution.available()) {
+            RoomLiveEventXmlIssue.IssueType issueType = issueTypeFor(resolution);
+            String xmlPath = resolution.expectedPath() == null ? null : resolution.expectedPath().toString();
+            RoomLiveEventXmlIssueService.IssueUpdate update = xmlIssueService.record(part, issueType,
+                    resolution.storageRootId(), xmlPath, resolution.message());
+            saveUnavailableState(state, xmlPath, resolution.message());
+            if ((update.changed() || force) && logFailedCached) {
+                log.warn("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.IssueDetected")
+                        .add("roomId", part.getRoomId())
+                        .add("historyId", part.getHistoryId())
+                        .add("partId", part.getId())
+                        .add("issueType", issueType)
+                        .add("filePath", xmlPath)
+                        .add("err", resolution.message()));
+            }
+            return ParseResult.skipped("xml issue:" + issueType, issueType);
+        }
+
+        File xmlFile = resolution.path().toFile();
+        state.setXmlPath(xmlFile.getPath());
 
         long lastModified = xmlFile.lastModified();
         long size = xmlFile.length();
@@ -235,6 +261,7 @@ public class RoomLiveEventParseService {
             state.setParsedAt(now);
             state.setParserVersion(PARSER_VERSION);
             parseStateRepository.save(state);
+            xmlIssueService.clear(part.getId());
 
             log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.Saved")
                     .add("roomId", part.getRoomId())
@@ -248,13 +275,18 @@ public class RoomLiveEventParseService {
                     .addStageCostMs("total", parseStartNs));
             return ParseResult.parsed(counter.total);
         } catch (Exception e) {
-            state.setXmlLastModified(lastModified);
-            state.setXmlSize(size);
-            state.setSuccess(false);
-            state.setErrorMessage(truncate(e.getMessage(), 1000));
-            state.setParsedAt(LocalDateTime.now());
-            state.setParserVersion(PARSER_VERSION);
-            parseStateRepository.save(state);
+            RoomLiveEventXmlIssue.IssueType issueType = issueTypeFor(e);
+            RoomLiveEventXmlIssueService.IssueUpdate update = xmlIssueService.record(part, issueType,
+                    resolution.storageRootId(), xmlFile.getPath(), e.getMessage());
+            if (!state.isSuccess()) {
+                state.setXmlLastModified(lastModified);
+                state.setXmlSize(size);
+                state.setSuccess(false);
+                state.setErrorMessage(truncate(e.getMessage(), 1000));
+                state.setParsedAt(LocalDateTime.now());
+                state.setParserVersion(PARSER_VERSION);
+                parseStateRepository.save(state);
+            }
             log.warn("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.Failed")
                     .add("roomId", part.getRoomId())
                     .add("historyId", part.getHistoryId())
@@ -262,9 +294,43 @@ public class RoomLiveEventParseService {
                     .add("filePath", xmlFile.getPath())
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName())
+                    .add("issueType", issueType)
                     .addStageCostMs("total", parseStartNs), e);
-            return ParseResult.skipped("parse failed");
+            return ParseResult.skipped("xml issue:" + update.issue().getIssueType(), update.issue().getIssueType());
         }
+    }
+
+    private void saveUnavailableState(RoomLiveEventParseState state, String xmlPath, String error) {
+        if (state.isSuccess()) {
+            return;
+        }
+        state.setXmlPath(xmlPath);
+        state.setXmlLastModified(0L);
+        state.setXmlSize(0L);
+        state.setSuccess(false);
+        state.setErrorMessage(truncate(error, 1000));
+        state.setParsedAt(LocalDateTime.now());
+        state.setParserVersion(PARSER_VERSION);
+        parseStateRepository.save(state);
+    }
+
+    private RoomLiveEventXmlIssue.IssueType issueTypeFor(PartFileLocationService.CompanionResolution resolution) {
+        return switch (resolution.state()) {
+            case ROOT_OFFLINE -> RoomLiveEventXmlIssue.IssueType.ROOT_OFFLINE;
+            case MISSING_UNEXPECTED -> RoomLiveEventXmlIssue.IssueType.MISSING_UNEXPECTED;
+            case PATH_UNRESOLVED -> RoomLiveEventXmlIssue.IssueType.PATH_UNRESOLVED;
+            case AVAILABLE -> RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR;
+        };
+    }
+
+    private RoomLiveEventXmlIssue.IssueType issueTypeFor(Exception error) {
+        if (error instanceof org.dom4j.DocumentException) {
+            return RoomLiveEventXmlIssue.IssueType.INVALID_XML;
+        }
+        if (error instanceof java.io.IOException) {
+            return RoomLiveEventXmlIssue.IssueType.READ_FAILED;
+        }
+        return RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR;
     }
 
     private static Object[] createPartParseLocks() {
@@ -554,13 +620,17 @@ public class RoomLiveEventParseService {
     private record DanmuUserKey(Long uid, String uname) {
     }
 
-    public record ParseResult(boolean parsed, int count, String reason) {
+    public record ParseResult(boolean parsed, int count, String reason, RoomLiveEventXmlIssue.IssueType issueType) {
         private static ParseResult parsed(int count) {
-            return new ParseResult(true, count, null);
+            return new ParseResult(true, count, null, null);
         }
 
         private static ParseResult skipped(String reason) {
-            return new ParseResult(false, 0, reason);
+            return new ParseResult(false, 0, reason, null);
+        }
+
+        private static ParseResult skipped(String reason, RoomLiveEventXmlIssue.IssueType issueType) {
+            return new ParseResult(false, 0, reason, issueType);
         }
     }
 }

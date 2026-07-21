@@ -21,6 +21,10 @@ public class PartFileLocationService {
         MISSING_UNEXPECTED, PROCESSING, PROCESS_FAILED, UNKNOWN
     }
 
+    public enum CompanionState {
+        AVAILABLE, ROOT_OFFLINE, MISSING_UNEXPECTED, PATH_UNRESOLVED
+    }
+
     public record FileResolution(LocalFileState state, Path path, PartFileLocation location,
                                  StorageRoot root, String message) {
         public boolean available() { return path != null && location != null; }
@@ -29,6 +33,13 @@ public class PartFileLocationService {
     public record LocalFileView(LocalFileState state, boolean available, boolean expected,
                                 String primaryPath, String storageType, String rootStatus, long replicaCount,
                                 String message) {}
+
+    public record CompanionResolution(CompanionState state, Path path, Path expectedPath,
+                                      Long storageRootId, String message) {
+        public boolean available() {
+            return state == CompanionState.AVAILABLE && path != null;
+        }
+    }
 
     private final PartFileLocationRepository locationRepository;
     private final RecordHistoryPartRepository partRepository;
@@ -157,7 +168,59 @@ public class PartFileLocationService {
     }
 
     public Optional<Path> resolveCompanion(Long partId, String extension) {
-        return resolveCompanions(partId, extension).stream().findFirst();
+        CompanionResolution resolution = resolveCompanionState(partId, extension);
+        return resolution.available() ? Optional.of(resolution.path()) : Optional.empty();
+    }
+
+    public CompanionResolution resolveCompanionState(Long partId, String extension) {
+        String suffix = extension == null ? "" : extension.startsWith(".") ? extension : "." + extension;
+        if (partId == null) {
+            return new CompanionResolution(CompanionState.PATH_UNRESOLVED, null, null, null, "part missing");
+        }
+        Path expectedPath = null;
+        Long offlineRootId = null;
+        boolean resolvedPath = false;
+        for (PartFileLocation location : locationRepository.findByPartIdOrderByIdAsc(partId)) {
+            try {
+                if (location.getStorageRootId() == null) {
+                    Path video = legacyPath(location);
+                    if (video == null) continue;
+                    Path companion = companionPath(video, suffix);
+                    resolvedPath = true;
+                    if (expectedPath == null) expectedPath = companion;
+                    if (Files.isRegularFile(companion)) {
+                        return new CompanionResolution(CompanionState.AVAILABLE, companion.toRealPath(), companion,
+                                null, null);
+                    }
+                    continue;
+                }
+                StorageRoot root = rootService.findById(location.getStorageRootId()).orElse(null);
+                if (root == null) continue;
+                if (!rootService.ensureOnline(root)) {
+                    if (offlineRootId == null) offlineRootId = root.getId();
+                    continue;
+                }
+                Path video = rootService.resolve(root, location.getRelativePath());
+                Path companion = companionPath(video, suffix);
+                resolvedPath = true;
+                if (expectedPath == null) expectedPath = companion;
+                if (Files.isRegularFile(companion)) {
+                    return new CompanionResolution(CompanionState.AVAILABLE, companion.toRealPath(), companion,
+                            root.getId(), null);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (offlineRootId != null) {
+            return new CompanionResolution(CompanionState.ROOT_OFFLINE, null, expectedPath, offlineRootId,
+                    "storage root offline");
+        }
+        if (resolvedPath) {
+            return new CompanionResolution(CompanionState.MISSING_UNEXPECTED, null, expectedPath, null,
+                    "companion file not found");
+        }
+        return new CompanionResolution(CompanionState.PATH_UNRESOLVED, null, null, null,
+                "companion path cannot be resolved");
     }
 
     public List<Path> resolveCompanions(Long partId, String extension) {
@@ -177,6 +240,23 @@ public class PartFileLocationService {
             }
         }
         return result.stream().distinct().toList();
+    }
+
+    private static Path companionPath(Path video, String suffix) {
+        String name = video.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        return video.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + suffix);
+    }
+
+    private static Path legacyPath(PartFileLocation location) {
+        if (location == null || location.getAbsolutePathSnapshot() == null || location.getAbsolutePathSnapshot().isBlank()) {
+            return null;
+        }
+        try {
+            return Path.of(location.getAbsolutePathSnapshot());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     @Transactional

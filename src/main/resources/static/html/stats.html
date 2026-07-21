@@ -79,6 +79,7 @@
                         <el-button size="small" type="warning" plain icon="el-icon-delete" :loading="cleaning" @click="cleanupStats">清理缓存</el-button>
                         <el-button size="small" type="warning" plain icon="el-icon-brush" :loading="cleaningStaleStates" @click="cleanupStaleRecordingStates">清理旧录制状态</el-button>
                         <el-button size="small" type="danger" plain icon="el-icon-box" :loading="compacting" @click="compactDatabase">压缩数据库</el-button>
+                        <el-button size="small" plain icon="el-icon-warning-outline" @click="openXmlIssueManager()">XML 问题管理</el-button>
                         <el-button size="small" plain icon="el-icon-document-checked" :loading="xmlRepairing" @click="chooseXmlRepairFile">XML 文件简单修复工具</el-button>
                         <el-button size="small" type="primary" icon="el-icon-magic-stick" :loading="rebuilding" @click="rebuildStats">重建统计</el-button>
                     </div>
@@ -113,6 +114,15 @@
                 <span>历史 {{ number(coverage.totalHistoryCount) }} 场，已统计 {{ number(coverage.statsSessionCount) }} 场，待补算 {{ number(coverage.pendingSessionCount) }} 场</span>
             </div>
             <span>最后更新 {{ dateTime(coverage.updatedAt) }}</span>
+        </section>
+
+        <section v-if="showXmlIssueBanner" class="xml-issue-banner" role="status">
+            <div class="xml-issue-banner-icon"><i class="el-icon-warning-outline"></i></div>
+            <div class="xml-issue-banner-main">
+                <strong>XML 源文件待处理</strong>
+                <span>缺失 {{ number(xmlIssueSummary.missingCount || 0) }}，解析失败 {{ number(xmlIssueSummary.parseFailedCount || 0) }}，存储离线 {{ number(xmlIssueSummary.storageOfflineCount || 0) }}</span>
+            </div>
+            <el-button size="small" type="warning" plain icon="el-icon-s-operation" @click="openXmlIssueManager()">查看并处理</el-button>
         </section>
 
         <section v-if="pendingCoverageItems.length" class="coverage-pending-panel">
@@ -418,9 +428,10 @@
                     <div class="diagnostic-meta">
                         <span>解析弹幕：{{ number(danmuDiagnostic.parsedDanmuCount || 0) }} 条</span>
                         <span>用户统计：{{ number(danmuDiagnostic.userStatsDanmuCount || 0) }} 条 / {{ number(danmuDiagnostic.userStatsRows || 0) }} 个用户</span>
-                        <span>XML：存在 {{ number(danmuDiagnostic.xmlExistsCount || 0) }}，缺失 {{ number(danmuDiagnostic.xmlMissingCount || 0) }}</span>
+                        <span>XML：待处理 {{ number(danmuDiagnostic.xmlIssueCount || 0) }}，已停止 {{ number(danmuDiagnostic.xmlIgnoredIssueCount || 0) }}</span>
                     </div>
                 </div>
+                <el-button size="mini" plain icon="el-icon-s-operation" @click="openXmlIssueManager(selectedSessionSummary.historyId)">处理这场 XML</el-button>
                 <el-tooltip placement="top" :content="danmuDiagnostic.rebuildMayHelp ? '可以尝试点击重建统计补齐用户 Top' : '重建统计大概率无法恢复缺失的用户维度'">
                     <el-tag size="mini" :type="danmuDiagnostic.rebuildMayHelp ? 'success' : 'warning'">
                         {{ danmuDiagnostic.rebuildMayHelp ? '重建可能有效' : '需检查源文件' }}
@@ -510,6 +521,92 @@
         </section>
     </main>
     <el-dialog
+            title="XML 问题管理"
+            :visible.sync="xmlIssueDialogVisible"
+            width="1080px"
+            top="6vh"
+            append-to-body
+            custom-class="stats-xml-issue-dialog">
+        <section class="xml-issue-toolbar">
+            <el-radio-group v-model="xmlIssueStatus" size="small" @change="changeXmlIssueStatus">
+                <el-radio-button label="PENDING">待处理 {{ number(xmlIssueSummary.attentionCount || 0) }}</el-radio-button>
+                <el-radio-button label="MISSING_UNEXPECTED">文件缺失 {{ number(xmlIssueSummary.missingCount || 0) }}</el-radio-button>
+                <el-radio-button label="PARSE_FAILED">解析失败 {{ number(xmlIssueSummary.parseFailedCount || 0) }}</el-radio-button>
+                <el-radio-button label="ROOT_OFFLINE">存储离线 {{ number(xmlIssueSummary.storageOfflineCount || 0) }}</el-radio-button>
+                <el-radio-button label="IGNORED">已停止检查 {{ number(xmlIssueSummary.ignoredCount || 0) }}</el-radio-button>
+            </el-radio-group>
+            <div class="xml-issue-toolbar-actions">
+                <el-input v-model="xmlIssueKeyword" size="small" clearable placeholder="稿件、分P、路径或错误" @keyup.enter.native="loadXmlIssues(1)">
+                    <i slot="prefix" class="el-input__icon el-icon-search"></i>
+                </el-input>
+                <el-button size="small" icon="el-icon-search" @click="loadXmlIssues(1)">筛选</el-button>
+                <el-button v-if="xmlIssueHistoryId" size="small" icon="el-icon-close" @click="xmlIssueHistoryId = null; loadXmlIssues(1)">清除场次</el-button>
+            </div>
+        </section>
+        <div class="xml-issue-action-bar">
+            <span>已选 {{ selectedXmlIssueIds.length }} 条</span>
+            <div>
+                <el-button size="mini" :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" icon="el-icon-refresh" @click="recheckXmlIssues()">重新检查</el-button>
+                <el-button v-if="xmlIssueStatus !== 'IGNORED'" size="mini" type="warning" plain :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="ignoreXmlIssues(false)">停止检查</el-button>
+                <el-button v-else size="mini" type="primary" plain :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="resumeXmlIssues(false)">恢复检查</el-button>
+                <el-button v-if="xmlIssueStatus !== 'IGNORED'" size="mini" type="text" :disabled="xmlIssueActionLoading" @click="ignoreXmlIssues(true)">停止检查当前筛选</el-button>
+                <el-button v-else size="mini" type="text" :disabled="xmlIssueActionLoading" @click="resumeXmlIssues(true)">恢复当前筛选</el-button>
+            </div>
+        </div>
+        <el-table
+                v-loading="xmlIssuesLoading"
+                :data="xmlIssueItems"
+                row-key="partId"
+                size="mini"
+                class="xml-issue-table"
+                max-height="500"
+                @selection-change="onXmlIssueSelectionChange">
+            <el-table-column type="selection" width="48"></el-table-column>
+            <el-table-column type="expand" width="44">
+                <template slot-scope="scope">
+                    <div class="xml-issue-expanded">
+                        <div><span>路径</span><code>{{ scope.row.xmlPath || '--' }}</code><el-button v-if="scope.row.xmlPath" type="text" size="mini" @click="copyXmlIssuePath(scope.row.xmlPath)">复制</el-button></div>
+                        <div><span>存储根</span><strong>{{ scope.row.rootStatus || '--' }}</strong></div>
+                        <div><span>错误</span><strong>{{ scope.row.errorMessage || '--' }}</strong></div>
+                        <div><span>处理建议</span><strong>{{ scope.row.suggestion || '--' }}</strong></div>
+                    </div>
+                </template>
+            </el-table-column>
+            <el-table-column label="状态" width="104">
+                <template slot-scope="scope">
+                    <el-tag size="mini" :type="scope.row.ignoredAt ? 'info' : xmlIssueTagType(scope.row.issueType)">{{ scope.row.ignoredAt ? '已停止' : xmlIssueLabel(scope.row.issueType) }}</el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="稿件 / 分P" min-width="250">
+                <template slot-scope="scope">
+                    <div class="xml-issue-title">{{ scope.row.historyTitle || scope.row.roomId || '未命名稿件' }}</div>
+                    <div class="xml-issue-subtitle">稿件 {{ scope.row.historyId || '--' }} · 分P {{ scope.row.partOrder || scope.row.page || scope.row.partId }}{{ scope.row.partTitle ? ' · ' + scope.row.partTitle : '' }}</div>
+                </template>
+            </el-table-column>
+            <el-table-column label="XML 文件" min-width="180">
+                <template slot-scope="scope"><span class="xml-issue-file-name">{{ scope.row.xmlFileName || '--' }}</span></template>
+            </el-table-column>
+            <el-table-column label="最后检查" width="142">
+                <template slot-scope="scope">{{ dateTime(scope.row.lastCheckedAt) }}</template>
+            </el-table-column>
+            <el-table-column label="缓存" width="78">
+                <template slot-scope="scope"><el-tag size="mini" :type="scope.row.cachedStatsAvailable ? 'success' : 'info'">{{ scope.row.cachedStatsAvailable ? '可用' : '待补' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="操作" width="190" fixed="right">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="primary" plain @click="recheckXmlIssues([scope.row.partId])">重检</el-button>
+                    <el-button v-if="xmlIssueCanRepair(scope.row)" size="mini" @click="chooseXmlRepairFile">修复</el-button>
+                    <el-button v-if="scope.row.ignoredAt" size="mini" @click="resumeOneXmlIssue(scope.row)">恢复</el-button>
+                    <el-button v-else-if="scope.row.issueType !== 'ROOT_OFFLINE'" size="mini" type="warning" plain @click="ignoreOneXmlIssue(scope.row)">停止</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+        <div class="xml-issue-pagination">
+            <span>共 {{ number(xmlIssueTotal) }} 条</span>
+            <el-pagination background layout="prev, pager, next" :page-size="25" :current-page="Number(xmlIssuePageData.page || 0) + 1" :total="xmlIssueTotal" @current-change="loadXmlIssues"></el-pagination>
+        </div>
+    </el-dialog>
+    <el-dialog
             title="XML 文件简单修复工具"
             :visible.sync="xmlRepairDialogVisible"
             width="520px"
@@ -533,7 +630,7 @@
             </div>
             <p v-if="xmlRepairResult.actions && xmlRepairResult.actions.length">动作：{{ xmlRepairResult.actions.join('、') }}</p>
             <p v-if="xmlRepairResult.error" class="xml-repair-error">失败原因：{{ xmlRepairResult.error }}</p>
-            <p class="xml-repair-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再点击“重建统计”。</p>
+            <p class="xml-repair-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再回到 XML 问题管理里重新检查。</p>
         </div>
         <div v-else class="xml-repair-empty">
             请选择一个录播姬 XML 文件，系统会尝试做简单语法修复并返回可下载文件。

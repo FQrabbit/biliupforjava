@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class StorageRootService {
     private final String requestedChangeMode;
     private final String requestedChangeFrom;
     private final String requestedChangeTo;
+    private final ApplicationEventPublisher eventPublisher;
 
     public StorageRootService(StorageRootRepository rootRepository,
                               PartFileLocationRepository locationRepository,
@@ -45,7 +47,8 @@ public class StorageRootService {
                               @Value("${record.work-path}") String workPath,
                               @Value("${record.work-path-change-mode:}") String requestedChangeMode,
                               @Value("${record.work-path-change-from:}") String requestedChangeFrom,
-                              @Value("${record.work-path-change-to:}") String requestedChangeTo) {
+                              @Value("${record.work-path-change-to:}") String requestedChangeTo,
+                              ApplicationEventPublisher eventPublisher) {
         this.rootRepository = rootRepository;
         this.locationRepository = locationRepository;
         this.partRepository = partRepository;
@@ -55,6 +58,7 @@ public class StorageRootService {
         this.requestedChangeMode = requestedChangeMode;
         this.requestedChangeFrom = requestedChangeFrom;
         this.requestedChangeTo = requestedChangeTo;
+        this.eventPublisher = eventPublisher;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -247,6 +251,9 @@ public class StorageRootService {
                 log.info("[BLR] {}", LogKvs.event("StorageRoot.HealthChanged")
                         .add("rootId", root.getId()).add("path", root.getPath())
                         .add("before", before).add("after", root.getStatus()));
+                if (before == StorageRoot.RootStatus.OFFLINE && root.getStatus() == StorageRoot.RootStatus.ONLINE) {
+                    eventPublisher.publishEvent(new StorageRootOnlineEvent(root.getId()));
+                }
             }
         }
     }

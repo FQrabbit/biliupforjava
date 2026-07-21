@@ -118,6 +118,11 @@
                         <i class="el-icon-box"></i>
                         <span>压缩数据库</span>
                     </button>
+                    <button type="button" class="mobile-stats-xml-issue-command" @click="openXmlIssueManager()">
+                        <i class="el-icon-warning-outline"></i>
+                        <span>XML 问题管理</span>
+                        <em v-if="showXmlIssueBanner">{{ number(xmlIssueSummary.attentionCount || 0) }}</em>
+                    </button>
                     <button type="button" :disabled="xmlRepairing" @click="chooseXmlRepairFile">
                         <i class="el-icon-document-checked"></i>
                         <span>XML 简单修复</span>
@@ -158,6 +163,15 @@
                 <p>历史 {{ number(coverage.totalHistoryCount) }} 场，已统计 {{ number(coverage.statsSessionCount) }} 场，最后更新 {{ dateTime(coverage.updatedAt) }}</p>
             </div>
         </section>
+
+        <button v-if="showXmlIssueBanner" type="button" class="mobile-stats-xml-issue-banner" @click="openXmlIssueManager()">
+            <i class="el-icon-warning-outline"></i>
+            <span>
+                <strong>XML 源文件待处理</strong>
+                <em>缺失 {{ number(xmlIssueSummary.missingCount || 0) }}，解析失败 {{ number(xmlIssueSummary.parseFailedCount || 0) }}，存储离线 {{ number(xmlIssueSummary.storageOfflineCount || 0) }}</em>
+            </span>
+            <b>查看并处理</b>
+        </button>
 
         <transition name="mobile-stats-rise">
             <section v-if="!selectedRoomId && pendingCoverageItems.length" class="mobile-stats-pending">
@@ -372,6 +386,9 @@
                         <strong>{{ danmuDiagnosticTitle }}</strong>
                         <span>{{ danmuDiagnostic.message }}</span>
                     </div>
+                    <button v-if="selectedSessionSummary.historyId" type="button" class="mobile-stats-diagnostic-action" @click="openXmlIssueManager(selectedSessionSummary.historyId)">
+                        处理这场 XML
+                    </button>
                 </div>
                 <div v-if="showGiftPriceDiagnostic" class="mobile-stats-diagnostic" :class="'is-' + giftPriceDiagnostic.status">
                     <i :class="giftPriceDiagnostic.rebuildMayHelp ? 'el-icon-refresh' : 'el-icon-warning-outline'"></i>
@@ -423,6 +440,79 @@
     </section>
 
     <el-dialog
+            title="XML 问题管理"
+            :visible.sync="xmlIssueDialogVisible"
+            top="3vh"
+            append-to-body
+            custom-class="mobile-stats-xml-issue-dialog">
+        <section class="mobile-stats-xml-issue-toolbar">
+            <div class="mobile-stats-xml-issue-tabs" role="tablist" aria-label="XML 问题筛选">
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'PENDING' }" @click="changeXmlIssueStatus('PENDING')">待处理 {{ number(xmlIssueSummary.attentionCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'MISSING_UNEXPECTED' }" @click="changeXmlIssueStatus('MISSING_UNEXPECTED')">文件缺失 {{ number(xmlIssueSummary.missingCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'PARSE_FAILED' }" @click="changeXmlIssueStatus('PARSE_FAILED')">解析失败 {{ number(xmlIssueSummary.parseFailedCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'ROOT_OFFLINE' }" @click="changeXmlIssueStatus('ROOT_OFFLINE')">存储离线 {{ number(xmlIssueSummary.storageOfflineCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'IGNORED' }" @click="changeXmlIssueStatus('IGNORED')">已停止 {{ number(xmlIssueSummary.ignoredCount || 0) }}</button>
+            </div>
+            <div class="mobile-stats-xml-issue-search">
+                <el-input v-model="xmlIssueKeyword" clearable placeholder="稿件、分P、路径或错误" @keyup.enter.native="loadXmlIssues(1)">
+                    <i slot="prefix" class="el-input__icon el-icon-search"></i>
+                </el-input>
+                <button type="button" @click="loadXmlIssues(1)">筛选</button>
+                <button v-if="xmlIssueHistoryId" type="button" @click="xmlIssueHistoryId = null; loadXmlIssues(1)">清除场次</button>
+            </div>
+        </section>
+
+        <section class="mobile-stats-xml-issue-actions">
+            <span>已选 {{ selectedXmlIssueIds.length }} 条</span>
+            <div>
+                <button type="button" :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="recheckXmlIssues()">重新检查</button>
+                <button v-if="xmlIssueStatus !== 'IGNORED'" type="button" :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="ignoreXmlIssues(false)">停止检查</button>
+                <button v-else type="button" :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="resumeXmlIssues(false)">恢复检查</button>
+                <button v-if="xmlIssueStatus !== 'IGNORED'" type="button" class="is-quiet" :disabled="xmlIssueActionLoading" @click="ignoreXmlIssues(true)">停止当前筛选</button>
+                <button v-else type="button" class="is-quiet" :disabled="xmlIssueActionLoading" @click="resumeXmlIssues(true)">恢复当前筛选</button>
+            </div>
+        </section>
+
+        <section v-loading="xmlIssuesLoading" class="mobile-stats-xml-issue-list">
+            <article v-for="item in xmlIssueItems" :key="item.partId" class="mobile-stats-xml-issue-card">
+                <label class="mobile-stats-xml-issue-check" :aria-label="'选择 XML 问题分P ' + item.partId">
+                    <input v-model="xmlIssueSelection" type="checkbox" :value="item">
+                    <span></span>
+                </label>
+                <div class="mobile-stats-xml-issue-card-main">
+                    <header>
+                        <span class="mobile-stats-xml-issue-tag" :class="'is-' + (item.ignoredAt ? 'ignored' : xmlIssueTagType(item.issueType))">{{ item.ignoredAt ? '已停止' : xmlIssueLabel(item.issueType) }}</span>
+                        <span v-if="item.cachedStatsAvailable" class="mobile-stats-xml-issue-cache">已有统计缓存</span>
+                    </header>
+                    <strong>{{ item.historyTitle || item.roomId || '未命名稿件' }}</strong>
+                    <p>稿件 {{ item.historyId || '--' }} · 分P {{ item.partOrder || item.page || item.partId }}{{ item.partTitle ? ' · ' + item.partTitle : '' }}</p>
+                    <p class="mobile-stats-xml-issue-file">{{ item.xmlFileName || '--' }}</p>
+                    <p>最后检查 {{ dateTime(item.lastCheckedAt) }}{{ item.rootStatus ? ' · 存储根 ' + item.rootStatus : '' }}</p>
+                    <div class="mobile-stats-xml-issue-card-actions">
+                        <button type="button" :disabled="xmlIssueActionLoading" @click="recheckXmlIssues([item.partId])">重新检查</button>
+                        <button v-if="xmlIssueCanRepair(item)" type="button" :disabled="xmlIssueActionLoading" @click="chooseXmlRepairFile">修复 XML</button>
+                        <button v-if="item.ignoredAt" type="button" :disabled="xmlIssueActionLoading" @click="resumeOneXmlIssue(item)">恢复检查</button>
+                        <button v-else-if="item.issueType !== 'ROOT_OFFLINE'" type="button" :disabled="xmlIssueActionLoading" @click="ignoreOneXmlIssue(item)">停止检查</button>
+                    </div>
+                    <details class="mobile-stats-xml-issue-detail">
+                        <summary>查看路径、错误和建议</summary>
+                        <div><span>完整路径</span><code>{{ item.xmlPath || '--' }}</code></div>
+                        <div><span>原始错误</span><strong>{{ item.errorMessage || '--' }}</strong></div>
+                        <div><span>处理建议</span><strong>{{ item.suggestion || '--' }}</strong></div>
+                    </details>
+                </div>
+            </article>
+            <div v-if="!xmlIssuesLoading && !xmlIssueItems.length" class="mobile-stats-xml-issue-empty">当前筛选没有 XML 问题</div>
+        </section>
+
+        <footer class="mobile-stats-xml-issue-pagination">
+            <button type="button" :disabled="Number(xmlIssuePageData.page || 0) <= 0 || xmlIssuesLoading" @click="loadXmlIssues(Number(xmlIssuePageData.page || 0))">上一页</button>
+            <span>第 {{ Number(xmlIssuePageData.page || 0) + 1 }} / {{ xmlIssuePageCount }} 页 · 共 {{ number(xmlIssueTotal) }} 条</span>
+            <button type="button" :disabled="Number(xmlIssuePageData.page || 0) + 1 >= xmlIssuePageCount || xmlIssuesLoading" @click="loadXmlIssues(Number(xmlIssuePageData.page || 0) + 2)">下一页</button>
+        </footer>
+    </el-dialog>
+
+    <el-dialog
             title="XML 文件简单修复工具"
             :visible.sync="xmlRepairDialogVisible"
             width="520px"
@@ -447,7 +537,7 @@
             </div>
             <p v-if="xmlRepairResult.actions && xmlRepairResult.actions.length">动作：{{ xmlRepairResult.actions.join('、') }}</p>
             <p v-if="xmlRepairResult.error" class="mobile-stats-xml-error">失败原因：{{ xmlRepairResult.error }}</p>
-            <p class="mobile-stats-xml-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再点击“重建统计”。</p>
+            <p class="mobile-stats-xml-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再回到 XML 问题管理里重新检查。</p>
         </div>
         <div v-else class="mobile-stats-xml-empty">
             请选择一个录播姬 XML 文件，系统会尝试做简单语法修复并返回可下载文件。
