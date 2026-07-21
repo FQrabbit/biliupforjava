@@ -287,7 +287,7 @@ public class RoomLiveEventParseService {
                 state.setParserVersion(PARSER_VERSION);
                 parseStateRepository.save(state);
             }
-            log.warn("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.Failed")
+            LogKvs failureLog = LogKvs.event(parseFailureEvent(issueType))
                     .add("roomId", part.getRoomId())
                     .add("historyId", part.getHistoryId())
                     .add("partId", part.getId())
@@ -295,7 +295,12 @@ public class RoomLiveEventParseService {
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName())
                     .add("issueType", issueType)
-                    .addStageCostMs("total", parseStartNs), e);
+                    .addStageCostMs("total", parseStartNs);
+            if (shouldLogFailureStackTrace(issueType)) {
+                log.warn("[BLR] {}", failureLog, e);
+            } else {
+                log.warn("[BLR] {}", failureLog);
+            }
             return ParseResult.skipped("xml issue:" + update.issue().getIssueType(), update.issue().getIssueType());
         }
     }
@@ -331,6 +336,20 @@ public class RoomLiveEventParseService {
             return RoomLiveEventXmlIssue.IssueType.READ_FAILED;
         }
         return RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR;
+    }
+
+    static String parseFailureEvent(RoomLiveEventXmlIssue.IssueType issueType) {
+        if (issueType == RoomLiveEventXmlIssue.IssueType.INVALID_XML) {
+            return "RoomLiveEvent.Parse.InvalidXml";
+        }
+        if (issueType == RoomLiveEventXmlIssue.IssueType.READ_FAILED) {
+            return "RoomLiveEvent.Parse.ReadFailed";
+        }
+        return "RoomLiveEvent.Parse.InternalError";
+    }
+
+    static boolean shouldLogFailureStackTrace(RoomLiveEventXmlIssue.IssueType issueType) {
+        return issueType == RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR;
     }
 
     private static Object[] createPartParseLocks() {

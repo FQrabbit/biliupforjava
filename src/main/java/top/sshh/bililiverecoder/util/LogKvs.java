@@ -578,7 +578,9 @@ public final class LogKvs {
 
         // 直播事件解析/统计缓存
         EVENT_ZH.put("RoomLiveEvent.Parse.Saved", "直播事件解析：已保存统计缓存");
-        EVENT_ZH.put("RoomLiveEvent.Parse.Failed", "XML 弹幕礼物文件解析失败");
+        EVENT_ZH.put("RoomLiveEvent.Parse.InvalidXml", "XML 弹幕礼物文件格式错误，解析失败");
+        EVENT_ZH.put("RoomLiveEvent.Parse.ReadFailed", "XML 弹幕礼物文件读取失败");
+        EVENT_ZH.put("RoomLiveEvent.Parse.InternalError", "处理 XML 弹幕礼物数据时发生程序内部错误");
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipActive", "直播事件解析：跳过仍在写入的分P");
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipFailedCached", "直播事件解析：跳过已确认失败且未变化的 XML");
         EVENT_ZH.put("RoomLiveEvent.Parse.SkipFailedCachedSummary", "直播事件解析：已汇总跳过未变化的失败 XML");

@@ -95,7 +95,7 @@ public class RoomLiveEventXmlIssueService {
     @Transactional
     public void clear(Long partId) {
         if (partId != null) {
-            issueRepository.deleteById(partId);
+            issueRepository.deleteByPartIdIfPresent(partId);
         }
     }
 
