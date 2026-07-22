@@ -54,6 +54,7 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
             "top.sshh.bililiverecoder.entity.blrec.BlrecEventDTO",
             "top.sshh.bililiverecoder.entity.blrec.BlrecRoomInfoDTO",
             "top.sshh.bililiverecoder.entity.ExportConfigParams",
+            "top.sshh.bililiverecoder.entity.DiagnosticExportRequest",
             "top.sshh.bililiverecoder.entity.LogAlert",
             "top.sshh.bililiverecoder.entity.RecordEventDTO",
             "top.sshh.bililiverecoder.entity.RecordEventData",

@@ -23,6 +23,7 @@ Vue.component('log-page', {
             filterTimer: null,
             isAutoScrolling: false,
             ws: null,
+            wsConnectAttempt: 0,
             statusText: '未连接',
             maxLogs: 500,
             nextLogId: 1,
@@ -344,53 +345,61 @@ Vue.component('log-page', {
             var self = this;
             if (!this.realtime) return;
 
+            var attempt = ++this.wsConnectAttempt;
+
             if (this.wsConnectStartTime === 0) {
                 this.wsConnectStartTime = Date.now();
             }
 
-            var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            var host = window.location.host;
-            this.ws = new WebSocket(protocol + '//' + host + '/ws/log');
+            LogApi.wsTicket(function(ticketData) {
+                if (!self.realtime || attempt !== self.wsConnectAttempt || !ticketData || !ticketData.ticket) return;
+                var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                var host = window.location.host;
+                self.ws = new WebSocket(protocol + '//' + host + '/ws/log?ticket=' + encodeURIComponent(ticketData.ticket));
 
-            this.ws.onopen = function () {
-                self.statusText = '实时连接已建立';
-                self.wsConnectStartTime = 0;
-                self.reportConnection(false);
-                self.loadHistory();
-            };
-
-            this.ws.onmessage = function (event) {
-                try {
-                    var log = JSON.parse(event.data);
-                    self.addLog(log);
-                } catch (e) {
-                    self.addLog({
-                        timestamp: new Date().toLocaleTimeString(),
-                        level: 'INFO',
-                        message: event.data
-                    });
-                }
-            };
-
-            this.ws.onclose = function () {
-                self.statusText = '连接断开';
-                if (self.realtime) {
-                    self.reportConnection(true);
-                    if (self.wsConnectStartTime > 0 && (Date.now() - self.wsConnectStartTime > 30000)) {
-                        self.realtime = false;
-                        self.statusText = '连接超时，已自动关闭实时推送';
-                        self.wsConnectStartTime = 0;
-                        self.$message.warning('实时日志连接超时，已自动停止重连。');
-                    } else {
-                        setTimeout(function () { self.connectWs(); }, 3000);
-                    }
-                } else {
+                self.ws.onopen = function () {
+                    self.statusText = '实时连接已建立';
+                    self.wsConnectStartTime = 0;
                     self.reportConnection(false);
-                }
-            };
+                    self.loadHistory();
+                };
+
+                self.ws.onmessage = function (event) {
+                    try {
+                        var log = JSON.parse(event.data);
+                        self.addLog(log);
+                    } catch (e) {
+                        self.addLog({ timestamp: new Date().toLocaleTimeString(), level: 'INFO', message: event.data });
+                    }
+                };
+
+                self.ws.onclose = function () {
+                    if (attempt !== self.wsConnectAttempt) return;
+                    self.statusText = '连接断开';
+                    if (self.realtime) {
+                        self.reportConnection(true);
+                        if (self.wsConnectStartTime > 0 && (Date.now() - self.wsConnectStartTime > 30000)) {
+                            self.realtime = false;
+                            self.statusText = '连接超时，已自动关闭实时推送';
+                            self.wsConnectStartTime = 0;
+                            self.$message.warning('实时日志连接超时，已自动停止重连。');
+                        } else {
+                            setTimeout(function () { self.connectWs(); }, 3000);
+                        }
+                    } else {
+                        self.reportConnection(false);
+                    }
+                };
+            }, function() {
+                if (attempt !== self.wsConnectAttempt || !self.realtime) return;
+                self.statusText = '获取实时日志凭据失败';
+                self.reportConnection(true);
+                setTimeout(function () { self.connectWs(); }, 3000);
+            });
         },
         disconnectWs: function () {
             this.realtime = false;
+            this.wsConnectAttempt++;
             if (this.ws) {
                 this.ws.close();
                 this.ws = null;
@@ -568,6 +577,9 @@ Vue.component('log-page', {
                 this.renderTimer = null;
             }
             this.rendering = false;
+        },
+        openDiagnosticExport: function () {
+            window.dispatchEvent(new CustomEvent('open-diagnostic-export', { detail: {} }));
         },
         fetchAlerts: function () {
             var self = this;

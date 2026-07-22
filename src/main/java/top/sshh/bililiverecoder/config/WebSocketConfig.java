@@ -13,8 +13,12 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Autowired
     private LogWebSocketHandler logWebSocketHandler;
 
+    @Autowired
+    private LogWebSocketHandshakeInterceptor logWebSocketHandshakeInterceptor;
+
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(logWebSocketHandler, "/ws/log").setAllowedOrigins("*");
+        registry.addHandler(logWebSocketHandler, "/ws/log")
+                .addInterceptors(logWebSocketHandshakeInterceptor);
     }
 }

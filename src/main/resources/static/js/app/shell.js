@@ -505,6 +505,15 @@ var answer = new Vue({
             self.bindScrollObserver();
             self.startScrollStateMonitor();
             self.installScrollDebugTools();
+            var diagnosticHistoryId = new URLSearchParams(window.location.search).get('diagnosticHistoryId');
+            if (diagnosticHistoryId) {
+                window.dispatchEvent(new CustomEvent('open-diagnostic-export', {
+                    detail: { history: { id: Number(diagnosticHistoryId) || diagnosticHistoryId } }
+                }));
+                var url = new URL(window.location.href);
+                url.searchParams.delete('diagnosticHistoryId');
+                window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+            }
         });
         this.resizeHandler = function() {
             self.viewportWidth = window.innerWidth || 0;
@@ -523,6 +532,10 @@ var answer = new Vue({
             if (event.data && event.data.type === 'batchOperationStatus') {
                 self.iframeOperating = event.data.operating || false;
                 self.iframeOperatingMessage = event.data.message || '批量操作';
+            }
+
+            if (event.data && event.data.type === 'openDiagnosticExport') {
+                window.dispatchEvent(new CustomEvent('open-diagnostic-export', { detail: { history: event.data.history || {} } }));
             }
 
             if (event.data && event.data.type === 'iframeWorkspaceMode') {

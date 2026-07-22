@@ -20,6 +20,7 @@
     <link href="css/pages/home.css" rel="stylesheet">
     <link href="css/user.css" rel="stylesheet">
     <link href="css/log.css" rel="stylesheet">
+    <link href="css/diagnostic-export.css" rel="stylesheet">
     <link href="css/global-preview-player.css" rel="stylesheet">
     <script src="js/jquery-3.3.1.min.js"></script>
     <script src="js/vue.min.js"></script>
@@ -31,10 +32,12 @@
     <script src="js/api/storage-api.js"></script>
     <script src="js/api/notification-api.js"></script>
     <script src="js/api/log-api.js"></script>
+    <script src="js/api/diagnostic-api.js"></script>
     <script src="js/api/user-api.js"></script>
     <script src="js/frontend-cache-refresh.js"></script>
     <script src="js/mixins.js"></script>
     <script src="js/privacy.js"></script>
+    <script src="js/components/diagnostic-export-dialog.js"></script>
     <script src="js/global-preview-player.js"></script>
     <script src="js/pages/user.js"></script>
 </head>
@@ -995,6 +998,7 @@
             <el-button class="modern-btn" type="danger" plain size="small" :loading="notificationLegacyMigration.loading" @click="discardLegacyNotificationMigration">不迁移并清理旧配置</el-button>
         </span>
     </el-dialog>
+    <diagnostic-export-dialog></diagnostic-export-dialog>
 </div>
 
 <!-- ========== 用户管理页面模板 ========== -->
@@ -1365,6 +1369,7 @@
                         </transition>
                     </div>
                     <div class="log-actions">
+                        <el-button size="mini" class="modern-btn" type="primary" plain icon="el-icon-download" @click="openDiagnosticExport">导出诊断包</el-button>
                         <el-button size="mini" class="modern-btn" icon="el-icon-setting" @click="settingsDrawerVisible = true">设置</el-button>
                         <el-button size="mini" class="modern-btn" type="danger" plain icon="el-icon-delete" @click="clearLogs">清空</el-button>
                     </div>
@@ -1656,6 +1661,51 @@
     </el-dialog>
 
 </div>
+</script>
+
+<script type="text/x-template" id="diagnostic-export-template">
+<el-dialog :visible.sync="visible" :fullscreen="isMobile" append-to-body width="620px" title="导出诊断包" custom-class="diagnostic-export-dialog">
+    <el-form label-position="top" class="diagnostic-export-form">
+        <el-form-item label="诊断范围">
+            <div class="diagnostic-segmented" role="group" aria-label="诊断范围">
+                <el-button class="modern-btn diagnostic-segmented-button" :class="{ 'is-selected': mode === 'GLOBAL' }" :aria-pressed="mode === 'GLOBAL'" @click="setMode('GLOBAL')">全局诊断</el-button>
+                <el-button class="modern-btn diagnostic-segmented-button" :class="{ 'is-selected': mode === 'HISTORY' }" :aria-pressed="mode === 'HISTORY'" @click="setMode('HISTORY')">指定稿件</el-button>
+            </div>
+        </el-form-item>
+        <el-form-item v-if="mode === 'HISTORY'" label="稿件">
+            <el-select v-model="historyId" filterable remote clearable reserve-keyword placeholder="搜索标题、BV号、房间号或稿件ID" :remote-method="remoteHistorySearch" :loading="historyLoading" @change="handleHistoryChange" style="width:100%">
+                <el-option v-for="item in historyOptions" :key="item.id" :label="(item.title || '无标题') + ' · #' + item.id" :value="item.id">
+                    <span>{{ item.title || '无标题' }}</span><span style="float:right;color:#909399">#{{ item.id }}</span>
+                </el-option>
+            </el-select>
+        </el-form-item>
+        <el-form-item label="日志范围">
+            <template v-if="mode === 'GLOBAL'">
+                <div class="diagnostic-segmented diagnostic-days" role="group" aria-label="全局日志范围">
+                    <el-button v-for="option in [1, 3, 7, 14]" :key="option" class="modern-btn diagnostic-segmented-button" :class="{ 'is-selected': days === option }" :aria-pressed="days === option" @click="days = option">{{ option }}天</el-button>
+                </div>
+            </template>
+            <div v-else class="diagnostic-export-meta diagnostic-history-window">{{ historyWindowText }}</div>
+            <div v-if="mode === 'GLOBAL'" class="diagnostic-export-meta">可用日志：{{ availableText }}</div>
+        </el-form-item>
+        <div class="diagnostic-export-options">
+            <el-checkbox v-model="includeRoomConfig" class="diagnostic-checkbox">附带直播间配置</el-checkbox>
+            <el-checkbox v-model="includeSystemConfig" class="diagnostic-checkbox">附带系统与通知配置</el-checkbox>
+        </div>
+        <div class="diagnostic-export-summary">必含：相关日志、运行环境、稿件与分P状态。密码、Cookie、Token 和推送密钥会自动移除。</div>
+        <el-collapse v-model="advancedVisible" class="diagnostic-export-advanced">
+            <el-collapse-item title="高级选项" name="advanced">
+                <el-checkbox v-model="includeFullLogs" class="diagnostic-checkbox">附带完整时段日志</el-checkbox>
+                <el-form-item label="问题发生时间" style="margin-top:14px"><el-date-picker v-model="occurredAt" type="datetime" placeholder="可选" style="width:100%"></el-date-picker></el-form-item>
+                <el-form-item label="补充说明"><el-input v-model="note" type="textarea" :maxlength="2000" show-word-limit :autosize="{minRows:3,maxRows:6}" placeholder="可选"></el-input></el-form-item>
+            </el-collapse-item>
+        </el-collapse>
+    </el-form>
+    <span slot="footer" class="dialog-footer">
+        <el-button @click="visible = false" :disabled="exporting">取消</el-button>
+        <el-button type="primary" icon="el-icon-download" :loading="exporting" :disabled="exporting" @click="exportPackage">生成并下载</el-button>
+    </span>
+</el-dialog>
 </script>
 
 </body>

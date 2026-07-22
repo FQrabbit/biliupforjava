@@ -1851,6 +1851,7 @@
         handleCommand: function(command, row) {
             this.showMoreActions = false;
             switch(command) {
+                case 'exportDiagnostic': this.openDiagnosticExport(row); break;
                 case 'rePublish': this.rePublish(row.id); break;
                 case 'highEnergyCutPublish': this.highEnergyCutPublish(row.id); break;
                 case 'updatePartStatus': this.updatePartStatus(row.id); break;
@@ -2299,6 +2300,24 @@
                     node.classList.remove('mobile-history-detail-wrapper--behind-danmaku');
                 });
             }
+        },
+        openDiagnosticExport: function(row) {
+            if (!row || !row.id) return;
+            var history = {
+                id: row.id,
+                title: row.title,
+                roomId: row.roomId,
+                roomName: row.roomName,
+                bvId: row.bvId,
+                startTime: row.startTime,
+                endTime: row.endTime
+            };
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'openDiagnosticExport', history: history }, window.location.origin);
+                return;
+            }
+            var root = window.location.pathname.indexOf('/mobile/') >= 0 ? '/mobile/index.html' : '/index.html';
+            window.location.href = root + '?diagnosticHistoryId=' + encodeURIComponent(row.id);
         },
         mountMobileDanmakuStatsPortal: function() {
             if (typeof document === 'undefined' || !document.body) return;

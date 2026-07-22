@@ -1,0 +1,87 @@
+.diagnostic-export-dialog .el-dialog__body { padding-top: 12px; }
+.diagnostic-export-form { display: flex; flex-direction: column; gap: 16px; }
+.diagnostic-export-meta { color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.diagnostic-segmented { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.diagnostic-segmented-button.modern-btn { min-width: 104px; margin: 0; border-color: var(--border-light); background: var(--bg-primary); color: var(--text-secondary); }
+.diagnostic-export-dialog .diagnostic-segmented-button.modern-btn.is-selected {
+    border-color: var(--brand-accent-border-strong) !important;
+    background-color: var(--brand-soft-bg-strong) !important;
+    color: var(--primary-color) !important;
+    box-shadow: inset 0 0 0 1px var(--brand-accent-border-light), 0 4px 16px var(--brand-soft-bg) !important;
+}
+.diagnostic-export-dialog .diagnostic-segmented-button.modern-btn.is-selected:hover {
+    border-color: var(--primary-color) !important;
+    background-color: var(--brand-soft-bg-active) !important;
+    color: var(--primary-color) !important;
+}
+.diagnostic-segmented-button.modern-btn:focus-visible { outline: 2px solid var(--primary-light); outline-offset: 2px; }
+.diagnostic-days .diagnostic-segmented-button.modern-btn { min-width: 58px; }
+.diagnostic-history-window { padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary); }
+[data-theme="dark"] .diagnostic-segmented-button.modern-btn { border-color: var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); }
+[data-theme="dark"] .diagnostic-export-dialog .diagnostic-segmented-button.modern-btn.is-selected { color: var(--primary-light) !important; }
+[data-theme="dark"] .diagnostic-history-window { border-color: var(--border-color); background: var(--bg-tertiary); }
+.diagnostic-export-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+.diagnostic-export-options .diagnostic-checkbox { width: 100%; }
+.diagnostic-export-dialog .diagnostic-checkbox.el-checkbox {
+    min-height: 44px;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-primary);
+}
+.diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__inner {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--text-disabled);
+    border-radius: 4px;
+    background: transparent;
+    transition: background-color var(--duration-base) var(--ease-apple), border-color var(--duration-base) var(--ease-apple), box-shadow var(--duration-base) var(--ease-apple);
+}
+.diagnostic-export-dialog .diagnostic-checkbox:hover .el-checkbox__inner { border-color: var(--primary-color); }
+.diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__input.is-focus .el-checkbox__inner {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--brand-soft-bg-strong);
+}
+.diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__input.is-checked .el-checkbox__inner {
+    border-color: var(--primary-color);
+    background-color: var(--primary-color);
+}
+.diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__inner::after {
+    left: 6px;
+    top: 2px;
+    width: 5px;
+    height: 11px;
+    border-width: 0 2px 2px 0;
+}
+.diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__label,
+.diagnostic-export-dialog .diagnostic-checkbox.is-checked .el-checkbox__label {
+    padding-left: 10px;
+    color: var(--text-primary);
+}
+[data-theme="dark"] .diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__inner { border-color: var(--text-secondary); }
+[data-theme="dark"] .diagnostic-export-dialog .diagnostic-checkbox:hover .el-checkbox__inner,
+[data-theme="dark"] .diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__input.is-focus .el-checkbox__inner,
+[data-theme="dark"] .diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__input.is-checked .el-checkbox__inner { border-color: var(--primary-light); }
+[data-theme="dark"] .diagnostic-export-dialog .diagnostic-checkbox .el-checkbox__input.is-checked .el-checkbox__inner { background-color: var(--primary-color); }
+.diagnostic-export-advanced { border-top: 1px solid var(--border-light); padding-top: 12px; }
+.diagnostic-export-advanced .el-collapse-item__header { color: var(--text-secondary); }
+.diagnostic-export-summary { padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 6px; background: var(--bg-secondary); color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+[data-theme="dark"] .diagnostic-export-summary { border-color: var(--border-color); background: var(--bg-tertiary); }
+.diagnostic-export-dialog .el-textarea__inner { padding-bottom: 28px; }
+.diagnostic-export-dialog .el-textarea .el-input__count {
+    right: 10px;
+    bottom: 6px;
+    padding: 0;
+    line-height: 20px;
+    background-color: transparent !important;
+    color: var(--text-secondary) !important;
+}
+@media (max-width: 767px) {
+    .diagnostic-export-dialog .el-dialog__body { padding: 16px; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+    .diagnostic-export-options { grid-template-columns: 1fr; gap: 12px; }
+    .diagnostic-segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+    .diagnostic-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .diagnostic-segmented-button.modern-btn, .diagnostic-days .diagnostic-segmented-button.modern-btn { min-width: 0; min-height: 48px; }
+    .diagnostic-export-dialog .el-dialog__footer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+    .diagnostic-export-dialog .el-button { min-height: 48px; }
+}

@@ -3,6 +3,7 @@
 [data-theme="dark"] .el-dialog,
 [data-theme="dark"] .el-message-box,
 [data-theme="dark"] .el-picker-panel,
+[data-theme="dark"] .el-time-panel,
 [data-theme="dark"] .el-select-dropdown,
 [data-theme="dark"] .el-dropdown-menu,
 [data-theme="dark"] .el-popover,
@@ -15,6 +16,39 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
 }
+
+[data-theme="dark"] .el-picker-panel__footer {
+    background-color: var(--bg-tertiary);
+    border-top-color: var(--border-color);
+}
+
+[data-theme="dark"] .el-date-picker__time-header,
+[data-theme="dark"] .el-date-table th,
+[data-theme="dark"] .el-time-panel__footer,
+[data-theme="dark"] .el-time-panel__content::before,
+[data-theme="dark"] .el-time-panel__content::after {
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .el-date-table th,
+[data-theme="dark"] .el-time-spinner__item,
+[data-theme="dark"] .el-time-panel__btn {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .el-time-spinner__item:hover:not(.disabled):not(.active) {
+    background-color: var(--brand-soft-bg);
+    color: var(--primary-light);
+}
+
+[data-theme="dark"] .el-time-spinner__item.active:not(.disabled) { color: var(--text-primary); }
+[data-theme="dark"] .el-time-spinner__item.disabled { color: var(--text-disabled); }
+[data-theme="dark"] .el-time-panel__btn.confirm { color: var(--primary-light); }
+
+[data-theme="dark"] .el-picker-panel[x-placement^="top"] .popper__arrow { border-top-color: var(--border-color); }
+[data-theme="dark"] .el-picker-panel[x-placement^="top"] .popper__arrow::after { border-top-color: var(--bg-tertiary); }
+[data-theme="dark"] .el-picker-panel[x-placement^="bottom"] .popper__arrow { border-bottom-color: var(--border-color); }
+[data-theme="dark"] .el-picker-panel[x-placement^="bottom"] .popper__arrow::after { border-bottom-color: var(--bg-tertiary); }
 
 [data-theme="dark"] .el-dialog__title,
 [data-theme="dark"] .el-card__header,

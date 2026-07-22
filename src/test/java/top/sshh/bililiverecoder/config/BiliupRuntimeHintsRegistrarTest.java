@@ -5,6 +5,7 @@ import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.predicate.RuntimeHintsPredicates;
 import top.sshh.bililiverecoder.entity.NotificationChannel;
+import top.sshh.bililiverecoder.entity.DiagnosticExportRequest;
 import top.sshh.bililiverecoder.entity.NotificationDelivery;
 import top.sshh.bililiverecoder.entity.NotificationRule;
 import top.sshh.bililiverecoder.entity.RoomLiveSessionStats;
@@ -24,6 +25,7 @@ class BiliupRuntimeHintsRegistrarTest {
         new BiliupRuntimeHintsRegistrar().registerHints(hints, getClass().getClassLoader());
 
         assertReflectionRegistered(hints, NotificationChannel.class);
+        assertReflectionRegistered(hints, DiagnosticExportRequest.class);
         assertReflectionRegistered(hints, NotificationRule.class);
         assertReflectionRegistered(hints, NotificationDelivery.class);
         assertReflectionRegistered(hints, RoomLiveSessionStats.class);

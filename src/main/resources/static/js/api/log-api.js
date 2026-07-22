@@ -13,6 +13,9 @@
         },
         context: function(url, callback, errorCallback) {
             ApiUtil.get(url, callback, errorCallback);
+        },
+        wsTicket: function(callback, errorCallback) {
+            ApiUtil.post('/log/ws-ticket', {}, callback, errorCallback);
         }
     };
 })(window);

@@ -86,6 +86,15 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
             """)
     List<RecordHistory> findCompletedOrderByEndTimeDesc(Pageable pageable);
 
+    @Query("""
+            select h from RecordHistory h
+            where lower(coalesce(h.title, '')) like lower(concat('%', ?1, '%'))
+               or lower(coalesce(h.bvId, '')) like lower(concat('%', ?1, '%'))
+               or lower(coalesce(h.roomId, '')) like lower(concat('%', ?1, '%'))
+            order by h.id desc
+            """)
+    List<RecordHistory> searchForDiagnostic(String query, Pageable pageable);
+
     @org.springframework.data.jpa.repository.Query("select h from RecordHistory h where h.endTime is not null and h.recording = false and h.streaming = false and h.endTime <= ?1 order by h.endTime asc")
     List<RecordHistory> findMatureCompletedOrderByEndTimeAsc(LocalDateTime endBefore, Pageable pageable);
 
