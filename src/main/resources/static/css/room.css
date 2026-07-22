@@ -5297,6 +5297,38 @@
 
 }
 
+.cover-uploader-mini.is-uploading .el-upload {
+
+    cursor: wait;
+
+    border-color: var(--primary-color);
+
+}
+
+.cover-uploader-mini.is-success .el-upload {
+
+    border-color: var(--success-color);
+
+}
+
+.cover-uploader-mini.is-error .el-upload {
+
+    border-color: var(--danger-color);
+
+}
+
+.cover-upload-surface {
+
+    position: relative;
+
+    width: 100%;
+
+    height: 100%;
+
+    overflow: hidden;
+
+}
+
 
 
 .cover-preview-mini {
@@ -5311,6 +5343,20 @@
 
 }
 
+.cover-uploader-mini .cover-placeholder-mini {
+
+    width: 100%;
+
+    height: 100%;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+}
+
 
 
 .cover-placeholder-mini i {
@@ -5318,6 +5364,267 @@
     font-size: 24px;
 
     color: var(--text-secondary);
+
+}
+
+.cover-upload-overlay {
+
+    position: absolute;
+
+    inset: 0;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    gap: 10px;
+
+    padding: 20px 56px 20px 20px;
+
+    color: var(--text-primary);
+
+    background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
+
+    backdrop-filter: blur(4px);
+
+}
+
+.cover-upload-progress-copy {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 12px;
+
+    min-width: 0;
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+}
+
+.cover-upload-progress-copy span {
+
+    min-width: 0;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+}
+
+.cover-upload-progress-copy strong {
+
+    flex: 0 0 auto;
+
+    color: var(--text-primary);
+
+    font-size: 13px;
+
+    font-variant-numeric: tabular-nums;
+
+}
+
+.cover-upload-progress-copy i {
+
+    color: var(--primary-color);
+
+}
+
+.cover-upload-progress-track {
+
+    height: 6px;
+
+    overflow: hidden;
+
+    border-radius: 3px;
+
+    background: var(--brand-soft-bg-strong);
+
+}
+
+.cover-upload-progress-track span {
+
+    display: block;
+
+    width: 100%;
+
+    height: 100%;
+
+    border-radius: inherit;
+
+    background: var(--primary-color);
+
+    transform: scaleX(0);
+
+    transform-origin: left center;
+
+    transition: transform var(--duration-fast) var(--ease-decel);
+
+}
+
+.cover-upload-cancel {
+
+    position: absolute;
+
+    top: 8px;
+
+    right: 8px;
+
+    width: 44px;
+
+    height: 44px;
+
+    display: inline-grid;
+
+    place-items: center;
+
+    padding: 0;
+
+    border: 1px solid var(--border-color);
+
+    border-radius: 50%;
+
+    color: var(--text-secondary);
+
+    background: var(--bg-primary);
+
+    cursor: pointer;
+
+    transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+
+}
+
+.cover-upload-cancel:hover,
+.cover-upload-cancel:focus-visible {
+
+    color: var(--danger-color);
+
+    border-color: var(--danger-color);
+
+    background: var(--danger-soft-bg-faint);
+
+    outline: none;
+
+}
+
+.cover-upload-cancel:focus-visible {
+
+    box-shadow: 0 0 0 3px var(--danger-soft-bg-strong);
+
+}
+
+.cover-upload-status-slot {
+
+    min-height: 32px;
+
+    margin-top: 8px;
+
+}
+
+.cover-upload-status {
+
+    min-height: 32px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    padding: 6px 10px;
+
+    border: 1px solid transparent;
+
+    border-radius: 6px;
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+}
+
+.cover-upload-status i {
+
+    flex: 0 0 auto;
+
+    font-size: 16px;
+
+}
+
+.cover-upload-status span {
+
+    min-width: 0;
+
+    overflow-wrap: anywhere;
+
+}
+
+.cover-upload-status.is-success {
+
+    color: var(--text-primary);
+
+    border-color: var(--success-border);
+
+    background: var(--success-soft-bg-faint);
+
+}
+
+.cover-upload-status.is-success i {
+
+    color: var(--success-dark);
+
+}
+
+.cover-upload-status.is-error {
+
+    color: var(--text-primary);
+
+    border-color: var(--danger-border-soft);
+
+    background: var(--danger-soft-bg-faint);
+
+}
+
+.cover-upload-status.is-error i {
+
+    color: var(--danger-color);
+
+}
+
+.cover-upload-status-enter-active,
+.cover-upload-status-leave-active {
+
+    transition: opacity var(--transition-fast), transform var(--transition-fast);
+
+}
+
+.cover-upload-status-enter,
+.cover-upload-status-leave-to {
+
+    opacity: 0;
+
+    transform: translateY(-4px);
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .cover-upload-progress-track span,
+    .cover-upload-status-enter-active,
+    .cover-upload-status-leave-active {
+
+        transition-duration: 1ms !important;
+
+    }
 
 }
 
@@ -6436,7 +6743,5 @@
 .config-progress-detail {
     margin-top: 8px;
 }
-
-
 
 

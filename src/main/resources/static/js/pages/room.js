@@ -58,6 +58,11 @@ new Vue({
         imageObjectUrlLoading: {},
         roomCoverObjectUrl: '',
         liveCoverObjectUrl: '',
+        coverUpload: {
+            status: 'idle',
+            percent: 0,
+            message: ''
+        },
         tableData: [],
         roomFilter: 'all',
         isSortMode: false,
@@ -380,12 +385,14 @@ new Vue({
                     message: '修改未保存',
                     type: 'warning'
                 });
+                this.abortCoverUpload(false);
                 done();
             })
             .catch(_ => {});
         },
         cancelEdit() {
             this.closeMobileConfigHelp();
+            this.abortCoverUpload(false);
             this.$message({
                 message: '修改未保存',
                 type: 'warning'
@@ -742,6 +749,7 @@ new Vue({
             }
         },
         handleEdit: function (index, row) {
+            this.resetCoverUploadState();
             this.room = JSON.parse(JSON.stringify(row));
             this.originalRoomDeleteType = this.room.deleteType;
             this.normalizeGiftReplyRoom(this.room);
@@ -785,6 +793,11 @@ new Vue({
         },
         updateRoom: function () {
             let _this = this;
+
+            if (_this.coverUpload.status === 'uploading') {
+                _this.$message.info('封面仍在上传，请等待上传完成后再保存');
+                return;
+            }
 
             // 保存前校验：小节必须属于当前合集，不符合则自动修正
             _this.ensureSectionBelongsSeason(true);
@@ -1257,6 +1270,11 @@ new Vue({
             this.coverTypeChange(type);
         },
         coverTypeChange(change) {
+            if (change !== 'diy' && this.coverUpload.status === 'uploading') {
+                this.abortCoverUpload(false);
+            } else if (change !== 'diy') {
+                this.resetCoverUploadState();
+            }
             if (change === 'default') {
                 this.room.coverUrl = '';
             }
@@ -1269,12 +1287,85 @@ new Vue({
             this.refreshRoomCoverPreview();
         },
         handleCoverSuccess(data, file) {
+            if (!data || data.type !== 'success' || !data.coverUrl) {
+                var failureMessage = data && data.msg ? data.msg : '封面上传失败，请重新选择图片重试';
+                this.coverUpload.status = 'error';
+                this.coverUpload.percent = 0;
+                this.coverUpload.message = failureMessage;
+                this.$message({
+                    message: failureMessage,
+                    type: data && data.type === 'info' ? 'info' : 'warning'
+                });
+                return;
+            }
+
+            this.coverUpload.status = 'success';
+            this.coverUpload.percent = 100;
+            this.coverUpload.message = data.msg || '封面上传完成';
             this.$message({
-                message: data.msg,
-                type: data.type
+                message: this.coverUpload.message,
+                type: 'success'
             });
             this.room.coverUrl = data.coverUrl;
             this.refreshRoomCoverPreview();
+        },
+        handleCoverUploadProgress: function (event) {
+            var percent = Number(event && event.percent);
+            if (!Number.isFinite(percent)) {
+                percent = 0;
+            }
+            this.coverUpload.status = 'uploading';
+            this.coverUpload.percent = Math.max(0, Math.min(99, Math.round(percent)));
+            this.coverUpload.message = percent >= 100
+                ? '图片已发送，正在处理封面'
+                : '正在上传封面';
+        },
+        handleCoverUploadError: function (error) {
+            var status = Number(error && error.status);
+            if (!status) {
+                var statusMatch = String(error && error.message || '').match(/\b([45]\d{2})\b/);
+                status = statusMatch ? Number(statusMatch[1]) : 0;
+            }
+
+            var message;
+            if (status === 401) {
+                message = '登录状态已失效，请重新登录后上传';
+            } else if (status === 413) {
+                message = '图片超过服务器允许的大小，请压缩后重试';
+            } else if (status >= 500) {
+                message = '服务器处理封面失败，请稍后重试';
+            } else if (status === 0) {
+                message = '无法连接服务器，请检查网络后重试';
+            } else {
+                message = '封面上传失败（HTTP ' + status + '），请重新选择图片重试';
+            }
+
+            this.coverUpload.status = 'error';
+            this.coverUpload.percent = 0;
+            this.coverUpload.message = message;
+            this.$message.error(message);
+        },
+        resetCoverUploadState: function () {
+            this.coverUpload.status = 'idle';
+            this.coverUpload.percent = 0;
+            this.coverUpload.message = '';
+        },
+        abortCoverUpload: function (showFeedback) {
+            if (this.coverUpload.status !== 'uploading') {
+                return;
+            }
+            var uploader = this.$refs.coverUploader;
+            if (uploader && typeof uploader.abort === 'function') {
+                uploader.abort();
+            }
+            if (showFeedback) {
+                this.coverUpload.status = 'error';
+                this.coverUpload.percent = 0;
+                this.coverUpload.message = '上传已取消，请重新选择图片重试';
+                this.$message.info('已取消封面上传');
+            } else {
+                this.resetCoverUploadState();
+            }
         },
         testLines() {
             var _this = this;
@@ -1359,16 +1450,36 @@ new Vue({
             return 'el-icon-error';
         },
         beforeCoverUpload(file) {
-            const isLt2M = file.size / 1024 / 1024 < 10;
+            const isUnderSizeLimit = file.size / 1024 / 1024 < 10;
             const isImg = file.type === 'image/jpeg' || file.type === 'image/png';
             if (!isImg) {
-                this.$message.error('上传图片只能是 JPG/PNG 格式!');
+                this.coverUpload.status = 'error';
+                this.coverUpload.percent = 0;
+                this.coverUpload.message = '仅支持 JPG 或 PNG 图片，请重新选择';
+                this.$message.error(this.coverUpload.message);
+                return false;
             }
 
-            if (!isLt2M) {
-                this.$message.error('上传图片大小不能超过 10MB!');
+            if (!isUnderSizeLimit) {
+                this.coverUpload.status = 'error';
+                this.coverUpload.percent = 0;
+                this.coverUpload.message = '图片大小不能超过 10MB，请压缩后重试';
+                this.$message.error(this.coverUpload.message);
+                return false;
             }
-            return isImg && isLt2M;
+
+            if (!localStorage.getItem('biliup_auth')) {
+                this.coverUpload.status = 'error';
+                this.coverUpload.percent = 0;
+                this.coverUpload.message = '登录状态已失效，请重新登录后上传';
+                this.$message.error(this.coverUpload.message);
+                return false;
+            }
+
+            this.coverUpload.status = 'uploading';
+            this.coverUpload.percent = 0;
+            this.coverUpload.message = '正在准备上传';
+            return true;
         },
         uploadSuccess: function () {
             this.$message({
@@ -1556,6 +1667,8 @@ new Vue({
             this.syncParentIframeModalState();
             if (!val) {
                 this.closeMobileConfigHelp();
+                this.abortCoverUpload(false);
+                this.resetCoverUploadState();
                 this.partitionDialogVisible = false;
                 this.wxDialogVisible = false;
                 this.manualPasteDialogVisible = false;
@@ -1610,6 +1723,7 @@ new Vue({
         }
     },
     beforeDestroy: function () {
+        this.abortCoverUpload(false);
         this.stopPolling();
         window.removeEventListener('resize', this.handleResize);
         this.closeAllMobileOverlays();
