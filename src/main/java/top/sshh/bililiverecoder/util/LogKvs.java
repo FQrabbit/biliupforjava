@@ -38,6 +38,7 @@ public final class LogKvs {
         EVENT_ZH.put("History.HighEnergyCutPublish.Success", "触发高能剪辑成功");
         EVENT_ZH.put("History.Republish.Success", "触发转码修复成功");
         EVENT_ZH.put("History.ForceArchive.Success", "强制归档成功");
+        EVENT_ZH.put("ArchiveReview.CleanupCheck", "定时清理：稿件审核状态检查完成");
 
         // 上传
         EVENT_ZH.put("Upload.Part.AsyncStart", "分P上传任务开始(异步触发)");
@@ -814,6 +815,7 @@ public final class LogKvs {
         EVENT_ZH.put("PartFile.Operation.Succeeded", "本地素材处理：操作完成");
         EVENT_ZH.put("PartFile.Operation.Failed", "本地素材处理：操作失败");
         EVENT_ZH.put("PartFile.Operation.RecoveryFailed", "本地素材处理：中断恢复失败");
+        EVENT_ZH.put("PartFile.Operation.ReviewGuardBlocked", "本地素材处理：审核保护已阻止操作");
         EVENT_ZH.put("PublishJob.PartCompensate.SkipLocalFileState", "分P补偿上传：按本地素材状态跳过");
         EVENT_ZH.put("Upload.Part.LocalFileUnavailable", "分P上传：本地素材当前不可读取");
         EVENT_ZH.put("Publish.Edit.PartUpload.LocalFileUnavailable", "分P编辑上传：本地素材当前不可读取");

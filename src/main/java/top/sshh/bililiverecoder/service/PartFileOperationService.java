@@ -1,14 +1,21 @@
 package top.sshh.bililiverecoder.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.PartFileLocation;
 import top.sshh.bililiverecoder.entity.PartFileOperation;
 import top.sshh.bililiverecoder.entity.StorageRoot;
+import top.sshh.bililiverecoder.entity.RecordHistory;
+import top.sshh.bililiverecoder.entity.RecordHistoryPart;
+import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.repo.PartFileLocationRepository;
 import top.sshh.bililiverecoder.repo.PartFileOperationRepository;
+import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
+import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
+import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.IOException;
@@ -35,6 +42,15 @@ public class PartFileOperationService {
     private final PartFileStorageAdapter storage;
     private final Map<Long, Object> partLocks = new ConcurrentHashMap<>();
 
+    @Autowired(required = false)
+    private ArchiveReviewStatusService archiveReviewStatusService;
+    @Autowired(required = false)
+    private RecordHistoryPartRepository partRepository;
+    @Autowired(required = false)
+    private RecordHistoryRepository historyRepository;
+    @Autowired(required = false)
+    private RecordRoomRepository roomRepository;
+
     public PartFileOperationService(PartFileOperationRepository operationRepository,
                                     PartFileLocationRepository locationRepository,
                                     PartFileLocationService locationService,
@@ -48,15 +64,31 @@ public class PartFileOperationService {
     }
 
     public PartFileOperation move(Long partId, String targetRootPath) {
-        return submit(partId, PartFileOperation.OperationType.MOVE, targetRootPath);
+        return submit(partId, PartFileOperation.OperationType.MOVE, targetRootPath,
+                PartFileOperation.OperationSource.STANDARD, null);
     }
 
     public PartFileOperation copy(Long partId, String targetRootPath) {
-        return submit(partId, PartFileOperation.OperationType.COPY, targetRootPath);
+        return submit(partId, PartFileOperation.OperationType.COPY, targetRootPath,
+                PartFileOperation.OperationSource.STANDARD, null);
     }
 
     public PartFileOperation delete(Long partId) {
-        return submit(partId, PartFileOperation.OperationType.DELETE, null);
+        return submit(partId, PartFileOperation.OperationType.DELETE, null,
+                PartFileOperation.OperationSource.STANDARD, null);
+    }
+
+    public PartFileOperation moveScheduled(Long partId,
+                                           String targetRootPath,
+                                           ArchiveReviewStatusService.ReviewCheckResult review) {
+        return submit(partId, PartFileOperation.OperationType.MOVE, targetRootPath,
+                PartFileOperation.OperationSource.SCHEDULED_CLEANUP, review);
+    }
+
+    public PartFileOperation deleteScheduled(Long partId,
+                                             ArchiveReviewStatusService.ReviewCheckResult review) {
+        return submit(partId, PartFileOperation.OperationType.DELETE, null,
+                PartFileOperation.OperationSource.SCHEDULED_CLEANUP, review);
     }
 
     public List<String> deleteAllAvailable(Long partId) {
@@ -91,13 +123,13 @@ public class PartFileOperationService {
                 .orElseThrow(() -> new IllegalArgumentException("file operation missing"));
         if (operation.getStatus() == PartFileOperation.OperationStatus.RUNNING) return operation;
         if (operation.getStatus() == PartFileOperation.OperationStatus.PENDING) {
-            return executeLocked(operation);
+            return executeLocked(operation, null);
         }
         operation.setStatus(PartFileOperation.OperationStatus.PENDING);
         operation.setErrorMessage(null);
         operation.setFinishedAt(null);
         operationRepository.save(operation);
-        return executeLocked(operation);
+        return executeLocked(operation, null);
     }
 
     public Optional<PartFileOperation> latest(Long partId) {
@@ -105,6 +137,14 @@ public class PartFileOperationService {
     }
 
     public PartFileOperation submit(Long partId, PartFileOperation.OperationType type, String targetRootPath) {
+        return submit(partId, type, targetRootPath, PartFileOperation.OperationSource.STANDARD, null);
+    }
+
+    private PartFileOperation submit(Long partId,
+                                     PartFileOperation.OperationType type,
+                                     String targetRootPath,
+                                     PartFileOperation.OperationSource operationSource,
+                                     ArchiveReviewStatusService.ReviewCheckResult review) {
         if (partId == null) throw new IllegalArgumentException("partId missing");
         Object lock = partLocks.computeIfAbsent(partId, ignored -> new Object());
         synchronized (lock) {
@@ -126,6 +166,7 @@ public class PartFileOperationService {
                 PartFileOperation operation = new PartFileOperation();
                 operation.setPartId(partId);
                 operation.setOperationType(type);
+                operation.setOperationSource(operationSource);
                 operation.setSourceLocationId(source.location() == null ? null : source.location().getId());
                 if (targetRoot != null) {
                     operation.setTargetRootId(targetRoot.getId());
@@ -143,7 +184,7 @@ public class PartFileOperationService {
                 if (!source.available()) {
                     return fail(operation, null, source.message());
                 }
-                return execute(operation);
+                return execute(operation, review);
             } finally {
                 partLocks.remove(partId, lock);
             }
@@ -153,9 +194,22 @@ public class PartFileOperationService {
     @Scheduled(fixedDelay = 300000, initialDelay = 90000)
     public void recoverPendingOperations() {
         if (rootService.hasPendingWorkPathChange()) return;
-        for (PartFileOperation operation : operationRepository.findByStatusInOrderByCreatedAtAsc(ACTIVE)) {
+        List<PartFileOperation> operations = operationRepository.findByStatusInOrderByCreatedAtAsc(ACTIVE);
+        ArchiveReviewStatusService.ReviewRound reviewRound = archiveReviewStatusService == null
+                ? null : archiveReviewStatusService.newRound();
+        Map<Long, ArchiveReviewStatusService.ReviewCheckResult> groupedReviews = new HashMap<>();
+        for (PartFileOperation operation : operations) {
+            if (!requiresScheduledReview(operation)) continue;
+            Long historyId = resolveHistoryId(operation);
+            if (historyId != null && !groupedReviews.containsKey(historyId)) {
+                groupedReviews.put(historyId, reviewOperation(operation, reviewRound));
+            }
+        }
+        for (PartFileOperation operation : operations) {
             try {
-                executeLocked(operation);
+                ArchiveReviewStatusService.ReviewCheckResult review =
+                        groupedReviews.get(resolveHistoryId(operation));
+                executeLocked(operation, review);
             } catch (Exception e) {
                 log.warn("[BLR] {}", LogKvs.event("PartFile.Operation.RecoveryFailed")
                         .add("operationKey", operation.getOperationKey()).add("partId", operation.getPartId())
@@ -164,19 +218,21 @@ public class PartFileOperationService {
         }
     }
 
-    private PartFileOperation executeLocked(PartFileOperation operation) {
+    private PartFileOperation executeLocked(PartFileOperation operation,
+                                            ArchiveReviewStatusService.ReviewCheckResult review) {
         Long partId = operation.getPartId();
         Object lock = partLocks.computeIfAbsent(partId, ignored -> new Object());
         synchronized (lock) {
             try {
-                return execute(operation);
+                return execute(operation, review);
             } finally {
                 partLocks.remove(partId, lock);
             }
         }
     }
 
-    private PartFileOperation execute(PartFileOperation operation) {
+    private PartFileOperation execute(PartFileOperation operation,
+                                      ArchiveReviewStatusService.ReviewCheckResult review) {
         operation = operationRepository.findById(operation.getId()).orElseThrow();
         if (COMPLETE.contains(operation.getStatus())) return operation;
         boolean recoveringRunningOperation = operation.getStatus() == PartFileOperation.OperationStatus.RUNNING;
@@ -187,8 +243,8 @@ public class PartFileOperationService {
         operation = operationRepository.save(operation);
         try {
             return switch (operation.getOperationType()) {
-                case DELETE -> executeDelete(operation, recoveringRunningOperation);
-                case MOVE, COPY -> executeTransfer(operation);
+                case DELETE -> executeDelete(operation, recoveringRunningOperation, review);
+                case MOVE, COPY -> executeTransfer(operation, review);
             };
         } catch (Exception e) {
             return fail(operation, findTarget(operation).orElse(null),
@@ -196,7 +252,9 @@ public class PartFileOperationService {
         }
     }
 
-    private PartFileOperation executeDelete(PartFileOperation operation, boolean recoveringRunningOperation) throws IOException {
+    private PartFileOperation executeDelete(PartFileOperation operation,
+                                            boolean recoveringRunningOperation,
+                                            ArchiveReviewStatusService.ReviewCheckResult review) throws IOException {
         PartFileLocation source = locationService.findLocation(operation.getSourceLocationId()).orElse(null);
         if (source == null) return fail(operation, null, "source file location missing");
         if (source.getState() == PartFileLocation.LocationState.DELETED_BY_POLICY) {
@@ -212,13 +270,16 @@ public class PartFileOperationService {
             locationService.markMissingUnexpected(source, "source video missing before delete");
             return fail(operation, null, "source video missing before delete");
         }
+        PartFileOperation blocked = blockDestructiveOperation(operation, review);
+        if (blocked != null) return blocked;
         storage.delete(sourcePath.path());
         if (storage.isRegularFile(sourcePath.path())) throw new IOException("source video still exists after delete");
         locationService.completeDelete(operation.getPartId(), source);
         return succeed(operation, false, null);
     }
 
-    private PartFileOperation executeTransfer(PartFileOperation operation) throws IOException {
+    private PartFileOperation executeTransfer(PartFileOperation operation,
+                                              ArchiveReviewStatusService.ReviewCheckResult review) throws IOException {
         StorageRoot targetRoot = rootService.findById(operation.getTargetRootId())
                 .orElseThrow(() -> new IOException("target storage root missing"));
         rootService.markOnline(targetRoot);
@@ -261,7 +322,7 @@ public class PartFileOperationService {
                 target = locationService.createProcessingTarget(
                         operation.getPartId(), targetRoot, relative, expectedSize);
             }
-            return reconcileVerifiedTarget(operation, source, sourcePath, target, targetVideo);
+            return reconcileVerifiedTarget(operation, source, sourcePath, target, targetVideo, review);
         }
 
         if (source == null) return fail(operation, target, "source file location missing");
@@ -272,6 +333,10 @@ public class PartFileOperationService {
         }
 
         expectedSize = storage.size(sourcePath.path());
+        if (operation.getOperationType() == PartFileOperation.OperationType.MOVE) {
+            PartFileOperation blocked = blockDestructiveOperation(operation, review);
+            if (blocked != null) return blocked;
+        }
         target = locationService.createProcessingTarget(
                 operation.getPartId(), targetRoot, relative, expectedSize);
         operation.setTargetRelativePath(relative);
@@ -292,9 +357,12 @@ public class PartFileOperationService {
                                                       PartFileLocation source,
                                                       LocationPath sourcePath,
                                                       PartFileLocation target,
-                                                      Path targetVideo) throws IOException {
+                                                      Path targetVideo,
+                                                      ArchiveReviewStatusService.ReviewCheckResult review) throws IOException {
         if (operation.getOperationType() == PartFileOperation.OperationType.MOVE
                 && sourcePath != null && storage.isRegularFile(sourcePath.path())) {
+            PartFileOperation blocked = blockDestructiveOperation(operation, review);
+            if (blocked != null) return blocked;
             List<String> warnings = transferCompanions(sourcePath.path(), targetVideo, operation.getOperationType());
             storage.delete(sourcePath.path());
             if (storage.isRegularFile(sourcePath.path())) throw new IOException("source remains after recovered move");
@@ -307,6 +375,74 @@ public class PartFileOperationService {
             locationService.completeCopy(target, targetVideo);
         }
         return succeed(operation, false, null);
+    }
+
+    private PartFileOperation blockDestructiveOperation(
+            PartFileOperation operation,
+            ArchiveReviewStatusService.ReviewCheckResult suppliedReview) {
+        if (!requiresScheduledReview(operation)) return null;
+        Long expectedHistoryId = resolveHistoryId(operation);
+        ArchiveReviewStatusService.ReviewCheckResult review = suppliedReview;
+        if (review == null || !Objects.equals(expectedHistoryId, review.historyId())) {
+            review = reviewOperation(operation,
+                    archiveReviewStatusService == null ? null : archiveReviewStatusService.newRound());
+        }
+        if (review != null && review.permitsCleanup()) return null;
+        String reason = review == null
+                ? "审核服务不可用"
+                : review.state() + ":" + String.valueOf(review.reason());
+        return failReviewGuard(operation, reason);
+    }
+
+    private boolean requiresScheduledReview(PartFileOperation operation) {
+        if (operation == null || operation.getOperationType() == PartFileOperation.OperationType.COPY) return false;
+        if (operation.getOperationSource() == PartFileOperation.OperationSource.SCHEDULED_CLEANUP) return true;
+        if (operation.getOperationSource() != null) return false;
+        RecordRoom room = resolveRoom(operation);
+        if (room == null) return false;
+        return operation.getOperationType() == PartFileOperation.OperationType.DELETE && room.getDeleteType() == 3
+                || operation.getOperationType() == PartFileOperation.OperationType.MOVE && room.getDeleteType() == 8;
+    }
+
+    private ArchiveReviewStatusService.ReviewCheckResult reviewOperation(
+            PartFileOperation operation,
+            ArchiveReviewStatusService.ReviewRound round) {
+        if (archiveReviewStatusService == null || partRepository == null || historyRepository == null) return null;
+        RecordHistoryPart part = partRepository.findById(operation.getPartId()).orElse(null);
+        RecordHistory history = part == null || part.getHistoryId() == null
+                ? null : historyRepository.findById(part.getHistoryId()).orElse(null);
+        return archiveReviewStatusService.checkForCleanup(history, resolveRoom(part), round);
+    }
+
+    private Long resolveHistoryId(PartFileOperation operation) {
+        if (operation == null || partRepository == null) return null;
+        return partRepository.findById(operation.getPartId())
+                .map(RecordHistoryPart::getHistoryId)
+                .orElse(null);
+    }
+
+    private RecordRoom resolveRoom(PartFileOperation operation) {
+        if (operation == null || partRepository == null) return null;
+        return partRepository.findById(operation.getPartId()).map(this::resolveRoom).orElse(null);
+    }
+
+    private RecordRoom resolveRoom(RecordHistoryPart part) {
+        return part == null || roomRepository == null ? null : roomRepository.findByRoomId(part.getRoomId());
+    }
+
+    private PartFileOperation failReviewGuard(PartFileOperation operation, String reason) {
+        String message = "审核保护阻止执行：" + reason;
+        operation.setStatus(PartFileOperation.OperationStatus.FAILED);
+        operation.setErrorMessage(abbreviate(message));
+        operation.setFinishedAt(LocalDateTime.now());
+        PartFileOperation saved = operationRepository.save(operation);
+        log.warn("[BLR] {}", LogKvs.event("PartFile.Operation.ReviewGuardBlocked")
+                .add("operationKey", saved.getOperationKey())
+                .add("partId", saved.getPartId())
+                .add("operationType", saved.getOperationType())
+                .add("operationSource", saved.getOperationSource())
+                .add("reason", reason));
+        return saved;
     }
 
     private PartFileOperation finishTransfer(PartFileOperation operation,
