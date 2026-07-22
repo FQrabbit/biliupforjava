@@ -2383,7 +2383,7 @@
                     <i class="el-icon-close"></i>
                 </button>
             </header>
-            <div class="mobile-log-context-list" v-loading="loadingContext">
+            <div ref="contextContent" class="mobile-log-context-list" v-loading="loadingContext">
                 <div v-if="contextLogs.length === 0 && !loadingContext" class="mobile-log-empty is-compact">
                     <i class="el-icon-document"></i>
                     <h3>暂无上下文数据</h3>
@@ -2392,6 +2392,7 @@
                      :key="index"
                      class="mobile-log-context-line"
                      :class="{ 'is-target': isTargetLine(line) }"
+                     :data-context-target="isTargetLine(line) ? 'true' : null"
                      v-html="formatLogMessage(line)">
                 </div>
             </div>

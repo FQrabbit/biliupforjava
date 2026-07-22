@@ -1570,9 +1570,9 @@
 
     <!-- 上下文弹窗 -->
     <el-dialog title="日志上下文 (上下50条)" :visible.sync="contextDialogVisible" width="90%" append-to-body custom-class="context-dialog">
-        <div class="context-content" v-loading="loadingContext">
+        <div ref="contextContent" class="context-content" v-loading="loadingContext">
              <div v-if="contextLogs.length === 0 && !loadingContext" class="no-data">暂无上下文数据</div>
-             <div v-for="(line, index) in contextLogs" :key="index" class="log-line-item" :class="{'highlight-line': isTargetLine(line)}">
+             <div v-for="(line, index) in contextLogs" :key="index" class="log-line-item" :class="{'highlight-line': isTargetLine(line)}" :data-context-target="isTargetLine(line) ? 'true' : null">
                 <span class="log-line-text" v-html="formatLogMessage(line)"></span>
              </div>
         </div>

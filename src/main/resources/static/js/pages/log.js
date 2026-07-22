@@ -634,10 +634,26 @@ Vue.component('log-page', {
             LogApi.context(url, function(data) {
                 self.contextLogs = data;
                 self.loadingContext = false;
+                self.$nextTick(function () {
+                    self.scrollContextToTarget();
+                });
             }, function(err) {
                 self.contextLogs = ['加载失败: ' + (err.message || '未知错误')];
                 self.loadingContext = false;
             });
+        },
+        scrollContextToTarget: function () {
+            var container = this.$refs.contextContent;
+            if (!container) return;
+
+            var targets = container.querySelectorAll('[data-context-target="true"]');
+            if (targets.length === 0) return;
+            var target = targets[targets.length - 1];
+
+            var containerRect = container.getBoundingClientRect();
+            var targetRect = target.getBoundingClientRect();
+            container.scrollTop += targetRect.top - containerRect.top
+                - (container.clientHeight - targetRect.height) / 2;
         },
         isTargetLine: function(line) {
             if (!this.currentAlert) return false;
