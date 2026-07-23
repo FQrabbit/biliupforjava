@@ -72,6 +72,13 @@ public class RecordHistory {
 
     private int code = -1;
 
+    /**
+     * 已发布稿件是否正在上传分P并准备重新提交编辑
+     * 上传完成并成功调用稿件编辑接口后，才进入 code=-1 的审核状态
+     */
+    @Column(name = "edit_parts_uploading", columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private boolean editPartsUploading;
+
     private int uploadRetryCount = 0;
 
     @Column(name = "upload_paused", columnDefinition = "bit default 0")
@@ -210,6 +217,9 @@ public class RecordHistory {
      * 不修改数据库结构，仅做逻辑映射
      */
     public String getStatus() {
+        if (editPartsUploading) {
+            return "分P上传中";
+        }
         if (forceArchived) {
             return "已强制归档";
         }

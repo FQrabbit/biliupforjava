@@ -7,6 +7,7 @@
     window.HistoryPageEditPartsMethods = {
         canEditPublishedParts: function() {
             if (!this.currentDetail || !this.currentDetail.publish) return false;
+            if (this.currentDetail.editPartsUploading) return false;
             const hasOnlineId = !!(this.currentDetail.avId || this.currentDetail.bvId);
             const code = Number(this.currentDetail.code);
             return hasOnlineId && (code === 0 || code === -50 || code === -2);
@@ -607,9 +608,7 @@
                 _this.editPartsDraft = [];
                 _this.editPartFileDialogVisible = false;
                 _this.editPartsSessionId = '';
-                if (_this.currentDetail && _this.currentDetail.id) {
-                    _this.$set(_this.currentDetail, 'code', Number(resp.historyCode || -1));
-                }
+                _this.applyEditPartsHistoryState(resp, true);
                 if (_this.form && _this.form.viewType === 'archived') {
                     _this.form.viewType = 'working';
                 }
@@ -636,13 +635,11 @@
                         _this.$message({ message: '分P编辑成功', type: 'success' });
                         _this.editPartsEditing = false;
                         _this.editPartsDraft = [];
-                        _this.$set(_this.currentDetail, 'code', Number(resp.historyCode || -1));
+                        _this.applyEditPartsHistoryState(resp, false);
                         _this.fetchPartList(_this.currentDetail.id, function(){});
                         _this.initTable(true);
                     } else {
-                        if (_this.currentDetail && _this.currentDetail.id && resp.historyCode !== undefined && resp.historyCode !== null) {
-                            _this.$set(_this.currentDetail, 'code', Number(resp.historyCode));
-                        }
+                        _this.applyEditPartsHistoryState(resp, false);
                         _this.initTable(true);
                         _this.$message({ message: resp.message || '分P编辑失败', type: 'warning' });
                     }
@@ -650,6 +647,17 @@
             };
             tick();
             _this.editPartsTaskTimer = setInterval(tick, 2000);
+        },
+        applyEditPartsHistoryState: function(resp, uploadingFallback) {
+            if (!this.currentDetail || !this.currentDetail.id || !resp) return;
+            if (resp.historyCode !== undefined && resp.historyCode !== null) {
+                this.$set(this.currentDetail, 'code', Number(resp.historyCode));
+            }
+            const uploading = resp.historyEditPartsUploading !== undefined && resp.historyEditPartsUploading !== null
+                ? !!resp.historyEditPartsUploading
+                : !!uploadingFallback;
+            this.$set(this.currentDetail, 'editPartsUploading', uploading);
+            this.$set(this.currentDetail, 'status', resp.historyStatus || (uploading ? '分P上传中' : this.currentDetail.status));
         },
     };
 })(window);

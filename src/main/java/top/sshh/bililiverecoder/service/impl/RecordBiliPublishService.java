@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -77,7 +79,24 @@ public class RecordBiliPublishService {
     public void initWorkPath() {
         workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
         workPath = workPath.replace("\\", "/");
+        editPartsTaskMap.clear();
         cleanupExpiredEditPartTempFiles();
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void recoverInterruptedEditPartsUploads() {
+        List<RecordHistory> interrupted = historyRepository.findByEditPartsUploadingTrue();
+        if (interrupted.isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (RecordHistory history : interrupted) {
+            history.setEditPartsUploading(false);
+            history.setUpdateTime(now);
+        }
+        historyRepository.saveAll(interrupted);
+        log.warn("[BLR] {}", LogKvs.event("Publish.EditParts.InterruptedRecovered")
+                .addRoundCount("history", interrupted.size()));
     }
 
     @Autowired
@@ -457,7 +476,9 @@ public class RecordBiliPublishService {
         worker.start();
         result.put("accepted", true);
         result.put("status", status.status);
-        result.put("historyCode", -1);
+        result.put("historyCode", status.historyCode);
+        result.put("historyEditPartsUploading", status.historyEditPartsUploading);
+        result.put("historyStatus", status.historyStatus);
         return result;
     }
 
@@ -687,6 +708,7 @@ public class RecordBiliPublishService {
                     return;
                 }
                 if (hasReplacementFile) {
+                    status.message = "正在上传分P P" + page;
                     RecordHistoryPart part = prepareEditUploadPart(history, room, item, page);
                     if (part == null) {
                         markEditPartsTaskFailed(status, "文件不在工作目录下或文件不存在: P" + page);
@@ -734,6 +756,7 @@ public class RecordBiliPublishService {
                 markEditPartsTaskFailed(status, "至少需要保留一个分P");
                 return;
             }
+            status.message = "正在提交编辑";
             VideoEditUploadDto dto = buildVideoEditUploadDto(history, room, aid, videos);
             String editRes = BiliApi.editPublish(auth.user, dto);
             JSONObject root = parseJsonObject(editRes);
@@ -752,7 +775,7 @@ public class RecordBiliPublishService {
                 cleanupStaleEditPartLocalState(history, submittedPartIds);
                 syncEditHistoryStatusImmediately(history.getId());
                 cleanupEditPartTempFiles(historyId, status.sessionId);
-                status.historyCode = history.getCode();
+                captureEditPartsHistoryState(status);
                 status.status = "SUCCESS";
                 status.message = "编辑成功";
                 status.endTime = LocalDateTime.now();
@@ -1976,10 +1999,12 @@ public class RecordBiliPublishService {
         return onlineHasSamePage || missingOnlineIdentity || abnormal;
     }
 
-    private void markHistoryPendingReviewAfterEdit(RecordHistory history) {
+    void markHistoryPendingReviewAfterEdit(RecordHistory history) {
         if (history == null) {
             return;
         }
+        history.setEditPartsUploading(false);
+        history.setForceArchived(false);
         history.setCode(-1);
         history.setUpdateTime(LocalDateTime.now());
     }
@@ -1991,9 +2016,11 @@ public class RecordBiliPublishService {
         status.previousCode = history.getCode();
         status.previousForceArchived = history.isForceArchived();
         status.historyMarkedWorking = true;
-        status.historyCode = -1;
-        history.setForceArchived(false);
-        markHistoryPendingReviewAfterEdit(history);
+        status.historyCode = history.getCode();
+        status.historyEditPartsUploading = true;
+        status.historyStatus = "分P上传中";
+        history.setEditPartsUploading(true);
+        history.setUpdateTime(LocalDateTime.now());
         historyRepository.save(history);
     }
 
@@ -2002,14 +2029,17 @@ public class RecordBiliPublishService {
             return;
         }
         RecordHistory history = historyRepository.findById(status.historyId).orElse(null);
-        if (history == null || history.getCode() != -1) {
+        if (history == null || !history.isEditPartsUploading()) {
             return;
         }
         history.setCode(status.previousCode);
+        history.setEditPartsUploading(false);
         history.setForceArchived(Boolean.TRUE.equals(status.previousForceArchived));
         history.setUpdateTime(LocalDateTime.now());
         historyRepository.save(history);
         status.historyCode = history.getCode();
+        status.historyEditPartsUploading = false;
+        status.historyStatus = history.getStatus();
     }
 
     private void syncEditHistoryStatusImmediately(Long historyId) {
@@ -2225,6 +2255,10 @@ public class RecordBiliPublishService {
             ctx.message = "稿件未投稿或缺少 avId/bvId";
             return ctx;
         }
+        if (history.isEditPartsUploading() && status == null) {
+            ctx.message = "分P编辑任务正在上传，请等待当前任务完成";
+            return ctx;
+        }
         if (!isEditablePublishedCode(effectiveEditAuthCode(history, status))) {
             ctx.message = "仅审核通过或被退回的稿件支持编辑分P";
             return ctx;
@@ -2252,7 +2286,7 @@ public class RecordBiliPublishService {
         if (history != null
                 && status != null
                 && status.historyMarkedWorking
-                && history.getCode() == -1
+                && history.isEditPartsUploading()
                 && status.previousCode != null) {
             return status.previousCode;
         }
@@ -2496,9 +2530,25 @@ public class RecordBiliPublishService {
 
     private void markEditPartsTaskFailed(EditPartsTaskStatus status, String message) {
         restoreHistoryStateAfterEditFailure(status);
+        captureEditPartsHistoryState(status);
         status.status = "FAILED";
         status.message = StringUtils.defaultIfBlank(message, "编辑失败");
         status.endTime = LocalDateTime.now();
+    }
+
+    private void captureEditPartsHistoryState(EditPartsTaskStatus status) {
+        if (status == null || status.historyId == null) {
+            return;
+        }
+        RecordHistory history = historyRepository.findById(status.historyId).orElse(null);
+        if (history == null) {
+            status.historyEditPartsUploading = false;
+            status.historyStatus = null;
+            return;
+        }
+        status.historyCode = history.getCode();
+        status.historyEditPartsUploading = history.isEditPartsUploading();
+        status.historyStatus = history.getStatus();
     }
 
     private boolean deleteDirectoryQuietly(Path path) {
@@ -2616,6 +2666,8 @@ public class RecordBiliPublishService {
         private String responseMessage;
         private String responseSnippet;
         private Integer historyCode;
+        private Boolean historyEditPartsUploading;
+        private String historyStatus;
         private Integer previousCode;
         private Boolean previousForceArchived;
         private boolean historyMarkedWorking;
@@ -2632,6 +2684,8 @@ public class RecordBiliPublishService {
             map.put("responseMessage", responseMessage);
             map.put("responseSnippet", responseSnippet);
             map.put("historyCode", historyCode);
+            map.put("historyEditPartsUploading", historyEditPartsUploading);
+            map.put("historyStatus", historyStatus);
             map.put("startTime", startTime);
             map.put("endTime", endTime);
             return map;

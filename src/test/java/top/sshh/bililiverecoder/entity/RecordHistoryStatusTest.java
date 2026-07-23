@@ -18,5 +18,17 @@ class RecordHistoryStatusTest {
 
         assertEquals("已完成", history.getStatus());
     }
-}
 
+    @Test
+    void editPartsUploadShouldOverrideRejectedStatus() {
+        RecordHistory history = new RecordHistory();
+        history.setUpload(true);
+        history.setPublish(true);
+        history.setCode(-2);
+        history.setForceArchived(true);
+        history.setEditPartsUploading(true);
+
+        assertEquals("分P上传中", history.getStatus());
+        assertEquals(-2, history.getCode());
+    }
+}

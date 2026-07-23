@@ -51,6 +51,21 @@ class VideoSyncJobTest {
     }
 
     @Test
+    void skipsManualAuditRefreshWhileEditPartIsUploading() {
+        RecordHistory history = new RecordHistory();
+        history.setId(42L);
+        history.setCode(-2);
+        history.setEditPartsUploading(true);
+
+        var result = job.syncStatusOnly(history).toMap();
+
+        assertTrue((Boolean) result.get("success"));
+        assertEquals(-2, result.get("archiveCode"));
+        assertEquals("分P正在上传，上传完成并提交编辑后再查询审核状态", result.get("msg"));
+        assertFalse((Boolean) result.get("statusSynced"));
+    }
+
+    @Test
     void auditNotificationUsesModifyAdviceAndViolationDetails() {
         BiliVideoAuditDetailResponse.ProblemDetail detail = new BiliVideoAuditDetailResponse.ProblemDetail();
         detail.setReject_reason("您的视频不予审核通过");

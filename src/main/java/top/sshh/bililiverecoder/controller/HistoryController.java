@@ -1532,6 +1532,7 @@ public class HistoryController {
 
     private Predicate buildFullArchivedPredicate(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root) {
         Predicate isForceArchived = criteriaBuilder.equal(root.get("forceArchived"), true);
+        Predicate isNotEditingParts = criteriaBuilder.equal(root.get("editPartsUploading"), false);
 
         // 正常上传并完成的条件
         Predicate isPublishedArchived = buildPublishedArchivedPredicate(criteriaBuilder, root);
@@ -1554,13 +1555,16 @@ public class HistoryController {
                 criteriaBuilder.not(criteriaBuilder.exists(recordingPartExists))
         );
 
-        return criteriaBuilder.or(isForceArchived, isPublishedArchived, isNoUploadArchived);
+        return criteriaBuilder.and(
+                isNotEditingParts,
+                criteriaBuilder.or(isForceArchived, isPublishedArchived, isNoUploadArchived)
+        );
     }
 
     /**
-     * 填充RecordHistory的额外字段，包括分P统计、放弃分P信息等。
-     * 注意：房间名(roomName)需要调用方单独设置，通常通过roomCache获取。
-     * 此方法用于确保返回给前端的数据一致性。
+     * 填充RecordHistory的额外字段，包括分P统计、放弃分P信息等
+     * 注意：房间名(roomName)需要调用方单独设置，通常通过roomCache获取
+     * 此方法用于确保返回给前端的数据一致性
      */
     private void populateHistoryFields(RecordHistory history,
                                        Map<String, String> configMap,

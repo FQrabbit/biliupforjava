@@ -120,6 +120,13 @@ public class videoSyncJob {
             result.msg = "稿件不存在";
             return result;
         }
+        if (history.isEditPartsUploading()) {
+            result.success = true;
+            result.archiveCode = history.getCode();
+            result.type = "info";
+            result.msg = "分P正在上传，上传完成并提交编辑后再查询审核状态";
+            return result;
+        }
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         if (room == null) {
             result.success = false;
@@ -783,6 +790,9 @@ public class videoSyncJob {
     }
 
     private void syncOneInternal(RecordHistory next, boolean doPostPublishProcessing) {
+        if (next == null || next.isEditPartsUploading()) {
+            return;
+        }
         RecordRoom room = roomRepository.findByRoomId(next.getRoomId());
         if (room == null) {
             log.error("[BLR] {}", LogKvs.event("VideoSync.RoomMissing")

@@ -15,8 +15,8 @@ import java.util.stream.Stream;
 public interface RecordHistoryRepository extends CrudRepository<RecordHistory, Long> {
 
     /**
-     * 流式读取全部录制历史，用于导出配置时逐条写入 JSON，避免一次性加载全部到内存。
-     * 调用方必须在 try-with-resources 中使用，并确保在事务内调用。
+     * 流式读取全部录制历史，用于导出配置时逐条写入 JSON，避免一次性加载全部到内存
+     * 调用方必须在 try-with-resources 中使用，并确保在事务内调用
      */
     @Query("select h from RecordHistory h order by h.id")
     @Transactional(readOnly = true)
@@ -69,8 +69,10 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByEndTimeIsNotNullOrderByEndTimeDesc();
 
-    @org.springframework.data.jpa.repository.Query("select r from RecordHistory r where r.bvId is not null and r.publish = true and r.code in (-1, -9, -30, -40)")
+    @org.springframework.data.jpa.repository.Query("select r from RecordHistory r where r.bvId is not null and r.publish = true and r.editPartsUploading = false and r.code in (-1, -9, -30, -40)")
     List<RecordHistory> findSyncList();
+
+    List<RecordHistory> findByEditPartsUploadingTrue();
 
     @org.springframework.data.jpa.repository.Query("""
             select h from RecordHistory h

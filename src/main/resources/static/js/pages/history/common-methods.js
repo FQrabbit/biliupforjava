@@ -119,6 +119,7 @@
         },
         getMobileHistoryPhaseText: function(item) {
             if (!item) return '未知';
+            if (item.editPartsUploading) return '分P上传中';
             if (this.abnormalPartCount(item) > 0) return '异常';
             if (this.isActuallyRecording(item)) return '录制中';
             if (item.forceArchived && this.form.viewType === 'archived') return '已归档';
@@ -130,6 +131,7 @@
         },
         getMobileHistoryPhaseClass: function(item) {
             if (!item) return 'is-info';
+            if (item.editPartsUploading) return 'is-upload';
             if (this.abnormalPartCount(item) > 0) return 'is-danger';
             if (this.isActuallyRecording(item)) return 'is-recording';
             if (item.publish) {

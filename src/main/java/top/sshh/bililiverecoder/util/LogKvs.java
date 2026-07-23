@@ -216,6 +216,7 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.EditParts.SubmitFailed", "分P编辑：提交编辑失败");
         EVENT_ZH.put("Publish.EditParts.TempPartDeleteFailed", "分P编辑：临时分P删除失败");
         EVENT_ZH.put("Publish.EditParts.SyncStatusFailed", "分P编辑：编辑后刷新稿件状态失败");
+        EVENT_ZH.put("Publish.EditParts.InterruptedRecovered", "分P编辑：已恢复因服务重启中断的上传状态");
         EVENT_ZH.put("Publish.Task.SuspendedSkip", "投稿任务已暂停，跳过本次执行");
         EVENT_ZH.put("Publish.History.AlreadyPublished", "投稿历史已标记为发布，跳过");
         EVENT_ZH.put("Publish.Retry.GiveUp", "投稿重试次数过多，放弃");
