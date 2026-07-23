@@ -2,6 +2,9 @@ package top.sshh.bililiverecoder.util.retry;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,5 +31,25 @@ class UploadRetryClassifierTest {
 
         assertTrue(!assessment.retryable());
         assertEquals(UploadRetryClassifier.AUTH, assessment.category());
+    }
+
+    @Test
+    void shouldClassifyNetworkTimeoutAsRetryable() {
+        SocketTimeoutException timeout = new SocketTimeoutException("Read timed out");
+
+        UploadRetryClassifier.UploadRetryAssessment assessment = UploadRetryClassifier.assess(timeout, null);
+        assertTrue(assessment.retryable());
+        assertEquals(UploadRetryClassifier.TIMEOUT, assessment.category());
+    }
+
+    @Test
+    void shouldTreatInterruptedIoAsRetryableTimeout() {
+        UploadRetryClassifier.UploadRetryAssessment assessment = UploadRetryClassifier.assess(
+                new InterruptedIOException("Connection interrupted"),
+                null
+        );
+
+        assertTrue(assessment.retryable());
+        assertEquals(UploadRetryClassifier.TIMEOUT, assessment.category());
     }
 }

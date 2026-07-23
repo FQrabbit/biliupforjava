@@ -889,7 +889,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("thread", Thread.currentThread().getName()));
                                                 break;
                                             } catch (Exception e) {
-                                                if (shouldPauseUpload(historyId, partId) || isUploadChunkCancelled(e)) {
+                                                if (shouldPauseUpload(historyId, partId)) {
                                                     globalFuseReason.compareAndSet(null, "UPLOAD_PAUSED");
                                                     globalFuseOpen.set(true);
                                                     break;
@@ -1551,20 +1551,6 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     private boolean shouldPauseUpload(Long historyId, Long partId) {
         return uploadPauseService.isUploadPaused(historyId, partId);
-    }
-
-    private boolean isUploadChunkCancelled(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            String message = current.getMessage();
-            if (StringUtils.containsIgnoreCase(message, "Upload chunk cancelled")
-                    || current instanceof java.io.InterruptedIOException
-                    || current instanceof InterruptedException) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 
     private String pauseUpload(Long historyId, Long partId, MultipartUploadSession session) {
