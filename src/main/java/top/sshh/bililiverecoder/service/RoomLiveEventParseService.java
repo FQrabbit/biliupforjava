@@ -90,12 +90,20 @@ public class RoomLiveEventParseService {
         if (part == null || part.getId() == null) {
             return ParseResult.skipped("invalid part");
         }
-        synchronized (partParseLocks[lockIndex(part.getId())]) {
-            return parsePartLocked(part, force, logFailedCached);
-        }
+        return statsAggregationService.withStatsWriteLock(() -> {
+            synchronized (partParseLocks[lockIndex(part.getId())]) {
+                return parsePartLocked(part, force, logFailedCached);
+            }
+        });
     }
 
     private ParseResult parsePartLocked(RecordHistoryPart part, boolean force, boolean logFailedCached) {
+        if (!partRepository.existsById(part.getId())) {
+            return ParseResult.skipped("part deleted");
+        }
+        if (part.getHistoryId() != null && !historyRepository.existsById(part.getHistoryId())) {
+            return ParseResult.skipped("history deleted");
+        }
         if (!force && (part.isRecording() || part.getEndTime() == null)) {
             log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SkipActive")
                     .add("roomId", part.getRoomId())

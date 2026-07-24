@@ -21,6 +21,11 @@ public interface RoomLiveDailyStatsRepository extends CrudRepository<RoomLiveDai
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
+    @Query("delete from RoomLiveDailyStats d where d.roomId = ?1")
+    int deleteByRoomId(String roomId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
     @Query("delete from RoomLiveDailyStats d")
     int deleteAllRows();
 }

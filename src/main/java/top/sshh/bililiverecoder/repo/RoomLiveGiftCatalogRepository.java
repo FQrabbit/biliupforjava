@@ -13,6 +13,11 @@ public interface RoomLiveGiftCatalogRepository extends CrudRepository<RoomLiveGi
 
     List<RoomLiveGiftCatalog> findByRoomIdAndGiftIdIn(String roomId, List<Integer> giftIds);
 
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("delete from RoomLiveGiftCatalog c where c.roomId = ?1")
+    int deleteByRoomId(String roomId);
+
     @org.springframework.data.jpa.repository.Query("""
             select c from RoomLiveGiftCatalog c
             where c.giftId in ?1

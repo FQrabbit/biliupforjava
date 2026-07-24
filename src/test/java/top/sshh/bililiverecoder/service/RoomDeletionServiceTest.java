@@ -3,6 +3,7 @@ package top.sshh.bililiverecoder.service;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +37,8 @@ class RoomDeletionServiceTest {
     private RecordHistoryPartRepository partRepository;
     @Mock
     private HistoryDeletionService historyDeletionService;
+    @Mock
+    private StatsAggregationService statsAggregationService;
     @Mock
     private UploadProgressTracker uploadProgressTracker;
     @Mock
@@ -159,6 +162,7 @@ class RoomDeletionServiceTest {
         assertTrue(result.deleted());
         assertEquals(0, result.deletedHistoryCount());
         verify(historyDeletionService, never()).delete(any(), any());
+        verify(statsAggregationService, never()).deleteRoomStats(anyString());
         verify(roomRepository).delete(room);
     }
 
@@ -200,15 +204,24 @@ class RoomDeletionServiceTest {
         failedFile.put("reason", "storage offline");
         when(historyDeletionService.delete(21L, historyOptions)).thenReturn(historyResult(21L, 2, List.of()));
         when(historyDeletionService.delete(22L, historyOptions)).thenReturn(historyResult(22L, 3, List.of(failedFile)));
+        when(statsAggregationService.deleteRoomStats("123")).thenReturn(
+                new StatsAggregationService.RoomStatsDeletionResult(
+                        "123", 1, 2, 3, 4, 5, 6, 7L, 8));
 
         RoomDeletionService.DeletionResult result = service.delete(10L,
                 new RoomDeletionService.DeleteOptions(true, true, true, true));
 
         assertEquals(2, result.deletedHistoryCount());
         assertEquals(5, result.deletedPartCount());
+        assertEquals(36L, result.deletedStatisticsCount());
+        assertEquals(36L, result.toMap().get("deletedStatisticsCount"));
         assertEquals(1, result.notDeletedFiles().size());
         assertEquals(22L, result.notDeletedFiles().get(0).get("historyId"));
-        verify(roomRepository).delete(room);
+        InOrder deletionOrder = inOrder(historyDeletionService, statsAggregationService, roomRepository);
+        deletionOrder.verify(historyDeletionService).delete(21L, historyOptions);
+        deletionOrder.verify(historyDeletionService).delete(22L, historyOptions);
+        deletionOrder.verify(statsAggregationService).deleteRoomStats("123");
+        deletionOrder.verify(roomRepository).delete(room);
     }
 
     private static RecordRoom room(Long id, String roomId) {

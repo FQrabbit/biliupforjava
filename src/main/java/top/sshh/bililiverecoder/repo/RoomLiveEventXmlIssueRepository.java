@@ -23,6 +23,10 @@ public interface RoomLiveEventXmlIssueRepository extends CrudRepository<RoomLive
 
     long deleteByHistoryId(Long historyId);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from RoomLiveEventXmlIssue issue where issue.roomId = ?1")
+    long deleteByRoomId(String roomId);
+
     long deleteByPartIdIn(Collection<Long> partIds);
 
     @Modifying

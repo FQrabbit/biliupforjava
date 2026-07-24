@@ -19,6 +19,11 @@ public interface RoomLiveMsgBucketStatsRepository extends CrudRepository<RoomLiv
 
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
+    @org.springframework.data.jpa.repository.Query("delete from RoomLiveMsgBucketStats b where b.roomId = ?1")
+    int deleteByRoomId(String roomId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
     @org.springframework.data.jpa.repository.Query("delete from RoomLiveMsgBucketStats b")
     int deleteAllRows();
 }

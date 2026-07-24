@@ -8,6 +8,12 @@
         update: function(data, callback, errorCallback) {
             ApiUtil.post('/history/update', data, callback, errorCallback);
         },
+        updateUploadBatch: function(data, callback, errorCallback) {
+            ApiUtil.post('/history/batch/upload', data, callback, errorCallback);
+        },
+        forceArchiveBatch: function(data, callback, errorCallback) {
+            ApiUtil.post('/history/batch/forceArchive', data, callback, errorCallback);
+        },
         remove: function(id, data, callback, errorCallback) {
             $.ajax({
                 url: '/history/delete/' + encodeURIComponent(id),

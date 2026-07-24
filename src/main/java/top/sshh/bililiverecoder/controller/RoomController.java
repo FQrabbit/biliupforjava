@@ -1359,12 +1359,16 @@ public class RoomController {
             result.put("data", deletion.toMap());
             if (deletion.notDeletedFiles().isEmpty()) {
                 result.put("type", "success");
-                result.put("msg", deletion.deletedHistoryCount() > 0
-                        ? "房间及 " + deletion.deletedHistoryCount() + " 条录制历史删除成功"
-                        : "房间删除成功");
+                if (deletion.options().deleteHistories()) {
+                    result.put("msg", deletion.deletedHistoryCount() > 0
+                            ? "房间、" + deletion.deletedHistoryCount() + " 条录制历史及相关统计数据删除成功"
+                            : "房间及相关统计数据删除成功");
+                } else {
+                    result.put("msg", "房间删除成功，录制历史和统计数据已保留");
+                }
             } else {
                 result.put("type", "warning");
-                result.put("msg", "房间和数据库记录已删除（有 "
+                result.put("msg", "房间、录制历史和统计数据已删除（有 "
                         + deletion.notDeletedFiles().size() + " 个本地文件未删除）");
             }
             return result;

@@ -19,15 +19,16 @@
         },
         toggleBatchMode: function() {
             if (this.batchVisibilityRunning) {
-                this.$message.warning('批量可见性切换进行中，请等待完成后再退出');
+                this.$message.warning((this.batchOperationTitle || '批量操作') + '进行中，请等待完成后再退出');
                 return;
             }
             this.isMultiSelectMode = !this.isMultiSelectMode;
             this.selectedItems = [];
+            this.batchDeleteDialogVisible = false;
             if (this.isMultiSelectMode) {
                 this.filterExpanded = false;
                 this.stopPolling();
-                this.$message.info('已进入批量管理模式，可批量删除或批量切换可见性');
+                this.$message.info('已进入批量管理模式');
             } else {
                 this.startPolling();
                 this.initTable(true);
@@ -67,6 +68,18 @@
         canOperateVisibilityForItem: function(item) {
             return !this.getVisibilityDisabledReasonForItem(item);
         },
+        canOperateVisibilityTargetForItem: function(item, isOnlySelf) {
+            return !this.getVisibilityTargetDisabledReasonForItem(item, isOnlySelf);
+        },
+        getVisibilityTargetDisabledReasonForItem: function(item, isOnlySelf) {
+            var reason = this.getVisibilityDisabledReasonForItem(item);
+            if (reason) return reason;
+            var targetCode = Number(isOnlySelf) === 1 ? -50 : 0;
+            if (Number(item && item.code) === targetCode) {
+                return targetCode === -50 ? '已经是仅自己可见' : '已经是公开状态';
+            }
+            return '';
+        },
         getVisibilityDisabledReasonForItem: function(item) {
             if (!item || !item.id) return '请先选择有效稿件';
             if (!item.publish) return '稿件未发布，不能切换可见性';
@@ -82,6 +95,70 @@
             if (pendingNormal > 0 || pendingHigh > 0) return '稿件仍有弹幕待发送，暂不可切换';
             if (item.roomSendSc === true && !item.sendReply) return '稿件仍在发送SC/评论，暂不可切换';
             return '';
+        },
+        beginBatchOperation: function(title, targetText, total) {
+            this.batchOperationTitle = title || '批量操作';
+            this.batchVisibilityTargetText = targetText || '';
+            this.batchVisibilityTotal = Math.max(0, Number(total) || 0);
+            this.batchVisibilityDone = 0;
+            this.batchVisibilitySuccess = 0;
+            this.batchVisibilityFail = 0;
+            this.batchVisibilityCurrentId = null;
+            this.batchVisibilityRunning = true;
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'batchOperationStatus',
+                    operating: true,
+                    message: this.batchOperationTitle
+                }, '*');
+            }
+        },
+        finishBatchOperation: function() {
+            this.batchVisibilityCurrentId = null;
+            this.batchVisibilityRunning = false;
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'batchOperationStatus',
+                    operating: false,
+                    message: ''
+                }, '*');
+            }
+        },
+        finishBatchModeAndRefresh: function() {
+            this.isMultiSelectMode = false;
+            this.selectedItems = [];
+            this.startPolling();
+            this.initTable();
+        },
+        escapeBatchHtml: function(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+        showBatchFailureDetails: function(data, title) {
+            var _this = this;
+            var failed = data && Array.isArray(data.details) ? data.details.filter(function(item) {
+                return item && item.status === 'failed';
+            }) : [];
+            if (failed.length === 0) return;
+            var html = '<div style="max-height:calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.4);overflow:auto;">'
+                + '<div style="margin-bottom:8px;color:#606266;">以下稿件处理失败：</div><ul style="margin:0;padding-left:18px;">';
+            failed.slice(0, 20).forEach(function(item) {
+                html += '<li style="margin:4px 0;">ID ' + _this.escapeBatchHtml(item.id) + '：'
+                    + _this.escapeBatchHtml(item.reason || '未知原因') + '</li>';
+            });
+            if (failed.length > 20) {
+                html += '<li style="color:#909399;">... 其余 ' + (failed.length - 20) + ' 项请查看日志</li>';
+            }
+            html += '</ul></div>';
+            this.$alert(html, title || '批量操作失败详情', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: '知道了',
+                type: 'warning'
+            });
         },
         handleCardClick: function(item) {
             if (this.isMobileBatchSelectionSurface()) {
@@ -269,69 +346,168 @@
             return html;
         },
         handleBatchDelete: function() {
-            var _this = this;
             if (this.selectedItems.length === 0) return;
-
-            var msg = '<p>确定要删除选中的 <span style="color:#F56C6C;font-weight:bold;">' + this.selectedItems.length + '</span> 个稿件吗？</p>';
-            if (this.batchDeleteOptions.deleteVideo || this.batchDeleteOptions.deleteDanmaku || this.batchDeleteOptions.deleteCover) {
-                msg += '<p style="margin-top:10px;">同时删除以下本地文件：</p><ul style="color:#F56C6C;padding-left:20px;">';
-                if (this.batchDeleteOptions.deleteVideo) msg += '<li>视频文件</li>';
-                if (this.batchDeleteOptions.deleteDanmaku) msg += '<li>弹幕文件</li>';
-                if (this.batchDeleteOptions.deleteCover) msg += '<li>封面图片</li>';
-                msg += '</ul>';
-                msg += '<p style="font-size:12px;color:#909399;margin-top:10px;">注意：此操作不可恢复！</p>';
-            }
-
-            this.$confirm(msg, '批量删除确认', {
-                dangerouslyUseHTMLString: true,
-                confirmButtonText: '确定删除',
-                cancelButtonText: '取消',
-                type: 'warning'
-            }).then(function() {
-                const loading = _this.$loading({
-                    lock: true,
-                    text: '正在批量删除 ' + _this.selectedItems.length + ' 个稿件...',
-                    spinner: 'el-icon-loading',
-                    background: 'rgba(0, 0, 0, 0.7)'
-                });
-
-                // 使用 Promise.all 并行请求
-                var promises = _this.selectedItems.map(function(item) {
-                    return new Promise(function(resolve, reject) {
-                        HistoryApi.remove(item.id, _this.batchDeleteOptions, function(res) {
-                                var ok = res && typeof res.msg === 'string' && res.msg.indexOf('删除成功') > -1;
-                                var files = res && res.data && Array.isArray(res.data.notDeletedFiles) ? res.data.notDeletedFiles : [];
-                                resolve({ id: item.id, deleted: ok, type: res && res.type, msg: res && res.msg, notDeletedFiles: files });
-                            }, function() {
-                                resolve({ id: item.id, deleted: false, type: 'error', msg: '请求失败', notDeletedFiles: [] });
-                            });
+            this.batchDeleteOptions.deleteVideo = false;
+            this.batchDeleteOptions.deleteDanmaku = false;
+            this.batchDeleteOptions.deleteCover = false;
+            this.batchDeleteDialogVisible = true;
+        },
+        confirmBatchDelete: function() {
+            var _this = this;
+            if (this.selectedItems.length === 0 || this.batchDeleteRunning) return;
+            var selected = this.selectedItems.slice();
+            var options = {
+                deleteVideo: !!this.batchDeleteOptions.deleteVideo,
+                deleteDanmaku: !!this.batchDeleteOptions.deleteDanmaku,
+                deleteCover: !!this.batchDeleteOptions.deleteCover
+            };
+            this.batchDeleteDialogVisible = false;
+            this.batchDeleteRunning = true;
+            var loading = this.$loading({
+                lock: true,
+                text: '正在批量删除 ' + selected.length + ' 个稿件...',
+                spinner: 'el-icon-loading',
+                background: 'rgba(0, 0, 0, 0.7)'
+            });
+            var promises = selected.map(function(item) {
+                return new Promise(function(resolve) {
+                    HistoryApi.remove(item.id, options, function(res) {
+                        var ok = res && typeof res.msg === 'string' && res.msg.indexOf('删除成功') > -1;
+                        var files = res && res.data && Array.isArray(res.data.notDeletedFiles) ? res.data.notDeletedFiles : [];
+                        resolve({ id: item.id, deleted: ok, type: res && res.type, msg: res && res.msg, notDeletedFiles: files });
+                    }, function() {
+                        resolve({ id: item.id, deleted: false, type: 'error', msg: '请求失败', notDeletedFiles: [] });
                     });
                 });
+            });
 
-                Promise.all(promises).then(function(results) {
-                    loading.close();
-                    var successCount = results.filter(function(r) { return r.deleted; }).length;
-                    var failCount = results.length - successCount;
-                    var notDeletedGrouped = results
-                        .filter(function(r) { return r.deleted && r.notDeletedFiles && r.notDeletedFiles.length > 0; })
-                        .map(function(r) { return { historyId: r.id, files: r.notDeletedFiles }; });
-
-                    if (failCount === 0) {
-                        _this.$message.success('成功删除 ' + successCount + ' 个稿件');
-                    } else {
-                        _this.$message.warning('删除完成：成功 ' + successCount + ' 个，失败 ' + failCount + ' 个');
-                    }
-                    _this.isMultiSelectMode = false;
-                    _this.selectedItems = [];
-                    _this.startPolling();
-                    _this.initTable();
-                    if (notDeletedGrouped.length > 0) {
-                        _this.$alert(_this.buildNotDeletedFilesHtml(notDeletedGrouped), '部分本地文件未删除', {
-                            dangerouslyUseHTMLString: true,
-                            confirmButtonText: '知道了',
-                            type: 'warning'
-                        });
-                    }
+            Promise.all(promises).then(function(results) {
+                var successCount = results.filter(function(r) { return r.deleted; }).length;
+                var failCount = results.length - successCount;
+                var notDeletedGrouped = results
+                    .filter(function(r) { return r.deleted && r.notDeletedFiles && r.notDeletedFiles.length > 0; })
+                    .map(function(r) { return { historyId: r.id, files: r.notDeletedFiles }; });
+                if (failCount === 0) {
+                    _this.$message.success('成功删除 ' + successCount + ' 个稿件');
+                } else {
+                    _this.$message.warning('删除完成：成功 ' + successCount + ' 个，失败 ' + failCount + ' 个');
+                }
+                _this.finishBatchModeAndRefresh();
+                if (notDeletedGrouped.length > 0) {
+                    _this.$alert(_this.buildNotDeletedFilesHtml(notDeletedGrouped), '部分本地文件未删除', {
+                        dangerouslyUseHTMLString: true,
+                        confirmButtonText: '知道了',
+                        type: 'warning'
+                    });
+                }
+            }).catch(function() {
+                _this.$message.error('批量删除请求失败');
+            }).finally(function() {
+                _this.batchDeleteRunning = false;
+                loading.close();
+            });
+        },
+        handleBatchUpload: function(upload) {
+            var _this = this;
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return;
+            if (this.batchVisibilityRunning) {
+                this.$message.warning('批量操作正在进行中，请稍候');
+                return;
+            }
+            var enable = upload === true;
+            var eligibleItems = this.selectedItems.filter(function(item) {
+                if (!item) return false;
+                return enable ? (!item.forceArchived && (!item.upload || item.uploadPaused)) : !!item.upload;
+            });
+            if (eligibleItems.length === 0) {
+                this.$message.info(enable ? '所选稿件无需开启上传' : '所选稿件的上传开关均已关闭');
+                return;
+            }
+            var skipped = this.selectedItems.length - eligibleItems.length;
+            var targetText = enable ? '开启上传' : '关闭上传';
+            var msg = '<p>将把 <b>' + eligibleItems.length + '</b> 个稿件的上传开关设为“'
+                + (enable ? '开' : '关') + '”。</p>';
+            if (!enable) {
+                msg += '<p style="margin-top:8px;color:#E6A23C;">正在上传或等待投稿的任务将被停止；已经完成的上传不会被删除。</p>';
+            } else {
+                msg += '<p style="margin-top:8px;color:#606266;">开启后会恢复尚未完成分P的上传调度。</p>';
+            }
+            if (skipped > 0) {
+                msg += '<p style="margin-top:8px;color:#909399;">另外 ' + skipped + ' 个稿件已是目标状态或已强制归档，将自动跳过。</p>';
+            }
+            this.$confirm(msg, '批量' + targetText + '确认', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: targetText,
+                cancelButtonText: '取消',
+                confirmButtonClass: enable ? 'el-button--primary' : 'el-button--warning',
+                type: enable ? 'info' : 'warning'
+            }).then(function() {
+                _this.beginBatchOperation('批量' + targetText, targetText, _this.selectedItems.length);
+                HistoryApi.updateUploadBatch({
+                    ids: _this.selectedItems.map(function(item) { return item.id; }),
+                    upload: enable
+                }, function(data) {
+                    _this.batchVisibilityDone = Number(data && data.requested) || _this.batchVisibilityTotal;
+                    _this.batchVisibilitySuccess = Number(data && data.updated) || 0;
+                    _this.batchVisibilityFail = Number(data && data.failed) || 0;
+                    _this.finishBatchOperation();
+                    _this.$message({
+                        message: (data && data.msg) || ('批量' + targetText + '完成'),
+                        type: (data && data.type) || 'success'
+                    });
+                    _this.showBatchFailureDetails(data, '上传开关修改失败详情');
+                    _this.finishBatchModeAndRefresh();
+                }, function() {
+                    _this.finishBatchOperation();
+                    _this.$message.error('批量' + targetText + '请求失败');
+                });
+            }).catch(function() {});
+        },
+        handleBatchForceArchive: function() {
+            var _this = this;
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return;
+            if (this.batchVisibilityRunning) {
+                this.$message.warning('批量操作正在进行中，请稍候');
+                return;
+            }
+            var eligibleItems = this.selectedItems.filter(function(item) {
+                return item && !item.forceArchived;
+            });
+            if (eligibleItems.length === 0) {
+                this.$message.info('所选稿件均已强制归档');
+                return;
+            }
+            var skipped = this.selectedItems.length - eligibleItems.length;
+            var msg = '<p>将强制归档 <b style="color:#E6A23C;">' + eligibleItems.length + '</b> 个稿件。</p>'
+                + '<p style="margin-top:8px;color:#E6A23C;">这会停止尚未完成的录制、上传和弹幕发送，并清理待发送队列。</p>'
+                + '<p style="margin-top:8px;color:#909399;">之后可以恢复处理标记，但已中止的任务不会自动恢复。</p>';
+            if (skipped > 0) {
+                msg += '<p style="margin-top:8px;color:#909399;">已归档的 ' + skipped + ' 个稿件将自动跳过。</p>';
+            }
+            this.$confirm(msg, '批量强制归档确认', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: '强制归档 ' + eligibleItems.length + ' 个',
+                cancelButtonText: '取消',
+                confirmButtonClass: 'el-button--warning',
+                type: 'warning'
+            }).then(function() {
+                _this.beginBatchOperation('批量强制归档', '强制归档', _this.selectedItems.length);
+                HistoryApi.forceArchiveBatch({
+                    ids: _this.selectedItems.map(function(item) { return item.id; })
+                }, function(data) {
+                    _this.batchVisibilityDone = Number(data && data.requested) || _this.batchVisibilityTotal;
+                    _this.batchVisibilitySuccess = Number(data && data.archived) || 0;
+                    _this.batchVisibilityFail = Number(data && data.failed) || 0;
+                    _this.finishBatchOperation();
+                    _this.$message({
+                        message: (data && data.msg) || '批量强制归档完成',
+                        type: (data && data.type) || 'success'
+                    });
+                    _this.showBatchFailureDetails(data, '强制归档失败详情');
+                    _this.finishBatchModeAndRefresh();
+                }, function() {
+                    _this.finishBatchOperation();
+                    _this.$message.error('批量强制归档请求失败');
                 });
             }).catch(function() {});
         },
@@ -344,10 +520,10 @@
             }
 
             var eligibleItems = this.selectedItems.filter(function(item) {
-                return _this.canOperateVisibilityForItem(item);
+                return _this.canOperateVisibilityTargetForItem(item, isOnlySelf);
             });
             var skippedItems = this.selectedItems.filter(function(item) {
-                return !_this.canOperateVisibilityForItem(item);
+                return !_this.canOperateVisibilityTargetForItem(item, isOnlySelf);
             });
 
             if (eligibleItems.length === 0) {
@@ -361,11 +537,11 @@
                 msg += '<p style="margin-top:8px;color:#E6A23C;">其中 ' + skippedItems.length + ' 个稿件不满足切换条件，将自动跳过。</p>';
                 var topReasons = {};
                 skippedItems.forEach(function(item) {
-                    var reason = _this.getVisibilityDisabledReasonForItem(item) || '不满足切换条件';
+                    var reason = _this.getVisibilityTargetDisabledReasonForItem(item, isOnlySelf) || '不满足切换条件';
                     topReasons[reason] = (topReasons[reason] || 0) + 1;
                 });
                 var reasonLines = Object.keys(topReasons).slice(0, 3).map(function(reason) {
-                    return '<li>' + reason + '（' + topReasons[reason] + '）</li>';
+                    return '<li>' + _this.escapeBatchHtml(reason) + '（' + topReasons[reason] + '）</li>';
                 }).join('');
                 if (reasonLines) {
                     msg += '<ul style="margin:6px 0 0 18px;color:#909399;">' + reasonLines + '</ul>';
@@ -378,22 +554,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(async function() {
-                _this.batchVisibilityRunning = true;
-                _this.batchVisibilityTotal = eligibleItems.length;
-                _this.batchVisibilityDone = 0;
-                _this.batchVisibilitySuccess = 0;
-                _this.batchVisibilityFail = 0;
-                _this.batchVisibilityCurrentId = null;
-                _this.batchVisibilityTargetText = targetText;
-
-                // 通知父页面（index.html）批量操作开始
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({
-                        type: 'batchOperationStatus',
-                        operating: true,
-                        message: '批量切换可见性'
-                    }, '*');
-                }
+                _this.beginBatchOperation('批量切换可见性', targetText, eligibleItems.length);
 
                 var results = [];
                 try {
@@ -421,17 +582,7 @@
                         }
                     }
                 } finally {
-                    _this.batchVisibilityCurrentId = null;
-                    _this.batchVisibilityRunning = false;
-
-                    // 通知父页面（index.html）批量操作结束
-                    if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({
-                            type: 'batchOperationStatus',
-                            operating: false,
-                            message: ''
-                        }, '*');
-                    }
+                    _this.finishBatchOperation();
                 }
 
                 var successCount = results.filter(function(r) { return r.ok; }).length;
@@ -444,15 +595,12 @@
                     _this.$message.warning('批量切换完成：成功 ' + successCount + ' 项，失败 ' + failCount + ' 项');
                 }
 
-                _this.isMultiSelectMode = false;
-                _this.selectedItems = [];
-                _this.startPolling();
-                _this.initTable();
+                _this.finishBatchModeAndRefresh();
 
                 if (failCount > 0) {
                     var details = '<div style="max-height:calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.4);overflow:auto;"><div style="margin-bottom:8px;color:#606266;">以下稿件切换失败：</div><ul style="margin:0;padding-left:18px;">';
                     failList.slice(0, 20).forEach(function(f) {
-                        details += '<li style="margin:4px 0;">ID ' + f.id + '：' + String(f.msg || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</li>';
+                        details += '<li style="margin:4px 0;">ID ' + _this.escapeBatchHtml(f.id) + '：' + _this.escapeBatchHtml(f.msg || '') + '</li>';
                     });
                     if (failList.length > 20) {
                         details += '<li style="color:#909399;">... 其余 ' + (failList.length - 20) + ' 项请查看日志</li>';

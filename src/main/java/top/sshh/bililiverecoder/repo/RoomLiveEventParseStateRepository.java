@@ -31,6 +31,11 @@ public interface RoomLiveEventParseStateRepository extends CrudRepository<RoomLi
     @Query("delete from RoomLiveEventParseState s where not exists (select i from RoomLiveEventXmlIssue i where i.partId = s.partId)")
     int deleteAllRowsWithoutXmlIssue();
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("delete from RoomLiveEventParseState s where s.roomId = ?1")
+    int deleteByRoomId(String roomId);
+
     @org.springframework.data.jpa.repository.Query("select sum(s.danmuCount) from RoomLiveEventParseState s where s.historyId = ?1 and s.success = true")
     Long sumDanmuCountByHistoryId(Long historyId);
 }

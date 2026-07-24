@@ -32,6 +32,11 @@ public interface RoomLiveDanmuUserStatsRepository extends CrudRepository<RoomLiv
     @Transactional
     void deleteByHistoryId(Long historyId);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("delete from RoomLiveDanmuUserStats s where s.roomId = ?1")
+    int deleteByRoomId(String roomId);
+
     boolean existsByPartId(Long partId);
 
     long countByHistoryId(Long historyId);

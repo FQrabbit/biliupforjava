@@ -140,6 +140,14 @@ public class RoomLiveGiftCatalogService {
         return BigDecimal.valueOf(priceCoin).divide(BigDecimal.valueOf(1000));
     }
 
+    public void clearRoomState(String roomId) {
+        if (StringUtils.isBlank(roomId)) {
+            return;
+        }
+        roomNextSuccessSyncAt.remove(roomId);
+        roomFailureState.remove(roomId);
+    }
+
     private JSONArray extractGiftList(JSONObject data) {
         if (data == null) {
             return null;

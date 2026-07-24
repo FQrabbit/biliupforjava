@@ -2280,6 +2280,7 @@
                 this.bindFileDialogVisible ||
                 this.previewDialogVisible ||
                 this.editPartFileDialogVisible ||
+                this.batchDeleteDialogVisible ||
                 this.singleDeleteDialogVisible
             ));
             if (typeof document !== 'undefined' && document.body) {

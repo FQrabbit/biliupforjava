@@ -703,6 +703,164 @@ public class HistoryController {
         return result;
     }
 
+    @PostMapping("/batch/upload")
+    public Map<String, Object> updateUploadBatch(@RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Long> ids = historyIdsFromRequest(request);
+        if (ids.isEmpty()) {
+            result.put("type", "info");
+            result.put("msg", "请选择要处理的稿件");
+            return result;
+        }
+
+        Boolean upload = booleanFromRequest(request, "upload");
+        if (upload == null) {
+            result.put("type", "warning");
+            result.put("msg", "参数错误：upload 只能为 true 或 false");
+            return result;
+        }
+
+        int updated = 0;
+        int skipped = 0;
+        int failed = 0;
+        int interruptedTasks = 0;
+        List<Map<String, Object>> details = new ArrayList<>();
+        for (Long id : ids) {
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("id", id);
+            try {
+                Optional<RecordHistory> historyOptional = historyRepository.findById(id);
+                if (historyOptional.isEmpty()) {
+                    failed++;
+                    detail.put("status", "failed");
+                    detail.put("reason", "稿件不存在");
+                    details.add(detail);
+                    continue;
+                }
+
+                RecordHistory history = historyOptional.get();
+                if (upload && history.isForceArchived()) {
+                    skipped++;
+                    detail.put("status", "skipped");
+                    detail.put("reason", "稿件已强制归档，请先恢复处理");
+                    details.add(detail);
+                    continue;
+                }
+
+                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(id);
+                boolean hasActiveTask = hasActiveHistoryProcessingTask(id, parts);
+                boolean paused = Boolean.TRUE.equals(history.getUploadPaused());
+                if (upload) {
+                    if (history.isUpload() && !paused) {
+                        skipped++;
+                        detail.put("status", "skipped");
+                        detail.put("reason", "上传开关已经开启");
+                        details.add(detail);
+                        continue;
+                    }
+                    history.setUpload(true);
+                    history.setUpdateTime(LocalDateTime.now());
+                    historyRepository.save(history);
+                    uploadPauseService.resumeHistory(id);
+                } else {
+                    if (!history.isUpload() && !hasActiveTask) {
+                        skipped++;
+                        detail.put("status", "skipped");
+                        detail.put("reason", "上传开关已经关闭");
+                        details.add(detail);
+                        continue;
+                    }
+                    history.setUpload(false);
+                    history.setUpdateTime(LocalDateTime.now());
+                    historyRepository.save(history);
+                    uploadPauseService.pauseHistory(id, "用户已批量关闭稿件上传");
+                    int interrupted = interruptHistoryProcessingTasks(id, parts);
+                    interruptedTasks += interrupted;
+                    detail.put("interruptedTasks", interrupted);
+                }
+
+                updated++;
+                detail.put("status", "updated");
+                details.add(detail);
+            } catch (Exception e) {
+                failed++;
+                detail.put("status", "failed");
+                detail.put("reason", StringUtils.defaultIfBlank(e.getMessage(), "处理失败"));
+                details.add(detail);
+                log.warn("[BLR] {}", LogKvs.event("History.BatchUpload.ItemFailed")
+                        .add("historyId", id)
+                        .add("upload", upload)
+                        .add("ex", e.getClass().getSimpleName())
+                        .addIfNotBlank("err", e.getMessage()), e);
+            }
+        }
+
+        result.put("type", failed > 0 ? "warning" : (updated > 0 ? "success" : "info"));
+        result.put("msg", String.format("上传开关已%s：成功 %d 个，跳过 %d 个，失败 %d 个",
+                upload ? "开启" : "关闭", updated, skipped, failed));
+        result.put("targetUpload", upload);
+        result.put("requested", ids.size());
+        result.put("updated", updated);
+        result.put("skipped", skipped);
+        result.put("failed", failed);
+        result.put("interruptedTasks", interruptedTasks);
+        result.put("details", details);
+        return result;
+    }
+
+    @PostMapping("/batch/forceArchive")
+    public Map<String, Object> forceArchiveBatch(@RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Long> ids = historyIdsFromRequest(request);
+        if (ids.isEmpty()) {
+            result.put("type", "info");
+            result.put("msg", "请选择要强制归档的稿件");
+            return result;
+        }
+
+        int archived = 0;
+        int skipped = 0;
+        int failed = 0;
+        List<Map<String, Object>> details = new ArrayList<>();
+        for (Long id : ids) {
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("id", id);
+            try {
+                Map<String, String> one = forceArchive(id);
+                String type = one.get("type");
+                detail.put("reason", one.get("msg"));
+                if ("success".equals(type)) {
+                    archived++;
+                    detail.put("status", "archived");
+                } else if ("info".equals(type)) {
+                    skipped++;
+                    detail.put("status", "skipped");
+                } else {
+                    failed++;
+                    detail.put("status", "failed");
+                }
+            } catch (Exception e) {
+                failed++;
+                detail.put("status", "failed");
+                detail.put("reason", StringUtils.defaultIfBlank(e.getMessage(), "处理失败"));
+                log.warn("[BLR] {}", LogKvs.event("History.BatchForceArchive.ItemFailed")
+                        .add("historyId", id)
+                        .add("ex", e.getClass().getSimpleName())
+                        .addIfNotBlank("err", e.getMessage()), e);
+            }
+            details.add(detail);
+        }
+
+        result.put("type", failed > 0 ? "warning" : (archived > 0 ? "success" : "info"));
+        result.put("msg", String.format("强制归档完成：成功 %d 个，跳过 %d 个，失败 %d 个", archived, skipped, failed));
+        result.put("requested", ids.size());
+        result.put("archived", archived);
+        result.put("skipped", skipped);
+        result.put("failed", failed);
+        result.put("details", details);
+        return result;
+    }
+
     private long toCostMs(long startNs) {
         return (System.nanoTime() - startNs) / 1_000_000;
     }
@@ -864,7 +1022,7 @@ public class HistoryController {
         if (!(raw instanceof Collection<?> values)) {
             return List.of();
         }
-        List<Long> ids = new ArrayList<>();
+        Set<Long> ids = new LinkedHashSet<>();
         for (Object value : values) {
             try {
                 Long id = Long.parseLong(String.valueOf(value));
@@ -874,7 +1032,27 @@ public class HistoryController {
             } catch (Exception ignored) {
             }
         }
-        return ids;
+        return new ArrayList<>(ids);
+    }
+
+    private Boolean booleanFromRequest(Map<String, Object> request, String key) {
+        if (request == null || key == null) {
+            return null;
+        }
+        Object value = request.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value != null) {
+            String text = String.valueOf(value).trim();
+            if ("true".equalsIgnoreCase(text)) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(text)) {
+                return false;
+            }
+        }
+        return null;
     }
 
     private String buildCleanupMsg(HistoryMsgQueueCleanupService.CleanupResult cleanup, String prefix, String emptyMsg) {

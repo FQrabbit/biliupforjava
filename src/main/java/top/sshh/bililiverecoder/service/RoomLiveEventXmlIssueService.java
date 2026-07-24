@@ -241,6 +241,14 @@ public class RoomLiveEventXmlIssueService {
     }
 
     @Transactional
+    public long deleteByRoomId(String roomId) {
+        if (StringUtils.isBlank(roomId)) {
+            return 0L;
+        }
+        return issueRepository.deleteByRoomId(roomId);
+    }
+
+    @Transactional
     public void deleteByPartIds(Collection<Long> partIds) {
         if (partIds != null && !partIds.isEmpty()) {
             issueRepository.deleteByPartIdIn(partIds);

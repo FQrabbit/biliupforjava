@@ -57,7 +57,7 @@
         },
         getMobileHistorySubtitle: function() {
             if (this.isMultiSelectMode) {
-                return '批量选择稿件，统一切换可见性或删除记录。';
+                return '批量选择稿件，统一调整上传、归档与可见性。';
             }
             if (this.form.viewType === 'archived') {
                 return '按时间归档已经完成的稿件，适合查找、预览和维护历史资产。';
@@ -149,11 +149,11 @@
             if (document.hidden) {
                 // 页面不可见时停止进度轮询
                 this.stopProgressPolling();
-                // 如果正在进行批量切换，提醒用户
+                // 如果正在进行批量操作，提醒用户
                 if (this.batchVisibilityRunning) {
                     this.$notify.warning({
                         title: '工作进行中',
-                        message: '批量切换状态正在进行中，请不要关闭此标签页，切换到其他标签页工作可能会被打断',
+                        message: (this.batchOperationTitle || '批量操作') + '正在进行中，请不要关闭此标签页',
                         duration: 0,
                         position: 'bottom-right'
                     });
@@ -181,11 +181,11 @@
                 event.returnValue = '本地分P文件已经上传到临时区，但还没有保存到稿件。确定要关闭吗？';
                 return event.returnValue;
             }
-            // 如果有批量切换正在进行中，提醒用户
+            // 如果有批量操作正在进行中，提醒用户
             if (this.batchVisibilityRunning) {
                 event.preventDefault();
-                event.returnValue = '批量切换状态正在进行中，关闭页面可能导致数据不一致。确定要关闭吗？';
-                return '批量切换状态正在进行中，关闭页面可能导致数据不一致。确定要关闭吗？';
+                event.returnValue = '批量操作正在进行中，关闭页面可能导致数据不一致。确定要关闭吗？';
+                return event.returnValue;
             }
         },
         handlePageHide: function() {

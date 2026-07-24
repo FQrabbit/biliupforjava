@@ -35,12 +35,24 @@
     box-shadow: var(--shadow-md) !important;
 }
 
-.el-button,
+/*
+ * Keep the 44px touch target for text/action buttons, but do not apply it
+ * to Element UI's icon-only `.is-circle` buttons. Element UI sizes circles
+ * with symmetric padding; a global min-height changes only their height and
+ * renders every circle as a vertical oval.
+ */
+.el-button:not(.is-circle),
 .el-input__inner,
 .el-select .el-input__inner,
 .el-textarea__inner {
     min-height: 44px;
     font-size: 14px;
+}
+
+/* Preserve the component's natural, padding-based square size. */
+.el-button.is-circle {
+    min-height: 0 !important;
+    aspect-ratio: 1 / 1;
 }
 
 .el-table__header-wrapper {

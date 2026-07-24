@@ -172,7 +172,10 @@ new Vue({
             deleteDanmaku: false,
             deleteCover: false
         },
+        batchDeleteDialogVisible: false,
+        batchDeleteRunning: false,
         batchVisibilityRunning: false,
+        batchOperationTitle: '批量操作',
         batchVisibilityTotal: 0,
         batchVisibilityDone: 0,
         batchVisibilitySuccess: 0,
@@ -254,6 +257,32 @@ new Vue({
         selectedVisibilityIneligibleCount: function() {
             if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
             return this.selectedItems.length - this.selectedVisibilityEligibleCount;
+        },
+        selectedVisibilityPublicCount: function() {
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
+            return this.selectedItems.filter(item => this.canOperateVisibilityTargetForItem(item, 0)).length;
+        },
+        selectedVisibilityPrivateCount: function() {
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
+            return this.selectedItems.filter(item => this.canOperateVisibilityTargetForItem(item, 1)).length;
+        },
+        selectedUploadEnableCount: function() {
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
+            return this.selectedItems.filter(function(item) {
+                return item && !item.forceArchived && (!item.upload || item.uploadPaused);
+            }).length;
+        },
+        selectedUploadDisableCount: function() {
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
+            return this.selectedItems.filter(function(item) {
+                return item && item.upload;
+            }).length;
+        },
+        selectedForceArchiveEligibleCount: function() {
+            if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
+            return this.selectedItems.filter(function(item) {
+                return item && !item.forceArchived;
+            }).length;
         },
         batchVisibilityPercent: function() {
             if (!this.batchVisibilityTotal || this.batchVisibilityTotal <= 0) return 0;
@@ -680,6 +709,9 @@ new Vue({
             this.syncParentIframeModalState();
         },
         singleDeleteDialogVisible: function() {
+            this.syncParentIframeModalState();
+        },
+        batchDeleteDialogVisible: function() {
             this.syncParentIframeModalState();
         },
         viewMode: function (val) {

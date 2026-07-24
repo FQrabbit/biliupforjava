@@ -1386,7 +1386,7 @@
                                      @change="onDeleteRoomHistoriesChange">
                             同时删除 {{ deleteRoomPreview.historyCount || 0 }} 条录制历史
                         </el-checkbox>
-                        <p>删除数据库中的历史、分P和弹幕队列；不会删除 B 站上的已投稿视频。</p>
+                        <p>删除数据库中的历史、分P、弹幕队列及该房间的统计数据；不会删除 B 站上的已投稿视频。</p>
                     </div>
                     <div class="room-delete-child-options" :class="{ 'is-disabled': !deleteRoomOptions.deleteHistories }">
                         <div class="room-delete-impact-row">

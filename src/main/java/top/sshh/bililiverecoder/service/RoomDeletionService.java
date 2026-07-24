@@ -30,6 +30,7 @@ public class RoomDeletionService {
     private final RecordHistoryRepository historyRepository;
     private final RecordHistoryPartRepository partRepository;
     private final HistoryDeletionService historyDeletionService;
+    private final StatsAggregationService statsAggregationService;
     private final UploadProgressTracker uploadProgressTracker;
     private final UploadUserSerialScheduler uploadUserSerialScheduler;
 
@@ -37,12 +38,14 @@ public class RoomDeletionService {
                                RecordHistoryRepository historyRepository,
                                RecordHistoryPartRepository partRepository,
                                HistoryDeletionService historyDeletionService,
+                               StatsAggregationService statsAggregationService,
                                UploadProgressTracker uploadProgressTracker,
                                UploadUserSerialScheduler uploadUserSerialScheduler) {
         this.roomRepository = roomRepository;
         this.historyRepository = historyRepository;
         this.partRepository = partRepository;
         this.historyDeletionService = historyDeletionService;
+        this.statsAggregationService = statsAggregationService;
         this.uploadProgressTracker = uploadProgressTracker;
         this.uploadUserSerialScheduler = uploadUserSerialScheduler;
     }
@@ -152,6 +155,10 @@ public class RoomDeletionService {
                 }
             }
 
+            StatsAggregationService.RoomStatsDeletionResult statsDeletion = safeOptions.deleteHistories()
+                    ? statsAggregationService.deleteRoomStats(room.getRoomId())
+                    : StatsAggregationService.RoomStatsDeletionResult.empty(room.getRoomId());
+
             roomRepository.delete(room);
             DeletionResult result = new DeletionResult(
                     true,
@@ -162,6 +169,7 @@ public class RoomDeletionService {
                     histories.size(),
                     deletedHistoryCount,
                     deletedPartCount,
+                    statsDeletion.deletedTotal(),
                     localDeleteAttempt,
                     localDeleteSuccess,
                     failures);
@@ -174,6 +182,7 @@ public class RoomDeletionService {
                     .add("deleteCoverFiles", safeOptions.deleteCoverFiles())
                     .add("deletedHistoryCount", deletedHistoryCount)
                     .add("deletedPartCount", deletedPartCount)
+                    .add("deletedStatisticsCount", statsDeletion.deletedTotal())
                     .add("notDeletedCount", failures.size()));
             return result;
         }
@@ -318,13 +327,14 @@ public class RoomDeletionService {
                                  int requestedHistoryCount,
                                  int deletedHistoryCount,
                                  int deletedPartCount,
+                                 long deletedStatisticsCount,
                                  int localDeleteAttempt,
                                  int localDeleteSuccess,
                                  List<Map<String, Object>> notDeletedFiles) {
 
         private static DeletionResult notFound(Long roomDatabaseId) {
             return new DeletionResult(false, false, roomDatabaseId, null, DeleteOptions.roomOnly(),
-                    0, 0, 0, 0, 0, List.of());
+                    0, 0, 0, 0L, 0, 0, List.of());
         }
 
         public Map<String, Object> toMap() {
@@ -338,6 +348,7 @@ public class RoomDeletionService {
             data.put("requestedHistoryCount", requestedHistoryCount);
             data.put("deletedHistoryCount", deletedHistoryCount);
             data.put("deletedPartCount", deletedPartCount);
+            data.put("deletedStatisticsCount", deletedStatisticsCount);
             data.put("localDeleteAttempt", localDeleteAttempt);
             data.put("localDeleteSuccess", localDeleteSuccess);
             data.put("notDeletedFiles", notDeletedFiles);

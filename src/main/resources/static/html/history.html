@@ -29,7 +29,7 @@
     <script src="../js/app/page-bootstrap.js"></script>
 </head>
 <body>
-<div class="history-container" id="historyApp">
+<div class="history-container" :class="{ 'is-batch-mode': isMultiSelectMode }" id="historyApp">
     <!-- 顶部导航栏 -->
     <header class="history-header">
         <div class="header-left">
@@ -345,7 +345,7 @@
                      :style="{ animationDelay: (tableData.indexOf(item)) * 30 + 'ms' }"
                      v-for="item in tableData" :key="item.id" :data-id="item.id" @click="handleCardClick(item)">
                     <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
-                        <i class="el-icon-delete selection-icon"></i>
+                        <i class="el-icon-check selection-icon"></i>
                     </div>
                     <div style="position: absolute; top: 6px; left: 10px; font-size: 11px; color: var(--text-tertiary, #909399); opacity: 0.5; pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                         ID: {{ item.id }}
@@ -500,38 +500,66 @@
 
         <!-- 批量操作栏 -->
         <div class="batch-action-bar" v-if="isMultiSelectMode">
-            <el-checkbox v-model="isAllSelected" :indeterminate="isIndeterminate">全选本页</el-checkbox>
-            <span class="batch-count">已选 {{ selectedItems.length }} 项</span>
-            <span class="batch-count" style="color:#67c23a;">可切换 {{ selectedVisibilityEligibleCount }} 项</span>
-            <span class="batch-count" v-if="selectedVisibilityIneligibleCount > 0" style="color:#e6a23c;">不可切换 {{ selectedVisibilityIneligibleCount }} 项</span>
-            <div class="batch-options">
-                <el-tooltip effect="dark" content="不勾选时只删除数据库记录；勾选后会同时尝试删除对应本地文件，删除失败会在完成后提示。" placement="top">
-                    <i class="el-icon-info batch-options-help"></i>
+            <div class="batch-selection-summary">
+                <div class="batch-selection-main">
+                    <el-checkbox v-model="isAllSelected" :indeterminate="isIndeterminate" :disabled="batchVisibilityRunning">全选本页</el-checkbox>
+                    <span class="batch-count">已选 {{ selectedItems.length }} 项</span>
+                    <span class="batch-selection-hint" v-if="selectedItems.length === 0">选择稿件后即可执行批量操作</span>
+                </div>
+                <el-tooltip effect="dark" content="退出批量管理" placement="top">
+                    <el-button class="batch-close-button" size="mini" icon="el-icon-close" circle aria-label="退出批量管理" @click="toggleBatchMode" :disabled="batchVisibilityRunning"></el-button>
                 </el-tooltip>
-                <el-checkbox v-model="batchDeleteOptions.deleteVideo" :disabled="batchVisibilityRunning">同时删除视频文件</el-checkbox>
-                <el-checkbox v-model="batchDeleteOptions.deleteDanmaku" :disabled="batchVisibilityRunning">同时删除弹幕文件</el-checkbox>
-                <el-checkbox v-model="batchDeleteOptions.deleteCover" :disabled="batchVisibilityRunning">同时删除封面图片</el-checkbox>
             </div>
-            <div class="batch-actions">
-                <el-button type="success" size="small" icon="el-icon-unlock" @click="handleBatchVisibility(0)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected">批量设为公开</el-button>
-                <el-button type="warning" size="small" icon="el-icon-lock" @click="handleBatchVisibility(1)" :disabled="selectedVisibilityEligibleCount === 0 || batchVisibilityRunning || isDeleteOptionSelected">批量设为仅自己可见</el-button>
-                <el-dropdown trigger="click" @command="handleQueueMaintenanceCommand" :disabled="batchVisibilityRunning">
-                    <el-button size="small" icon="el-icon-setting" :disabled="batchVisibilityRunning">
-                        队列维护<i class="el-icon-arrow-up el-icon--right"></i>
+            <div class="batch-command-row">
+                <div class="batch-action-group">
+                    <span class="batch-action-label">上传状态</span>
+                    <el-button-group>
+                        <el-button class="batch-upload-enable" size="small" icon="el-icon-upload2" plain @click="handleBatchUpload(true)" :disabled="selectedUploadEnableCount === 0 || batchVisibilityRunning">
+                            开启 <span class="batch-action-count">{{ selectedUploadEnableCount }}</span>
+                        </el-button>
+                        <el-button class="batch-upload-disable" size="small" icon="el-icon-circle-close" plain @click="handleBatchUpload(false)" :disabled="selectedUploadDisableCount === 0 || batchVisibilityRunning">
+                            关闭 <span class="batch-action-count">{{ selectedUploadDisableCount }}</span>
+                        </el-button>
+                    </el-button-group>
+                </div>
+                <div class="batch-action-group">
+                    <span class="batch-action-label">稿件处理</span>
+                    <el-button class="batch-force-archive" size="small" icon="el-icon-switch-button" type="warning" plain @click="handleBatchForceArchive" :disabled="selectedForceArchiveEligibleCount === 0 || batchVisibilityRunning">
+                        强制归档 <span class="batch-action-count">{{ selectedForceArchiveEligibleCount }}</span>
                     </el-button>
-                    <el-dropdown-menu slot="dropdown">
-                        <el-dropdown-item command="selected" :disabled="selectedItems.length === 0">放弃已选待发送</el-dropdown-item>
-                        <el-dropdown-item command="historical">清理历史待发送队列</el-dropdown-item>
-                    </el-dropdown-menu>
-                </el-dropdown>
-                <el-button type="danger" size="small" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedItems.length === 0 || batchVisibilityRunning">批量删除</el-button>
-                <el-button size="small" @click="toggleBatchMode" :disabled="batchVisibilityRunning">取消</el-button>
+                </div>
+                <div class="batch-action-group">
+                    <span class="batch-action-label">B站可见性</span>
+                    <el-button-group>
+                        <el-button class="batch-visibility-public" size="small" icon="el-icon-unlock" plain @click="handleBatchVisibility(0)" :disabled="selectedVisibilityPublicCount === 0 || batchVisibilityRunning">
+                            公开 <span class="batch-action-count">{{ selectedVisibilityPublicCount }}</span>
+                        </el-button>
+                        <el-button class="batch-visibility-private" size="small" icon="el-icon-lock" plain @click="handleBatchVisibility(1)" :disabled="selectedVisibilityPrivateCount === 0 || batchVisibilityRunning">
+                            仅自己 <span class="batch-action-count">{{ selectedVisibilityPrivateCount }}</span>
+                        </el-button>
+                    </el-button-group>
+                </div>
+                <div class="batch-action-group">
+                    <span class="batch-action-label">更多</span>
+                    <el-dropdown trigger="click" placement="top-start" @command="handleQueueMaintenanceCommand" :disabled="batchVisibilityRunning">
+                        <el-button size="small" icon="el-icon-more" plain :disabled="batchVisibilityRunning">
+                            队列维护<i class="el-icon-arrow-up el-icon--right"></i>
+                        </el-button>
+                        <el-dropdown-menu slot="dropdown">
+                            <el-dropdown-item command="selected" :disabled="selectedItems.length === 0" icon="el-icon-remove-outline">放弃已选待发送</el-dropdown-item>
+                            <el-dropdown-item command="historical" icon="el-icon-setting">清理历史待发送队列</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </div>
+                <div class="batch-danger-action">
+                    <el-button type="danger" size="small" icon="el-icon-delete" plain @click="handleBatchDelete" :disabled="selectedItems.length === 0 || batchVisibilityRunning">删除所选</el-button>
+                </div>
             </div>
         </div>
 
         <transition name="fade">
             <div class="batch-progress-float" v-if="batchVisibilityRunning">
-                <div class="batch-progress-title">批量切换可见性进行中</div>
+                <div class="batch-progress-title">{{ batchOperationTitle }}进行中</div>
                 <div class="batch-progress-meta">
                     <span>目标：{{ batchVisibilityTargetText }}</span>
                     <span>{{ batchVisibilityDone }}/{{ batchVisibilityTotal }}</span>
@@ -1378,6 +1406,33 @@
         <div slot="footer" class="dialog-footer">
             <el-button @click="editPartFileDialogVisible = false">取 消</el-button>
             <el-button type="primary" :disabled="!selectedEditCandidateFile" @click="applyEditCandidateFile">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 批量删除确认弹窗 -->
+    <el-dialog title="批量删除确认" :visible.sync="batchDeleteDialogVisible" width="480px" append-to-body :close-on-click-modal="false" :close-on-press-escape="!batchDeleteRunning" :show-close="!batchDeleteRunning" custom-class="batch-delete-dialog">
+        <div class="batch-delete-confirm">
+            <div class="batch-delete-warning">
+                <i class="el-icon-warning-outline"></i>
+                <div>
+                    <strong>永久删除 {{ selectedItems.length }} 条录制历史记录？</strong>
+                    <span>数据库记录删除后不可恢复。本地文件默认保留。</span>
+                </div>
+            </div>
+            <div class="batch-delete-options">
+                <div class="batch-delete-options-title">同时删除本地文件（可选）</div>
+                <el-checkbox v-model="batchDeleteOptions.deleteVideo" :disabled="batchDeleteRunning">视频文件（.mp4 / .flv / .mkv 等）</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteDanmaku" :disabled="batchDeleteRunning">弹幕文件（.xml / .ass）</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteCover" :disabled="batchDeleteRunning">封面图片（.jpg / .png 等）</el-checkbox>
+            </div>
+            <div v-if="isDeleteOptionSelected" class="batch-delete-danger-note">
+                <i class="el-icon-warning"></i>
+                勾选的本地文件也会被永久删除，无法恢复。
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="batchDeleteDialogVisible = false" :disabled="batchDeleteRunning">取 消</el-button>
+            <el-button type="danger" @click="confirmBatchDelete" :loading="batchDeleteRunning" :disabled="selectedItems.length === 0">确认删除 {{ selectedItems.length }} 项</el-button>
         </div>
     </el-dialog>
 

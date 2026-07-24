@@ -647,19 +647,6 @@
     font-weight: 840;
 }
 
-.mobile-history-batch-options {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-}
-
-.mobile-history-batch-options .el-checkbox {
-    margin: 0 !important;
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-}
-
 .mobile-history-batch-actions {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -710,6 +697,139 @@
 
 .mobile-history-batch-maintenance button:disabled {
     opacity: 0.45;
+}
+
+.mobile-history-batch-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.mobile-history-batch-head > div {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+}
+
+.mobile-history-batch-close {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 15px;
+    background: var(--mobile-panel-bg);
+    color: var(--text-secondary);
+    font-size: 17px;
+}
+
+.mobile-history-batch-close:disabled {
+    opacity: 0.45;
+}
+
+.mobile-history-check {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--mobile-page-surface-strong) 70%, transparent);
+}
+
+.mobile-history-batch-section {
+    display: grid;
+    gap: 8px;
+    padding-top: 11px;
+    border-top: 1px solid var(--mobile-page-border);
+}
+
+.mobile-history-batch-label {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 780;
+}
+
+.mobile-history-batch-actions:not(.is-two-column) {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.mobile-history-batch-actions.is-two-column {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mobile-history-batch-actions button {
+    position: relative;
+}
+
+.mobile-history-batch-actions button span,
+.mobile-history-batch-footer button span,
+.mobile-history-batch-maintenance button span {
+    color: currentColor;
+}
+
+.mobile-history-batch-actions button b {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    color: currentColor;
+    font-size: 11px;
+    line-height: 20px;
+}
+
+.mobile-history-batch-actions button.is-primary {
+    color: var(--mobile-blue);
+    border-color: color-mix(in srgb, var(--mobile-blue) 32%, var(--mobile-page-border));
+}
+
+.mobile-history-batch-actions button:disabled,
+.mobile-history-batch-footer button:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+}
+
+.mobile-history-batch-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--mobile-page-border);
+}
+
+.mobile-history-batch-footer button {
+    min-width: 0;
+    min-height: 46px;
+    padding: 0 12px;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 15px;
+    background: var(--mobile-panel-bg);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 780;
+}
+
+.mobile-history-batch-footer button.is-danger {
+    color: #f56c6c;
+    border-color: color-mix(in srgb, #f56c6c 32%, var(--mobile-page-border));
+}
+
+.mobile-history-danger-dialog .batch-delete-options .el-checkbox {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
 }
 
 .queue-cleanup-dialog {
@@ -2032,8 +2152,13 @@
 
 .mobile-edit-part-sort button {
     width: 44px;
+    height: 44px;
     min-width: 44px;
     padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
 }
 
 .mobile-edit-part-sort button:disabled,
@@ -2126,6 +2251,12 @@
 
     .mobile-edit-part-sort button {
         width: 100%;
+    }
+
+    .mobile-edit-part-sort button.is-circle {
+        width: 44px;
+        min-width: 44px;
+        justify-self: center;
     }
 }
 
@@ -3406,12 +3537,17 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 
 @media (max-width: 340px) {
     .mobile-history-pipeline,
-    .mobile-history-batch-options,
     .mobile-history-detail-pipeline {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .mobile-history-batch-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-history-batch-actions.is-two-column,
+    .mobile-history-batch-footer,
+    .mobile-history-batch-maintenance {
         grid-template-columns: 1fr;
     }
 

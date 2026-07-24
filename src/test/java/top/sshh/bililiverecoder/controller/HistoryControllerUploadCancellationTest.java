@@ -94,6 +94,81 @@ class HistoryControllerUploadCancellationTest {
         awaitUploadThreadExit();
     }
 
+    @Test
+    void batchUploadDisableDoesNotChangeRecordingState() throws Exception {
+        RecordHistory stored = history(21L, true);
+        stored.setRecording(true);
+        RecordHistoryPart part = part(31L, 21L);
+        when(historyRepository.findById(21L)).thenReturn(Optional.of(stored));
+        when(partRepository.findByHistoryIdOrderByStartTimeAsc(21L)).thenReturn(List.of(part));
+        startUploadThread(part.getId());
+
+        Map<String, Object> result = controller.updateUploadBatch(Map.of(
+                "ids", List.of(21L),
+                "upload", false));
+
+        assertFalse(stored.isUpload());
+        assertTrue(stored.isRecording());
+        assertEquals("success", result.get("type"));
+        assertEquals(1, result.get("updated"));
+        verify(uploadPauseService).pauseHistory(21L, "用户已批量关闭稿件上传");
+        awaitUploadThreadExit();
+    }
+
+    @Test
+    void batchUploadEnableSkipsForceArchivedHistory() {
+        RecordHistory stored = history(21L, false);
+        stored.setForceArchived(true);
+        when(historyRepository.findById(21L)).thenReturn(Optional.of(stored));
+
+        Map<String, Object> result = controller.updateUploadBatch(Map.of(
+                "ids", List.of(21L),
+                "upload", true));
+
+        assertFalse(stored.isUpload());
+        assertEquals("info", result.get("type"));
+        assertEquals(1, result.get("skipped"));
+        verify(historyRepository, never()).save(any());
+        verify(uploadPauseService, never()).resumeHistory(anyLong());
+    }
+
+    @Test
+    void batchUploadEnableResumesPausedHistory() {
+        RecordHistory stored = history(21L, true);
+        stored.setUploadPaused(true);
+        when(historyRepository.findById(21L)).thenReturn(Optional.of(stored));
+        when(partRepository.findByHistoryIdOrderByStartTimeAsc(21L)).thenReturn(List.of());
+
+        Map<String, Object> result = controller.updateUploadBatch(Map.of(
+                "ids", List.of(21L, 21L),
+                "upload", true));
+
+        assertEquals("success", result.get("type"));
+        assertEquals(1, result.get("requested"));
+        assertEquals(1, result.get("updated"));
+        verify(uploadPauseService).resumeHistory(21L);
+    }
+
+    @Test
+    void batchForceArchiveSummarizesArchivedAndSkippedHistories() {
+        RecordHistory active = history(21L, false);
+        RecordHistory archived = history(22L, false);
+        archived.setForceArchived(true);
+        when(historyRepository.findById(21L)).thenReturn(Optional.of(active));
+        when(historyRepository.findById(22L)).thenReturn(Optional.of(archived));
+        when(partRepository.findByHistoryIdOrderByStartTimeAsc(anyLong())).thenReturn(List.of());
+        when(msgQueueCleanupService.cleanupByHistoryId(anyLong(), any(), eq(false), eq("forceArchive")))
+                .thenReturn(HistoryMsgQueueCleanupService.CleanupResult.empty(false));
+
+        Map<String, Object> result = controller.forceArchiveBatch(Map.of("ids", List.of(21L, 22L)));
+
+        assertTrue(active.isForceArchived());
+        assertEquals("success", result.get("type"));
+        assertEquals(1, result.get("archived"));
+        assertEquals(1, result.get("skipped"));
+        assertEquals(0, result.get("failed"));
+    }
+
     private void startUploadThread(Long partId) throws InterruptedException {
         CountDownLatch started = new CountDownLatch(1);
         uploadThread = new Thread(() -> {

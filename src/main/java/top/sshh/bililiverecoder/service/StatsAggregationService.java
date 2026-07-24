@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -637,6 +638,58 @@ public class StatsAggregationService {
         }
     }
 
+    public <T> T withStatsWriteLock(Supplier<T> action) {
+        Objects.requireNonNull(action, "action");
+        statsWriteLock.lock();
+        try {
+            return action.get();
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
+    public RoomStatsDeletionResult deleteRoomStats(String roomId) {
+        if (StringUtils.isBlank(roomId)) {
+            return RoomStatsDeletionResult.empty(roomId);
+        }
+        statsWriteLock.lock();
+        try {
+            int deletedBuckets = bucketStatsRepository.deleteByRoomId(roomId);
+            int deletedDailyStats = dailyStatsRepository.deleteByRoomId(roomId);
+            int deletedSessionStats = sessionStatsRepository.deleteByRoomId(roomId);
+            int deletedDanmuUserStats = danmuUserStatsRepository.deleteByRoomId(roomId);
+            int deletedParseStates = eventParseStateRepository.deleteByRoomId(roomId);
+            int deletedEvents = eventRepository.deleteByRoomId(roomId);
+            long deletedXmlIssues = xmlIssueService.deleteByRoomId(roomId);
+            int deletedGiftCatalog = giftCatalogRepository.deleteByRoomId(roomId);
+            giftCatalogService.clearRoomState(roomId);
+            RoomStatsDeletionResult result = new RoomStatsDeletionResult(
+                    roomId,
+                    deletedBuckets,
+                    deletedDailyStats,
+                    deletedSessionStats,
+                    deletedDanmuUserStats,
+                    deletedParseStates,
+                    deletedEvents,
+                    deletedXmlIssues,
+                    deletedGiftCatalog);
+            log.info("[BLR] {}", LogKvs.event("Stats.Room.Delete.Success")
+                    .add("roomId", roomId)
+                    .add("deletedBucketStats", deletedBuckets)
+                    .add("deletedDailyStats", deletedDailyStats)
+                    .add("deletedSessionStats", deletedSessionStats)
+                    .add("deletedDanmuUserStats", deletedDanmuUserStats)
+                    .add("deletedParseStates", deletedParseStates)
+                    .add("deletedEvents", deletedEvents)
+                    .add("deletedXmlIssues", deletedXmlIssues)
+                    .add("deletedGiftCatalog", deletedGiftCatalog)
+                    .add("deletedTotalStatistics", result.deletedTotal()));
+            return result;
+        } finally {
+            statsWriteLock.unlock();
+        }
+    }
+
     private void refreshHistoryStatsUnlocked(Long historyId) {
         if (historyId == null) {
             return;
@@ -692,6 +745,47 @@ public class StatsAggregationService {
             map.put("deletedSessionStats", deletedSessionStats);
             map.put("deletedDanmuUserStats", deletedDanmuUserStats);
             map.put("deletedTotalStats", deletedTotal());
+            return map;
+        }
+    }
+
+    public record RoomStatsDeletionResult(String roomId,
+                                          int deletedBucketStats,
+                                          int deletedDailyStats,
+                                          int deletedSessionStats,
+                                          int deletedDanmuUserStats,
+                                          int deletedParseStates,
+                                          int deletedEvents,
+                                          long deletedXmlIssues,
+                                          int deletedGiftCatalog) {
+
+        public static RoomStatsDeletionResult empty(String roomId) {
+            return new RoomStatsDeletionResult(roomId, 0, 0, 0, 0, 0, 0, 0L, 0);
+        }
+
+        public long deletedTotal() {
+            return (long) deletedBucketStats
+                    + deletedDailyStats
+                    + deletedSessionStats
+                    + deletedDanmuUserStats
+                    + deletedParseStates
+                    + deletedEvents
+                    + deletedXmlIssues
+                    + deletedGiftCatalog;
+        }
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("roomId", roomId);
+            map.put("deletedBucketStats", deletedBucketStats);
+            map.put("deletedDailyStats", deletedDailyStats);
+            map.put("deletedSessionStats", deletedSessionStats);
+            map.put("deletedDanmuUserStats", deletedDanmuUserStats);
+            map.put("deletedParseStates", deletedParseStates);
+            map.put("deletedEvents", deletedEvents);
+            map.put("deletedXmlIssues", deletedXmlIssues);
+            map.put("deletedGiftCatalog", deletedGiftCatalog);
+            map.put("deletedTotalStatistics", deletedTotal());
             return map;
         }
     }
@@ -1235,6 +1329,10 @@ public class StatsAggregationService {
     }
 
     public Map<String, Object> getSessionDetail(String roomId, Long historyId) {
+        return withStatsWriteLock(() -> getSessionDetailUnlocked(roomId, historyId));
+    }
+
+    private Map<String, Object> getSessionDetailUnlocked(String roomId, Long historyId) {
         RoomLiveSessionStats session = sessionStatsRepository.findByHistoryId(historyId);
         if (session == null || roomId == null || !roomId.equals(session.getRoomId())) {
             return Collections.emptyMap();
