@@ -99,7 +99,17 @@ new Vue({
         mobileConfigHelpVisible: false,
         mobileConfigHelpTitle: '',
         mobileConfigHelpLines: [],
-        mobileDialogLayerTimer: null
+        mobileDialogLayerTimer: null,
+        deleteRoomDialogVisible: false,
+        deleteRoomPreviewLoading: false,
+        deleteRoomSubmitting: false,
+        deleteRoomTarget: {},
+        deleteRoomPreview: {},
+        deleteRoomOptions: {
+            deleteHistories: false,
+            deleteVideoFiles: false,
+            deleteSidecarFiles: false
+        }
     },
     computed: {
         uploadConfigHeaders: function () {
@@ -114,6 +124,39 @@ new Vue({
                 return this.tableData.filter(function (item) { return !!item.recording; });
             }
             return this.tableData;
+        },
+        deleteRoomConfirmLabel: function () {
+            if (!this.deleteRoomOptions.deleteHistories) {
+                return '仅删除房间';
+            }
+            if (this.deleteRoomOptions.deleteVideoFiles || this.deleteRoomOptions.deleteSidecarFiles) {
+                return '彻底删除房间数据';
+            }
+            var count = Number(this.deleteRoomPreview.historyCount || 0);
+            return count > 0 ? '删除房间和 ' + count + ' 条历史' : '删除房间';
+        },
+        deleteRoomBlockTitle: function () {
+            var recording = !!this.deleteRoomPreview.recordingActive;
+            var uploading = !!this.deleteRoomPreview.uploadingActive;
+            if (recording && uploading) {
+                return '房间仍在直播或录制，且有稿件正在上传';
+            }
+            if (uploading) {
+                var count = Number(this.deleteRoomPreview.uploadingHistoryCount || 0);
+                return count > 0 ? '有 ' + count + ' 个稿件正在上传或处理' : '存在正在上传或处理的稿件';
+            }
+            return '当前房间仍在直播或录制';
+        },
+        deleteRoomBlockMessage: function () {
+            var recording = !!this.deleteRoomPreview.recordingActive;
+            var uploading = !!this.deleteRoomPreview.uploadingActive;
+            if (recording && uploading) {
+                return '请先停止直播或录制；再前往录制历史取消稿件上传，或将稿件强制归档，等待后台任务停止后再删除。';
+            }
+            if (uploading) {
+                return '请前往录制历史，将稿件“是否上传”设为否，或使用“强制归档”；等待后台任务停止后再删除。';
+            }
+            return '请先在录播姬停止录制，并等待当前分P结束后再删除。';
         }
     },
     methods: {
@@ -247,6 +290,7 @@ new Vue({
                 this.wxDialogVisible ||
                 this.manualPasteDialogVisible ||
                 this.pasteConfirmDialogVisible ||
+                this.deleteRoomDialogVisible ||
                 this.mobileConfigHelpVisible
             );
             this.notifyParentIframeModal(active, 'room');
@@ -913,22 +957,115 @@ new Vue({
                 });
         },
         deleteRoom: function (roomId) {
-            let _this = this;
-            this.$confirm('确定删除吗？', '提示', {
-                confirmButtonText: '删除',
-                cancelButtonText: '保留',
-                confirmButtonClass: 'el-button--danger',
-                cancelButtonClass: 'el-button--success',
+            var _this = this;
+            var target = this.tableData.find(function (item) {
+                return String(item.id) === String(roomId);
+            }) || { id: roomId };
+            this.deleteRoomTarget = target;
+            this.deleteRoomPreview = {};
+            this.deleteRoomOptions.deleteHistories = false;
+            this.deleteRoomOptions.deleteVideoFiles = false;
+            this.deleteRoomOptions.deleteSidecarFiles = false;
+            this.deleteRoomPreviewLoading = true;
+            this.deleteRoomDialogVisible = true;
+            RoomApi.deletionPreview(roomId, function (data) {
+                _this.deleteRoomPreviewLoading = false;
+                if (!data || !data.data) {
+                    _this.deleteRoomDialogVisible = false;
+                    _this.$message({ message: data && data.msg ? data.msg : '无法加载删除影响范围', type: 'warning' });
+                    return;
+                }
+                _this.deleteRoomPreview = data.data;
+            }, function () {
+                _this.deleteRoomPreviewLoading = false;
+                _this.deleteRoomDialogVisible = false;
+                _this.$message.error('无法加载删除影响范围，请稍后重试');
+            });
+        },
+        onDeleteRoomHistoriesChange: function (checked) {
+            if (!checked) {
+                this.deleteRoomOptions.deleteVideoFiles = false;
+                this.deleteRoomOptions.deleteSidecarFiles = false;
+            }
+        },
+        beforeDeleteRoomDialogClose: function (done) {
+            if (!this.deleteRoomSubmitting) {
+                done();
+            }
+        },
+        confirmDeleteRoom: function () {
+            var _this = this;
+            var targetId = this.deleteRoomTarget && this.deleteRoomTarget.id;
+            if (!targetId || this.deleteRoomSubmitting || this.deleteRoomPreviewLoading) {
+                return;
+            }
+            if (this.deleteRoomPreview.active) {
+                this.$message.warning(this.deleteRoomBlockMessage);
+                return;
+            }
+            this.deleteRoomSubmitting = true;
+            var request = {
+                deleteHistories: this.deleteRoomOptions.deleteHistories,
+                deleteVideoFiles: this.deleteRoomOptions.deleteHistories && this.deleteRoomOptions.deleteVideoFiles,
+                deleteDanmakuFiles: this.deleteRoomOptions.deleteHistories && this.deleteRoomOptions.deleteSidecarFiles,
+                deleteCoverFiles: this.deleteRoomOptions.deleteHistories && this.deleteRoomOptions.deleteSidecarFiles
+            };
+            RoomApi.remove(targetId, request, function (data) {
+                _this.deleteRoomSubmitting = false;
+                if (!data || data.type === 'error' || (!data.data && data.type !== 'success')) {
+                    _this.$message({ message: data && data.msg ? data.msg : '房间删除失败', type: data && data.type ? data.type : 'error' });
+                    return;
+                }
+                _this.deleteRoomDialogVisible = false;
+                _this.$message({ message: data.msg, type: data.type });
+                var files = data.data && Array.isArray(data.data.notDeletedFiles) ? data.data.notDeletedFiles : [];
+                if (files.length > 0) {
+                    _this.showRoomDeletionFailures(files);
+                }
+                _this.initTable();
+            }, function () {
+                _this.deleteRoomSubmitting = false;
+                _this.$message.error('房间删除请求失败，请检查服务状态后重试');
+            });
+        },
+        showRoomDeletionFailures: function (files) {
+            var _this = this;
+            var rows = files.slice(0, 30).map(function (file) {
+                var history = file.historyId ? '<span class="room-delete-failure-history">历史 #' + _this.escapeDeleteHtml(file.historyId) + '</span>' : '';
+                return '<li>' + history
+                    + '<code>' + _this.escapeDeleteHtml(file.path || '未知路径') + '</code>'
+                    + '<span>' + _this.escapeDeleteHtml(file.reason || '删除失败') + '</span></li>';
+            }).join('');
+            var omitted = files.length > 30
+                ? '<p class="room-delete-failure-more">另有 ' + (files.length - 30) + ' 个失败项，请查看服务日志。</p>'
+                : '';
+            this.$alert('<div class="room-delete-failure-list"><p>数据库记录已经删除，以下本地文件需要手动处理：</p><ul>'
+                + rows + '</ul>' + omitted + '</div>', '部分本地文件未删除', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: '知道了',
                 type: 'warning'
-            }).then(() => {
-                RoomApi.remove(roomId, function (data) {
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    });
-            }).catch(() => {});
+            });
+        },
+        escapeDeleteHtml: function (value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+        formatDeleteBytes: function (bytes) {
+            var value = Number(bytes || 0);
+            if (!isFinite(value) || value <= 0) return '0 B';
+            var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            var index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+            var amount = value / Math.pow(1024, index);
+            return amount.toFixed(index === 0 || amount >= 100 ? 0 : 1) + ' ' + units[index];
+        },
+        webhookSourceLabel: function (source) {
+            if (source === 'BLREC') return 'blrec';
+            if (source === 'BREC') return 'BililiveRecorder';
+            return '录播姬';
         },
         getSeasons: function (roomId) {
             let _this = this;
@@ -1705,6 +1842,9 @@ new Vue({
             this.syncParentIframeModalState();
         },
         pasteConfirmDialogVisible: function () {
+            this.syncParentIframeModalState();
+        },
+        deleteRoomDialogVisible: function () {
             this.syncParentIframeModalState();
         },
         mobileConfigHelpVisible: function () {

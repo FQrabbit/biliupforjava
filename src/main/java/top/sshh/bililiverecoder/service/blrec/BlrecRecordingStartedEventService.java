@@ -47,6 +47,8 @@ public class BlrecRecordingStartedEventService implements BlrecEventService {
         // 更新房间基本信息
         room.setUname(String.valueOf(roomInfo.getUid())); // 注意：blrec的room_info里没有uname，我们暂用uid代替
         room.setTitle(roomInfo.getTitle());
+        room.setWebhookSource("BLREC");
+        room.setWebhookLastSeenAt(now);
         room.setStreaming(roomInfo.getLiveStatus() == 1);
         room.setRecording(true); // 核心：将录制状态设置为 true
         

@@ -26,6 +26,10 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     RecordHistory findByBvId(String bvId);
 
+    List<RecordHistory> findByRoomIdOrderByIdAsc(String roomId);
+
+    long countByRoomId(String roomId);
+
     List<RecordHistory> findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(String roomId, LocalDateTime from, LocalDateTime to);
 
     List<RecordHistory> findByRoomIdAndRecordingTrueOrderByStartTimeDesc(String roomId);

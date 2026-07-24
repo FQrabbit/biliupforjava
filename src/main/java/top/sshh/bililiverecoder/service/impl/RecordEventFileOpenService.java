@@ -85,6 +85,9 @@ public class RecordEventFileOpenService implements RecordEventService {
                     room.setHistoryId(-1L);
                 }
 
+                room.setWebhookSource("BREC");
+                room.setWebhookLastSeenAt(LocalDateTime.now());
+
                 String currentSessionId = room.getSessionId();
                 if (incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
                     log.debug("[BLR] {}", LogKvs.event("SessionMismatch.Detected")
@@ -130,6 +133,8 @@ public class RecordEventFileOpenService implements RecordEventService {
                             .add("newSessionId", incomingSessionId));
                 }
 
+                roomRepository.save(room);
+
                 Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
                 if (historyOptional.isEmpty()) {
                     log.error("[BLR] {}", LogKvs.event("FileOpen.FATAL.HistoryStillNotFound")
@@ -161,6 +166,7 @@ public class RecordEventFileOpenService implements RecordEventService {
 
                 RecordHistoryPart part = new RecordHistoryPart();
                 part.setEventId(event.getEventId());
+                part.setSourceType("brec");
                 part.setTitle(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM\u6708dd\u65e5HH\u70b9mm\u5206ss\u79d2")));
                 part.setLiveTitle(eventData.getTitle());
                 part.setAreaName(eventData.getAreaNameChild());

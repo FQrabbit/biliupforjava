@@ -49,6 +49,8 @@ public class RecordEventStreamStartService implements RecordEventService {
         room.setUname(eventData.getName());
         room.setTitle(eventData.getTitle());
         room.setSessionId(eventData.getSessionId());
+        room.setWebhookSource("BREC");
+        room.setWebhookLastSeenAt(LocalDateTime.now());
         room.setRecording(eventData.isRecording());
         room.setStreaming(eventData.isStreaming());
         room = roomRepository.save(room);

@@ -32,14 +32,13 @@ import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.service.GiftReplyCandidateService;
+import top.sshh.bililiverecoder.service.HistoryDeletionService;
 import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
 import top.sshh.bililiverecoder.service.HistoryMsgRetryService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.StorageRootService;
-import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
-import top.sshh.bililiverecoder.service.RoomLiveEventXmlIssueService;
 import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 
 import java.io.File;
@@ -96,11 +95,9 @@ public class HistoryController {
     @Autowired
     private StorageRootService storageRootService;
     @Autowired
-    private PartFileOperationService partFileOperationService;
-    @Autowired
     private PartFileLocationService partFileLocationService;
     @Autowired
-    private RoomLiveEventXmlIssueService xmlIssueService;
+    private HistoryDeletionService historyDeletionService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -492,12 +489,25 @@ public class HistoryController {
         Map<String, String> result = new HashMap<>();
         if (historyOptional.isPresent()) {
             RecordHistory dbHistory = historyOptional.get();
+            boolean resumeUpload = !dbHistory.isUpload() && history.isUpload();
+            List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(dbHistory.getId());
+            boolean cancelUpload = !history.isUpload()
+                    && (dbHistory.isUpload() || hasActiveHistoryProcessingTask(dbHistory.getId(), parts));
             dbHistory.setRecording(history.isRecording());
             dbHistory.setUpload(history.isUpload());
             dbHistory.setUpdateTime(LocalDateTime.now());
             historyRepository.save(dbHistory);
+            if (cancelUpload) {
+                uploadPauseService.pauseHistory(dbHistory.getId(), "用户已取消稿件上传");
+                int interrupted = interruptHistoryProcessingTasks(dbHistory.getId(), parts);
+                result.put("msg", interrupted > 0 ? "已取消上传，正在停止后台任务" : "已取消上传");
+            } else if (resumeUpload) {
+                uploadPauseService.resumeHistory(dbHistory.getId());
+                result.put("msg", "已恢复上传");
+            } else {
+                result.put("msg", "更新成功");
+            }
             result.put("type", "info");
-            result.put("msg", "更新成功");
         }
         return result;
     }
@@ -669,172 +679,28 @@ public class HistoryController {
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteVideo,
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteDanmaku,
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteCover) {
-        long totalStartNs = System.nanoTime();
         Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
             result.put("msg", "请输入id");
             return result;
         }
-        Optional<RecordHistory> historyOptional = historyRepository.findById(id);
-        if (historyOptional.isPresent()) {
-            RecordHistory history = historyOptional.get();
-            msgQueueCleanupService.cleanupByHistoryId(history.getId(),
-                    new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
-                    false,
-                    "delete");
-            long msgDeleteStartNs = System.nanoTime();
-            int deletedMsgCount = msgRepository.deleteByHistoryId(history.getId());
-            long msgDeleteCostMs = toCostMs(msgDeleteStartNs);
-
-            List<Map<String, Object>> notDeletedFiles = new ArrayList<>();
-            int localDeleteAttempt = 0;
-            int localDeleteSuccess = 0;
-            boolean deleteAnyLocal = deleteVideo || deleteDanmaku || deleteCover;
-
-            long localDeleteStartNs = System.nanoTime();
-            if (deleteAnyLocal) {
-                List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
-                for (RecordHistoryPart part : partList) {
-                    if (deleteVideo) {
-                        localDeleteAttempt++;
-                        List<String> failures = partFileOperationService.deleteAllAvailable(part.getId());
-                        if (failures.isEmpty()) localDeleteSuccess++;
-                        else for (String failure : failures) {
-                            Map<String, Object> entry = new LinkedHashMap<>();
-                            entry.put("path", part.getFilePath());
-                            entry.put("kind", "video");
-                            entry.put("status", "failed");
-                            entry.put("reason", failure);
-                            notDeletedFiles.add(entry);
-                        }
-                    }
-                    List<String> suffixes = new ArrayList<>();
-                    if (deleteDanmaku) suffixes.add(".xml");
-                    if (deleteCover) {
-                        suffixes.add(".cover.jpg");
-                        suffixes.add(".jpg");
-                    }
-                    for (String suffix : suffixes) {
-                        for (Path path : partFileLocationService.resolveCompanions(part.getId(), suffix)) {
-                            localDeleteAttempt++;
-                            try {
-                                if (Files.deleteIfExists(path)) localDeleteSuccess++;
-                            } catch (Exception ex) {
-                                Map<String, Object> entry = new LinkedHashMap<>();
-                                entry.put("path", path.toString().replace("\\", "/"));
-                                entry.put("kind", suffix.equals(".xml") ? "danmaku" : "cover");
-                                entry.put("status", "failed");
-                                entry.put("reason", ex.getClass().getSimpleName() + ": " + String.valueOf(ex.getMessage()));
-                                notDeletedFiles.add(entry);
-                            }
-                        }
-                    }
-                }
-            }
-
-            long localDeleteCostMs = toCostMs(localDeleteStartNs);
-
-            long partDeleteStartNs = System.nanoTime();
-            xmlIssueService.deleteByHistoryId(history.getId());
-            for (RecordHistoryPart part : partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId())) {
-                partFileOperationService.purgeMetadata(part.getId());
-            }
-            int deletedPartCount = partRepository.deleteByHistoryId(history.getId());
-            long partDeleteCostMs = toCostMs(partDeleteStartNs);
-
-            long historyDeleteStartNs = System.nanoTime();
-            historyRepository.delete(history);
-            long historyDeleteCostMs = toCostMs(historyDeleteStartNs);
-            long totalCostMs = toCostMs(totalStartNs);
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("historyId", id);
-            data.put("deleteVideo", deleteVideo);
-            data.put("deleteDanmaku", deleteDanmaku);
-            data.put("deleteCover", deleteCover);
-            data.put("deletedMsgCount", deletedMsgCount);
-            data.put("deletedPartCount", deletedPartCount);
-            data.put("localDeleteAttempt", localDeleteAttempt);
-            data.put("localDeleteSuccess", localDeleteSuccess);
-            data.put("msgDeleteCostMs", msgDeleteCostMs);
-            data.put("localDeleteCostMs", localDeleteCostMs);
-            data.put("partDeleteCostMs", partDeleteCostMs);
-            data.put("historyDeleteCostMs", historyDeleteCostMs);
-            data.put("totalCostMs", totalCostMs);
-            data.put("round.deletedMsgCount", deletedMsgCount);
-            data.put("round.deletedPartCount", deletedPartCount);
-            data.put("round.localDeleteAttemptCount", localDeleteAttempt);
-            data.put("round.localDeleteSuccessCount", localDeleteSuccess);
-            data.put("stage.msgDelete.costMs", msgDeleteCostMs);
-            data.put("stage.localDelete.costMs", localDeleteCostMs);
-            data.put("stage.partDelete.costMs", partDeleteCostMs);
-            data.put("stage.historyDelete.costMs", historyDeleteCostMs);
-            data.put("stage.total.costMs", totalCostMs);
-            data.put("notDeletedFiles", notDeletedFiles);
-            result.put("data", data);
-
-            log.info("[BLR] {}", LogKvs.event("History.Delete.Success")
-                    .add("historyId", id)
-                    .add("roomId", history.getRoomId())
-                    .add("deleteVideo", deleteVideo)
-                    .add("deleteDanmaku", deleteDanmaku)
-                    .add("deleteCover", deleteCover)
-                    .add("deletedMsgCount", deletedMsgCount)
-                    .add("deletedPartCount", deletedPartCount)
-                    .add("localDeleteAttempt", localDeleteAttempt)
-                    .add("localDeleteSuccess", localDeleteSuccess)
-                    .add("msgDeleteCostMs", msgDeleteCostMs)
-                    .add("localDeleteCostMs", localDeleteCostMs)
-                    .add("partDeleteCostMs", partDeleteCostMs)
-                    .add("historyDeleteCostMs", historyDeleteCostMs)
-                    .add("totalCostMs", totalCostMs)
-                    .addRoundCount("deletedMsg", deletedMsgCount)
-                    .addRoundCount("deletedPart", deletedPartCount)
-                    .addRoundCount("localDeleteAttempt", localDeleteAttempt)
-                    .addRoundCount("localDeleteSuccess", localDeleteSuccess)
-                    .addStageField("msgDelete", "costMs", msgDeleteCostMs)
-                    .addStageField("localDelete", "costMs", localDeleteCostMs)
-                    .addStageField("partDelete", "costMs", partDeleteCostMs)
-                    .addStageField("historyDelete", "costMs", historyDeleteCostMs)
-                    .addStageField("total", "costMs", totalCostMs));
-
-            if (notDeletedFiles.isEmpty()) {
-                result.put("type", "success");
-                result.put("msg", "录制历史删除成功");
-            } else {
-                result.put("type", "warning");
-                result.put("msg", "录制历史删除成功（有 " + notDeletedFiles.size() + " 个本地文件未删除）");
-                log.warn(LogKvs.event("History.Delete.LocalFileNotDeleted")
-                        .msg("删除录制历史时发现本地文件未删除")
-                        .add("historyId", id)
-                        .add("notDeletedCount", notDeletedFiles.size())
-                        .add("localDeleteAttempt", localDeleteAttempt)
-                        .add("localDeleteSuccess", localDeleteSuccess)
-                        .add("deletedMsgCount", deletedMsgCount)
-                        .add("deletedPartCount", deletedPartCount)
-                        .add("msgDeleteCostMs", msgDeleteCostMs)
-                        .add("localDeleteCostMs", localDeleteCostMs)
-                        .add("partDeleteCostMs", partDeleteCostMs)
-                        .add("historyDeleteCostMs", historyDeleteCostMs)
-                        .add("totalCostMs", totalCostMs)
-                        .addRoundCount("deletedMsg", deletedMsgCount)
-                        .addRoundCount("deletedPart", deletedPartCount)
-                        .addRoundCount("localDeleteAttempt", localDeleteAttempt)
-                        .addRoundCount("localDeleteSuccess", localDeleteSuccess)
-                        .addStageField("msgDelete", "costMs", msgDeleteCostMs)
-                        .addStageField("localDelete", "costMs", localDeleteCostMs)
-                        .addStageField("partDelete", "costMs", partDeleteCostMs)
-                        .addStageField("historyDelete", "costMs", historyDeleteCostMs)
-                        .addStageField("total", "costMs", totalCostMs)
-                        .toString());
-            }
-            return result;
-        } else {
+        HistoryDeletionService.DeletionResult deletion = historyDeletionService.delete(id,
+                new HistoryDeletionService.DeleteOptions(deleteVideo, deleteDanmaku, deleteCover));
+        if (!deletion.found()) {
             result.put("type", "warning");
             result.put("msg", "录制历史不存在");
             return result;
         }
+        result.put("data", deletion.toMap());
+        if (deletion.notDeletedFiles().isEmpty()) {
+            result.put("type", "success");
+            result.put("msg", "录制历史删除成功");
+        } else {
+            result.put("type", "warning");
+            result.put("msg", "录制历史删除成功（有 " + deletion.notDeletedFiles().size() + " 个本地文件未删除）");
+        }
+        return result;
     }
 
     private long toCostMs(long startNs) {
@@ -1305,8 +1171,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             boolean changed = false;
             boolean uploadClosed = false;
+            boolean uploadStopRequested = history.isUpload()
+                    || history.isEditPartsUploading()
+                    || hasActiveHistoryProcessingTask(history.getId(), parts);
 
             if (!history.isForceArchived()) {
                 history.setForceArchived(true);
@@ -1328,7 +1198,6 @@ public class HistoryController {
             // 如果正在录制 -> 强制停止录制状态
             if (history.isRecording()) {
                 history.setRecording(false);
-                List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
                 for (RecordHistoryPart part : parts) {
                     if (part.isRecording()) {
                         part.setRecording(false);
@@ -1345,6 +1214,11 @@ public class HistoryController {
                 uploadClosed = true;
                 changed = true;
             }
+            if (history.isEditPartsUploading()) {
+                history.setEditPartsUploading(false);
+                uploadClosed = true;
+                changed = true;
+            }
 
             RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
             boolean roomDetached = detachRoomHistoryIfCurrent(room, history);
@@ -1352,6 +1226,13 @@ public class HistoryController {
 
             if (changed) {
                 historyRepository.save(history);
+            }
+            int interruptedTasks = 0;
+            if (uploadStopRequested) {
+                uploadPauseService.pauseHistory(history.getId(), "稿件已强制归档，上传已停止");
+                interruptedTasks = interruptHistoryProcessingTasks(history.getId(), parts);
+                uploadClosed = true;
+                changed = true;
             }
             HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.cleanupByHistoryId(history.getId(),
                     new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
@@ -1363,11 +1244,13 @@ public class HistoryController {
                         ? String.format("（已同时清理：普通弹幕 %d 条，SC/上舰 %d 条，评论汇总 %d 个）",
                         cleanup.ordinary, cleanup.advanced, cleanup.reply)
                         : "";
-                result.put("msg", "已强制归档" + cleanupMsg);
+                String stoppingMsg = interruptedTasks > 0 ? "，后台上传任务正在停止" : "";
+                result.put("msg", "已强制归档" + stoppingMsg + cleanupMsg);
                 log.info("[BLR] {}", LogKvs.event("History.ForceArchive.Success")
                         .add("historyId", id)
                         .add("roomId", history.getRoomId())
                         .add("uploadClosed", uploadClosed)
+                        .add("interruptedTasks", interruptedTasks)
                         .add("roomDetached", roomDetached)
                         .addRoundCount("abandonedOrdinary", cleanup.ordinary)
                         .addRoundCount("abandonedAdvanced", cleanup.advanced)
@@ -1383,6 +1266,55 @@ public class HistoryController {
             result.put("msg", "录制历史不存在");
             return result;
         }
+    }
+
+    private boolean hasActiveHistoryProcessingTask(Long historyId, List<RecordHistoryPart> parts) {
+        Thread publishThread = historyId == null ? null : TaskUtil.publishTask.get(historyId);
+        if (publishThread != null && publishThread.isAlive()) {
+            return true;
+        }
+        if (historyId != null && uploadProgressTracker.listByHistoryId(historyId).stream()
+                .anyMatch(UploadProgressTracker.Progress::isActive)) {
+            return true;
+        }
+        if (parts == null) {
+            return false;
+        }
+        for (RecordHistoryPart part : parts) {
+            if (part == null || part.getId() == null) {
+                continue;
+            }
+            Thread uploadThread = TaskUtil.partUploadTask.get(part.getId());
+            if (uploadThread != null && uploadThread.isAlive()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int interruptHistoryProcessingTasks(Long historyId, List<RecordHistoryPart> parts) {
+        Set<Thread> tasks = new LinkedHashSet<>();
+        if (historyId != null) {
+            tasks.add(TaskUtil.publishTask.get(historyId));
+        }
+        if (parts != null) {
+            for (RecordHistoryPart part : parts) {
+                if (part != null && part.getId() != null) {
+                    tasks.add(TaskUtil.partUploadTask.get(part.getId()));
+                }
+            }
+        }
+        tasks.remove(null);
+
+        int interrupted = 0;
+        Thread current = Thread.currentThread();
+        for (Thread task : tasks) {
+            if (task != current && task.isAlive()) {
+                task.interrupt();
+                interrupted++;
+            }
+        }
+        return interrupted;
     }
 
 

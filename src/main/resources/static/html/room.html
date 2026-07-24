@@ -1355,6 +1355,78 @@
         </div>
     </el-dialog>
 
+    <el-dialog
+            title="删除直播间"
+            :visible.sync="deleteRoomDialogVisible"
+            width="520px"
+            :fullscreen="isMobile"
+            append-to-body
+            :close-on-click-modal="false"
+            :close-on-press-escape="!deleteRoomSubmitting"
+            :show-close="!deleteRoomSubmitting"
+            :before-close="beforeDeleteRoomDialogClose"
+            custom-class="room-delete-dialog">
+        <div class="room-delete-dialog-body" v-loading="deleteRoomPreviewLoading" element-loading-text="正在计算删除影响范围">
+            <template v-if="!deleteRoomPreviewLoading">
+                <div class="room-delete-target">
+                    <span class="room-delete-target-icon" aria-hidden="true"><i class="el-icon-delete"></i></span>
+                    <div>
+                        <strong>{{ maskText(deleteRoomPreview.uname || deleteRoomTarget.uname || '未命名房间') }}</strong>
+                        <span>房间号 {{ maskText(deleteRoomPreview.roomId || deleteRoomTarget.roomId || '--') }}</span>
+                    </div>
+                </div>
+                <div v-if="deleteRoomPreview.active" class="room-delete-active-warning" role="alert">
+                    <i :class="deleteRoomPreview.uploadingActive && !deleteRoomPreview.recordingActive ? 'el-icon-upload2' : 'el-icon-video-camera'" aria-hidden="true"></i>
+                    <div><strong>{{ deleteRoomBlockTitle }}</strong><span>{{ deleteRoomBlockMessage }}</span></div>
+                </div>
+                <div class="room-delete-impact" aria-label="删除影响范围">
+                    <div class="room-delete-impact-row">
+                        <el-checkbox v-model="deleteRoomOptions.deleteHistories"
+                                     :disabled="deleteRoomSubmitting || deleteRoomPreview.active || !deleteRoomPreview.historyCount"
+                                     @change="onDeleteRoomHistoriesChange">
+                            同时删除 {{ deleteRoomPreview.historyCount || 0 }} 条录制历史
+                        </el-checkbox>
+                        <p>删除数据库中的历史、分P和弹幕队列；不会删除 B 站上的已投稿视频。</p>
+                    </div>
+                    <div class="room-delete-child-options" :class="{ 'is-disabled': !deleteRoomOptions.deleteHistories }">
+                        <div class="room-delete-impact-row">
+                            <el-checkbox v-model="deleteRoomOptions.deleteVideoFiles"
+                                         :disabled="deleteRoomSubmitting || !deleteRoomOptions.deleteHistories">
+                                同时删除视频文件
+                            </el-checkbox>
+                            <p>{{ deleteRoomPreview.partCount || 0 }} 个分P，约 {{ formatDeleteBytes(deleteRoomPreview.estimatedVideoBytes) }}(非实际)</p>
+                        </div>
+                        <div class="room-delete-impact-row">
+                            <el-checkbox v-model="deleteRoomOptions.deleteSidecarFiles"
+                                         :disabled="deleteRoomSubmitting || !deleteRoomOptions.deleteHistories">
+                                同时删除封面和弹幕文件
+                            </el-checkbox>
+                            <p>删除视频所在存储位置中的封面图片、XML 和 ASS 文件。</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="room-delete-webhook-warning" role="note">
+                    <i class="el-icon-warning-outline" aria-hidden="true"></i>
+                    <div v-if="deleteRoomPreview.webhookManaged">
+                        <strong>此房间由 {{ webhookSourceLabel(deleteRoomPreview.webhookSource) }} Webhook 管理</strong>
+                        <span>还需要在录播姬中删除或停用该房间，否则下次开播时会再次自动创建。</span>
+                    </div>
+                    <div v-else>
+                        <strong>请确认录播姬中的房间配置</strong>
+                        <span>若此房间通过 Webhook 管理，请同时在 BililiveRecorder 或 blrec 中删除或停用。</span>
+                    </div>
+                </div>
+            </template>
+        </div>
+        <div slot="footer" class="room-delete-dialog-footer">
+            <el-button :disabled="deleteRoomSubmitting" @click="deleteRoomDialogVisible = false">取消</el-button>
+            <el-button type="danger" icon="el-icon-delete" :loading="deleteRoomSubmitting"
+                       :disabled="deleteRoomPreviewLoading || deleteRoomPreview.active" @click="confirmDeleteRoom">
+                {{ deleteRoomConfirmLabel }}
+            </el-button>
+        </div>
+    </el-dialog>
+
     <el-dialog :visible.sync="manualPasteDialogVisible" :fullscreen="isMobile" title="手动粘贴配置" append-to-body>
         <div style="margin-bottom: 15px;">
             <p>由于浏览器安全限制，无法自动读取剪贴板。</p>

@@ -151,6 +151,13 @@ public class RecordRoom {
 
     private String sessionId;
 
+    /** 最近一次驱动该房间的 Webhook 来源：BililiveRecorder 或 BLREC。 */
+    @Column(name = "webhook_source", length = 16)
+    private String webhookSource;
+
+    @Column(name = "webhook_last_seen_at")
+    private LocalDateTime webhookLastSeenAt;
+
     private Boolean sendDm = false;
 
     /**

@@ -11,8 +11,11 @@
         update: function(data, callback, errorCallback) {
             ApiUtil.post('/room/update', data, callback, errorCallback);
         },
-        remove: function(roomId, callback, errorCallback) {
-            ApiUtil.get('/room/delete/' + encodeURIComponent(roomId), callback, errorCallback);
+        deletionPreview: function(roomId, callback, errorCallback) {
+            ApiUtil.get('/room/' + encodeURIComponent(roomId) + '/deletion-preview', callback, errorCallback);
+        },
+        remove: function(roomId, data, callback, errorCallback) {
+            ApiUtil.post('/room/' + encodeURIComponent(roomId) + '/delete', data || {}, callback, errorCallback);
         },
         sort: function(data, callback, errorCallback) {
             ApiUtil.post('/room/sort', data, callback, errorCallback);

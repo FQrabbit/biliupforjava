@@ -9,10 +9,12 @@ import top.sshh.bililiverecoder.entity.DiagnosticExportRequest;
 import top.sshh.bililiverecoder.entity.NotificationDelivery;
 import top.sshh.bililiverecoder.entity.NotificationRule;
 import top.sshh.bililiverecoder.entity.RoomLiveSessionStats;
+import top.sshh.bililiverecoder.controller.RoomController;
 import top.sshh.bililiverecoder.notification.NotificationEvent;
 import top.sshh.bililiverecoder.notification.NotificationEventDescriptor;
 import top.sshh.bililiverecoder.notification.NotificationMessage;
 import top.sshh.bililiverecoder.notification.NotificationSendResult;
+import top.sshh.bililiverecoder.service.RoomDeletionService;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,6 +35,8 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, NotificationEventDescriptor.class);
         assertReflectionRegistered(hints, NotificationMessage.class);
         assertReflectionRegistered(hints, NotificationSendResult.class);
+        assertReflectionRegistered(hints, RoomController.RoomDeletionRequest.class);
+        assertReflectionRegistered(hints, RoomDeletionService.DeletionPreview.class);
     }
 
     private void assertReflectionRegistered(RuntimeHints hints, Class<?> type) {

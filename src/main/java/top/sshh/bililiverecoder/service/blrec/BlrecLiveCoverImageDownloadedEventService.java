@@ -49,6 +49,7 @@ public class BlrecLiveCoverImageDownloadedEventService implements BlrecEventServ
 
         RecordHistory history = historyOpt.get();
         // 将本地文件路径保存到 coverUrl 字段，投稿时可直接使用
+        history.setLocalCoverPath(coverPath);
         history.setCoverUrl(coverPath);
         historyRepository.save(history);
 

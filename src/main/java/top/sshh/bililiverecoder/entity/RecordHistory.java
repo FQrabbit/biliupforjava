@@ -43,6 +43,10 @@ public class RecordHistory {
      */
     private String coverUrl;
 
+    /** 录播姬下载的本地封面路径；coverUrl 后续可能被投稿返回的网络地址覆盖。 */
+    @Column(name = "local_cover_path", length = 2048)
+    private String localCoverPath;
+
     private String eventId;
 
     private String sessionId;

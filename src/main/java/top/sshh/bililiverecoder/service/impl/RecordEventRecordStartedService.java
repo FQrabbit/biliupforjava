@@ -58,6 +58,8 @@ public class RecordEventRecordStartedService implements RecordEventService {
             room.setUname(eventData.getName());
             room.setTitle(eventData.getTitle());
             room.setSessionId(eventData.getSessionId());
+            room.setWebhookSource("BREC");
+            room.setWebhookLastSeenAt(now);
             room.setRecording(eventData.isRecording());
             room.setStreaming(eventData.isStreaming());
 

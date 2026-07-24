@@ -31,6 +31,7 @@ import top.sshh.bililiverecoder.repo.PartFileLocationRepository;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.StorageLifecycleMigrationService;
+import top.sshh.bililiverecoder.service.RoomDeletionService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.ImageDimensionsReader;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -100,6 +101,9 @@ public class RoomController {
 
     @Autowired
     private StorageLifecycleMigrationService storageLifecycleMigrationService;
+
+    @Autowired
+    private RoomDeletionService roomDeletionService;
 
     private final Cache<String, CachedImage> imageCache = CacheBuilder.newBuilder()
             .maximumSize(1000)
@@ -1302,9 +1306,9 @@ public class RoomController {
         }
 
         try {
-            Optional<RecordRoom> roomOptional = roomRepository.findById(roomId);
-            if (roomOptional.isPresent()) {
-                roomRepository.delete(roomOptional.get());
+            RoomDeletionService.DeletionResult deletion = roomDeletionService.delete(
+                    roomId, RoomDeletionService.DeleteOptions.roomOnly());
+            if (deletion.deleted()) {
                 result.put("type", "success");
                 result.put("msg", "房间删除成功");
                 return result;
@@ -1318,6 +1322,76 @@ public class RoomController {
             result.put("msg", "房间删除失败==>" + e.getMessage());
             return result;
         }
+    }
+
+    @GetMapping("/{id}/deletion-preview")
+    public Map<String, Object> deletionPreview(@PathVariable("id") Long id) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        RoomDeletionService.DeletionPreview preview = roomDeletionService.preview(id);
+        if (!preview.found()) {
+            result.put("type", "warning");
+            result.put("msg", "房间不存在");
+            return result;
+        }
+        result.put("type", "success");
+        result.put("msg", "删除影响范围加载成功");
+        result.put("data", preview.toMap());
+        return result;
+    }
+
+    @PostMapping("/{id}/delete")
+    public Map<String, Object> deleteWithOptions(@PathVariable("id") Long id,
+                                                  @RequestBody(required = false) RoomDeletionRequest request) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        RoomDeletionRequest safeRequest = request == null ? new RoomDeletionRequest() : request;
+        try {
+            RoomDeletionService.DeletionResult deletion = roomDeletionService.delete(id,
+                    new RoomDeletionService.DeleteOptions(
+                            safeRequest.isDeleteHistories(),
+                            safeRequest.isDeleteVideoFiles(),
+                            safeRequest.isDeleteDanmakuFiles(),
+                            safeRequest.isDeleteCoverFiles()));
+            if (!deletion.found()) {
+                result.put("type", "warning");
+                result.put("msg", "房间不存在");
+                return result;
+            }
+            result.put("data", deletion.toMap());
+            if (deletion.notDeletedFiles().isEmpty()) {
+                result.put("type", "success");
+                result.put("msg", deletion.deletedHistoryCount() > 0
+                        ? "房间及 " + deletion.deletedHistoryCount() + " 条录制历史删除成功"
+                        : "房间删除成功");
+            } else {
+                result.put("type", "warning");
+                result.put("msg", "房间和数据库记录已删除（有 "
+                        + deletion.notDeletedFiles().size() + " 个本地文件未删除）");
+            }
+            return result;
+        } catch (IllegalStateException e) {
+            result.put("type", "warning");
+            result.put("msg", e.getMessage());
+            return result;
+        } catch (IllegalArgumentException e) {
+            result.put("type", "error");
+            result.put("msg", e.getMessage());
+            return result;
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("Room.Delete.Error")
+                    .add("roomDatabaseId", id)
+                    .add("err", e.getMessage()), e);
+            result.put("type", "error");
+            result.put("msg", "房间删除失败：" + e.getClass().getSimpleName());
+            return result;
+        }
+    }
+
+    @Data
+    public static class RoomDeletionRequest {
+        private boolean deleteHistories;
+        private boolean deleteVideoFiles;
+        private boolean deleteDanmakuFiles;
+        private boolean deleteCoverFiles;
     }
 
     @PostMapping("/uploadCover")

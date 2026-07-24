@@ -6744,4 +6744,248 @@
     margin-top: 8px;
 }
 
+.room-delete-dialog {
+    max-width: calc(100vw - 32px);
+    border-radius: var(--radius-md);
+}
 
+.room-delete-dialog .el-dialog__header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.room-delete-dialog .el-dialog__title {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.room-delete-dialog .el-dialog__body {
+    padding: 20px 24px;
+}
+
+.room-delete-dialog .el-dialog__footer {
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--border-light);
+}
+
+.room-delete-dialog-body {
+    min-height: 340px;
+    color: var(--text-primary);
+}
+
+.room-delete-target {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.room-delete-target-icon {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    color: var(--danger-color);
+    background: var(--danger-soft-bg);
+    font-size: 18px;
+}
+
+.room-delete-target > div,
+.room-delete-active-warning > div,
+.room-delete-webhook-warning > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.room-delete-target strong {
+    overflow-wrap: anywhere;
+    font-size: 15px;
+}
+
+.room-delete-target span:not(.room-delete-target-icon),
+.room-delete-active-warning span,
+.room-delete-webhook-warning span {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.room-delete-impact {
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+}
+
+.room-delete-impact-row {
+    min-height: 56px;
+    padding: 12px 14px;
+}
+
+.room-delete-impact-row + .room-delete-impact-row {
+    border-top: 1px solid var(--border-light);
+}
+
+.room-delete-impact-row .el-checkbox {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    white-space: normal;
+}
+
+.room-delete-impact-row .el-checkbox__label {
+    color: var(--text-primary);
+    line-height: 1.45;
+    white-space: normal;
+}
+
+.room-delete-impact-row p {
+    margin: 5px 0 0 24px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.room-delete-child-options {
+    margin-left: 18px;
+    border-left: 2px solid var(--danger-border-soft);
+    background: var(--bg-tertiary);
+    transition: opacity var(--transition-fast);
+}
+
+.room-delete-child-options.is-disabled {
+    opacity: 0.58;
+}
+
+.room-delete-active-warning,
+.room-delete-webhook-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 14px 0;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+}
+
+.room-delete-active-warning {
+    border: 1px solid var(--danger-border-soft);
+    color: var(--danger-color);
+    background: var(--danger-soft-bg-faint);
+}
+
+.room-delete-webhook-warning {
+    margin-bottom: 0;
+    border: 1px solid var(--warning-border);
+    color: var(--warning-color);
+    background: var(--warning-soft-bg-faint);
+}
+
+.room-delete-active-warning > i,
+.room-delete-webhook-warning > i {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    font-size: 18px;
+}
+
+.room-delete-active-warning strong,
+.room-delete-webhook-warning strong {
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.room-delete-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.room-delete-dialog-footer .el-button + .el-button {
+    margin-left: 0;
+}
+
+.room-delete-failure-list p {
+    margin: 0 0 12px;
+    line-height: 1.55;
+}
+
+.room-delete-failure-list ul {
+    max-height: 300px;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+}
+
+.room-delete-failure-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 0;
+    border-top: 1px solid var(--border-light);
+}
+
+.room-delete-failure-list code {
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.room-delete-failure-list li > span:last-child,
+.room-delete-failure-more,
+.room-delete-failure-history {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+@media (max-width: 768px) {
+    .room-delete-dialog.is-fullscreen {
+        max-width: none;
+        border-radius: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .room-delete-dialog.is-fullscreen .el-dialog__header {
+        padding: max(18px, env(safe-area-inset-top)) 16px 14px;
+    }
+
+    .room-delete-dialog.is-fullscreen .el-dialog__body {
+        flex: 1;
+        padding: 16px;
+        overflow-y: auto;
+    }
+
+    .room-delete-dialog.is-fullscreen .el-dialog__footer {
+        padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+    }
+
+    .room-delete-dialog-body {
+        min-height: 420px;
+    }
+
+    .room-delete-impact-row {
+        min-height: 64px;
+        padding: 14px 12px;
+    }
+
+    .room-delete-impact-row .el-checkbox {
+        min-height: 28px;
+    }
+
+    .room-delete-child-options {
+        margin-left: 12px;
+    }
+
+    .room-delete-dialog-footer .el-button {
+        min-height: 44px;
+        flex: 1 1 0;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
