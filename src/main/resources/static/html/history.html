@@ -1110,6 +1110,11 @@
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
+                            <span class="action-group-label">排查工具</span>
+                            <el-button class="modern-btn" @click="showMoreActions = false; openDiagnosticExport(currentDetail)" size="mini" type="primary" plain icon="el-icon-download">导出诊断包</el-button>
+                        </div>
+                        <div class="action-divider"></div>
+                        <div class="action-sub-group">
                             <el-button class="modern-btn" @click="deleteHistory(currentDetail.id)" size="mini" type="danger" icon="el-icon-delete">删除记录</el-button>
                         </div>
                     </div>
