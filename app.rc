@@ -23,7 +23,7 @@ BEGIN
             VALUE "FileVersion",      "1.4.1.78"
             VALUE "InternalName",     "biliupforjava"
             VALUE "OriginalFilename", "biliupforjava.exe"
-            VALUE "ProductName",      "[测试]B站录播自动投稿工具BiliUpForJava"
+            VALUE "ProductName",      "B站录播自动投稿工具BiliUpForJava"
             VALUE "ProductVersion",   "1.4.1.78"
             VALUE "LegalCopyright",   "Copyright (C) FQrabbit. Licensed under Apache-2.0. Source: https://github.com/FQrabbit/biliupforjava"
         END
