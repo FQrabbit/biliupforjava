@@ -353,6 +353,21 @@
     pointer-events: none;
 }
 
+/* 删除/批量任务期间，保留当前页面和进度区域，锁住壳层控制。 */
+.app-container.is-operation-locked .header-actions,
+.app-container.is-operation-locked .workspace-logo-trigger,
+.app-container.is-operation-locked .brand-version.link-type,
+.app-container.is-operation-locked .mobile-new-badge,
+.app-container.is-operation-locked .app-header .header-top > a {
+    pointer-events: none;
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
+.app-container.is-operation-locked .header-nav {
+    cursor: not-allowed;
+}
+
 .workspace-toggle {
     cursor: pointer;
     font-size: 18px;

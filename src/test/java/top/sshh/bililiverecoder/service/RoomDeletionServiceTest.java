@@ -17,6 +17,7 @@ import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -222,6 +223,37 @@ class RoomDeletionServiceTest {
         deletionOrder.verify(historyDeletionService).delete(22L, historyOptions);
         deletionOrder.verify(statsAggregationService).deleteRoomStats("123");
         deletionOrder.verify(roomRepository).delete(room);
+    }
+
+    @Test
+    void reportsMonotonicDeletionProgressAcrossStages() {
+        RecordRoom room = room(10L, "123");
+        RecordHistory history = history(21L, "123");
+        RoomDeletionService.DeleteOptions options = new RoomDeletionService.DeleteOptions(true, false, false, false);
+        HistoryDeletionService.DeleteOptions historyOptions = HistoryDeletionService.DeleteOptions.databaseOnly();
+        when(roomRepository.findById(10L)).thenReturn(Optional.of(room));
+        when(historyRepository.findByRoomIdOrderByIdAsc("123")).thenReturn(List.of(history));
+        when(partRepository.findByHistoryIdIn(List.of(21L))).thenReturn(List.of());
+        when(historyDeletionService.delete(21L, historyOptions)).thenReturn(historyResult(21L, 1, List.of()));
+        when(statsAggregationService.deleteRoomStats("123"))
+                .thenReturn(StatsAggregationService.RoomStatsDeletionResult.empty("123"));
+        List<String> phases = new ArrayList<>();
+        List<Integer> percents = new ArrayList<>();
+
+        service.delete(10L, options, (phase, message, detail, processed, total, percent) -> {
+            phases.add(phase);
+            percents.add(percent);
+        });
+
+        assertTrue(phases.contains("PREPARING"));
+        assertTrue(phases.contains("DELETING_HISTORIES"));
+        assertTrue(phases.contains("DELETING_STATISTICS"));
+        assertTrue(phases.contains("DELETING_ROOM"));
+        assertEquals("DONE", phases.get(phases.size() - 1));
+        for (int i = 1; i < percents.size(); i++) {
+            assertTrue(percents.get(i) >= percents.get(i - 1));
+        }
+        assertEquals(100, percents.get(percents.size() - 1));
     }
 
     private static RecordRoom room(Long id, String roomId) {

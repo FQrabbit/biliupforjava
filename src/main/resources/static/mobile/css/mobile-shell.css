@@ -692,6 +692,21 @@ body > .el-color-dropdown {
     transform: translateY(0) scale(0.965);
 }
 
+.mobile-shell.is-operation-locked .header-actions,
+.mobile-shell.is-operation-locked .workspace-logo-trigger,
+.mobile-shell.is-operation-locked .brand-version.link-type,
+.mobile-shell.is-operation-locked .mobile-new-badge,
+.mobile-shell.is-operation-locked .header-nav,
+.mobile-shell.is-operation-locked .nav-item {
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+.mobile-shell.is-operation-locked .header-actions,
+.mobile-shell.is-operation-locked .workspace-logo-trigger {
+    opacity: 0.52;
+}
+
 .mobile-shell .nav-item.is-active i,
 .mobile-shell .nav-item.is-active span:not(.alert-badge) {
     position: relative;

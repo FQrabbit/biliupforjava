@@ -6796,7 +6796,8 @@
 
 .room-delete-target > div,
 .room-delete-active-warning > div,
-.room-delete-webhook-warning > div {
+.room-delete-webhook-warning > div,
+.room-delete-progress-head > div {
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -6810,10 +6811,64 @@
 
 .room-delete-target span:not(.room-delete-target-icon),
 .room-delete-active-warning span,
-.room-delete-webhook-warning span {
+.room-delete-webhook-warning span,
+.room-delete-progress-head span {
     color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.55;
+}
+
+.room-delete-progress {
+    margin: 14px 0;
+    padding: 14px;
+    border: 1px solid var(--primary-border-soft, var(--border-light));
+    border-radius: var(--radius-md);
+    background: var(--brand-soft-bg-faint, var(--bg-tertiary));
+}
+
+.room-delete-progress-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.room-delete-progress-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--primary-color);
+    background: var(--bg-primary);
+    font-size: 16px;
+}
+
+.room-delete-progress .el-progress-bar__outer {
+    background: color-mix(in srgb, var(--bg-primary) 74%, var(--border-light));
+}
+
+.room-delete-progress .el-progress-bar__inner {
+    transition: width 260ms ease;
+}
+
+.room-delete-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 9px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.room-delete-progress-detail {
+    margin: 7px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
 }
 
 .room-delete-impact {
@@ -6967,6 +7022,15 @@
 
     .room-delete-dialog-body {
         min-height: 420px;
+    }
+
+    .room-delete-progress {
+        padding: 12px;
+    }
+
+    .room-delete-progress-meta {
+        flex-direction: column;
+        gap: 3px;
     }
 
     .room-delete-impact-row {

@@ -32,6 +32,7 @@ import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.StorageLifecycleMigrationService;
 import top.sshh.bililiverecoder.service.RoomDeletionService;
+import top.sshh.bililiverecoder.service.RoomDeletionTaskService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.ImageDimensionsReader;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -104,6 +105,9 @@ public class RoomController {
 
     @Autowired
     private RoomDeletionService roomDeletionService;
+
+    @Autowired
+    private RoomDeletionTaskService roomDeletionTaskService;
 
     private final Cache<String, CachedImage> imageCache = CacheBuilder.newBuilder()
             .maximumSize(1000)
@@ -1345,32 +1349,20 @@ public class RoomController {
         Map<String, Object> result = new LinkedHashMap<>();
         RoomDeletionRequest safeRequest = request == null ? new RoomDeletionRequest() : request;
         try {
-            RoomDeletionService.DeletionResult deletion = roomDeletionService.delete(id,
+            RoomDeletionTaskService.StartResult task = roomDeletionTaskService.start(id,
                     new RoomDeletionService.DeleteOptions(
                             safeRequest.isDeleteHistories(),
                             safeRequest.isDeleteVideoFiles(),
                             safeRequest.isDeleteDanmakuFiles(),
                             safeRequest.isDeleteCoverFiles()));
-            if (!deletion.found()) {
+            if (!task.found()) {
                 result.put("type", "warning");
                 result.put("msg", "房间不存在");
                 return result;
             }
-            result.put("data", deletion.toMap());
-            if (deletion.notDeletedFiles().isEmpty()) {
-                result.put("type", "success");
-                if (deletion.options().deleteHistories()) {
-                    result.put("msg", deletion.deletedHistoryCount() > 0
-                            ? "房间、" + deletion.deletedHistoryCount() + " 条录制历史及相关统计数据删除成功"
-                            : "房间及相关统计数据删除成功");
-                } else {
-                    result.put("msg", "房间删除成功，录制历史和统计数据已保留");
-                }
-            } else {
-                result.put("type", "warning");
-                result.put("msg", "房间、录制历史和统计数据已删除（有 "
-                        + deletion.notDeletedFiles().size() + " 个本地文件未删除）");
-            }
+            result.put("type", "success");
+            result.put("msg", "删除任务已启动，请等待进度完成");
+            result.put("data", task.toMap());
             return result;
         } catch (IllegalStateException e) {
             result.put("type", "warning");
@@ -1388,6 +1380,38 @@ public class RoomController {
             result.put("msg", "房间删除失败：" + e.getClass().getSimpleName());
             return result;
         }
+    }
+
+    @GetMapping("/delete-task/{taskId}")
+    public Map<String, Object> deleteTaskStatus(@PathVariable("taskId") String taskId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Object> status = roomDeletionTaskService.status(taskId);
+        if (!Boolean.TRUE.equals(status.get("found"))) {
+            result.put("type", "warning");
+            result.put("msg", status.getOrDefault("message", "删除任务不存在或已过期"));
+            result.put("data", status);
+            return result;
+        }
+        result.put("type", "success");
+        result.put("msg", status.getOrDefault("message", "删除任务状态"));
+        result.put("data", status);
+        return result;
+    }
+
+    @GetMapping("/delete-task/room/{roomDatabaseId}")
+    public Map<String, Object> deleteTaskStatusForRoom(@PathVariable("roomDatabaseId") Long roomDatabaseId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Object> status = roomDeletionTaskService.statusForRoom(roomDatabaseId);
+        if (!Boolean.TRUE.equals(status.get("found"))) {
+            result.put("type", "warning");
+            result.put("msg", status.getOrDefault("message", "没有找到该房间的删除任务"));
+            result.put("data", status);
+            return result;
+        }
+        result.put("type", "success");
+        result.put("msg", status.getOrDefault("message", "删除任务状态"));
+        result.put("data", status);
+        return result;
     }
 
     @Data

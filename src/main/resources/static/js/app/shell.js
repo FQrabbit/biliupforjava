@@ -191,6 +191,8 @@ var answer = new Vue({
         // iframe 子页面批量操作状态
         iframeOperating: false,
         iframeOperatingMessage: '',
+        iframeOperationBlocksUnload: false,
+        beforeUnloadHandler: null,
         workspaceStatusLoading: false,
         showWorkspaceUsagePanel: false,
         showMobileLogPanel: false,
@@ -532,6 +534,7 @@ var answer = new Vue({
             if (event.data && event.data.type === 'batchOperationStatus') {
                 self.iframeOperating = event.data.operating || false;
                 self.iframeOperatingMessage = event.data.message || '批量操作';
+                self.iframeOperationBlocksUnload = !!(event.data.operating && event.data.blockingClose);
             }
 
             if (event.data && event.data.type === 'openDiagnosticExport') {
@@ -568,6 +571,16 @@ var answer = new Vue({
             }
         };
         window.addEventListener('message', this.iframeMessageHandler);
+        this.beforeUnloadHandler = function(event) {
+            if (!self.iframeOperationBlocksUnload) {
+                return;
+            }
+            event.preventDefault();
+            event.returnValue = '当前正在进行 ' + (self.iframeOperatingMessage || '后台操作') + '，关闭页面可能导致无法继续查看进度。确定要离开吗？';
+            return event.returnValue;
+        };
+        window.addEventListener('beforeunload', this.beforeUnloadHandler);
+        this.restorePendingRoomDeletionLock();
     },
     watch: {
         activeName: function() {
@@ -631,12 +644,45 @@ var answer = new Vue({
             window.removeEventListener('message', this.iframeMessageHandler);
             this.iframeMessageHandler = null;
         }
+        if (this.beforeUnloadHandler) {
+            window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+            this.beforeUnloadHandler = null;
+        }
         if (this.resizeHandler) {
             window.removeEventListener('resize', this.resizeHandler);
             this.resizeHandler = null;
         }
     },
     methods: {
+        restorePendingRoomDeletionLock: function() {
+            var raw = null;
+            try {
+                raw = localStorage.getItem('biliup-room-delete-task');
+            } catch (e) {
+            }
+            if (!raw) {
+                return;
+            }
+            var saved;
+            try {
+                saved = JSON.parse(raw);
+            } catch (e) {
+                try {
+                    localStorage.removeItem('biliup-room-delete-task');
+                } catch (ignore) {
+                }
+                return;
+            }
+            if (!saved || (!saved.taskId && !saved.roomDatabaseId)) {
+                return;
+            }
+            if (this.activeName !== 'room') {
+                this.switchTab('room');
+            }
+            this.iframeOperating = true;
+            this.iframeOperatingMessage = '删除直播间数据';
+            this.iframeOperationBlocksUnload = true;
+        },
         loadStorageStatus: function() {
             var self = this;
             if (!window.StorageApi) return;
@@ -1944,6 +1990,10 @@ var answer = new Vue({
             this.switchTab('log');
         },
         toggleThemePanel: function() {
+            if (this.iframeOperating) {
+                this.$message.warning('当前正在进行 ' + (this.iframeOperatingMessage || '后台操作') + '，请稍候完成后再操作');
+                return;
+            }
             if (!this.showThemePanel) {
                 var btn = document.getElementById('themeToggleBtn');
                 if (btn) {
@@ -2602,6 +2652,9 @@ var answer = new Vue({
             }, 400);
         },
         applyThemePalette: function(paletteName) {
+            if (this.iframeOperating) {
+                return;
+            }
             if (window.ThemeTokens && typeof window.ThemeTokens.setPalette === 'function') {
                 var ok = window.ThemeTokens.setPalette(paletteName);
                 if (!ok) {
@@ -2612,6 +2665,10 @@ var answer = new Vue({
             this.applyTheme(this.theme);
         },
         toggleGlobalPrivacyMode: function() {
+            if (this.iframeOperating) {
+                this.$message.warning('当前正在进行 ' + (this.iframeOperatingMessage || '后台操作') + '，请稍候完成后再操作');
+                return;
+            }
             this.privacyMode = !this.privacyMode;
             this.syncIframePrivacyMode();
         },

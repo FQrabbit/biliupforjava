@@ -1356,7 +1356,7 @@
     </el-dialog>
 
     <el-dialog
-            title="删除直播间"
+            :title="deleteRoomSubmitting ? '正在删除直播间' : '删除直播间'"
             :visible.sync="deleteRoomDialogVisible"
             width="520px"
             :fullscreen="isMobile"
@@ -1374,6 +1374,27 @@
                         <strong>{{ maskText(deleteRoomPreview.uname || deleteRoomTarget.uname || '未命名房间') }}</strong>
                         <span>房间号 {{ maskText(deleteRoomPreview.roomId || deleteRoomTarget.roomId || '--') }}</span>
                     </div>
+                </div>
+                <div v-if="deleteRoomProgress.visible" class="room-delete-progress" role="status" aria-live="polite">
+                    <div class="room-delete-progress-head">
+                        <span class="room-delete-progress-icon" aria-hidden="true">
+                            <i :class="deleteRoomProgress.status === 'exception' ? 'el-icon-warning' : (deleteRoomProgress.status === 'success' ? 'el-icon-success' : 'el-icon-loading')"></i>
+                        </span>
+                        <div>
+                            <strong>{{ deleteRoomProgress.message || '正在删除直播间数据' }}</strong>
+                            <span v-if="deleteRoomSubmitting">删除正在进行，请勿切换页面、刷新或关闭窗口。</span>
+                            <span v-else-if="deleteRoomProgress.status === 'exception'">删除任务已停止，请查看下方错误信息后关闭窗口。</span>
+                            <span v-else>删除任务已完成。</span>
+                        </div>
+                    </div>
+                    <el-progress :percentage="deleteRoomProgress.percent"
+                                 :status="deleteRoomProgress.status === 'active' ? undefined : deleteRoomProgress.status"
+                                 :stroke-width="10"></el-progress>
+                    <div class="room-delete-progress-meta">
+                        <span>阶段：{{ deleteRoomPhaseLabel(deleteRoomProgress.phase) }}</span>
+                        <span v-if="deleteRoomProgressCountLabel">{{ deleteRoomProgressCountLabel }}</span>
+                    </div>
+                    <p v-if="deleteRoomProgress.detail" class="room-delete-progress-detail">{{ deleteRoomProgress.detail }}</p>
                 </div>
                 <div v-if="deleteRoomPreview.active" class="room-delete-active-warning" role="alert">
                     <i :class="deleteRoomPreview.uploadingActive && !deleteRoomPreview.recordingActive ? 'el-icon-upload2' : 'el-icon-video-camera'" aria-hidden="true"></i>
@@ -1419,9 +1440,9 @@
             </template>
         </div>
         <div slot="footer" class="room-delete-dialog-footer">
-            <el-button :disabled="deleteRoomSubmitting" @click="deleteRoomDialogVisible = false">取消</el-button>
+            <el-button :disabled="deleteRoomSubmitting" @click="deleteRoomDialogVisible = false">{{ deleteRoomProgress.status === 'exception' ? '关闭' : '取消' }}</el-button>
             <el-button type="danger" icon="el-icon-delete" :loading="deleteRoomSubmitting"
-                       :disabled="deleteRoomPreviewLoading || deleteRoomPreview.active" @click="confirmDeleteRoom">
+                       :disabled="deleteRoomPreviewLoading || deleteRoomPreview.active || deleteRoomSubmitting || deleteRoomProgress.status === 'exception'" @click="confirmDeleteRoom">
                 {{ deleteRoomConfirmLabel }}
             </el-button>
         </div>

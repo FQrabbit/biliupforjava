@@ -17,6 +17,12 @@
         remove: function(roomId, data, callback, errorCallback) {
             ApiUtil.post('/room/' + encodeURIComponent(roomId) + '/delete', data || {}, callback, errorCallback);
         },
+        deleteTaskStatus: function(taskId, callback, errorCallback) {
+            ApiUtil.get('/room/delete-task/' + encodeURIComponent(taskId), callback, errorCallback);
+        },
+        deleteTaskStatusForRoom: function(roomId, callback, errorCallback) {
+            ApiUtil.get('/room/delete-task/room/' + encodeURIComponent(roomId), callback, errorCallback);
+        },
         sort: function(data, callback, errorCallback) {
             ApiUtil.post('/room/sort', data, callback, errorCallback);
         },

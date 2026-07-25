@@ -42,7 +42,7 @@
     <script src="js/pages/user.js"></script>
 </head>
 <body>
-<div id="app" class="app-container">
+<div id="app" class="app-container" :class="{ 'is-operation-locked': iframeOperating }">
     <!-- 顶部导航栏 -->
     <header class="app-header" :class="{ 'is-compact': headerCompact }">
         <div class="header-top">
@@ -164,7 +164,7 @@
                 </div>
             </nav>
 
-            <div class="header-actions">
+            <div class="header-actions" :class="{ 'is-operation-locked': iframeOperating }">
                 <div class="privacy-toggle" :class="{ 'is-active': privacyMode }" @click="toggleGlobalPrivacyMode" :title="privacyMode ? '隐私模式：开' : '隐私模式：关'">
                     <i :class="privacyMode ? 'el-icon-lock' : 'el-icon-view'"></i>
                 </div>
@@ -185,10 +185,10 @@
         </div>
     </header>
     <transition name="fade">
-        <div v-if="showThemePanel" class="theme-popover-backdrop" @click="showThemePanel = false"></div>
+        <div v-if="showThemePanel && !iframeOperating" class="theme-popover-backdrop" @click="showThemePanel = false"></div>
     </transition>
     <transition name="theme-pop">
-        <div v-if="showThemePanel" class="theme-popover-panel" :style="themePanelStyle" @click.stop>
+        <div v-if="showThemePanel && !iframeOperating" class="theme-popover-panel" :style="themePanelStyle" @click.stop>
             <div class="theme-popover-title">主题外观</div>
             <div class="theme-popover-row">
                 <span class="theme-popover-label">模式</span>

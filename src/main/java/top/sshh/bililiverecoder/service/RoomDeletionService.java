@@ -97,8 +97,21 @@ public class RoomDeletionService {
                 room.getWebhookLastSeenAt());
     }
 
+    /**
+     * 保留同步删除入口，供旧接口和已有调用方继续使用
+     */
     public DeletionResult delete(Long roomDatabaseId, DeleteOptions options) {
+        return delete(roomDatabaseId, options, ProgressReporter.noop());
+    }
+
+    /**
+     * 执行删除并在关键阶段回报进度;回调只用于观察进度，不能影响删除流程
+     */
+    public DeletionResult delete(Long roomDatabaseId,
+                                 DeleteOptions options,
+                                 ProgressReporter progressReporter) {
         DeleteOptions safeOptions = options == null ? DeleteOptions.roomOnly() : options;
+        ProgressReporter reporter = progressReporter == null ? ProgressReporter.noop() : progressReporter;
         if (!safeOptions.deleteHistories()
                 && (safeOptions.deleteVideoFiles() || safeOptions.deleteDanmakuFiles() || safeOptions.deleteCoverFiles())) {
             throw new IllegalArgumentException("删除本地文件前必须同时删除录制历史");
@@ -110,6 +123,7 @@ public class RoomDeletionService {
         }
 
         synchronized (initialRoom.getRoomId().intern()) {
+            report(reporter, "PREPARING", "正在校验删除条件", "正在读取房间和录制历史", 0, 1, 1);
             DeletionPreview current = preview(roomDatabaseId);
             if (!current.found()) {
                 return DeletionResult.notFound(roomDatabaseId);
@@ -128,6 +142,7 @@ public class RoomDeletionService {
             List<RecordHistory> histories = safeOptions.deleteHistories()
                     ? historyRepository.findByRoomIdOrderByIdAsc(room.getRoomId())
                     : List.of();
+            long progressTotal = safeOptions.deleteHistories() ? Math.max(1, histories.size()) : 1;
 
             int deletedHistoryCount = 0;
             int deletedPartCount = 0;
@@ -139,9 +154,17 @@ public class RoomDeletionService {
                     safeOptions.deleteVideoFiles(),
                     safeOptions.deleteDanmakuFiles(),
                     safeOptions.deleteCoverFiles());
+            int historyProcessed = 0;
             for (RecordHistory history : histories) {
+                report(reporter, "DELETING_HISTORIES", "正在删除录制历史",
+                        "正在处理第 " + (historyProcessed + 1) + " / " + histories.size() + " 条历史",
+                        historyProcessed, progressTotal, historyPercent(historyProcessed, progressTotal));
                 HistoryDeletionService.DeletionResult deletion = historyDeletionService.delete(history.getId(), historyOptions);
                 if (!deletion.deleted()) {
+                    historyProcessed++;
+                    report(reporter, "DELETING_HISTORIES", "正在删除录制历史",
+                            "历史 #" + history.getId() + " 已不存在，继续处理下一条",
+                            historyProcessed, progressTotal, historyPercent(historyProcessed, progressTotal));
                     continue;
                 }
                 deletedHistoryCount++;
@@ -153,12 +176,23 @@ public class RoomDeletionService {
                     item.put("historyId", history.getId());
                     failures.add(item);
                 }
+                historyProcessed++;
+                report(reporter, "DELETING_HISTORIES", "正在删除录制历史",
+                        "已处理 " + historyProcessed + " / " + histories.size() + " 条历史",
+                        historyProcessed, progressTotal, historyPercent(historyProcessed, progressTotal));
             }
 
+            report(reporter, "DELETING_STATISTICS", "正在清理房间统计数据",
+                    safeOptions.deleteHistories() ? "正在删除统计页中的房间数据" : "已保留录制历史和统计数据",
+                    safeOptions.deleteHistories() ? progressTotal : 1,
+                    progressTotal,
+                    safeOptions.deleteHistories() ? 88 : 82);
             StatsAggregationService.RoomStatsDeletionResult statsDeletion = safeOptions.deleteHistories()
                     ? statsAggregationService.deleteRoomStats(room.getRoomId())
                     : StatsAggregationService.RoomStatsDeletionResult.empty(room.getRoomId());
 
+            report(reporter, "DELETING_ROOM", "正在删除房间记录", "正在提交最后的数据库变更",
+                    progressTotal, progressTotal, 97);
             roomRepository.delete(room);
             DeletionResult result = new DeletionResult(
                     true,
@@ -184,7 +218,37 @@ public class RoomDeletionService {
                     .add("deletedPartCount", deletedPartCount)
                     .add("deletedStatisticsCount", statsDeletion.deletedTotal())
                     .add("notDeletedCount", failures.size()));
+            report(reporter, "DONE", "删除完成",
+                    !safeOptions.deleteHistories()
+                            ? "房间已删除，录制历史和统计数据已保留"
+                            : (failures.isEmpty()
+                                ? "房间、所选历史和统计数据已处理"
+                                : "数据库已删除，但有部分本地文件未能删除"),
+                    progressTotal, progressTotal, 100);
             return result;
+        }
+    }
+
+    private static int historyPercent(long processed, long total) {
+        if (total <= 0) {
+            return 70;
+        }
+        long safeProcessed = Math.max(0, Math.min(processed, total));
+        return (int) Math.max(5, Math.min(82, 5 + Math.floor(safeProcessed * 77.0d / total)));
+    }
+
+    private void report(ProgressReporter reporter,
+                        String phase,
+                        String message,
+                        String detail,
+                        long processed,
+                        long total,
+                        int percent) {
+        try {
+            reporter.report(phase, message, detail, processed, total, Math.max(0, Math.min(100, percent)));
+        } catch (RuntimeException e) {
+            // 进度上报失败不能回滚或中断删除本身
+            log.debug("[BLR] room deletion progress reporter failed: {}", e.getMessage());
         }
     }
 
@@ -267,6 +331,17 @@ public class RoomDeletionService {
                                 boolean deleteCoverFiles) {
         public static DeleteOptions roomOnly() {
             return new DeleteOptions(false, false, false, false);
+        }
+    }
+
+    @FunctionalInterface
+    public interface ProgressReporter {
+        void report(String phase, String message, String detail,
+                    long processed, long total, int percent);
+
+        static ProgressReporter noop() {
+            return (phase, message, detail, processed, total, percent) -> {
+            };
         }
     }
 
