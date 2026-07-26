@@ -121,7 +121,7 @@ http://192.168.x.x:44122/recordWebHook
 
 需要安装录播姬时，可以查看 [录播姬容器安装文档](https://rec.danmuji.org/install/container/)；Webhook 的事件说明见 [录播姬 Webhook 文档](https://rec.danmuji.org/reference/webhook/)
 
-**安全提醒：**不要把无密码的管理界面直接暴露到公网。公网访问请使用强密码，并配合内网、VPN、SSH 隧道或带身份验证的反向代理
+**安全提醒：** 不要把无密码的管理界面直接暴露到公网。公网访问请使用强密码，并配合内网、VPN、SSH 隧道或带身份验证的反向代理
 
 NAS、Linux、Docker 和 WAR 的完整步骤统一放在 [部署与配置文档](./Doc/部署与配置.md) 中，README 不再重复展开
 
