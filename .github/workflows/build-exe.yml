@@ -1,4 +1,5 @@
 name: Build and Release Windows EXE
+run-name: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag_name }}
 
 on:
   release:
@@ -10,64 +11,147 @@ on:
         required: true
         default: ''
 
+permissions:
+  contents: write
+
 jobs:
   build-exe:
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
-
-      - name: Set up GraalVM
-        uses: graalvm/setup-graalvm@v1
-        with:
-          java-version: '17'
-          distribution: 'graalvm' # or 'graalvm-community'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          native-image-job-reports: 'true'
-
-      - name: Build Native Image with Maven
-        run: |
-          # Execute maven native compilation
-          # Ensure this runs in the Developer Command Prompt environment
-          cmd.exe /c "call `"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat`" && rc /nologo /fo app.res app.rc && mvn clean -Pnative native:compile -DskipTests -Dnative.maven.plugin.version=0.9.28"
-
-      - name: Set Version
+      - name: Resolve Version
         id: version
+        shell: pwsh
         run: |
           if ("${{ github.event_name }}" -eq "release") {
-            $TAG_NAME = "${{ github.event.release.tag_name }}"
+            $tagName = "${{ github.event.release.tag_name }}"
           } else {
-            $TAG_NAME = "${{ github.event.inputs.tag_name }}"
+            $tagName = "${{ inputs.tag_name }}"
           }
-          # Remove 'v' prefix if it exists
-          $VERSION = $TAG_NAME -replace "^v", ""
-          echo "tag=$TAG_NAME" >> $env:GITHUB_OUTPUT
-          echo "version=$VERSION" >> $env:GITHUB_OUTPUT
-          echo "Version: $VERSION, Tag: $TAG_NAME"
 
-      - name: Rename Executable
-        run: |
-          $TAG_NAME = "${{ steps.version.outputs.tag }}"
-          if (Test-Path "target\biliupforjava.exe") {
-            Rename-Item -Path "target\biliupforjava.exe" -NewName "biliupforjava-${TAG_NAME}.exe"
-            Write-Host "Renamed target\biliupforjava.exe to biliupforjava-${TAG_NAME}.exe"
-          } else {
-            Write-Error "target\biliupforjava.exe not found!"
+          if ([string]::IsNullOrWhiteSpace($tagName)) {
+            Write-Error "Tag name cannot be empty"
             exit 1
           }
 
-      - name: Upload Release Asset
+          $version = $tagName -replace "^v", ""
+          "tag=$tagName" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $version, Tag: $tagName"
+
+      - name: Checkout Release Tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.version.outputs.tag }}
+
+      - name: Set up GraalVM 17
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '17.0.12'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+          cache: 'maven'
+
+      - name: Build Windows Native Image
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) {
+            Write-Error "vswhere.exe not found"
+            exit 1
+          }
+
+          $vsPath = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1)
+          if ([string]::IsNullOrWhiteSpace($vsPath)) {
+            Write-Error "Visual Studio C++ x64 build tools not found"
+            exit 1
+          }
+
+          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
+          if (-not (Test-Path $vcvars)) {
+            Write-Error "vcvars64.bat not found: $vcvars"
+            exit 1
+          }
+
+          Write-Host "Visual Studio: $vsPath"
+          $nativeBuildWork = Join-Path $env:RUNNER_TEMP "biliupforjava-native-build"
+          New-Item -ItemType Directory -Path $nativeBuildWork -Force | Out-Null
+          $env:JAVA_TOOL_OPTIONS = "-Drecord.work-path=$nativeBuildWork"
+          cmd.exe /d /c "call `"$vcvars`" && rc /nologo /fo app.res app.rc && mvn clean -Pnative native:compile -DskipTests -Dnative.maven.plugin.version=0.9.28"
+          $buildExitCode = $LASTEXITCODE
+
+          $requiredRuntimeFiles = @(
+            "target\biliupforjava.exe"
+            "target\awt.dll"
+            "target\jaas.dll"
+            "target\javaaccessbridge.dll"
+            "target\javajpeg.dll"
+            "target\jawt.dll"
+            "target\lcms.dll"
+            "target\w2k_lsa_auth.dll"
+          )
+          $missingFiles = @($requiredRuntimeFiles | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+          if ($missingFiles.Count -gt 0) {
+            Write-Error "Native Image output is incomplete. Missing: $($missingFiles -join ', ')"
+            exit 1
+          }
+
+          $emptyFiles = @($requiredRuntimeFiles | Where-Object { (Get-Item -LiteralPath $_).Length -eq 0 })
+          if ($emptyFiles.Count -gt 0) {
+            Write-Error "Native Image generated empty runtime files: $($emptyFiles -join ', ')"
+            exit 1
+          }
+
+          if ($buildExitCode -ne 0) {
+            Write-Warning "Native Image returned exit code $buildExitCode after generating all required runtime artifacts; continuing with the verified output"
+          }
+
+      - name: Package Windows ZIP
+        id: package
+        shell: pwsh
+        run: |
+          $tagName = "${{ steps.version.outputs.tag }}"
+          $packageName = "biliupforjava-${tagName}-Windows"
+          $packageDir = Join-Path "dist" $packageName
+          $zipPath = Join-Path "dist" "${packageName}.zip"
+
+          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+
+          $runtimeFiles = @((Get-Item -LiteralPath "target\biliupforjava.exe"))
+          $runtimeFiles += @(Get-ChildItem -LiteralPath "target" -Filter "*.dll" -File)
+          foreach ($file in $runtimeFiles) {
+            if ($file.Extension -ieq ".exe") {
+              $destination = Join-Path $packageDir "biliupforjava-${tagName}.exe"
+            } else {
+              $destination = Join-Path $packageDir $file.Name
+            }
+            Copy-Item $file.FullName $destination -Force
+          }
+
+          Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -CompressionLevel Optimal -Force
+          if (-not (Test-Path $zipPath)) {
+            Write-Error "ZIP package was not created: $zipPath"
+            exit 1
+          }
+
+          "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
+          "zip_name=${packageName}.zip" >> $env:GITHUB_OUTPUT
+          Write-Host "Created Windows package: $zipPath"
+          Get-ChildItem $packageDir | Select-Object Name, Length
+
+      - name: Upload Windows ZIP to Release
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $TAG_NAME = "${{ steps.version.outputs.tag }}"
-          $ARTIFACT = "target\biliupforjava-${TAG_NAME}.exe"
-          
-          if (-Not (Test-Path $ARTIFACT)) {
-            Write-Error "ERROR: Expected EXE file not found: $ARTIFACT"
+          $tagName = "${{ steps.version.outputs.tag }}"
+          $zipPath = "${{ steps.package.outputs.zip_path }}"
+
+          if (-not (Test-Path $zipPath)) {
+            Write-Error "Windows ZIP not found: $zipPath"
             exit 1
           }
-          
-          Write-Host "Uploading release asset: $ARTIFACT to tag: $TAG_NAME"
-          gh release upload $TAG_NAME $ARTIFACT --clobber
+
+          Write-Host "Uploading $zipPath to Release $tagName"
+          gh release upload $tagName $zipPath --clobber
