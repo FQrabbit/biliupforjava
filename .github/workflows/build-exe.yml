@@ -129,6 +129,13 @@ jobs:
             Copy-Item $file.FullName $destination -Force
           }
 
+          # 压缩前统一文件时间，避免用户解压后有部分从Oracle GraalVM下载的jdk库文件时间差距过大导致排序问题
+          $packageTimestamp = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).DateTime
+          Get-ChildItem -LiteralPath $packageDir -File | ForEach-Object {
+            $_.LastWriteTime = $packageTimestamp
+          }
+          Write-Host "Normalized package timestamps to $($packageTimestamp.ToString('yyyy-MM-dd HH:mm:ss')) (UTC+8)"
+
           Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -CompressionLevel Optimal -Force
           if (-not (Test-Path $zipPath)) {
             Write-Error "ZIP package was not created: $zipPath"
