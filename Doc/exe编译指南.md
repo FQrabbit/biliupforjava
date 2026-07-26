@@ -157,19 +157,29 @@ target\*.dll
 ```text
 biliupforjava-windows-x64\
 ├─ biliupforjava.exe
+├─ ffmpeg.exe   *(GitHub上编译会包含)
 ├─ awt.dll
 ├─ javajpeg.dll
 ├─ lcms.dll
-└─ 其他本次生成的 DLL
+├─ 其他本次生成的 DLL
+└─ licenses\   *(GitHub上编译会包含)
+   └─ ffmpeg\
+      ├─ LICENSE-GPLv3.txt
+      ├─ NOTICE.txt
+      ├─ SOURCE.txt
+      ├─ BUILDINFO.txt
+      └─ BUILD-README.txt
 ```
 
 GitHub Actions 会自动生成并上传类似下面的压缩包：
 
 ```text
-biliupforjava-1.4.1-beta7.8-Windows.zip
+biliupforjava-1.4.1-beta7.8-Windows-x64.zip
 ```
 
-压缩包中的 EXE 会命名为 `biliupforjava-1.4.1-beta7.8.exe`，其余 DLL 保持原文件名。`-Windows` 表示这个 ZIP 只能在 Windows x64 环境中使用。
+压缩包中的主程序会命名为 `biliupforjava-1.4.1-beta7.8.exe`，其余 DLL 保持原文件名。GitHub Actions 还会下载最新版 FFmpeg release essentials 构建，只保留程序实际需要的 `ffmpeg.exe`。这个精简构建包含项目高能切片所需的 `libx264`，不会额外打包 `ffplay.exe` 和 `ffprobe.exe`。
+
+FFmpeg 是独立运行的第三方程序，使用 GPLv3 许可证。它的许可证原文、构建来源、对应源码提交、依赖版本和实际编译参数会放在 `licenses\ffmpeg` 中；项目自身仍使用 Apache License 2.0。`-Windows-x64` 表示这个 ZIP 只能在 64 位 Windows 环境中使用，不支持 32 位 Windows。
 
 如果你仍想给用户提供单个 EXE，也可以继续保留；ZIP 主要作为包含全部 GraalVM 运行产物的稳妥版本。
 
@@ -274,7 +284,7 @@ rc /nologo /fo app.res app.rc
 
 ### EXE 在其他电脑上无法启动或提示缺少 DLL
 
-单个 EXE 在当前验证中可以正常运行。如果某台电脑或某项图片功能提示缺少 DLL，把编译后 `target` 根目录中的全部 DLL 与 EXE 放在同一目录；也可以直接改用 GitHub Release 中带 `-Windows` 标识的完整 ZIP。
+单个 EXE 在当前验证中可以正常运行。如果某台电脑或某项图片功能提示缺少 DLL，把编译后 `target` 根目录中的全部 DLL 与 EXE 放在同一目录；也可以直接改用 GitHub Release 中带 `-Windows-x64` 标识的完整 ZIP。
 
 ### 脚本显示 `BUILD COMPLETED WITH WARNINGS`
 

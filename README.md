@@ -1,404 +1,226 @@
-<div align="center">
+<p align="center">
+  <img src="./src/main/resources/static/img/icon.svg" width="92" alt="BiliUpForJava 图标">
+</p>
 
-# BiliUpForJava
+<h1 align="center">BiliUpForJava</h1>
 
-**📺 基于 Webhook 的 B站录播自动投稿工具**
+<p align="center"><strong>录完即传，传完即投</strong></p>
+<p align="center">连接录播姬与 B 站投稿，让录制完成后的重复工作自动接力</p>
 
-[![GitHub Release](https://img.shields.io/github/v/release/FQrabbit/biliupforjava?style=flat-square)](https://github.com/FQrabbit/biliupforjava/releases)
-[![Docker Pulls](https://img.shields.io/docker/pulls/fqrabbit/biliupforjava?style=flat-square)](https://hub.docker.com/r/FQrabbit/biliupforjava)
-![GitHub all releases](https://img.shields.io/github/downloads/FQrabbit/biliupforjava/total?style=flat-square)
-[![GitHub Stars](https://img.shields.io/github/stars/FQrabbit/biliupforjava?style=flat-square)](https://github.com/FQrabbit/biliupforjava/stargazers)
-![GitHub last commit](https://img.shields.io/github/last-commit/FQrabbit/biliupforjava?style=flat-square)
-[![License](https://img.shields.io/github/license/FQrabbit/biliupforjava?style=flat-square)](LICENSE)
+<p align="center">
+  <a href="#五分钟跑起来"><strong>五分钟跑起来</strong></a>
+  ·
+  <a href="https://github.com/FQrabbit/biliupforjava/releases/latest"><strong>下载最新版</strong></a>
+  ·
+  <a href="#看看实际界面"><strong>看看界面</strong></a>
+  ·
+  <a href="./Doc/部署与配置.md"><strong>完整文档</strong></a>
+</p>
 
-[功能特性](#-功能特性) • [快速开始](#-快速开始) • [详细配置](#-详细配置) • [系统截图](#-系统截图) • [常见问题](#-常见问题)
+<p align="center">
+  <a href="https://github.com/FQrabbit/biliupforjava/releases"><img src="https://img.shields.io/github/v/release/FQrabbit/biliupforjava?style=flat-square&color=4CAF50" alt="最新版本"></a>
+  <a href="https://hub.docker.com/r/fqrabbit/biliupforjava"><img src="https://img.shields.io/docker/pulls/fqrabbit/biliupforjava?style=flat-square&color=5B5FEF" alt="Docker 拉取次数"></a>
+  <a href="https://github.com/FQrabbit/biliupforjava/releases"><img src="https://img.shields.io/badge/Windows-x64-0F172A?style=flat-square&logo=windows11&logoColor=white" alt="支持 64 位 Windows"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/FQrabbit/biliupforjava?style=flat-square&color=5B5FEF" alt="开源许可证"></a>
+</p>
 
-</div>
+> BiliUpForJava 负责录播文件的上传与投稿，不负责直播录制。使用前需要先准备 [BililiveRecorder](https://github.com/BililiveRecorder/BililiveRecorder) 或 [blrec](https://github.com/acgnhiki/blrec)
 
----
+[![BiliUpForJava 直播间管理界面](./Doc/Screenshot/room.jpg)](./Doc/Screenshot/room.jpg)
 
-## 📖 简介
+<p align="center"><em>一个页面看清直播、录制与自动上传状态</em></p>
 
-BiliUpForJava 是一个全自动的 B站录播投稿工具，配合**录播姬**（BililiveRecorder/blrec）使用，通过 Webhook 机制实现录播文件的自动上传和投稿。
+## 录完之后，这段流程交给它
 
-> **重要说明**：本程序只负责录播文件的上传投稿，**不支持直播录制功能**，需要配合录播姬使用。
+![从录制完成到自动投稿的工作流程](./Doc/readme-flow.svg)
 
-### 💡 适用场景
+BiliUpForJava 通过 Webhook 接收录制事件，读取录播姬写入的文件，再按房间配置完成上传和投稿
 
-- 🖥️ NAS / 服务器 24小时录播监控
-- 🎬 直播录制后自动投稿
-- 💾 边录边传*，节省磁盘空间
-- ☁️ 录播文件自动上传至云盘
-- 🎨 支持自定义封面和云剪辑
+**最关键的前提：** 录播姬写入的文件，必须能被 BiliUpForJava 从自己的“工作路径”中找到。Windows 用户要选中同一个真实录制目录；Docker 用户还要对齐宿主机挂载目录、容器内目录与 `record.work-path`
 
-## ✨ 功能特性
+## 它能替你做什么
 
-| 功能 | 说明 |
-|------|------|
-| 🎯 **WebUI 配置** | 友好的网页管理界面，无需修改配置文件 |
-| 💾 **边录边传** | 支持录制一个文件后上传一个文件，减少硬盘占用 |
-| 🖼️ **智能封面** | 支持直播封面和自定义封面 |
-| 💬 **弹幕转移** | 可将直播弹幕转移到录播视频（非压制） |
-| ✂️ ~~**云剪辑支持**~~| ~~上传到 B站云剪辑平台素材库进行二次创作~~ |
-| 📤 **云盘路径支持** | 支持文件处理后移动，配合 rclone/WebDAV 上传云盘 |
-| 🐳 **Docker 部署** | 提供 Docker 镜像，支持一键部署 |
-| 🖥️ **跨平台** | 支持 Windows、Linux、NAS 等多种环境 |
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>录完自动接上</strong><br>
+      录播姬发来 Webhook 后自动处理文件，支持一段录完传一段，减少等待和磁盘压力
+    </td>
+    <td width="50%" valign="top">
+      <strong>上传过程看得见</strong><br>
+      通过 WebUI 查看直播间、录制历史、稿件状态和分 P 上传进度，不必只盯着日志
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>投稿规则按房间配置</strong><br>
+      为不同直播间选择投稿账号、标题、标签和封面，也可以转移直播弹幕(量大不推荐)
+    </td>
+    <td width="50%" valign="top">
+      <strong>文件处理留有后路</strong><br>
+      处理完成后可移动文件，配合 rclone、WebDAV 等工具继续归档到云盘
+    </td>
+  </tr>
+</table>
 
-## 🔄 工作原理
+适合放在 NAS、家用服务器或长期运行的录播主机上，也支持 Windows、Linux 与 Docker 环境
 
-```mermaid
-graph TD
-    subgraph Env ["你的环境"]
-        direction TB
-        Recorder["录播姬 / blrec"]
-        Plugin["biliupforjava (本项目)"]
-        Disk[("共享存储 (硬盘/映射卷)")]
-        
-        Recorder -- "1. 录制视频写入" --> Disk
-        Recorder -- "2. 发送 Webhook 通知" --> Plugin
-        Plugin -- "3. 根据通知读取文件" --> Disk
-    end
-    
-    Live["B站直播间"] -- "直播流" --> Recorder
-    Plugin -- "4. 上传视频" --> Bilibili["B站投稿服务器"]
+## 五分钟跑起来
 
-    style Disk fill:#f96,stroke:#333,stroke-width:4px
-    style Plugin fill:#69f,stroke:#333,stroke-width:2px
-    style Recorder fill:#6f9,stroke:#333,stroke-width:2px
+### Windows EXE（推荐）
+
+Windows 版本不需要安装 Java 或 Docker。开始前只需要准备：
+
+- 64 位 Windows 系统
+- BililiveRecorder 或 blrec
+- 一个可以正常投稿的 B 站账号
+- 录播姬实际保存视频的文件夹
+- 至少为本项目预留 1 GB 可用RAM(War文件下需求，exe只要200MB内)
+
+#### 1. 下载并完整解压
+
+前往 [GitHub Releases](https://github.com/FQrabbit/biliupforjava/releases/latest)，下载名称中带有 `Windows-x64.zip` 的压缩包
+
+如果当前版本暂未提供 Windows ZIP，可以先使用 [部署与配置文档](./Doc/部署与配置.md) 中的 Docker 或 WAR 方式
+
+把压缩包完整解压到一个固定目录，不要直接在压缩包里运行，也不要只把 EXE 单独拖出来。DLL、`ffmpeg.exe` 和 `licenses` 目录都应与主程序放在一起
+
+#### 2. 完成首次运行向导
+
+1. 双击解压目录中的 `biliupforjava-版本号.exe`
+2. 第一次运行会自动打开初始化向导，通常是 `http://localhost:8080/html/setup.html`；如果没有自动打开，以程序窗口显示的实际地址为准
+3. 服务端口可以保留默认的 `44122`
+4. **工作路径请选择录播姬实际保存视频的根目录**
+5. 建议同时设置管理员账号和密码
+6. 保存后会在 EXE 同级目录生成 `application.yml`，程序随后自动退出
+7. 再次双击 EXE，程序才会按刚才的配置正常启动
+
+正常运行期间请保持程序窗口开启，关闭窗口就会停止服务
+
+> [!IMPORTANT]
+> “工作路径”不是 EXE 所在目录，也不是随便新建的缓存目录。比如录播文件实际位于 `D:\录播\主播名\视频.flv`，这里就应该填写 `D:\录播`
+
+#### 3. 登录账号并连接录播姬
+
+1. 打开 `http://localhost:44122`；如果向导里改过端口，请使用修改后的端口
+2. 进入用户页面，登录 B 站账号
+3. 添加或编辑直播间，设置自动上传与投稿信息
+4. 在录播姬中填写 Webhook 地址
+
+录播姬也直接运行在这台 Windows 电脑上时，Webhook 可以填写：
+
+```text
+http://127.0.0.1:44122/recordWebHook
 ```
 
-### 工作流程说明
+如果录播姬运行在 Docker 中，`127.0.0.1` 指向的是录播姬容器自己，应改用这台 Windows 电脑的局域网 IP，例如：
 
-1. **录播姬** 负责监控直播并录制视频文件
-2. **录播姬** 通过 Webhook 通知本项目录制完成（携带文件路径）
-3. **本项目** 收到通知后读取文件并自动上传到 B站
-4. **⚠️ 关键**：录播姬和本项目必须能访问**同一个文件路径**（Docker 部署需映射同一宿主机目录）
-
----
-
-## 🚀 快速开始
-
-### 前置要求
-
-- Docker 环境（推荐）或 Java 17+ 环境
-- 录播姬（BililiveRecorder 或 blrec）
-- B站账号
-
-### 方式一：Docker 部署（推荐）
-
-<details open>
-<summary><b>展开查看 Docker 部署步骤</b></summary>
-
-#### 📋 容器参数说明
-
-| 参数项 | 容器内默认值 | 推荐设置 | 作用说明 |
-|--------|-------------|----------|----------|
-| **端口映射** | `80` | `-p 12380:80` | 映射宿主机端口到容器 80 端口 |
-| **存储卷** | 无 | `-v /path/to/recordings:/bilirecord` | 挂载录制文件目录（必须与录播姬一致） |
-| **内存限制** | 无限制 | `-m 512M` | 限制容器最大内存使用，最低 400MB |
-| **时区** | `Asia/Shanghai` | 已内置 | 已在镜像中设置中国时区 |
-| **重启策略** | 无 | `--restart always` | 容器异常退出时自动重启 |
-
-#### 🔧 可选 JVM 参数（通过 `JAVA_OPTS` 环境变量）
-
-| 参数 | 默认值 | 推荐值 | 说明 |
-|------|-------|--------|------|
-| `-Drecord.userName` | 无 | `admin` | Web 管理界面登录用户名 |
-| `-Drecord.password` | 无 | `your_password` | Web 管理界面登录密码 |
-| `-Dfile.encoding` | 系统默认 | `UTF-8` | **强烈推荐设置**，避免中文乱码 |
-| `-Duser.timezone` | `Asia/Shanghai` | `Asia/Shanghai` | 已内置，无需额外设置 |
-
-> ⚠️ **重要提示**
-> - 建议添加 `-Dfile.encoding=UTF-8` 参数，避免文件名或日志出现乱码
-> - 时区已在 Docker 镜像中设置为 `Asia/Shanghai`，无需额外配置
-
-#### 1️⃣ 拉取镜像
-
-```bash
-docker pull FQrabbit/biliupforjava:latest
+```text
+http://192.168.x.x:44122/recordWebHook
 ```
 
-#### 2️⃣ 基础运行（无密码）
+需要安装录播姬时，可以查看 [录播姬容器安装文档](https://rec.danmuji.org/install/container/)；Webhook 的事件说明见 [录播姬 Webhook 文档](https://rec.danmuji.org/reference/webhook/)
 
-```bash
-docker run -d \
-  --name bup \
-  -p 12380:80 \
-  -v /path/to/recordings:/bilirecord \
-  -m 512M \
-  --restart always \
-  FQrabbit/biliupforjava:latest
-```
+**安全提醒：**不要把无密码的管理界面直接暴露到公网。公网访问请使用强密码，并配合内网、VPN、SSH 隧道或带身份验证的反向代理
 
-#### 3️⃣ 完整配置运行（推荐）
+NAS、Linux、Docker 和 WAR 的完整步骤统一放在 [部署与配置文档](./Doc/部署与配置.md) 中，README 不再重复展开
 
-```bash
-docker run -d \
-  --name bup \
-  -p 12380:80 \
-  -v /path/to/recordings:/bilirecord \
-  -e JAVA_OPTS='-Drecord.userName=admin -Drecord.password=your_password -Dfile.encoding=UTF-8' \
-  -m 512M \
-  --restart always \
-  FQrabbit/biliupforjava:latest
-```
+## 看看实际界面
 
-> 💡 **路径提示**：`/path/to/recordings` 必须和录播姬的录制目录保持一致
+### 每一份录播现在走到了哪里
+
+[![BiliUpForJava 录制历史与稿件状态](./Doc/Screenshot/history.jpg)](./Doc/Screenshot/history.jpg)
+
+<p align="center"><em>工作中、失败与已归档稿件分开呈现</em></p>
+
+<details>
+<summary><strong>展开查看房间设置、历史详情和筛选</strong></summary>
+
+### 每个房间都有自己的投稿规则
+
+![BiliUpForJava 房间配置界面](./Doc/Screenshot/Room-Configuration.jpg)
+
+### 稿件信息与处理结果集中查看
+
+![BiliUpForJava 录制历史详情](./Doc/Screenshot/history_1.jpg)
+
+### 分 P 上传进度一目了然
+
+![BiliUpForJava 分 P 上传进度](./Doc/Screenshot/history_2.jpg)
+
+### 需要的稿件可以快速筛出来
+
+![BiliUpForJava 录制历史筛选条件](./Doc/Screenshot/Filter-criteria.jpg)
 
 </details>
 
-### 方式二：本地部署
+## 完整使用说明
+
+| 想了解什么 | 从这里开始 |
+|---|---|
+| Windows EXE 下载与首次运行 | [五分钟跑起来](#五分钟跑起来) |
+| Docker、WAR、路径映射、网络与 Webhook 配置 | [部署与配置](./Doc/部署与配置.md) |
+| 在 Windows 上自行编译 EXE | [EXE 编译指南](./Doc/exe编译指南.md) |
+| 下载最新版与查看更新内容 | [GitHub Releases](https://github.com/FQrabbit/biliupforjava/releases) |
+| 提交问题或功能建议 | [GitHub Issues](https://github.com/FQrabbit/biliupforjava/issues) |
+
+## 常见问题
 
 <details>
-<summary><b>展开查看本地部署步骤</b></summary>
+<summary><strong>Webhook 通知失败怎么办？</strong></summary>
 
-#### 前置条件
-- Java 17 或更高版本
-- 下载最新的 WAR 文件：~~[阿里云盘](https://www.aliyundrive.com/s/8n4waHuh5sA)~~ 或 [GitHub Release](https://github.com/FQrabbit/biliupforjava/releases/latest)
-
-#### 运行命令
-
-```bash
-java -Dserver.port=12380 \
-  -Drecord.work-path=/path/to/recordings \
-  -Drecord.userName=你的用户名admin \
-  -Drecord.password=你的密码your_password \
-  -Duser.timezone=Asia/Shanghai \
-  -Dfile.encoding=UTF-8 \
-  -jar biliupforjava.war
-```
-> 🔒 **安全提示**
-> - 强烈建议通过 `-Drecord.userName` 和 `-Drecord.password` 参数设置 Web 管理界面的登录密码
-> - 如果部署在公网服务器，务必配置强密码或使用 SSH 隧道/VPN 访问
-> - 默认无密码模式存在安全风险，任何人都可以访问管理界面
-
-
-#### Webhook 配置地址
-
-```
-录播姬 WebHook v2: http://192.168.x.x:12380/recordWebHook
-blrec WebHook: http://192.168.x.x:12380/recordWebHook
-```
-> **⚠️ 重要提示**
-> - ✅ 使用容器名称 `bup`（需配置网络）
-> - ✅ 或使用局域网 IP：`http://192.168.x.x:12380/recordWebHook`
-> - ❌ 不要使用 `localhost` 或 `127.0.0.1`
-> - ❌ 不要使用容器内部 IP
-
-
-</details>
-
----
-
-## 📦 详细配置
-
-### 步骤 1：安装录播姬
-
-选择以下任一录播姬：
-
-<details>
-<summary><b>选项 A：BililiveRecorder（推荐）</b></summary>
-
-📖 [官方文档](https://rec.danmuji.org/)
-
-```bash
-# 拉取镜像
-docker pull bililive/recorder:latest
-
-# 运行容器
-docker run -d \
-  --name brec \
-  -v /path/to/recordings:/rec \
-  -p 2356:2356 \
-  --restart always \
-  bililive/recorder
-```
-
-**推荐文件名格式：**
-```
-{{ roomId }}-{{ name }}/{{ json.room_info.live_start_time | time_zone: "Asia/Shanghai" | format_date: "yyyy年" }}/{{ json.room_info.live_start_time | time_zone: "Asia/Shanghai" | format_date: "MM月" }}/{{ json.room_info.live_start_time | time_zone: "Asia/Shanghai" | format_date: "dd号" }}/{{ json.room_info.live_start_time | time_zone: 'Asia/Shanghai' | format_date: "yyyy年MM月dd号-HH点mm分ss秒开播" }}/{{ title }}-{{ "now" | time_zone: 'Asia/Shanghai' | format_date: "yyyy年MM月dd号-HH点mm分ss秒" }}-{{ partIndex | format_number: "000" }}.flv
-```
+1. 两个程序都直接运行在同一台 Windows 电脑时，使用 `http://127.0.0.1:44122/recordWebHook`
+2. 录播姬在 Docker、BiliUpForJava 使用 EXE 时，使用 Windows 主机的局域网 IP，不要使用容器里的 `127.0.0.1`
+3. 两个程序都在 Docker 时，把容器接入同一网络并使用 `http://bup/recordWebHook`
+4. 确认端口与初始化向导中的设置一致，并检查 Windows 防火墙是否允许访问
+5. 不要填写 BiliUpForJava 容器容易变化的临时内部 IP
+6. 查看录播姬日志，确认通知是否实际发出
 
 </details>
 
 <details>
-<summary><b>选项 B：blrec</b></summary>
+<summary><strong>上传失败或一直没有进度怎么办？</strong></summary>
 
-📖 [GitHub 仓库](https://github.com/acgnhiki/blrec)
-
-```bash
-# 拉取镜像
-docker pull acgnhiki/blrec
-
-# 运行容器
-docker run -d \
-  --name blrec \
-  -v /path/to/recordings:/rec \
-  -p 2233:2233 \
-  --restart always \
-  acgnhiki/blrec
-```
-
-**推荐文件名格式：**
-```
-{roomid} - {uname}/{year}年/{month}月/{day}号/{year}年{month}月{day}号{hour}{minute}{second}
-```
-
-</details>
-
-### 步骤 2：配置 Docker 网络
-
-为了让录播姬和本项目能够相互通信，需要配置同一网络：
-
-```bash
-# 创建网络
-docker network create bili-net
-
-# 连接容器到网络
-docker network connect bili-net brec  # 或 blrec
-docker network connect bili-net bup
-```
-
-### 步骤 3：配置 Webhook
-
-#### 在录播姬中配置 Webhook
-
-打开录播姬的 WebUI（默认端口 2356 或 2233），找到 Webhook 配置：
-
-| 录播姬类型 | Webhook URL |
-|-----------|-------------|
-| BililiveRecorder | `http://bup/recordWebHook` |
-| blrec | `http://bup/recordWebHook` |
-
-> **⚠️ 重要提示**
-> - ✅ 使用容器名称 `bup`（需配置网络）
-> - ✅ 或使用局域网 IP：`http://192.168.x.x:12380/recordWebHook`
-> - ❌ 不要使用 `localhost` 或 `127.0.0.1`
-> - ❌ 不要使用容器内部 IP
-
-### 步骤 4：配置本项目
-
-1. 访问 Web 管理界面：`http://localhost:12380`
-2. 首次使用请先登录（默认无密码，建议配置）
-3. 进入**用户页面**进行 B站账号登录
-4. 配置**直播间设置**：
-   - 是否自动上传
-   - 是否删除源文件
-   - 上传用户选择
-   - 标题、标签等投稿信息
-
----
-
-## 🎨 系统截图
-
-<details>
-<summary><b>点击查看界面截图</b></summary>
-
-![直播间管理](Doc/Screenshot/room.jpg) 
-![房间配置](Doc/Screenshot/Room-Configuration.jpg)
-![上传历史](Doc/Screenshot/history.jpg)
-![详细信息](Doc/Screenshot/history_1.jpg)
-![分P上传进度](Doc/Screenshot/history_2.jpg)
-![筛选条件](Doc/Screenshot/Filter-criteria.jpg)
-
-</details>
-
----
-
-## ❓ 常见问题
-
-<details>
-<summary><b>Q: Webhook 通知失败怎么办？</b></summary>
-
-**A:** 检查以下几点：
-1. 确认两个容器在同一 Docker 网络中
-2. 在浏览器访问 Webhook URL 测试连通性
-3. 查看录播姬日志是否有错误信息
-4. 使用局域网 IP 而非 localhost
+- 检查 B 站登录状态或 Cookie 是否过期
+- 检查上传网络、磁盘空间和录制文件是否完整
+- 在录制历史中打开稿件详情，再结合日志查看具体错误
 
 </details>
 
 <details>
-<summary><b>Q: 上传失败或卡住怎么办？</b></summary>
+<summary><strong>支持多个 B 站账号吗？</strong></summary>
 
-**A:** 可能的原因：
-- B站 Cookie 过期，需重新登录
-- 网络不稳定，检查上传带宽
-- 文件过大，检查磁盘空间
-- 查看日志获取详细错误信息
+支持。可以在用户页面添加多个账号，再为不同直播间选择对应的投稿账号
 
 </details>
 
 <details>
-<summary><b>Q: 如何配置路径映射？</b></summary>
+<summary><strong>需要多少内存？</strong></summary>
 
-**A:** 确保路径一致性：
-```
-宿主机路径: /data/recordings
-录播姬映射: /data/recordings:/rec
-本项目映射: /data/recordings:/bilirecord
-```
-或在 Web 界面配置路径替换规则
+- 建议至少为 BiliUpForJava 预留 **1 GB 可用内存**
+- Docker 推荐使用 `-m 1g`，不建议再限制到 512 MB (原分支的需求)
+- Windows EXE 平时占用可能较低，但上传、封面和 FFmpeg 等任务会出现短时高峰，不要按空闲时占用估算机器容量 (EXE相比WAR的CPU占用时间会更短)
+- 同时管理很多房间或并行处理多个任务时，应继续增加可用内存
 
 </details>
+
+## 交流与相关项目
+
+- QQ 群：`697605055` <a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=kBA4u6rVFe_n2XjyYGx94CgTh3-KWM5T&jump_from=webapi&authKey=nhTa8F4D31bovL/ZwEfX5Qt148AyzJKCD4cC0+6ew/Y8bJfcf6aJKxtqXPUjQpwx"><img border="0" src="https://pub.idqqimg.com/wpa/images/group.png" alt="录播姬投稿插件交流群" title="录播姬投稿插件交流群"></a>
+- 问题反馈：[GitHub Issues](https://github.com/FQrabbit/biliupforjava/issues)
+- 录制工具：[BililiveRecorder](https://github.com/BililiveRecorder/BililiveRecorder) / [blrec](https://github.com/acgnhiki/blrec)
+
+## 许可证
+
+本项目采用 [Apache License 2.0](./LICENSE) 开源
 
 <details>
-<summary><b>Q: 支持多账号投稿吗？</b></summary>
+<summary><strong>查看 Star History</strong></summary>
 
-**A:** 支持！在用户页面可以添加多个 B站账号，并在房间配置中选择对应的投稿账号。
+[![Star History Chart](https://api.star-history.com/chart?repos=FQrabbit/biliupforjava&type=date&legend=top-left&sealed_token=YKOiRi3Nwq17MoV7kH3xCpoeEu92SiGUlouwk94Aewa0i_ew0mG-1hIQs78BPm7jCeXO_m5jindhs6wX49N3HBL6nwcqvpe0eG2ZpgDBav-3yUI7FF2OuQ)](https://www.star-history.com/?repos=FQrabbit%2Fbiliupforjava&type=date&legend=top-left)
+
+
 
 </details>
 
-<details>
-<summary><b>Q: 内存占用多少？</b></summary>
-
-**A:** 
-- 最低需求：400MB
-- 推荐配置：512MB 或更高
-- 可通过 `-m` 参数限制：`-m 512M`
-- 如果使用exe版本，内存占用大约70MB+ (运行时间长了Windows回收内存之后占用会更低)
-
-</details>
-
----
-
-## 💬 交流与支持
-
-- **QQ 群**：697605055 <a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=kBA4u6rVFe_n2XjyYGx94CgTh3-KWM5T&jump_from=webapi&authKey=nhTa8F4D31bovL/ZwEfX5Qt148AyzJKCD4cC0+6ew/Y8bJfcf6aJKxtqXPUjQpwx">
-  <img border="0" src="https://pub.idqqimg.com/wpa/images/group.png" alt="录播姬投稿插件交流群" title="录播姬投稿插件交流群"></a>
-
-- **问题反馈**：[GitHub Issues](https://github.com/FQrabbit/biliupforjava/issues)
-- ~~**下载地址**：[阿里云盘](https://www.aliyundrive.com/s/8n4waHuh5sA)~~
-
-
-
----
-
-## 🔗 相关项目
-
-| 项目 | 说明 |
-|------|------|
-| [BililiveRecorder](https://github.com/BililiveRecorder/BililiveRecorder) | mikufans 录播姬 |
-| [blrec](https://github.com/acgnhiki/blrec) | 另一款优秀的 B站录播工具 |
-
----
-
-## 📄 许可证
-
-本项目采用 [LICENSE](LICENSE) 许可证。
-
----
-
-## ⭐ Star History
-
-如果这个项目对你有帮助，欢迎给个 Star ⭐
-
-[![Star History Chart](https://api.star-history.com/svg?repos=FQrabbit/biliupforjava&type=Date)](https://star-history.com/#FQrabbit/biliupforjava&Date)
-
----
-
-<div align="center">
-
-**Made with ❤️ for biliupforjava**
-
-</div>
+<p align="center"><strong>让录播从存储到投稿，少一点重复操作</strong></p>

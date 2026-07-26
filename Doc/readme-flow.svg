@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-labelledby="title desc">
+  <title id="title">BiliUpForJava 自动投稿流程</title>
+  <desc id="desc">录制完成后，Webhook 通知 BiliUpForJava 读取并上传文件，最终完成投稿。配置好后全自动进行，可视化监看。</desc>
+
+  <defs>
+    <linearGradient id="connector" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4CAF50"/>
+      <stop offset="0.5" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-25%" y="-25%" width="150%" height="175%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0F172A" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <g stroke="url(#connector)" stroke-width="4" stroke-linecap="round" fill="none">
+    <path d="M298 101h24"/>
+    <path d="M588 101h24"/>
+    <path d="M878 101h24"/>
+  </g>
+  <g fill="#64748B">
+    <path d="M318 94l12 7-12 7z"/>
+    <path d="M608 94l12 7-12 7z"/>
+    <path d="M898 94l12 7-12 7z"/>
+  </g>
+
+  <g font-family="Segoe UI, Microsoft YaHei, Noto Sans SC, sans-serif">
+    <g transform="translate(40 28)" filter="url(#cardShadow)">
+      <rect width="250" height="146" rx="20" fill="#FFFFFF" fill-opacity="0.97" stroke="#4CAF50" stroke-width="2"/>
+      <path d="M20 1h210a19 19 0 0 1 19 19" fill="none" stroke="#4CAF50" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="38" cy="41" r="18" fill="#4CAF50"/>
+      <path d="M30 41l5 5 11-12" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="218" y="47" fill="#4CAF50" text-anchor="end" font-size="14" font-weight="700">01</text>
+      <text x="24" y="92" fill="#0F172A" font-size="22" font-weight="700">录制完成</text>
+      <text x="24" y="120" fill="#475569" font-size="15">录播姬写入视频文件</text>
+    </g>
+
+    <g transform="translate(330 28)" filter="url(#cardShadow)">
+      <rect width="250" height="146" rx="20" fill="#FFFFFF" fill-opacity="0.97" stroke="#38BDF8" stroke-width="2"/>
+      <path d="M20 1h210a19 19 0 0 1 19 19" fill="none" stroke="#38BDF8" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="38" cy="41" r="18" fill="#38BDF8"/>
+      <path d="M29 41h18M40 34l7 7-7 7" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="218" y="47" fill="#0284C7" text-anchor="end" font-size="14" font-weight="700">02</text>
+      <text x="24" y="92" fill="#0F172A" font-size="22" font-weight="700">Webhook 通知</text>
+      <text x="24" y="120" fill="#475569" font-size="15">发送本次录制事件</text>
+    </g>
+
+    <g transform="translate(620 28)" filter="url(#cardShadow)">
+      <rect width="250" height="146" rx="20" fill="#FFFFFF" fill-opacity="0.97" stroke="#6366F1" stroke-width="2"/>
+      <path d="M20 1h210a19 19 0 0 1 19 19" fill="none" stroke="#6366F1" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="38" cy="41" r="18" fill="#6366F1"/>
+      <path d="M38 50V32M31 39l7-7 7 7" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="218" y="47" fill="#6366F1" text-anchor="end" font-size="14" font-weight="700">03</text>
+      <text x="24" y="92" fill="#0F172A" font-size="22" font-weight="700">读取并上传</text>
+      <text x="24" y="120" fill="#475569" font-size="15">自动处理录播文件</text>
+    </g>
+
+    <g transform="translate(910 28)" filter="url(#cardShadow)">
+      <rect width="250" height="146" rx="20" fill="#FFFFFF" fill-opacity="0.97" stroke="#FB7299" stroke-width="2"/>
+      <path d="M20 1h210a19 19 0 0 1 19 19" fill="none" stroke="#FB7299" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="38" cy="41" r="18" fill="#FB7299"/>
+      <path d="M30 41l5 5 11-12" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="218" y="47" fill="#E84F7A" text-anchor="end" font-size="14" font-weight="700">04</text>
+      <text x="24" y="92" fill="#0F172A" font-size="22" font-weight="700">投稿完成</text>
+      <text x="24" y="120" fill="#475569" font-size="15">稿件进入 B 站</text>
+    </g>
+
+    <g transform="translate(385 198)">
+      <rect width="430" height="44" rx="22" fill="#FFFFFF" fill-opacity="0.96" stroke="#CBD5E1"/>
+      <circle cx="28" cy="22" r="6" fill="#4CAF50"/>
+      <text x="215" y="29" fill="#334155" text-anchor="middle" font-size="18" font-weight="600">配置好后全自动进行，可视化监看</text>
+    </g>
+  </g>
+</svg>

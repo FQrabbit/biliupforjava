@@ -53,6 +53,128 @@ jobs:
           native-image-job-reports: 'true'
           cache: 'maven'
 
+      - name: Download FFmpeg Essentials
+        shell: pwsh
+        run: |
+          $baseUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials"
+          $archiveUrl = "${baseUrl}.7z"
+          $checksumUrl = "${archiveUrl}.sha256"
+          $archivePath = Join-Path $env:RUNNER_TEMP "ffmpeg-release-essentials.7z"
+          $extractDir = Join-Path $env:RUNNER_TEMP "ffmpeg-release-essentials"
+          $ffmpegDir = "dist\ffmpeg-runtime"
+
+          $checksumResponse = Invoke-WebRequest -Uri $checksumUrl
+          $checksumText = if ($checksumResponse.Content -is [byte[]]) {
+            [Text.Encoding]::UTF8.GetString($checksumResponse.Content)
+          } else {
+            [string]$checksumResponse.Content
+          }
+          $expectedHash = $checksumText.Trim().Split()[0].ToLowerInvariant()
+
+          Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+          $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $expectedHash) {
+            Write-Error "FFmpeg archive checksum mismatch. Expected $expectedHash, got $actualHash"
+            exit 1
+          }
+
+          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) {
+            Write-Error "7-Zip was not found: $sevenZip"
+            exit 1
+          }
+
+          Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+          # 只解压最终需要的程序和许可材料，不展开 ffplay、ffprobe 与文档目录
+          & $sevenZip x $archivePath "-o$extractDir" -y "*\bin\ffmpeg.exe" "*\LICENSE" "*\README.txt" | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to extract the FFmpeg archive"
+            exit 1
+          }
+
+          $ffmpegFiles = @(Get-ChildItem -LiteralPath $extractDir -Filter "ffmpeg.exe" -File -Recurse)
+          $licenseFiles = @(Get-ChildItem -LiteralPath $extractDir -Filter "LICENSE" -File -Recurse)
+          $readmeFiles = @(Get-ChildItem -LiteralPath $extractDir -Filter "README.txt" -File -Recurse)
+          if ($ffmpegFiles.Count -ne 1 -or $licenseFiles.Count -ne 1 -or $readmeFiles.Count -ne 1) {
+            Write-Error "Unexpected FFmpeg archive structure"
+            exit 1
+          }
+
+          $ffmpegFile = $ffmpegFiles[0]
+          $licenseFile = $licenseFiles[0]
+          $readmeFile = $readmeFiles[0]
+          $versionOutput = @(& $ffmpegFile.FullName -hide_banner -version 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Downloaded ffmpeg.exe could not start"
+            exit 1
+          }
+
+          $buildConf = @(& $ffmpegFile.FullName -hide_banner -buildconf 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Could not read the FFmpeg build configuration"
+            exit 1
+          }
+
+          $buildConfText = $buildConf -join "`n"
+          if ($buildConfText -match "--enable-nonfree") {
+            Write-Error "The FFmpeg build contains --enable-nonfree and must not be redistributed"
+            exit 1
+          }
+          if ($buildConfText -notmatch "--enable-gpl" -or $buildConfText -notmatch "--enable-libx264") {
+            Write-Error "The FFmpeg build must be GPL and include libx264"
+            exit 1
+          }
+
+          $licenseText = Get-Content -LiteralPath $licenseFile.FullName -Raw
+          if ($licenseText -notmatch "GNU GENERAL PUBLIC LICENSE" -or $licenseText -notmatch "Version 3") {
+            Write-Error "The expected GPLv3 license was not found in the FFmpeg archive"
+            exit 1
+          }
+
+          Remove-Item -LiteralPath $ffmpegDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $ffmpegDir -Force | Out-Null
+          Copy-Item -LiteralPath $ffmpegFile.FullName -Destination (Join-Path $ffmpegDir "ffmpeg.exe")
+          Copy-Item -LiteralPath $licenseFile.FullName -Destination (Join-Path $ffmpegDir "LICENSE-GPLv3.txt")
+          Copy-Item -LiteralPath $readmeFile.FullName -Destination (Join-Path $ffmpegDir "BUILD-README.txt")
+
+          $versionLine = [string]($versionOutput | Select-Object -First 1)
+          $sourceLine = [string](Get-Content -LiteralPath $readmeFile.FullName | Where-Object { $_ -match '^Source Code:' } | Select-Object -First 1)
+          @(
+            "FFmpeg third-party component notice"
+            ""
+            "ffmpeg.exe is an unmodified standalone program distributed with biliupforjava."
+            "It is licensed separately under the GNU General Public License version 3."
+            "biliupforjava remains licensed under the Apache License 2.0."
+            ""
+            "Upstream project: https://ffmpeg.org/"
+            "Windows build provider: https://www.gyan.dev/ffmpeg/builds/"
+            "Binary package: $archiveUrl"
+            ""
+            "See LICENSE-GPLv3.txt for the license, BUILD-README.txt for the exact"
+            "source commit and dependency versions, and BUILDINFO.txt for the"
+            "configuration reported by this ffmpeg.exe."
+          ) | Set-Content -LiteralPath (Join-Path $ffmpegDir "NOTICE.txt") -Encoding utf8
+          @(
+            "FFmpeg corresponding source information"
+            ""
+            $versionLine
+            $sourceLine
+            "Build provider: https://www.gyan.dev/ffmpeg/builds/"
+            "Downloaded archive: $archiveUrl"
+            "Archive SHA-256: $actualHash"
+            ""
+            "The original BUILD-README.txt records the exact FFmpeg commit, build"
+            "configuration, enabled libraries, and external library versions."
+          ) | Set-Content -LiteralPath (Join-Path $ffmpegDir "SOURCE.txt") -Encoding utf8
+          (@("=== ffmpeg -version ===") + $versionOutput + @("", "=== ffmpeg -buildconf ===") + $buildConf) |
+            Set-Content -LiteralPath (Join-Path $ffmpegDir "BUILDINFO.txt") -Encoding utf8
+
+          Remove-Item -LiteralPath $archivePath -Force
+          Remove-Item -LiteralPath $extractDir -Recurse -Force
+          Write-Host "Prepared $versionLine"
+          Write-Host "FFmpeg archive SHA-256: $actualHash"
+
       - name: Build Windows Native Image
         shell: pwsh
         run: |
@@ -112,7 +234,7 @@ jobs:
         shell: pwsh
         run: |
           $tagName = "${{ steps.version.outputs.tag }}"
-          $packageName = "biliupforjava-${tagName}-Windows"
+          $packageName = "biliupforjava-${tagName}-Windows-x64"
           $packageDir = Join-Path "dist" $packageName
           $zipPath = Join-Path "dist" "${packageName}.zip"
 
@@ -129,9 +251,35 @@ jobs:
             Copy-Item $file.FullName $destination -Force
           }
 
+          $ffmpegDir = "dist\ffmpeg-runtime"
+          $ffmpegPath = Join-Path $ffmpegDir "ffmpeg.exe"
+          if (-not (Test-Path -LiteralPath $ffmpegPath -PathType Leaf)) {
+            Write-Error "Prepared ffmpeg.exe was not found: $ffmpegPath"
+            exit 1
+          }
+          Copy-Item -LiteralPath $ffmpegPath -Destination (Join-Path $packageDir "ffmpeg.exe")
+
+          $ffmpegLicenseDir = Join-Path $packageDir "licenses\ffmpeg"
+          New-Item -ItemType Directory -Path $ffmpegLicenseDir -Force | Out-Null
+          $ffmpegLicenseFiles = @(
+            "LICENSE-GPLv3.txt"
+            "NOTICE.txt"
+            "SOURCE.txt"
+            "BUILDINFO.txt"
+            "BUILD-README.txt"
+          )
+          foreach ($name in $ffmpegLicenseFiles) {
+            $source = Join-Path $ffmpegDir $name
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+              Write-Error "FFmpeg license file was not found: $source"
+              exit 1
+            }
+            Copy-Item -LiteralPath $source -Destination (Join-Path $ffmpegLicenseDir $name)
+          }
+
           # 压缩前统一文件时间，避免用户解压后有部分从Oracle GraalVM下载的jdk库文件时间差距过大导致排序问题
           $packageTimestamp = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).DateTime
-          Get-ChildItem -LiteralPath $packageDir -File | ForEach-Object {
+          Get-ChildItem -LiteralPath $packageDir -File -Recurse | ForEach-Object {
             $_.LastWriteTime = $packageTimestamp
           }
           Write-Host "Normalized package timestamps to $($packageTimestamp.ToString('yyyy-MM-dd HH:mm:ss')) (UTC+8)"
@@ -145,7 +293,7 @@ jobs:
           "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
           "zip_name=${packageName}.zip" >> $env:GITHUB_OUTPUT
           Write-Host "Created Windows package: $zipPath"
-          Get-ChildItem $packageDir | Select-Object Name, Length
+          Get-ChildItem $packageDir -File -Recurse | Select-Object FullName, Length
 
       - name: Upload Windows ZIP to Release
         shell: pwsh
