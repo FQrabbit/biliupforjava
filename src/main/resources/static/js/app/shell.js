@@ -2993,11 +2993,20 @@ var answer = new Vue({
             var now = Date.now();
             // 正在回顶中时禁用冷却时间，确保状态能及时更新
             var inCooldown = !this.isScrollingToTop && (now - this.lastHeaderToggleAt) < this.headerToggleCooldownMs;
+            // 冷却期内丢弃事件并清零累积量：导航栏切换会触发 440ms CSS 动画，动画过程中
+            // clientHeight 持续变化，浏览器会产生伪滚动事件把距离桶预填满，冷却一结束就
+            // 立即反向触发，造成反复隐藏/展开的振荡。隔离型冷却确保动画噪声不会预积累。
+            if (inCooldown) {
+                this.upScrollDistance = 0;
+                this.downScrollDistance = 0;
+                this.lastScrollTop = top;
+                return;
+            }
             if (delta > 0) {
                 this.downScrollDistance = this.downScrollDistance + delta;
                 this.upScrollDistance = 0;
                 var canCompactAfterReveal = !this.lastHeaderRevealTop || top >= (this.lastHeaderRevealTop + this.headerHideResumeDistance);
-                if (!inCooldown && !this.headerCompact && top > 60 && this.downScrollDistance >= 18 && canCompactAfterReveal) {
+                if (!this.headerCompact && top > 60 && this.downScrollDistance >= 18 && canCompactAfterReveal) {
                     this.headerCompact = true;
                     this.downScrollDistance = 0;
                     this.lastHeaderToggleAt = now;
@@ -3013,7 +3022,7 @@ var answer = new Vue({
                 }
                 this.upScrollDistance = this.upScrollDistance + Math.abs(delta);
                 this.downScrollDistance = 0;
-                if (!inCooldown && this.headerCompact && this.upScrollDistance >= 54) {
+                if (this.headerCompact && this.upScrollDistance >= 54) {
                     this.headerCompact = false;
                     this.upScrollDistance = 0;
                     this.lastHeaderRevealTop = top;
