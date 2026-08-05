@@ -200,13 +200,6 @@
     z-index: 0;
 }
 
-/* iframe 离场时保持其布局尺寸（因为 absolute 脱离了 flex 布局） */
-.fade-slide-leave-active.tab-frame {
-    width: calc(100% - 32px);
-    margin: 16px;
-    margin-top: 0;
-}
-
 /* 入场初始：从 scale(0.97) 渐入 — macOS 窗口淡入风格 */
 .fade-slide-enter {
     opacity: 0;
@@ -223,22 +216,6 @@
 .fade-slide-enter-to {
     opacity: 1;
     transform: scale(1);
-}
-
-/* ---------- iframe 标签页过渡覆盖 ---------- */
-.fade-slide-leave.tab-frame {
-    opacity: 1;
-}
-
-.fade-slide-leave-to.tab-frame {
-    opacity: 0;
-}
-
-.fade-slide-enter.tab-frame,
-.fade-slide-enter-to.tab-frame,
-.fade-slide-enter-active.tab-frame {
-    opacity: 0;
-    transition: none;
 }
 
 /* ========== Vue 过渡：fade-transform (左右滑动切换) ========== */

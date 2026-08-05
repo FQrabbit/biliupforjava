@@ -1,353 +1,409 @@
 # 前端结构小本本
 
-写给未来的我：如果哪天我又打开前端代码，别一脸懵地问这堆东西都是什么啊？
+这份文档记录当前前端的实际结构和维护约定。它是开发手册，不是迁移计划；目录或运行方式发生变化时，请顺手更新这里
 
-## 总体约定
+## 当前结论
 
-- `html/*.html` 和 `index.html`：主要放页面结构、Vue 模板、脚本加载顺序
-- `js/api/*`：所有内部接口尽量放这里，页面里少直接拼 URL
-- `js/pages/*`：页面自己的 Vue 逻辑
-- `js/pages/history/*`：录制历史页太胖了，已经单独拆成 methods 模块
-- `js/app/*`：整站公共启动逻辑、主页面壳层、浏览器提示
-- `css/*`：样式按公共基础、页面、动画拆开
+- 前端继续使用 Vue 2 和 classic script，不引入 Node/Vite 构建链
+- 桌面端和移动端共用一套模块运行时，但保留各自的页面模板和布局
+- `stats`、`history`、`room`、`user`、`log` 都是按需加载的业务页模块
+- 系统设置和通知设置是按需加载的壳层模块
+- 业务页切换时销毁并重建，不使用 `keep-alive`
+- 已加载的 JS、CSS 和模板结果会在当前浏览器会话中缓存；页面 CSS 切走后停用，资源节点不反复删除
+- 系统设置和通知设置首次加载后保持挂载，用来保留尚未保存的表单内容
+- 主页面不再使用 iframe，也没有跨帧 `postMessage` 协议
 
-## 图标图例
-
-```text
-📁 文件夹
-🧭 主入口
-📄 HTML 页面壳
-🧠 页面逻辑
-🔌 接口层
-🧰 公共工具
-🎨 样式
-📦 第三方库/旧备份
-```
-
-## 当前前端结构
+## 总体结构
 
 ```text
-📁 src/main/resources/static/
-├─ 🧭 index.html
-│  主页面壳。首页、用户页、日志页的模板都在这里，真正的主逻辑在 js/app/shell.js
+src/main/resources/static/
+├─ index.html                         桌面端壳层
+├─ mobile/index.html                  移动端壳层
 │
-├─ 📁 html/
-│  ├─ 📄 login.html
-│  │  登录页结构。逻辑在 js/pages/login.js
-│  ├─ 📄 setup.html
-│  │  首次初始化配置页。逻辑在 js/pages/setup.js
-│  ├─ 📄 captcha.html
-│  │  极验验证码页。逻辑在 js/pages/captcha.js
-│  ├─ 📄 room.html
-│  │  房间管理页结构。逻辑在 js/pages/room.js
-│  ├─ 📄 history.html
-│  │  录制历史页结构。逻辑入口在 js/pages/history.js，methods 拆到了 js/pages/history/
-│  └─ 📄 stats.html
-│     统计页结构。逻辑在 js/pages/stats.js
+├─ modules/
+│  ├─ manifest.json                   页面和壳层模块清单
+│  ├─ pages/
+│  │  ├─ stats/
+│  │  ├─ history/
+│  │  ├─ room/
+│  │  ├─ user/
+│  │  └─ log/
+│  └─ shell/
+│     ├─ system-settings/
+│     └─ notification-settings/
 │
-├─ 📁 js/
-│  ├─ 🧰 api.js
-│  │  通用请求工具。负责全局鉴权、GET/POST/DELETE、fetchBlob
-│  │
-│  ├─ 📁 api/
-│  │  ├─ 🔌 system-api.js
-│  │  │  系统配置、版本、工作区状态
-│  │  ├─ 🔌 user-api.js
-│  │  │  B站账号登录、刷新、更新、删除
-│  │  ├─ 🔌 room-api.js
-│  │  │  房间列表、新增、编辑、删除、导出配置、线路测速
-│  │  ├─ 🔌 history-api.js
-│  │  │  录制历史列表、状态刷新、删除、投稿动作、分P编辑任务
-│  │  ├─ 🔌 part-api.js
-│  │  │  分P列表、文件绑定、暂停/恢复、重扫
-│  │  ├─ 🔌 preview-api.js
-│  │  │  分P预览、封装任务、取消封装
-│  │  ├─ 🔌 stats-api.js
-│  │  │  统计维护、回填、清理、XML 修复
-│  │  ├─ 🔌 log-api.js
-│  │  │  日志历史、告警、清空告警
-│  │  ├─ 🔌 captcha-api.js
-│  │  │  验证码状态和提交
-│  │  └─ 🔌 setup-api.js
-│  │     初始化配置读取和提交
-│  │
-│  ├─ 📁 app/
-│  │  ├─ 🧭 shell.js
-│  │  │  主页面壳层：导航、主题、iframe、连接状态、缓存刷新、回顶按钮
-│  │  ├─ 🧰 page-bootstrap.js
-│  │  │  子页面公共启动：主题初始化、前端缓存刷新
-│  │  └─ 🧰 browser-warning.js
-│  │     旧浏览器提示
-│  │
-│  ├─ 📁 data/
-│  │  └─ 🧾 bili-partitions.js
-│  │     B站投稿分区数据。别再塞回 room.js 了，会胖到哭
-│  │
-│  ├─ 📁 pages/
-│  │  ├─ 🧠 user.js
-│  │  │  用户管理组件，挂在 index.html 的模板上
-│  │  ├─ 🧠 log.js
-│  │  │  日志中心组件，WebSocket 日志、历史日志、告警详情都在这里
-│  │  ├─ 🧠 login.js
-│  │  │  登录页逻辑。注意它不依赖 jQuery，别为了一个请求硬塞 api.js
-│  │  ├─ 🧠 setup.js
-│  │  │  初始化配置页逻辑
-│  │  ├─ 🧠 captcha.js
-│  │  │  极验验证码逻辑，和 B站投稿验证码有关
-│  │  ├─ 🧠 room.js
-│  │  │  房间管理逻辑。房间表单、排序、配置导入导出、线路测速都在这里
-│  │  ├─ 🧠 stats.js
-│  │  │  统计页逻辑。ECharts 图表、维护任务、清理任务都在这里
-│  │  ├─ 🧠 history.js
-│  │  │  录制历史页入口。主要放 data、computed、watch、生命周期
-│  │  │
-│  │  └─ 📁 history/
-│  │     ├─ 🧠 common-methods.js
-│  │     │  通用工具、页面关闭保护、全局预览消息等
-│  │     ├─ 🧠 batch-methods.js
-│  │     │  批量选择、批量删除、批量切换可见性
-│  │     ├─ 🧠 detail-methods.js
-│  │     │  筛选、详情弹窗、分P列表、进度轮询
-│  │     ├─ 🧠 edit-parts-methods.js
-│  │     │  已发布稿件分P编辑、本地临时上传、保存任务
-│  │     ├─ 🧠 preview-methods.js
-│  │     │  分P预览、播放器恢复、悬浮播放、MP4 封装任务
-│  │     ├─ 🧠 upload-methods.js
-│  │     │  上传暂停/恢复、绑定文件、速度和剩余时间计算
-│  │     └─ 🧠 record-methods.js
-│  │        历史列表操作、状态刷新、发布/重投/删除弹幕等
-│  │
-│  ├─ 🧰 mixins.js
-│  │  Vue 全局混入方法
-│  ├─ 🕶️ privacy.js
-│  │  隐私模式，负责遮挡文字和图片
-│  ├─ 🎨 theme-tokens.js
-│  │  主题色、调色板、CSS 变量
-│  ├─ 🔁 frontend-cache-refresh.js
-│  │  前端资源版本检测和刷新提醒
-│  ├─ 🎧 global-preview-player.js
-│  │  跨页面悬浮预览播放器
-│  ├─ 🧾 version.js
-│  │  版本号、更新日志数据
-│  ├─ 📦 index.js
-│  │  旧入口保留文件，基本不用管
-│  └─ 📦 第三方库
-│     jquery、vue、element-ui、echarts、ArtPlayer、mpegts 等
+├─ js/
+│  ├─ api.js                          通用请求封装
+│  ├─ api/                            按业务划分的接口层
+│  ├─ app/
+│  │  ├─ module-registry.js           模块工厂注册器
+│  │  ├─ module-loader.js             manifest 与动态资源加载器
+│  │  ├─ url-resolver.js              context path 解析
+│  │  ├─ page-state-coordinator.js    页面状态汇总
+│  │  ├─ page-portal-services.js      Element UI 全局层管理
+│  │  ├─ page-bootstrap.js            登录等独立页面的公共启动逻辑
+│  │  ├─ mobile-viewport.js           移动端视口和输入焦点处理
+│  │  ├─ shell.js                     根 Vue 实例组装
+│  │  └─ shell/                       壳层 mixin 和设置逻辑
+│  └─ components/
+│     ├─ page-host.js                 业务页宿主
+│     ├─ shell-module-host.js         设置模块宿主
+│     ├─ notification-channel-fields.js
+│     └─ diagnostic-export-dialog.js
 │
-└─ 📁 css/
-   ├─ 🎨 index.css
-   │  旧样式入口，继续 import 基础样式
-   ├─ 🎨 login.css
-   │  登录/初始化相关样式
-   ├─ 🎨 room.css
-   │  房间管理页样式
-   ├─ 🎨 history.css
-   │  录制历史页样式。它也很大，别无脑往最后追加
-   ├─ 🎨 stats.css
-   │  统计页样式
-   ├─ 🎨 log.css
-   │  日志页样式
-   ├─ 🎨 user.css
-   │  用户管理页样式
-   ├─ 🎨 global-preview-player.css
-   │  全局悬浮预览播放器样式
-   ├─ 📁 base/
-   │  ├─ variables.css
-   │  │  全局 CSS 变量
-   │  ├─ reset.css
-   │  │  全局重置、滚动条基础样式
-   │  ├─ element-override.css
-   │  │  Element UI 公共覆盖
-   │  ├─ shared-components.css
-   │  │  公共组件样式
-   │  └─ dark-overrides.css
-   │     深色主题覆盖
-   ├─ 📁 animations/
-   │  ├─ transitions.css
-   │  │  Vue 过渡、页面切换动画
-   │  └─ effects.css
-   │     额外视觉动效
-   └─ 📁 pages/
-      └─ home.css
-         主页面首页/导航样式
+├─ css/
+│  ├─ base/                           变量、重置、公共组件和主题覆盖
+│  ├─ animations/                     公共过渡和动效
+│  ├─ pages/home.css                  壳层首页样式
+│  └─ diagnostic-export.css           全局诊断导出样式
+│
+└─ html/
+   ├─ login.html                      登录独立页
+   ├─ setup.html                      初始化独立页
+   └─ captcha.html                    验证码独立页
 ```
 
-## 下次开发时先看这里
+模块化相关的本地检查在仓库根目录的 `scripts/`：
 
-### 新增接口
+```text
+scripts/
+├─ check-mobile-redirect.js
+├─ check-module-boundaries.js
+├─ check-module-runtime.js
+├─ check-page-lifecycles.js
+└─ check-shell-mixins.js
+```
 
-先去 `js/api/` 找对应模块：
+## 首屏与模块加载流程
 
-- 房间相关：`room-api.js`
-- 历史相关：`history-api.js`
-- 分P相关：`part-api.js`
-- 预览相关：`preview-api.js`
-- 统计相关：`stats-api.js`
+桌面端 `index.html` 和移动端 `mobile/index.html` 只加载壳层、公共样式、公共请求能力和模块运行时，不直接加载五个业务页的模板、页面 CSS 或重型依赖
 
-页面里尽量不要直接写：
+业务页加载流程如下：
+
+1. `navigation-page-runtime.js` 从白名单中确定当前页面
+2. `page-host.js` 根据 `page` 和 `surface` 请求模块
+3. `module-loader.js` 读取并缓存 `modules/manifest.json`
+4. 页面模板、模板分片和 CSS 并行加载
+5. manifest 中的 `scripts` 按数组顺序串行加载
+6. 所有依赖完成后，最后加载 `entry`
+7. 入口通过 `BiliupModuleRegistry.define()` 注册组件工厂
+8. 加载器传入模板和运行上下文，注册器创建 Vue 组件
+9. CSS 完成加载后才激活页面组件，宿主随后移动键盘焦点
+
+页面快速切换时，宿主使用加载令牌忽略旧请求结果。资源加载失败会清除对应 Promise 缓存，先检查前端版本；版本没有变化时显示错误和重试按钮
+
+动态资源必须满足以下条件：
+
+- 使用 `/` 开头的站内绝对路径
+- 不允许协议地址、反斜杠、`//` 开头或 `..` 路径
+- 所有请求通过 `url-resolver.js` 适配部署 context path
+- 模板、JS 和 CSS 都追加当前 frontend build ID
+
+## Manifest 约定
+
+`modules/manifest.json` 是模块资源的唯一入口。业务页放在 `pages`，设置类模块放在 `shell`。
+
+一个普通业务页的声明大致如下：
+
+```json
+{
+  "pages": {
+    "sample": {
+      "mode": "module",
+      "module": "page.sample",
+      "component": "sample-page",
+      "templates": {
+        "desktop": "/modules/pages/sample/desktop.html",
+        "mobile": "/modules/pages/sample/mobile.html"
+      },
+      "styles": {
+        "common": [
+          "/modules/pages/sample/page.css"
+        ],
+        "desktop": [
+          "/modules/pages/sample/desktop.css"
+        ],
+        "mobile": [
+          "/modules/pages/sample/mobile.css"
+        ]
+      },
+      "scripts": [
+        "/js/api/sample-api.js",
+        "/modules/pages/sample/methods/runtime-methods.js"
+      ],
+      "entry": "/modules/pages/sample/page.js"
+    }
+  }
+}
+```
+
+规则：
+
+- `scripts` 的顺序就是 classic script 的依赖顺序
+- API 和方法包放在前面，页面入口必须放在 `entry`
+- desktop/mobile 都必须有模板，不要用桌面模板配一堆 `v-if` 假装移动版
+- 公共 CSS 只写确实共享的内容，布局差异放到对应 surface CSS
+- 大模板可以使用 `fragments`；主模板用 `<template data-biliup-fragment="名称">` 声明插入点
+- 新增动态资源后，要同步确认 native-image 资源配置能够覆盖它
+
+## 页面组件契约
+
+页面入口统一注册工厂：
 
 ```js
-ApiUtil.post('/some/url', ...)
+BiliupModuleRegistry.define('page.sample', function (context) {
+    return {
+        name: 'sample-page',
+        template: context.template,
+        data: function () {
+            return {};
+        }
+    };
+});
 ```
 
-更推荐在 API 文件里包一层，然后页面调用语义化方法
+当前 `context` 包含：
 
-### 新增页面逻辑
+- `template`：已经合成分片的最终模板
+- `fragments`：本 surface 加载到的模板分片
+- `surface`：`desktop` 或 `mobile`
+- `pageName`：业务页名称；壳层模块中为 `undefined`
+- `moduleName`：manifest 中的模块名称
 
-看页面类型：
+业务页通过组件事件和壳层通信：
 
-- 主壳层行为：`js/app/shell.js`
-- 普通独立页面：`js/pages/页面名.js`
-- 录制历史页：先看 `js/pages/history/` 下面有没有对应模块
+- `page-ready`：首次数据准备完成，可以解除全局加载状态
+- `connection-status(Boolean)`：当前实现中 `true` 表示连接或请求异常，`false` 表示恢复正常
+- `page-state(payload)`：上报弹窗、工作区或后台操作状态
+- `diagnostic-export({ history })`：请求壳层打开诊断导出
 
-如果是历史页，别一上来就往 `history.js` 塞 methods。`history.js` 现在主要放状态和生命周期，methods 要按职责放进子模块
+`page-state` 的 `kind` 只允许：
 
-### 新增样式
+- `modal`：弹窗、抽屉、移动端操作面板
+- `workspace`：移动端详情等占用页面工作区的模式
+- `operation`：删除、批量操作、本地分P上传等会限制导航的任务
 
-优先放页面自己的 CSS：
+常用载荷：
 
-- 房间页：`css/room.css`
-- 历史页：`css/history.css`
-- 统计页：`css/stats.css`
-- 日志页：`css/log.css`
-- 用户页：`css/user.css`
-
-公共样式才放 `css/base/`。不要为了图快写一堆内联 style，不然后面改主题会哭
-
-## 重点踩坑提醒
-
-### `index.html` 是主壳，不是所有页面都塞 iframe
-
-`user` 和 `log` 已经是组件页，直接在主壳里渲染。`room/history/stats` 还是 iframe 子页面
-
-这里很容易手滑：如果以后改导航逻辑，记得看 `shell.js` 的 `componentPages`
-
-### 脚本加载顺序很重要
-
-现在还是 classic script，不是 ES module  也就是说加载顺序就是依赖顺序
-
-比如历史页：
-
-1. 先加载 `api.js`
-2. 再加载 `api/history-api.js`、`part-api.js`、`preview-api.js`
-3. 再加载 `js/pages/history/*.js`
-4. 最后加载 `js/pages/history.js`
-
-顺序错了就会出现 `xxx is not defined`!!!
-
-### 录制历史页是大魔王
-
-历史页以前太大了
-
-- 批量操作：`batch-methods.js`
-- 详情和进度：`detail-methods.js`
-- 分P编辑：`edit-parts-methods.js`
-- 分P预览：`preview-methods.js`
-- 上传控制：`upload-methods.js`
-- 列表操作：`record-methods.js`
-
-要加功能时先判断属于哪一类，不要把所有东西都塞进 `record-methods.js`，它已经很努力了，别再喂胖它！！
-
-### 批量切换可见性要慢一点
-
-`batch-methods.js` 里批量切换可见性有间隔控制。这个不是磨叽，是为了别把 B站接口打太快
-
-如果以后想改快，先想想风控和失败重试，不要一激动就把等待时间删了(
-
-### 分P预览别忘了销毁播放器
-
-`preview-methods.js` 里同时处理：
-
-- ArtPlayer
-- mpegts/flv
-- MP4 缓存预览
-- 弹幕插件
-- 悬浮小窗
-- 播放器卡住后的恢复
-
-加预览相关功能时，注意关闭弹窗、切换稿件、切换标签页时要清理播放器和 timer。不然页面看起来没事，后台偷偷占资源，像个不睡觉的小坏蛋
-
-### 分P编辑上传有临时文件清理
-
-`edit-parts-methods.js` 里本地分P上传会用临时 session、chunk upload、取消清理、页面关闭清理
-
-这里不要只看“上传成功”那条路，也要看：
-
-- 取消上传
-- 关闭页面
-- 保存失败
-- 浏览器刷新
-
-不然临时文件可能残留，后面排查起来真的很想抱头蹲下
-
-### `room.js` 不要再塞分区大数据
-
-B站投稿分区已经放到 `js/data/bili-partitions.js`
-
-房间页要用 `window.BILIUPFORJAVA_PARTITIONS`，不要把那坨数据复制回 `room.js`，复制一次，维护人掉一撮头发
-
-### 统计页改图表要注意销毁和 resize
-
-`stats.js` 图表多，ECharts 实例要注意：
-
-- 数据刷新
-- tab/筛选切换
-- 窗口 resize
-- 页面销毁
-
-新增图表时别只管 `init`，也要管后续更新。图表这东西，很占内存
-
-### 登录页不要随便引 jQuery
-
-`login.js` 用 `SystemApi.listConfigWithAuth(token)` 做登录校验，没有依赖 `api.js` 那套 jQuery 请求工具
-
-如果只是加登录页小功能，尽量保持它轻一点
-
-
-## 常见改动入口速查
-
-```text
-改主导航/主题/iframe：
-  js/app/shell.js
-
-改房间配置：
-  html/room.html
-  js/pages/room.js
-  js/api/room-api.js
-  css/room.css
-
-改录制历史列表：
-  html/history.html
-  js/pages/history.js
-  js/pages/history/record-methods.js
-  js/api/history-api.js
-  css/history.css
-
-改历史详情/分P进度：
-  js/pages/history/detail-methods.js
-  js/pages/history/upload-methods.js
-  js/api/part-api.js
-
-改分P预览：
-  js/pages/history/preview-methods.js
-  js/api/preview-api.js
-  css/global-preview-player.css
-  css/history.css
-
-改统计页：
-  html/stats.html
-  js/pages/stats.js
-  js/api/stats-api.js
-  css/stats.css
-
-改登录/初始化：
-  html/login.html
-  js/pages/login.js
-  html/setup.html
-  js/pages/setup.js
-  css/login.css
-
-加接口：
-  js/api/对应模块-api.js
+```js
+this.$emit('page-state', {
+    kind: 'operation',
+    source: 'sample-task',
+    active: true,
+    message: '正在处理',
+    blockingClose: true,
+    taskId: taskId,
+    percent: percent
+});
 ```
-~~然后梦到什么再写什么~~
+
+同一种 `kind` 可以有多个 `source`。关闭状态时必须使用与打开时相同的 `source`，状态协调器会在最后一个来源结束后再解除壳层锁定
+
+页面模板还要提供两个通用标记：
+
+```html
+<div data-page-scroll-root>
+    <h1 data-page-focus-target tabindex="-1">页面标题</h1>
+</div>
+```
+
+- `data-page-scroll-root` 供回顶、滚动恢复和移动端布局使用
+- `data-page-focus-target` 供切页后的键盘焦点管理使用
+- 壳层不要再按页面名查询 `.room-container`、`.history-main` 等私有选择器
+
+## 页面状态与全局浮层
+
+`page-state-coordinator.js` 按 `page + kind + source` 保存状态，而不是使用一个全局布尔值。它汇总：
+
+- 页面弹窗是否打开
+- 移动端是否进入工作区模式
+- 是否有后台操作正在运行
+- 当前操作提示和关闭保护
+- 移动端输入框是否聚焦
+
+Element UI 的 MessageBox 和 Loading 会挂到 `body`，业务页优先使用：
+
+- `$pageConfirm`
+- `$pageAlert`
+- `$pagePrompt`
+- `$pageMsgbox`
+- `$pageLoading`
+
+这些封装会自动追加页面专属类、上报 `modal` 状态，并在组件销毁时清理全局浮层。普通 `el-dialog`、`el-select` 等 append-to-body 内容也要设置页面专属 `custom-class` 或 `popper-class`，不要用裸 `.el-dialog` 做页面级覆盖
+
+## 页面生命周期
+
+普通业务页每次切换都会销毁。新增资源时，请一起处理它的退出路径：
+
+- `setTimeout`、`setInterval` 和轮询任务
+- `window`、`document`、媒体查询等监听器
+- WebSocket 和订阅回调
+- ECharts、ArtPlayer、mpegts 等实例
+- 对象 URL、临时上传会话和可取消请求
+- Element UI portal、遮罩和页面专属 body class
+- 所有仍为 active 的 `page-state` 来源
+
+页面入口的 `beforeDestroy` 负责组织清理，具体资源由创建它的方法模块负责关闭。不要依赖下次进入页面时覆盖旧引用，那样看起来能用，后台资源其实还在跑
+
+## 五个业务页
+
+### Stats
+
+路径：`modules/pages/stats/`
+
+- `desktop.html`、`mobile.html`：两套页面模板
+- `page.js`：组件状态、computed、watch 和生命周期组装
+- `methods/runtime-methods.js`：数据加载、轮询和运行状态
+- `methods/chart-methods.js`：ECharts 初始化、更新、resize 和销毁
+- `methods/xml-methods.js`：XML 修复流程
+- `methods/maintenance-methods.js`：维护和清理任务
+- `methods/format-methods.js`：格式化及连接状态处理
+
+ECharts 只在首次进入统计页时加载。新增图表必须同时补齐更新、resize 和 dispose
+
+### History
+
+路径：`modules/pages/history/`
+
+History 是目前拆分最细的页面：
+
+- `desktop.html`、`mobile.html`：列表和页面骨架
+- `fragments/`：桌面/移动详情与对话框分片
+- `options/`：`state`、`computed`、`watchers`
+- `methods/`：批量、详情、归档、审核、弹幕、分P编辑、预览、上传、进度和记录操作
+- 多个 CSS 文件按详情、批量、预览、上传状态等职责拆分
+
+本地分P上传、批量任务、播放器和诊断导出都直接使用同窗口服务。修改上传或预览逻辑时，要同时检查取消、切页、刷新、保存失败和临时文件清理路径
+
+### Room
+
+路径：`modules/pages/room/`
+
+- `desktop.html`、`mobile.html`：列表骨架
+- `fragments/`：桌面/移动配置和弹窗分片
+- `methods/config-methods.js`：配置表单和导入导出
+- `methods/deletion-methods.js`：删除任务、恢复和进度轮询
+- `methods/media-methods.js`：封面等媒体处理
+- `methods/runtime-methods.js`：列表、状态轮询和运行期逻辑
+- `methods/ui-methods.js`：页面交互和状态上报
+
+B站投稿分区数据继续使用 `js/data/bili-partitions.js`，不要复制回页面入口。删除任务必须在完成、失败和组件销毁路径中正确解除页面锁
+
+### User
+
+路径：`modules/pages/user/`
+
+用户页体量相对较小，目前由两套模板、公共/端侧 CSS 和一个 `page.js` 组成。接口统一从 `js/api/user-api.js` 调用
+
+### Log
+
+路径：`modules/pages/log/`
+
+- `methods/stream-methods.js`：实时日志连接
+- `methods/render-methods.js`：日志格式化和渲染
+- `methods/alert-methods.js`：告警与诊断导出
+- `methods/ui-methods.js`：筛选、面板和页面状态
+
+销毁时必须释放 WebSocket、滚动/播放器相关监听和弹窗状态
+
+## 壳层职责
+
+`js/app/shell.js` 只组合根 Vue 实例的五个 mixin：
+
+- `navigationPageRuntime`：页面白名单、切页、URL 参数和导航锁
+- `connectionReadiness`：连接状态、页面 ready 和断连保留规则
+- `viewportScroll`：桌面/移动视口、回顶和焦点处理
+- `workspace`：工作区状态与诊断入口
+- `updateAlerts`：版本更新和提示
+
+`mixin-guard.js` 会检查 data、methods、computed 等同名冲突。新增壳层 mixin 时，要让模块自己创建和清理 timer、window/document listener，不要把资源清理重新塞回 `shell.js`
+
+系统设置和通知设置通过 `shell-module-host.js` 按需加载：
+
+- `modules/shell/system-settings/`
+- `modules/shell/notification-settings/`
+
+通知字段继续复用 `notification-channel-fields.js` 和 `channel-fields.html`，不要在桌面/移动模板各复制一套字段逻辑
+
+## API 层约定
+
+内部接口优先放在 `js/api/`：
+
+- 房间：`room-api.js`
+- 用户：`user-api.js`
+- 历史：`history-api.js`
+- 分P：`part-api.js`
+- 预览：`preview-api.js`
+- 统计：`stats-api.js`
+- 日志：`log-api.js`
+- 通知：`notification-api.js`
+- 存储：`storage-api.js`
+- 诊断：`diagnostic-api.js`
+
+页面方法里尽量调用语义化 API 方法，不要到处直接拼 URL。登录、初始化和验证码仍是独立页面，可以保留各自较轻的依赖边界
+
+## 新增业务页
+
+1. 在 `modules/pages/<page>/` 创建 desktop/mobile 模板、CSS 和 `page.js`
+2. 复杂逻辑按职责放到 `methods/`；复杂模板按 surface 放到 `fragments/`
+3. 在 `js/api/` 添加需要的语义化接口封装
+4. 在 `modules/manifest.json` 声明模板、分片、样式、依赖脚本和入口顺序
+5. 在入口中调用 `BiliupModuleRegistry.define('page.<page>', factory)`
+6. 为模板补齐 `data-page-scroll-root` 和 `data-page-focus-target`
+7. 接入 `page-ready`、连接状态、页面状态和必要的诊断事件
+8. 在 `beforeDestroy` 中完成资源清理
+9. 把页面名加入壳层白名单、模块页列表和断连规则
+10. 更新 manifest/native-image/重定向相关测试，并运行本地检查
+
+如果新增的是需要保留未保存表单的设置模块，放到 manifest 的 `shell` 集合，并使用 `shell-module-host.js`；不要把普通业务页改成常驻
+
+## URL 与部署
+
+- 壳层只接受白名单中的 `?page=`
+- 切页使用 `history.replaceState`，不会不断制造浏览器历史记录
+- 移动端自动跳转和 `/mobile` 补斜杠会保留查询参数
+- 旧 `/html/stats.html`、`history.html`、`room.html` 及移动端地址由控制器重定向到对应模块页
+- `url-resolver.js` 负责 `/biliup` 等非根 context path
+- `/modules/**` 按公共静态前端资源处理，也适用于启用 Basic Auth 的部署
+- `META-INF/native-image/resource-config.json` 必须覆盖 `static/modules/.*`
+
+不要恢复可运行的 iframe 备份页面。旧地址只保留兼容重定向，业务实现以模块页为唯一来源
+
+## 样式约定
+
+- 页面样式以页面根类为边界，例如 `.page-surface-history`
+- 不要在页面模块里覆盖裸 `html`、`body`、`.el-dialog` 或其他全局选择器
+- append-to-body 内容必须有页面专属 class
+- 公共变量和真正跨页面的组件样式放 `css/base/`
+- desktop/mobile 的结构差异优先由模板表达，不靠隐藏一整套另一端 DOM
+- 不要为了减少文件数重新合并已经按职责拆开的 CSS
+
+页面 CSS 首次加载后会留在文档中，由加载器切换 `media` 激活状态。样式必须能在停用后不影响其他页面
+
+## 本地检查
+
+基础检查：
+
+```powershell
+node scripts/check-mobile-redirect.js
+node scripts/check-module-boundaries.js
+node scripts/check-module-runtime.js
+node scripts/check-page-lifecycles.js
+node scripts/check-shell-mixins.js
+mvn -DskipTests compile
+mvn test -DskipITs "-Dtest=MvcConfigTest,HtmlPageControllerRedirectTest,FrontendModuleManifestTest,FrontendVersionServiceTest"
+git diff --check
+```
+
+浏览器至少覆盖：
+
+- 桌面端 1440px
+- 手机端 375px、430px和横屏
+- 明暗主题和隐私模式
+- 断连与恢复
+- 首次加载、缓存命中、404 后重试和快速切页
+- 弹窗、工作区、导航锁和浏览器关闭保护
+- 页面反复进入退出后的轮询、监听器、WebSocket、播放器和遮罩残留
+- 键盘切页焦点、回顶和 `prefers-reduced-motion`
+
+发布前还要做一次打包 JAR 的模块静态资源冒烟；提供 native-image 时，再检查一次原生可执行文件中的模块资源

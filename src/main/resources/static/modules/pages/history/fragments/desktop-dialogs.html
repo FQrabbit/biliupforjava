@@ -1,0 +1,310 @@
+    <!-- 编辑弹窗 -->
+    <el-dialog :visible.sync="editDialogFormVisible" :fullscreen="isMobile" title="编辑记录" custom-class="history-page-dialog edit-dialog">
+        <el-form :model="history" label-width="100px">
+            <el-form-item label="是否上传">
+                <el-select placeholder="请选择" v-model="history.upload" popper-class="history-page-select-popper">
+                    <el-option label="是" :value="true"></el-option>
+                    <el-option label="否" :value="false"></el-option>
+                </el-select>
+            </el-form-item>
+            <el-form-item label="是否录制中">
+                <el-select placeholder="请选择" v-model="history.recording" popper-class="history-page-select-popper">
+                    <el-option label="是" :value="true"></el-option>
+                    <el-option label="否" :value="false"></el-option>
+                </el-select>
+            </el-form-item>
+            <el-form-item label="稿件可见性">
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                    <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" :content="visibilityActionDisabledReason || '切换为公开可见'" placement="top">
+                        <span>
+                            <el-button
+                                size="small"
+                                type="success"
+                                plain
+                                :disabled="!canOperateVisibilitySwitch"
+                                @click="setHistoryVisibility(0)">
+                                设为公开
+                            </el-button>
+                        </span>
+                    </el-tooltip>
+                    <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" :content="visibilityActionDisabledReason || '切换为仅自己可见'" placement="top">
+                        <span>
+                            <el-button
+                                size="small"
+                                type="warning"
+                                plain
+                                :disabled="!canOperateVisibilitySwitch"
+                                @click="setHistoryVisibility(1)">
+                                设为仅自己可见
+                            </el-button>
+                        </span>
+                    </el-tooltip>
+                </div>
+                <div style="margin-top:6px; font-size:12px; color:#909399; line-height:1.5;">
+                    仅审核通过（公开/仅自己可见）且稿件全部流程完成时可操作。
+                </div>
+            </el-form-item>
+        </el-form>
+        <div class="dialog-footer" slot="footer">
+            <el-button class="modern-btn" @click="editDialogFormVisible = false">取 消</el-button>
+            <el-button class="modern-btn" @click="updateHistory()" type="primary">保 存</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="放弃待发送队列" :visible.sync="abandonQueueDialogVisible" width="500px" append-to-body custom-class="history-page-dialog history-abandon-queue-dialog">
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 15px;">此操作会将已排队但未发送的弹幕/评论标记为已放弃，后续任务不会继续重试。</p>
+            <div style="background-color: #fdf6ec; color: #E6A23C; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
+                <i class="el-icon-warning"></i> 不会删除弹幕数据，也不会删除本地弹幕文件；如需重新发送，可再使用“重载弹幕”重新生成队列。
+            </div>
+            <el-form label-width="200px">
+                <el-form-item label="普通弹幕队列">
+                    <el-switch v-model="abandonQueueOptions.ordinary" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+                <el-form-item label="SC/上舰高级队列">
+                    <el-switch v-model="abandonQueueOptions.advanced" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+                <el-form-item label="评论汇总">
+                    <el-switch v-model="abandonQueueOptions.reply" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">停止继续补发 SC/上舰/礼物评论汇总</div>
+                </el-form-item>
+                <el-form-item label="同时强制归档">
+                    <el-switch v-model="abandonQueueOptions.forceArchive" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+            </el-form>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="abandonQueueDialogVisible = false" size="small">取 消</el-button>
+            <el-button type="warning" @click="handleAbandonQueueConfirm" size="small">放弃发送</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="清理历史待发送队列" :visible.sync="msgQueueCleanupDialogVisible" width="560px" append-to-body custom-class="history-page-dialog history-queue-cleanup-dialog">
+        <div class="queue-cleanup-dialog">
+            <p>用于清理旧版本或异常状态遗留下来的待发送弹幕/评论。不会删除弹幕数据，也不会删除本地文件。</p>
+            <el-form label-width="180px" size="small">
+                <el-form-item label="清理范围">
+                    <el-checkbox v-model="msgQueueCleanupOptions.ordinary">普通弹幕</el-checkbox>
+                    <el-checkbox v-model="msgQueueCleanupOptions.advanced">SC/上舰弹幕</el-checkbox>
+                    <el-checkbox v-model="msgQueueCleanupOptions.reply">评论汇总</el-checkbox>
+                </el-form-item>
+                <el-form-item label="同时强制归档">
+                    <el-switch v-model="msgQueueCleanupOptions.forceArchive" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                </el-form-item>
+                <el-form-item label="只处理结束超过">
+                    <el-input-number v-model="msgQueueCleanupOptions.olderThanDays" :min="0" :max="3650" :step="1" controls-position="right"></el-input-number>
+                    <span class="queue-cleanup-unit">天的稿件</span>
+                </el-form-item>
+                <el-form-item label="单次最多处理">
+                    <el-input-number v-model="msgQueueCleanupOptions.limit" :min="1" :max="20000" :step="500" controls-position="right"></el-input-number>
+                    <span class="queue-cleanup-unit">个稿件</span>
+                </el-form-item>
+            </el-form>
+            <div v-if="msgQueueCleanupPreview" class="queue-cleanup-preview">
+                <div>扫描结果：</div>
+                <div>命中稿件：{{ msgQueueCleanupPreview.historyCount || 0 }} 个</div>
+                <div>普通弹幕：{{ msgQueueCleanupPreview.ordinary || 0 }} 条</div>
+                <div>SC/上舰：{{ msgQueueCleanupPreview.advanced || 0 }} 条</div>
+                <div>评论汇总：{{ msgQueueCleanupPreview.reply || 0 }} 个</div>
+                <div>强制归档：{{ msgQueueCleanupPreview.forceArchived || 0 }} 个</div>
+                <div v-if="msgQueueCleanupPreview.limited" class="queue-cleanup-warning">符合条件的稿件较多，本次只扫描前 {{ msgQueueCleanupPreview.limit }} 个。</div>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="msgQueueCleanupDialogVisible = false" size="small" :disabled="msgQueueCleanupApplying">取 消</el-button>
+            <el-button @click="previewMsgQueueCleanup" size="small" :loading="msgQueueCleanupPreviewLoading" :disabled="msgQueueCleanupApplying">扫 描</el-button>
+            <el-button type="warning" @click="applyMsgQueueCleanup" size="small" :loading="msgQueueCleanupApplying" :disabled="!msgQueueCleanupPreview || msgQueueCleanupPreview.totalActions <= 0">确认清理</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 重载弹幕确认弹窗 -->
+    <el-dialog title="重载弹幕确认" :visible.sync="reloadDialogVisible" width="500px" append-to-body custom-class="history-page-dialog history-reload-dialog">
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 15px;">此操作将重新解析并加载弹幕文件到数据库。</p>
+            <div style="background-color: #fef0f0; color: #f56c6c; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
+                <i class="el-icon-warning"></i> 警告：如果您开启了以下开关，可能会导致任务被强制中断并重置，从而引起弹幕重复发送等问题，请务必确认当前没有正在进行的重要发送任务！
+            </div>
+            <el-form label-width="200px">
+                <el-form-item label="重置普通弹幕任务">
+                    <el-switch v-model="reloadOptions.restartOrdinary" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前普通弹幕发送线程并从头开始</div>
+                </el-form-item>
+                <el-form-item label="重置高级弹幕任务">
+                    <el-switch v-model="reloadOptions.restartAdvanced" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前SC/上舰发送线程并从头开始</div>
+                </el-form-item>
+            </el-form>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="reloadDialogVisible = false" size="small">取 消</el-button>
+            <el-button type="primary" @click="handleReloadConfirm" size="small">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="补全分P文件" :visible.sync="bindFileDialogVisible" width="600px" append-to-body custom-class="history-page-dialog history-bind-file-dialog">
+        <div v-if="bindTargetPart">
+            <div style="font-size: 13px; color: #606266; margin-bottom: 10px;">
+                P{{ bindTargetPart.page }} / partId={{ bindTargetPart.partId }}
+            </div>
+            <div v-if="bindTargetPart.issueMessage" style="background: #fff7e6; border: 1px solid #f3d19e; padding: 10px; border-radius: 6px; color: #E6A23C; font-size: 13px; margin-bottom: 12px;">
+                <i class="el-icon-warning"></i> {{ bindTargetPart.issueMessage }}
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+            <el-input v-model="candidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）" style="flex: 1;"></el-input>
+            <el-button size="small" @click="loadCandidateFiles" :loading="candidateFilesLoading">刷新列表</el-button>
+        </div>
+        <el-select v-model="selectedCandidateFile" filterable clearable placeholder="请选择要绑定的文件" style="width: 100%;" :loading="candidateFilesLoading" popper-class="history-page-select-popper">
+            <el-option v-for="f in candidateFiles" :key="f.filePath" :label="privacyMode ? '***' : (f.name + ' (' + formatSize(f.size) + ')')" :value="f.filePath">
+                <span style="float:left">{{ maskText(f.name) }}</span>
+                <span style="float:right; color:#909399; font-size:12px;">{{ formatSize(f.size) }}</span>
+            </el-option>
+        </el-select>
+        <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-size: 12px; color: #909399;">
+                文件来自服务器工作目录
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size: 12px; color: #606266;">绑定后触发上传</span>
+                <el-switch v-model="bindTriggerUpload"></el-switch>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="bindFileDialogVisible = false">取 消</el-button>
+            <el-button type="primary" :disabled="!selectedCandidateFile" @click="submitBindFile">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="预览视频" :visible.sync="previewDialogVisible" width="860px" append-to-body custom-class="history-page-dialog part-preview-dialog" :before-close="beforeClosePartPreviewDialog" @closed="onPartPreviewDialogClosed">
+        <div class="part-preview-panel">
+            <div class="part-preview-header">
+                <div>
+                    <span class="part-badge" v-if="previewPart">P{{ previewPart.page }}</span>
+                    <span class="part-preview-title">{{ previewMeta && previewMeta.fileName ? maskText(previewMeta.fileName) : '分P视频' }}</span>
+                </div>
+                <div class="part-preview-mode">
+                    {{ previewMode === 'mp4' ? 'MP4 可拖动预览' : 'FLV 快速预览' }}
+                </div>
+            </div>
+            <div class="part-preview-video-wrap">
+                <div ref="partPreviewPlayer" class="part-preview-video"></div>
+            </div>
+            <div v-if="previewMeta && previewMeta.recording" class="part-preview-tip is-warning">
+                文件仍在写入，直接预览可能可用，但生成 MP4 预览可能不完整。
+            </div>
+            <div v-else-if="previewMode === 'flv'" class="part-preview-tip">
+                FLV 快速预览适合确认内容，拖动进度可能不稳定。生成 MP4 后可获得更好的拖动体验。
+            </div>
+            <div v-if="previewTask && (previewTask.status === 'RUNNING' || previewTask.status === 'PENDING')" class="part-preview-progress">
+                <el-progress :percentage="Number(previewTask.percent) || 0" :stroke-width="8"></el-progress>
+                <span>{{ previewTask.message || '正在生成可拖动预览' }}</span>
+            </div>
+            <div v-if="previewError" class="part-preview-tip is-error">{{ previewError }}</div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button v-if="showPreviewFallbackButton" size="small" @click="switchPreviewSource('flv')">回退 FLV</el-button>
+            <el-button v-if="showPreviewCancelButton" size="small" type="warning" plain @click="cancelPreviewPrepare">取消封装</el-button>
+            <el-button size="small" type="primary" @click="preparePartPreview" :loading="previewPreparing" :disabled="previewPrepareDisabled">{{ previewPrepareButtonText }}</el-button>
+            <el-button v-if="canDetachPartPreview" size="small" type="success" plain icon="el-icon-headset" @click="detachPartPreview">后台播放</el-button>
+            <el-button size="small" @click="requestClosePartPreview">关闭</el-button>
+        </div>
+    </el-dialog>
+
+    <transition name="part-preview-mini">
+        <div v-if="previewDetached && previewPart" class="part-preview-mini" :class="{ 'is-collapsed': previewMiniCollapsed, 'is-paused': previewMiniPaused }" :style="{ '--part-preview-mini-progress': previewMiniProgress + '%' }">
+            <div class="part-preview-mini-video" ref="partPreviewMiniPlayer"></div>
+            <div class="part-preview-mini-bar">
+                <div class="part-preview-mini-meta">
+                    <span class="part-badge">P{{ previewPart.page }}</span>
+                    <span class="part-preview-mini-title">{{ previewMeta && previewMeta.fileName ? maskText(previewMeta.fileName) : '分P视频' }}</span>
+                    <span class="part-preview-mini-mode">{{ previewMode === 'mp4' ? 'MP4' : 'FLV' }}</span>
+                </div>
+                <button type="button" class="part-preview-mini-btn part-preview-mini-play" :title="previewMiniPaused ? '播放' : '暂停'" @click="togglePreviewMiniPlayback">
+                    <i :class="previewMiniPaused ? 'el-icon-video-play' : 'el-icon-video-pause'"></i>
+                </button>
+                <div class="part-preview-mini-wave" aria-hidden="true"></div>
+                <div class="part-preview-mini-actions">
+                    <button type="button" class="part-preview-mini-btn" :title="previewMiniCollapsed ? '展开小窗' : '折叠音频条'" @click="togglePreviewMiniCollapsed">
+                        <i :class="previewMiniCollapsed ? 'el-icon-plus' : 'el-icon-minus'"></i>
+                    </button>
+                    <button type="button" class="part-preview-mini-btn" title="返回大窗" @click="restorePartPreviewDialog">
+                        <i class="el-icon-full-screen"></i>
+                    </button>
+                    <button type="button" class="part-preview-mini-btn is-danger" title="停止播放" @click="stopPartPreview">
+                        <i class="el-icon-close"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <el-dialog :title="editPartFileDialogMode === 'add' ? '从工作目录添加分P' : '从工作目录替换分P'" :visible.sync="editPartFileDialogVisible" width="640px" append-to-body custom-class="history-page-dialog history-edit-part-file-dialog">
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+            <el-input v-model="editCandidateKeyword" clearable size="small" placeholder="按文件名搜索（可选）" style="flex: 1;"></el-input>
+            <el-button size="small" @click="loadEditCandidateFiles" :loading="editCandidateFilesLoading">刷新列表</el-button>
+        </div>
+        <el-select v-model="selectedEditCandidateFile" filterable clearable placeholder="请选择视频文件" style="width: 100%;" :loading="editCandidateFilesLoading" popper-class="history-page-select-popper">
+            <el-option v-for="f in editCandidateFiles" :key="f.filePath" :label="privacyMode ? '***' : (f.name + ' (' + formatSize(f.size) + ')')" :value="f.filePath">
+                <span style="float:left">{{ maskText(f.name) }}</span>
+                <span style="float:right; color:#909399; font-size:12px;">{{ formatSize(f.size) }}</span>
+            </el-option>
+        </el-select>
+        <div style="margin-top: 12px; font-size: 12px; color: #909399;">
+            文件来自当前房间工作目录，保存编辑时才会正式上传到 B 站。
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="editPartFileDialogVisible = false">取 消</el-button>
+            <el-button type="primary" :disabled="!selectedEditCandidateFile" @click="applyEditCandidateFile">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 批量删除确认弹窗 -->
+    <el-dialog title="批量删除确认" :visible.sync="batchDeleteDialogVisible" width="480px" append-to-body :close-on-click-modal="false" :close-on-press-escape="!batchDeleteRunning" :show-close="!batchDeleteRunning" custom-class="history-page-dialog batch-delete-dialog">
+        <div class="batch-delete-confirm">
+            <div class="batch-delete-warning">
+                <i class="el-icon-warning-outline"></i>
+                <div>
+                    <strong>永久删除 {{ selectedItems.length }} 条录制历史记录？</strong>
+                    <span>数据库记录删除后不可恢复。本地文件默认保留。</span>
+                </div>
+            </div>
+            <div class="batch-delete-options">
+                <div class="batch-delete-options-title">同时删除本地文件（可选）</div>
+                <el-checkbox v-model="batchDeleteOptions.deleteVideo" :disabled="batchDeleteRunning">视频文件（.mp4 / .flv / .mkv 等）</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteDanmaku" :disabled="batchDeleteRunning">弹幕文件（.xml / .ass）</el-checkbox>
+                <el-checkbox v-model="batchDeleteOptions.deleteCover" :disabled="batchDeleteRunning">封面图片（.jpg / .png 等）</el-checkbox>
+            </div>
+            <div v-if="isDeleteOptionSelected" class="batch-delete-danger-note">
+                <i class="el-icon-warning"></i>
+                勾选的本地文件也会被永久删除，无法恢复。
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="batchDeleteDialogVisible = false" :disabled="batchDeleteRunning">取 消</el-button>
+            <el-button type="danger" @click="confirmBatchDelete" :loading="batchDeleteRunning" :disabled="selectedItems.length === 0">确认删除 {{ selectedItems.length }} 项</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 单条删除确认弹窗 -->
+    <el-dialog title="删除记录确认" :visible.sync="singleDeleteDialogVisible" width="420px" append-to-body :close-on-click-modal="false" custom-class="history-page-dialog history-single-delete-dialog">
+        <div style="padding: 0 4px;">
+            <div style="display:flex; align-items:flex-start; margin-bottom:16px;">
+                <i class="el-icon-warning" style="font-size:22px; color:#E6A23C; margin-right:10px; margin-top:2px; flex-shrink:0;"></i>
+                <span style="line-height:1.6; color:var(--text-primary);">此操作将永久删除该条录制历史记录（数据库数据），<strong>不可恢复</strong>。</span>
+            </div>
+            <div style="background:var(--bg-tertiary); border-radius:6px; padding:12px 16px; margin-bottom:8px;">
+                <div style="font-size:13px; color:var(--text-secondary); margin-bottom:10px;">同时删除本地文件（可选）：</div>
+                <el-checkbox v-model="singleDeleteOptions.deleteVideo" style="display:block; margin-bottom:8px;">视频文件（.mp4 / .flv / .mkv 等）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteDanmaku" style="display:block; margin-bottom:8px;">弹幕文件（.xml / .ass）</el-checkbox>
+                <el-checkbox v-model="singleDeleteOptions.deleteCover" style="display:block;">封面图片（.jpg / .png 等）</el-checkbox>
+            </div>
+            <div v-if="singleDeleteOptions.deleteVideo || singleDeleteOptions.deleteDanmaku || singleDeleteOptions.deleteCover"
+                 style="font-size:12px; color:#F56C6C; margin-top:8px;">
+                ⚠ 勾选的本地文件将被永久删除，无法恢复！
+            </div>
+        </div>
+        <div slot="footer">
+            <el-button @click="singleDeleteDialogVisible = false">取 消</el-button>
+            <el-button type="danger" @click="confirmDeleteHistory">确认删除</el-button>
+        </div>
+    </el-dialog>

@@ -1,0 +1,188 @@
+/* ========== LOG 控制台页面专属样式 ========== */
+
+/* 页面布局 */
+.log-page {
+    height: 100%;
+}
+
+/* ========== 日志行样式 ========== */
+.log-line {
+    padding: var(--space-xs) var(--space-sm);
+    line-height: 1.6;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    transition: background-color var(--transition-base);
+    cursor: default;
+}
+
+.log-line:hover {
+    background-color: var(--hover-bg);
+}
+
+.log-line.nowrap {
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.log-line.nowrap .log-message {
+    white-space: nowrap;  /* .log-message 自身有 white-space: pre-wrap 会覆盖继承值，需显式声明 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 多选模式 */
+.log-line.selection-mode {
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.log-line.selection-mode:hover {
+    background-color: var(--brand-soft-bg);
+}
+
+.log-line.selected {
+    background-color: var(--brand-soft-bg-active);
+    border-left: 3px solid var(--primary-color);
+    padding-left: calc(var(--space-sm) - 3px);
+}
+
+/* 新日志闪烁动画 */
+.log-line.new-log {
+    animation: log-flash-in 0.6s var(--ease-spring) 1;
+}
+
+@keyframes log-flash-in {
+    0% {
+        background-color: var(--brand-soft-bg-strong);
+        transform: translateX(-4px);
+    }
+    50% {
+        background-color: var(--brand-soft-bg-strong);
+    }
+    100% {
+        background-color: transparent;
+        transform: translateX(0);
+    }
+}
+
+/* ========== 语法高亮 ========== */
+.log-url {
+    color: var(--primary-color);
+    text-decoration: underline;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all var(--transition-base);
+}
+
+.log-url:hover {
+    opacity: 0.8;
+}
+
+.log-date {
+    color: var(--success-color);
+    font-weight: 500;
+}
+
+.log-path {
+    color: var(--warning-color);
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-weight: 500;
+}
+
+.log-bracket {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.log-number {
+    color: var(--danger-color);
+    font-weight: 500;
+}
+
+/* ========== 动画过渡 ========== */
+@media (prefers-reduced-motion: reduce) {
+    .log-toolbar-card,
+    .log-line,
+    .log-line.new-log,
+    .log-console::-webkit-scrollbar-thumb,
+    .alert-dialog,
+    .detail-dialog,
+    .context-dialog {
+        animation: none !important;
+        transition: none !important;
+    }}
+
+.freq-range-pill.active {
+    color: var(--primary-color);
+    background: var(--brand-soft-bg-active);
+    border-color: var(--brand-accent-border);
+}
+
+.level-pill.active {
+    opacity: 1;
+}
+
+.level-pill.active:hover {
+    opacity: 1;
+}
+
+/* ========== 日志行级别着色 ========== */
+.log-line.line-warn {
+    border-left: 3px solid var(--warning-line);
+    background: var(--warning-soft-bg-faint);
+    padding-left: calc(var(--space-sm) - 3px);
+}
+
+.log-line.line-error {
+    border-left: 3px solid var(--danger-line);
+    background: var(--danger-soft-bg-faint);
+    padding-left: calc(var(--space-sm) - 3px);
+}
+
+.log-line.line-warn:hover {
+    background: var(--warning-soft-bg-hover);
+}
+
+.log-line.line-error:hover {
+    background: var(--danger-soft-bg-hover);
+}
+
+[data-theme="dark"] .log-line.line-warn {
+    background: var(--warning-soft-bg-faint);
+}
+
+[data-theme="dark"] .log-line.line-error {
+    background: var(--danger-soft-bg-faint);
+}
+
+/* ========== 所有詳情弹窗 - 缩放淡入动画 ========== */
+
+/* 从右侧缩放进入的关键帧 */
+@keyframes sidebar-scale-in {
+    0% {
+        opacity: 0;
+        transform: scale(0.85) translateX(100px);
+        transform-origin: right center;
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateX(0);
+        transform-origin: center center;
+    }
+}
+
+/* 淡出缩放离开的关键帧 */
+@keyframes sidebar-scale-out {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateX(0);
+        transform-origin: center center;
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.85) translateX(100px);
+        transform-origin: right center;
+    }
+}

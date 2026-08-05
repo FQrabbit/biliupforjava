@@ -62,6 +62,10 @@ public class FrontendVersionService {
     }
 
     public String renderHtml(String html) {
+        return renderHtml(html, "");
+    }
+
+    public String renderHtml(String html, String contextPath) {
         if (html == null) {
             return null;
         }
@@ -72,7 +76,7 @@ public class FrontendVersionService {
         rendered = LINK_PATTERN.matcher(rendered).replaceAll(match ->
                 match.group(1) + addVersionParam(match.group(2), versionParam) + match.group(3)
         );
-        rendered = injectBuildInfo(rendered);
+        rendered = injectBuildInfo(rendered, contextPath);
         return rendered;
     }
 
@@ -113,15 +117,24 @@ public class FrontendVersionService {
         return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
-    private String injectBuildInfo(String html) {
+    private String injectBuildInfo(String html, String contextPath) {
         String script = "<script>window.BILIUPFORJAVA_FRONTEND_BUILD_ID='" + escapeJs(buildId)
                 + "';window.BILIUPFORJAVA_FRONTEND_VERSION='" + escapeJs(version)
+                + "';window.BILIUPFORJAVA_CONTEXT_PATH='" + escapeJs(normalizeContextPath(contextPath))
                 + "';</script>";
         Matcher matcher = HEAD_PATTERN.matcher(html);
         if (matcher.find()) {
             return matcher.replaceFirst("<head>\n    " + Matcher.quoteReplacement(script));
         }
         return script + html;
+    }
+
+    private static String normalizeContextPath(String value) {
+        if (value == null || value.isBlank() || "/".equals(value)) {
+            return "";
+        }
+        String normalized = value.startsWith("/") ? value : "/" + value;
+        return normalized.replaceAll("/+$", "");
     }
 
     private static String addVersionParam(String url, String versionParam) {

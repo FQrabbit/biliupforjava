@@ -1,0 +1,1405 @@
+/* 房间编辑对话框头部*/
+
+.room-edit-dialog .el-dialog__header {
+
+    padding: 20px 24px;
+
+    background: var(--bg-primary);
+
+    border-bottom: 1px solid var(--border-light);
+
+}
+
+.room-edit-dialog .dialog-title-wrapper {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+}
+
+.room-edit-dialog .el-dialog__title {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    color: var(--text-primary);
+
+}
+
+.room-edit-dialog .dialog-room-info {
+
+    padding: 2px 8px;
+
+    background: var(--brand-soft-bg);
+
+    color: var(--primary-color);
+
+    border-radius: var(--radius-sm);
+
+    font-size: 12px;
+
+    font-weight: 500;
+
+}
+
+/* 房间编辑对话框主体*/
+
+.room-edit-dialog .el-dialog__body {
+
+    padding: 0;
+
+    background: var(--bg-secondary);
+
+    overflow-y: auto;
+
+    flex: 1;
+
+}
+
+/* 配置卡片 */
+
+.config-card {
+
+    background: var(--bg-primary);
+
+    border-radius: var(--radius-lg);
+
+    border: 1px solid var(--border-light);
+
+    overflow: hidden;
+
+    transition: box-shadow var(--duration-base) var(--ease-apple), border-color var(--duration-base) var(--ease-apple);
+
+}
+
+.config-card:hover {
+
+    box-shadow: var(--shadow-md);
+
+    border-color: var(--primary-light);
+
+}
+
+/* 底部按钮组*/
+
+.room-edit-dialog .el-dialog__footer {
+
+    padding: 16px 24px;
+
+    background: var(--bg-primary);
+
+    border-top: 1px solid var(--border-light);
+
+}
+
+.dialog-footer-modern {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+}
+
+.footer-actions-left {
+
+    display: flex;
+
+    gap: 12px;
+
+}
+
+.footer-actions-right {
+
+    display: flex;
+
+    gap: 12px;
+
+}
+
+/* 响应式布局 */
+
+@media (max-width: 768px) {
+
+    .dialog-footer-modern {
+
+        flex-direction: column;
+
+        gap: 16px;
+
+    }
+
+    .footer-actions-left, .footer-actions-right {
+
+        width: 100%;
+
+        justify-content: space-between;
+
+    }
+
+    .footer-actions-right button {
+
+        flex: 1;
+
+    }}
+
+/* ========== 房间编辑对话框(现代科技风格) ========== */
+
+/* 房间编辑对话框*/
+
+.room-config-dialog {
+
+    border-radius: 16px;
+
+    overflow: hidden;
+
+    box-shadow: var(--shadow-lg);
+
+    background: var(--bg-secondary);
+
+    max-width: 900px;
+
+    width: 90%;
+
+    margin-top: 0 !important; /* 使用 flex 布局 */
+
+}
+
+/* 房间编辑对话框头部*/
+
+.dialog-header-modern {
+
+    padding: 20px 24px;
+
+    background: var(--bg-primary);
+
+    border-bottom: 1px solid var(--border-light);
+
+}
+
+.header-title-group {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 16px;
+
+}
+
+.header-icon-box {
+
+    width: 40px;
+
+    height: 40px;
+
+    border-radius: 12px;
+
+    background: linear-gradient(135deg, var(--brand-soft-bg), var(--brand-soft-bg-faint));
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    color: var(--primary-color);
+
+    font-size: 20px;
+
+    box-shadow: inset 0 0 0 1px var(--brand-accent-border-light);
+
+}
+
+.header-text-box {
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 4px;
+
+}
+
+.dialog-title {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    color: var(--text-primary);
+
+    line-height: 1.2;
+
+}
+
+.room-name-tag {
+
+    font-size: 12px;
+
+    color: var(--text-secondary);
+
+    background: var(--bg-tertiary);
+
+    padding: 2px 8px;
+
+    border-radius: 4px;
+
+    align-self: flex-start;
+
+}
+
+/* 房间编辑对话框主体*/
+
+.room-config-dialog .el-dialog__body {
+
+    padding: 24px;
+
+    background: var(--bg-secondary);
+
+    max-height: 70vh;
+
+    overflow-y: auto;
+
+}
+
+.config-layout {
+
+    display: block;
+
+    column-count: 2;
+
+    column-gap: 24px;
+
+    orphans: 1;
+
+    widows: 1;
+
+}
+
+.config-column {
+
+    display: contents;
+
+}
+
+.config-layout .config-card {
+
+    break-inside: avoid;
+
+    page-break-inside: avoid;
+
+    margin-bottom: 24px;
+
+}
+
+.config-layout .config-card:last-child {
+
+    margin-bottom: 0;
+
+}
+
+.card-header {
+
+    padding: 12px 16px;
+
+    background: var(--bg-tertiary);
+
+    border-bottom: 1px solid var(--border-light);
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    font-size: 14px;
+
+    font-weight: 600;
+
+    color: var(--text-primary);
+
+}
+
+.card-header i {
+
+    color: var(--primary-color);
+
+}
+
+.card-body {
+
+    padding: 16px;
+
+}
+
+/* 配置表单容器*/
+
+.room-config-form .el-form-item {
+
+    margin-bottom: 16px;
+
+}
+
+.room-config-form .el-form-item:last-child {
+
+    margin-bottom: 0;
+
+}
+
+.room-config-form .el-form-item__label {
+
+    padding-bottom: 4px;
+
+    line-height: 1.4;
+
+    font-size: 13px;
+
+    color: var(--text-secondary);
+
+}
+
+/* 配置样式输入框*/
+
+.room-config-form .el-input__inner,
+
+.room-config-form .el-textarea__inner {
+
+    background: var(--bg-tertiary);
+
+    border-color: transparent;
+
+    transition: border-color var(--duration-base) var(--ease-apple), box-shadow var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple);
+
+}
+
+.room-config-form .el-input__inner:focus,
+
+.room-config-form .el-textarea__inner:focus {
+
+    background: var(--bg-primary);
+
+    border-color: var(--primary-color);
+
+    box-shadow: var(--brand-ring);
+
+}
+
+/* 配置开关行 */
+
+.switch-grid {
+
+    display: grid;
+
+    grid-template-columns: 1fr 1fr;
+
+    gap: 12px;
+
+}
+
+.switch-card {
+
+    background: var(--bg-tertiary);
+
+    padding: 10px 12px;
+
+    border-radius: 8px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    border: 1px solid transparent;
+
+}
+
+.switch-card:hover {
+
+    border-color: var(--border-light);
+
+    background: var(--bg-primary);
+
+}
+
+.switch-label {
+
+    font-size: 13px;
+
+    color: var(--text-primary);
+
+    font-weight: 500;
+
+}
+
+/* 底部按钮组*/
+
+.dialog-footer-modern {
+
+    padding: 16px 24px;
+
+    background: var(--bg-primary);
+
+    border-top: 1px solid var(--border-light);
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+}
+
+.footer-actions-left,
+
+.footer-actions-right {
+
+    display: flex;
+
+    gap: 12px;
+
+}
+
+/* 响应式布局 */
+
+@media (max-width: 768px) {
+
+    .config-layout {
+
+        column-count: 1;
+
+    }
+
+    .room-config-dialog {
+
+        width: 95%;
+
+        margin: 10px auto;
+
+    }}
+
+/* 封面上传小组件*/
+
+.cover-uploader-mini {
+
+    display: block;
+
+    margin-top: 10px;
+
+}
+
+.cover-uploader-mini .el-upload {
+
+    border: 1px dashed var(--border-light);
+
+    border-radius: 6px;
+
+    cursor: pointer;
+
+    position: relative;
+
+    overflow: hidden;
+
+    width: 100%;
+
+    height: 120px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    background: var(--bg-tertiary);
+
+    transition: border-color var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple);
+
+}
+
+.cover-uploader-mini .el-upload:hover {
+
+    border-color: var(--primary-color);
+
+    background: var(--bg-primary);
+
+}
+
+.cover-uploader-mini.is-uploading .el-upload {
+
+    cursor: wait;
+
+    border-color: var(--primary-color);
+
+}
+
+.cover-uploader-mini.is-success .el-upload {
+
+    border-color: var(--success-color);
+
+}
+
+.cover-uploader-mini.is-error .el-upload {
+
+    border-color: var(--danger-color);
+
+}
+
+.cover-upload-surface {
+
+    position: relative;
+
+    width: 100%;
+
+    height: 100%;
+
+    overflow: hidden;
+
+}
+
+.cover-preview-mini {
+
+    width: 100%;
+
+    height: 100%;
+
+    background-size: cover;
+
+    background-position: center;
+
+}
+
+.cover-uploader-mini .cover-placeholder-mini {
+
+    width: 100%;
+
+    height: 100%;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+}
+
+.cover-placeholder-mini i {
+
+    font-size: 24px;
+
+    color: var(--text-secondary);
+
+}
+
+.cover-upload-overlay {
+
+    position: absolute;
+
+    inset: 0;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    gap: 10px;
+
+    padding: 20px 56px 20px 20px;
+
+    color: var(--text-primary);
+
+    background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
+
+    backdrop-filter: blur(4px);
+
+}
+
+.cover-upload-progress-copy {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 12px;
+
+    min-width: 0;
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+}
+
+.cover-upload-progress-copy span {
+
+    min-width: 0;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+}
+
+.cover-upload-progress-copy strong {
+
+    flex: 0 0 auto;
+
+    color: var(--text-primary);
+
+    font-size: 13px;
+
+    font-variant-numeric: tabular-nums;
+
+}
+
+.cover-upload-progress-copy i {
+
+    color: var(--primary-color);
+
+}
+
+.cover-upload-progress-track {
+
+    height: 6px;
+
+    overflow: hidden;
+
+    border-radius: 3px;
+
+    background: var(--brand-soft-bg-strong);
+
+}
+
+.cover-upload-progress-track span {
+
+    display: block;
+
+    width: 100%;
+
+    height: 100%;
+
+    border-radius: inherit;
+
+    background: var(--primary-color);
+
+    transform: scaleX(0);
+
+    transform-origin: left center;
+
+    transition: transform var(--duration-fast) var(--ease-decel);
+
+}
+
+.cover-upload-cancel {
+
+    position: absolute;
+
+    top: 8px;
+
+    right: 8px;
+
+    width: 44px;
+
+    height: 44px;
+
+    display: inline-grid;
+
+    place-items: center;
+
+    padding: 0;
+
+    border: 1px solid var(--border-color);
+
+    border-radius: 50%;
+
+    color: var(--text-secondary);
+
+    background: var(--bg-primary);
+
+    cursor: pointer;
+
+    transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+
+}
+
+.cover-upload-cancel:hover,
+.cover-upload-cancel:focus-visible {
+
+    color: var(--danger-color);
+
+    border-color: var(--danger-color);
+
+    background: var(--danger-soft-bg-faint);
+
+    outline: none;
+
+}
+
+.cover-upload-cancel:focus-visible {
+
+    box-shadow: 0 0 0 3px var(--danger-soft-bg-strong);
+
+}
+
+.cover-upload-status-slot {
+
+    min-height: 32px;
+
+    margin-top: 8px;
+
+}
+
+.cover-upload-status {
+
+    min-height: 32px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    padding: 6px 10px;
+
+    border: 1px solid transparent;
+
+    border-radius: 6px;
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+}
+
+.cover-upload-status i {
+
+    flex: 0 0 auto;
+
+    font-size: 16px;
+
+}
+
+.cover-upload-status span {
+
+    min-width: 0;
+
+    overflow-wrap: anywhere;
+
+}
+
+.cover-upload-status.is-success {
+
+    color: var(--text-primary);
+
+    border-color: var(--success-border);
+
+    background: var(--success-soft-bg-faint);
+
+}
+
+.cover-upload-status.is-success i {
+
+    color: var(--success-dark);
+
+}
+
+.cover-upload-status.is-error {
+
+    color: var(--text-primary);
+
+    border-color: var(--danger-border-soft);
+
+    background: var(--danger-soft-bg-faint);
+
+}
+
+.cover-upload-status.is-error i {
+
+    color: var(--danger-color);
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .cover-upload-progress-track span,
+    .cover-upload-status-enter-active,
+    .cover-upload-status-leave-active {
+
+        transition-duration: 1ms !important;
+
+    }}
+
+/* 直播封面展示小组件 */
+.cover-display-mini {
+    border: 1px dashed var(--border-light);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    transition: border-color var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple);
+    margin-top: 10px;
+}
+
+.cover-display-mini:hover {
+    border-color: var(--primary-color);
+    background: var(--bg-primary);
+}
+
+.cover-display-mini .cover-placeholder-mini {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+}
+
+.cover-display-mini .cover-placeholder-mini i {
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+.cover-display-mini .cover-placeholder-mini span {
+    font-size: 12px;
+}
+
+/* 线路测试按钮样式*/
+
+.line-test-actions {
+
+    margin-top: 10px;
+
+    display: flex;
+
+    gap: 10px;
+
+}
+
+.line-test-actions .el-button {
+
+    flex: 1;
+
+    border-radius: 8px;
+
+    border: 1px solid var(--border-light);
+
+    background: var(--bg-tertiary);
+
+    color: var(--text-primary);
+
+    transition: border-color var(--duration-base) var(--ease-apple), color var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple);
+
+}
+
+.line-test-actions .el-button:hover {
+
+    border-color: var(--primary-color);
+
+    color: var(--primary-color);
+
+    background: var(--bg-primary);
+
+}
+
+/* 配置选项卡片 */
+
+.option-card-form-item .el-form-item__content {
+
+    width: 100%;
+
+}
+
+.option-card-grid {
+
+    display: grid;
+
+    gap: 10px;
+
+    width: 100%;
+
+}
+
+.option-card-grid-two {
+
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+}
+
+.cover-segmented {
+
+    display: grid;
+
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    gap: 4px;
+
+    padding: 4px;
+
+    border: 1px solid var(--border-color);
+
+    border-radius: var(--radius-md);
+
+    background: var(--bg-tertiary);
+
+}
+
+.cover-segment {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 6px;
+
+    min-width: 0;
+
+    min-height: 38px;
+
+    padding: 0 10px;
+
+    border: 1px solid transparent;
+
+    border-radius: calc(var(--radius-md) - 2px);
+
+    background: transparent;
+
+    color: var(--text-secondary);
+
+    font: inherit;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+
+}
+
+.cover-segment i {
+
+    flex: 0 0 auto;
+
+    font-size: 16px;
+
+}
+
+.cover-segment span {
+
+    min-width: 0;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+}
+
+.cover-segment:hover {
+
+    color: var(--primary-color);
+
+    background: var(--brand-soft-bg-hover);
+
+}
+
+.cover-segment.is-active {
+
+    color: var(--primary-color);
+
+    background: var(--bg-primary);
+
+    border-color: var(--brand-accent-border);
+
+    box-shadow: var(--shadow-sm);
+
+}
+
+.cover-segment:focus-visible {
+
+    outline: 2px solid var(--primary-color);
+
+    outline-offset: 2px;
+
+}
+
+.cover-mode-hint {
+
+    min-height: 20px;
+
+    margin-top: 8px;
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    line-height: 1.6;
+
+}
+
+.delete-policy-hint {
+
+    margin-top: 8px;
+
+}
+
+.config-field-hint {
+
+    margin-top: 8px;
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    line-height: 1.6;
+
+}
+
+.threshold-policy-hint {
+
+    margin-top: -4px;
+
+    margin-bottom: 14px;
+
+}
+
+.option-card {
+
+    position: relative;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    min-height: 74px;
+
+    padding: 12px 14px;
+
+    border: 1px solid var(--border-color);
+
+    border-radius: var(--radius-lg);
+
+    background:
+
+        linear-gradient(145deg, color-mix(in srgb, var(--bg-tertiary) 84%, transparent), color-mix(in srgb, var(--bg-primary) 96%, transparent));
+
+    color: var(--text-primary);
+
+    font: inherit;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    overflow: hidden;
+
+    transition:
+
+        transform var(--transition-base),
+
+        border-color var(--transition-base),
+
+        background var(--transition-base),
+
+        box-shadow var(--transition-base);
+
+}
+
+.option-card::before {
+
+    content: "";
+
+    position: absolute;
+
+    inset: 0;
+
+    background: radial-gradient(circle at 20% 0%, var(--brand-soft-bg-faint), transparent 42%);
+
+    opacity: 0;
+
+    transition: opacity var(--transition-base);
+
+    pointer-events: none;
+
+}
+
+.option-card:hover:not(:disabled) {
+
+    transform: translateY(-1px);
+
+    border-color: var(--primary-color);
+
+    background:
+
+        linear-gradient(145deg, var(--brand-soft-bg-hover), color-mix(in srgb, var(--bg-primary) 94%, transparent));
+
+    box-shadow: 0 10px 26px -18px var(--brand-soft-bg-strong);
+
+}
+
+.option-card:hover:not(:disabled)::before,
+.option-card.is-active::before {
+
+    opacity: 1;
+
+}
+
+.option-card.is-active {
+
+    border-color: var(--primary-color);
+
+    background:
+
+        linear-gradient(145deg, var(--brand-soft-bg-active), color-mix(in srgb, var(--bg-primary) 90%, transparent));
+
+    box-shadow:
+
+        0 12px 32px -20px var(--brand-soft-bg-strong),
+
+        inset 0 0 0 1px var(--brand-soft-bg-strong);
+
+}
+
+.option-card-icon {
+
+    position: relative;
+
+    z-index: 1;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    width: 34px;
+
+    height: 34px;
+
+    border-radius: var(--radius-md);
+
+    background: var(--brand-soft-bg);
+
+    color: var(--primary-color);
+
+    flex: 0 0 auto;
+
+    transition:
+
+        background var(--transition-base),
+
+        color var(--transition-base),
+
+        transform var(--transition-base);
+
+}
+
+.option-card.is-active .option-card-icon {
+
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+
+    color: var(--text-inverse);
+
+    transform: scale(1.03);
+
+}
+
+.option-card-main {
+
+    position: relative;
+
+    z-index: 1;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 3px;
+
+    min-width: 0;
+
+    padding-right: 18px;
+
+}
+
+.option-card-main strong {
+
+    color: var(--text-primary);
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    line-height: 1.25;
+
+}
+
+.option-card-main em {
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    font-style: normal;
+
+    line-height: 1.25;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+}
+
+.option-card-check {
+
+    position: absolute;
+
+    z-index: 1;
+
+    right: 10px;
+
+    top: 10px;
+
+    color: var(--primary-color);
+
+    opacity: 0;
+
+    transform: scale(0.72);
+
+    transition:
+
+        opacity var(--transition-base),
+
+        transform var(--transition-base);
+
+}
+
+.option-card.is-active .option-card-check {
+
+    opacity: 1;
+
+    transform: scale(1);
+
+}
+
+.option-card:disabled,
+.option-card.is-disabled {
+
+    cursor: not-allowed;
+
+    opacity: 0.58;
+
+    transform: none;
+
+    box-shadow: none;
+
+}
+
+.option-card:focus-visible {
+
+    outline: 2px solid var(--primary-color);
+
+    outline-offset: 2px;
+
+}
+
+@media (max-width: 768px) {
+
+    .cover-segmented {
+
+        grid-template-columns: 1fr;
+
+    }
+
+    .option-card-grid-two,
+    .option-card-grid-three {
+
+        grid-template-columns: 1fr;
+
+    }}
+
+/* 配置输入框数字控件样式*/
+
+.room-config-form .el-input-number.is-controls-right .el-input__inner {
+
+    padding-left: 15px;
+
+    padding-right: 50px;
+
+}
+
+.room-config-form .el-input-number__decrease,
+
+.room-config-form .el-input-number__increase {
+
+    background: var(--bg-tertiary);
+
+    border-color: var(--border-light);
+
+    color: var(--text-secondary);
+
+}
+
+.room-config-form .el-input-number__decrease:hover,
+
+.room-config-form .el-input-number__increase:hover {
+
+    color: var(--primary-color);
+
+}
+
+/* 配置 mini 输入框宽度*/
+
+.room-config-form .el-input-number--mini {
+
+    width: 100px !important;
+
+}
+
+.room-config-form .el-input-number--mini .el-input__inner {
+
+    background: var(--bg-primary);
+
+    border: 1px solid var(--border-light);
+
+    padding-left: 5px;
+
+    padding-right: 5px;
+
+    text-align: center;
+
+}
+
+.room-config-form .el-input-number--mini .el-input-number__decrease,
+
+.room-config-form .el-input-number--mini .el-input-number__increase {
+
+    background: var(--bg-tertiary);
+
+    border-left: 1px solid var(--border-light);
+
+    border-right: 1px solid var(--border-light);
+
+}

@@ -1,0 +1,571 @@
+<div class="history-container page-surface-history" :class="{ 'is-batch-mode': isMultiSelectMode }">
+    <!-- 顶部导航栏 -->
+    <header class="history-header">
+        <div class="header-left">
+            <h1 class="page-title" data-page-focus-target tabindex="-1">
+                <i class="el-icon-time"></i>
+                <span>录制历史</span>
+            </h1>
+
+            <div v-if="viewMode === 'card'" class="card-legend" aria-label="卡片颜色说明">
+                <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" content="审核中 / 转码中 / 已提交" placement="bottom">
+                    <div class="legend-item">
+                        <span class="legend-dot legend-processing"></span>
+                        <span>处理中</span>
+                    </div>
+                </el-tooltip>
+                <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" content="被退回 / 被锁定 / 已删除" placement="bottom">
+                    <div class="legend-item">
+                        <span class="legend-dot legend-failed"></span>
+                        <span>失败</span>
+                    </div>
+                </el-tooltip>
+                <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" content="通过 / 仅自己可见" placement="bottom">
+                    <div class="legend-item">
+                        <span class="legend-dot legend-success"></span>
+                        <span>成功</span>
+                    </div>
+                </el-tooltip>
+            </div>
+
+            <div v-if="viewMode === 'card'" class="card-legend-compact" aria-label="卡片颜色说明(移动端)">
+                <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" placement="bottom">
+                    <div slot="content">
+                        <div>处理中：审核中 / 转码中 / 已提交</div>
+                        <div>失败：被退回 / 被锁定 / 已删除</div>
+                        <div>成功：通过 / 仅自己可见</div>
+                    </div>
+                    <div class="legend-compact-pill">
+                        <span class="legend-dot legend-processing"></span>
+                        <span class="legend-dot legend-failed"></span>
+                        <span class="legend-dot legend-success"></span>
+                        <span class="legend-compact-text">颜色说明</span>
+                    </div>
+                </el-tooltip>
+            </div>
+        </div>
+        <div class="header-actions">
+            <div class="view-toggle">
+                <button class="view-btn" :class="{ 'is-active': viewMode === 'card' }" @click="viewMode = 'card'" title="卡片视图">
+                    <i class="el-icon-menu"></i>
+                </button>
+                <button class="view-btn" :class="{ 'is-active': viewMode === 'table' }" @click="viewMode = 'table'" title="表格视图">
+                    <i class="el-icon-s-grid"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="history-main" data-page-scroll-root>
+
+        <!-- 分类标签页 -->
+        <div class="category-tabs-container" :class="{ 'is-disabled': isMultiSelectMode || batchVisibilityRunning }">
+            <el-tabs v-model="form.viewType" @tab-click="handleViewTypeChange">
+                <el-tab-pane name="working" :disabled="isMultiSelectMode || batchVisibilityRunning">
+                    <span slot="label">
+                        工作中的稿件
+                        <el-badge v-if="workingCount > 0" :value="workingCount" class="item" type="success" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
+                    </span>
+                </el-tab-pane>
+                <el-tab-pane name="archived" :disabled="isMultiSelectMode || batchVisibilityRunning">
+                    <span slot="label">
+                        已归档的稿件
+                        <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" content="归档表示不再参与常规处理；不会删除本地文件或稿件记录，必要时可在详情中恢复处理。" placement="top">
+                            <i class="el-icon-question tab-help-icon"></i>
+                        </el-tooltip>
+                        <el-badge v-if="archivedCount > 0" :value="archivedCount" class="item" type="info" style="margin-left: 5px; vertical-align: super; transform: scale(0.8);"></el-badge>
+                    </span>
+                </el-tab-pane>
+            </el-tabs>
+        </div>
+
+        <!-- 现代化筛选面板 -->
+        <div class="filter-panel" :class="{ 'is-expanded': filterExpanded }">
+            <div class="filter-header"
+                 role="button"
+                 tabindex="0"
+                 :aria-expanded="filterExpanded ? 'true' : 'false'"
+                 @click="filterExpanded = !filterExpanded"
+                 @keydown.enter.prevent="filterExpanded = !filterExpanded"
+                 @keydown.space.prevent="filterExpanded = !filterExpanded">
+                <div class="filter-title">
+                    <i class="el-icon-search"></i>
+                    <span>筛选条件</span>
+                    <el-badge :value="activeFilterCount" :hidden="activeFilterCount === 0" class="filter-badge"></el-badge>
+                </div>
+                <div class="filter-actions">
+                    <i :class="filterExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="expand-icon"></i>
+                </div>
+            </div>
+
+            <transition name="filter-slide">
+                <div class="filter-body" v-show="filterExpanded">
+                    <div class="filter-controls" :class="{ 'is-disabled': isMultiSelectMode }">
+                    <!-- 快捷筛选标签 -->
+                    <div class="quick-filters">
+                        <span class="quick-filter-label">快捷筛选：</span>
+                        <el-tag
+                            :type="quickFilter === 'recording' ? 'primary' : 'info'"
+                            :effect="quickFilter === 'recording' ? 'dark' : 'plain'"
+                            @click="isMultiSelectMode ? null : setQuickFilter('recording')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
+                            <i class="el-icon-video-camera"></i> 录制中
+                        </el-tag>
+                        <el-tag
+                            :type="quickFilter === 'success' ? 'success' : 'info'"
+                            :effect="quickFilter === 'success' ? 'dark' : 'plain'"
+                            @click="isMultiSelectMode ? null : setQuickFilter('success')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
+                            <i class="el-icon-circle-check"></i> 已通过
+                        </el-tag>
+                        <el-tag
+                            :type="quickFilter === 'self' ? 'success' : 'info'"
+                            :effect="quickFilter === 'self' ? 'dark' : 'plain'"
+                            @click="isMultiSelectMode ? null : setQuickFilter('self')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
+                            <i class="el-icon-view"></i> 仅自己可见
+                        </el-tag>
+                        <el-tag
+                            :type="quickFilter === 'fail' ? 'danger' : 'info'"
+                            :effect="quickFilter === 'fail' ? 'dark' : 'plain'"
+                            @click="isMultiSelectMode ? null : setQuickFilter('fail')"
+                            class="quick-tag"
+                            :class="{ 'is-disabled': isMultiSelectMode }">
+                            <i class="el-icon-circle-close"></i> 不通过
+                        </el-tag>
+                    </div>
+
+                    <!-- 详细筛选 -->
+                    <div class="filter-section-header">
+                        <span class="filter-section-title"><i class="el-icon-set-up"></i> 详细筛选</span>
+                    </div>
+                    <div class="filter-grid">
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-house"></i> 房间号</label>
+                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small" :disabled="isMultiSelectMode" popper-class="history-page-select-popper">
+                                <el-option
+                                        v-for="room in roomList"
+                                        :key="room.roomId"
+                                        :label="privacyMode ? '***' : (room.roomId + ' - ' + room.uname)"
+                                        :value="room.roomId">
+                                    <span style="float: left">{{ maskText(room.uname) }}</span>
+                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ maskText(room.roomId) }}</span>
+                                </el-option>
+                            </el-select>
+                        </div>
+
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-video-play"></i> BV号</label>
+                            <el-input v-model="form.bvId" clearable placeholder="输入BV号" size="small" @clear="onFilterChange" :disabled="isMultiSelectMode">
+                                <i slot="prefix" class="el-input__icon el-icon-search"></i>
+                            </el-input>
+                        </div>
+
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-upload2"></i> 上传状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.upload !== null && form.upload !== undefined" class="select-prefix-icon" :class="form.upload === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === true ? '#67c23a' : '#f56c6c'}"></i>
+                                <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload !== null && form.upload !== undefined}" :disabled="isMultiSelectMode" popper-class="history-page-select-popper">
+                                    <el-option label="已上传" :value="true">
+                                        <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已上传
+                                    </el-option>
+                                    <el-option label="未上传" :value="false">
+                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>未上传
+                                    </el-option>
+                                </el-select>
+                            </div>
+                        </div>
+
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-video-camera"></i> 录制状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.recording !== null && form.recording !== undefined" class="select-prefix-icon" :class="form.recording === true ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === true ? '#e6a23c' : '#909399'}"></i>
+                                <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording !== null && form.recording !== undefined}" :disabled="isMultiSelectMode" popper-class="history-page-select-popper">
+                                    <el-option label="录制中" :value="true">
+                                        <i class="el-icon-video-camera" style="color: #e6a23c; margin-right: 6px;"></i>录制中
+                                    </el-option>
+                                    <el-option label="已结束" :value="false">
+                                        <i class="el-icon-video-pause" style="color: #909399; margin-right: 6px;"></i>已结束
+                                    </el-option>
+                                </el-select>
+                            </div>
+                        </div>
+
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? '#67c23a' : '#909399'}"></i>
+                                <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode || isMultiSelectMode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}" popper-class="history-page-select-popper">
+                                    <el-option label="已发布" :value="true">
+                                        <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已发布
+                                    </el-option>
+                                    <el-option label="未发布" :value="false">
+                                        <i class="el-icon-circle-close" style="color: #909399; margin-right: 6px;"></i>未发布
+                                    </el-option>
+                                </el-select>
+                            </div>
+                        </div>
+
+                        <div class="filter-item">
+                            <label class="filter-label"><i class="el-icon-s-check"></i> 审核状态</label>
+                            <div class="select-with-icon">
+                                <i v-if="form.code !== null && form.code !== undefined && form.code !== ''" class="select-prefix-icon" :class="getCodeIcon(form.code)" :style="{color: getCodeColor(form.code)}"></i>
+                                <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}" :disabled="isMultiSelectMode" popper-class="history-page-select-popper">
+                                    <el-option label="未审核" :value="-999">
+                                        <i class="el-icon-remove-outline" style="color: #909399; margin-right: 6px;"></i>未审核
+                                    </el-option>
+                                    <el-option label="通过" :value="0">
+                                        <i class="el-icon-success" style="color: #67c23a; margin-right: 6px;"></i>通过
+                                    </el-option>
+                                    <el-option label="仅自己可见" :value="-50">
+                                        <i class="el-icon-view" style="color: #67c23a; margin-right: 6px;"></i>仅自己可见
+                                    </el-option>
+                                    <el-option label="不通过" :value="1">
+                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>不通过
+                                    </el-option>
+                                </el-select>
+                            </div>
+                        </div>
+
+                        <div class="filter-item filter-item-wide">
+                            <div class="filter-label-row">
+                                <label class="filter-label" title="按结束时间(endTime)筛选"><i class="el-icon-date"></i> 结束时间</label>
+                                <div class="date-shortcuts">
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(0)" :disabled="isMultiSelectMode">今天</el-link>
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(1)" :disabled="isMultiSelectMode">最近24h</el-link>
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(3)" :disabled="isMultiSelectMode">3天</el-link>
+                                    <el-link type="primary" :underline="false" @click="isMultiSelectMode ? null : setDateRange(7)" :disabled="isMultiSelectMode">7天</el-link>
+                                </div>
+                            </div>
+                            <div class="date-range">
+                                <el-date-picker
+                                        v-model="form.from"
+                                        type="datetime"
+                                        placeholder="开始时间"
+                                    value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                        size="small"
+                                        :disabled="isMultiSelectMode"
+                                        popper-class="history-page-picker-popper"
+                                        @change="onFilterChange">
+                                </el-date-picker>
+                                <span class="date-separator">至</span>
+                                <el-date-picker
+                                        v-model="form.to"
+                                        type="datetime"
+                                        placeholder="结束时间"
+                                    value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                        size="small"
+                                        :disabled="isMultiSelectMode"
+                                        popper-class="history-page-picker-popper"
+                                        @change="onFilterChange">
+                                </el-date-picker>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="filter-footer">
+                        <el-button class="modern-btn filter-action-btn filter-action-btn--query" type="primary" icon="el-icon-search" @click="initTable" size="small" :loading="loading" :disabled="loading || isMultiSelectMode">查询</el-button>
+                        <el-button class="modern-btn filter-action-btn filter-action-btn--reset" icon="el-icon-refresh" @click="resetFilters" size="small" :disabled="isMultiSelectMode">重置</el-button>
+                        <el-button class="modern-btn filter-action-btn filter-action-btn--manage" icon="el-icon-files" @click="toggleBatchMode" size="small" :type="isMultiSelectMode ? 'primary' : 'default'" plain :disabled="batchVisibilityRunning">
+                            {{ isMultiSelectMode ? '退出管理' : '批量管理' }}
+                        </el-button>
+                    </div>
+                </div>
+            </transition>
+        </div>
+
+        <!-- 数据内容区域 -->
+        <transition :name="transitionName">
+            <!-- 空状态 -->
+            <div v-if="!loading && tableData.length === 0" key="empty" class="empty-container">
+                <el-empty style="margin-top: 10vh;">
+                    <template #description>
+                        <div class="empty-desc">
+                            <p v-if="activeFilterCount > 0" class="empty-main-text">没有找到符合条件的记录</p>
+                            <p v-else class="empty-main-text">暂无历史记录</p>
+                            <span class="empty-hint" v-if="activeFilterCount > 0">您可以尝试调整筛选条件或重置筛选</span>
+                        </div>
+                    </template>
+                    <template #image>
+                        <div class="empty-image-modern">
+                            <i :class="activeFilterCount > 0 ? 'el-icon-search' : 'el-icon-folder-opened'"></i>
+                        </div>
+                    </template>
+                    <el-button v-if="activeFilterCount > 0" type="primary" size="small" @click="resetFilters" icon="el-icon-refresh-left" round>重置所有筛选</el-button>
+                </el-empty>
+            </div>
+
+            <!-- 卡片视图 -->
+            <div v-else-if="viewMode === 'card'" class="data-card-grid" :class="{'is-multi-select-mode': isMultiSelectMode}" :key="form.current" v-loading="loading" element-loading-text="加载中..."
+                 @mousedown.prevent="onSelectDragStart"
+                 @mousemove.prevent="onSelectDragMove"
+                 @mouseup.prevent="onSelectDragEnd"
+                 @mouseleave.prevent="onSelectDragEnd"
+                 @touchstart="onSelectTouchStart"
+                 @touchmove="onSelectTouchMove"
+                 @touchend="onSelectTouchEnd">
+                <div class="data-card"
+                     :class="{
+                        'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
+                        'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (abnormalPartCount(item) > 0),
+                        'is-success': item.publish && (item.code == 0 || item.code == -50),
+                        'is-selected': isMultiSelectMode && isSelected(item),
+                        'press-anim': pressedCardId === item.id
+                     }"
+                     data-stagger
+                     :style="{ animationDelay: (tableData.indexOf(item)) * 30 + 'ms' }"
+                     v-for="item in tableData" :key="item.id" :data-id="item.id" @click="handleCardClick(item)">
+                    <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
+                        <i class="el-icon-check selection-icon"></i>
+                    </div>
+                    <div style="position: absolute; top: 6px; left: 10px; font-size: 11px; color: var(--text-tertiary, #909399); opacity: 0.5; pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ID: {{ item.id }}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
+                            <div class="card-title">{{ maskText(item.title || '无标题') }}</div>
+                            <div class="card-bvid" :class="{ 'is-placeholder': !item.bvId }">
+                                <span v-if="item.bvId">BV: {{ maskText(item.bvId) }}</span>
+                                <span v-else>&nbsp;</span>
+                            </div>
+                            <div class="card-status-row">
+                                <!-- 统一状态显示 -->
+                                <span class="status-chip" :class="getStatusColor(item.status)">{{ item.status }}</span>
+
+                                <!-- 仅自己可见标签 -->
+                                <el-tag v-if="item.code === -50" size="mini" class="private-tag" effect="dark">
+                                    <i class="el-icon-view"></i> 仅自己可见
+                                </el-tag>
+
+                                <el-tooltip popper-class="history-page-tooltip-popper" v-if="abnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
+                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ abnormalPartCount(item) }}</span>
+                                </el-tooltip>
+                                <el-tooltip popper-class="history-page-tooltip-popper" v-if="skippedOnlyCount(item) > 0" effect="dark" content="文件低于配置阈值，已自动跳过" placement="top">
+                                    <span class="status-chip" style="background: rgba(230, 162, 60, 0.15); color: #e6a23c;">已跳过 {{ skippedOnlyCount(item) }}</span>
+                                </el-tooltip>
+                                <el-tooltip popper-class="history-page-tooltip-popper" v-if="uploadFlowFallbackCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatUploadFlowFallbackTooltip(item.uploadFlowFallbackReasons)" placement="top">
+                                    <span class="status-chip warn">上传已回退 {{ uploadFlowFallbackCount(item) }}</span>
+                                </el-tooltip>
+                            </div>
+                            <div class="card-meta">
+                                <span class="meta-chip">{{ formatDateTime(item.startTime) }}</span>
+                            </div>
+                        </div>
+                        <div class="card-info-right">
+                            <el-tag size="mini" type="info">{{ maskText(item.roomName) }}</el-tag>
+                            <el-tag size="mini" :type="getFileSizeColorType(item.fileSize)">{{ formatFileSize(item.fileSize) }}</el-tag>
+                            <span class="card-info-text">时长: {{ formatDuration(item.partDuration) }}</span>
+                            <span class="card-info-text">分P: {{ item.partCount }} / 已传: {{ item.uploadPartCount }}</span>
+                            <span class="card-info-text">弹幕: {{ item.successMsgCount }}/{{ item.msgCount }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 表格视图 -->
+            <div v-else class="table-container" key="table">
+                <el-table
+                        v-loading="loading"
+                        :data="tableData"
+                        height="calc(100vh - 280px)"
+                        style="width: 100%">
+                    <el-table-column label="ID" prop="id" width="60"></el-table-column>
+                    <el-table-column label="房间号" width="100">
+                        <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
+                    </el-table-column>
+                    <el-table-column label="主播" width="100">
+                        <template slot-scope="scope">{{ maskText(scope.row.roomName) }}</template>
+                    </el-table-column>
+                    <el-table-column label="BV号" width="120">
+                        <template slot-scope="scope">{{ maskText(scope.row.bvId) }}</template>
+                    </el-table-column>
+                    <el-table-column label="标题" min-width="150" show-overflow-tooltip>
+                        <template slot-scope="scope">{{ maskText(scope.row.title) }}</template>
+                    </el-table-column>
+                    <el-table-column label="文件大小" prop="fileSize" width="100">
+                        <template slot-scope="scope">
+                            <el-tag size="mini" :type="getFileSizeColorType(scope.row.fileSize)">{{ formatFileSize(scope.row.fileSize) }}</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="时长" prop="partDuration" width="110">
+                        <template slot-scope="scope">{{ formatDuration(scope.row.partDuration) }}</template>
+                    </el-table-column>
+                    <el-table-column label="分P" prop="partCount" width="60"></el-table-column>
+                    <el-table-column label="录制中分P" prop="recordPartCount" width="80"></el-table-column>
+                    <el-table-column label="已上传分P" prop="uploadPartCount" width="80"></el-table-column>
+                    <el-table-column label="异常分P" prop="giveUpPartCount" width="80">
+                        <template slot-scope="scope">
+                            <el-tag v-if="abnormalPartCount(scope.row) > 0" size="mini" type="danger">{{ abnormalPartCount(scope.row) }}</el-tag>
+                            <el-tag v-else-if="skippedOnlyCount(scope.row) > 0" size="mini" type="warning">跳过{{ skippedOnlyCount(scope.row) }}</el-tag>
+                            <span v-else style="color: #909399;">0</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="弹幕" prop="msgCount" width="70"></el-table-column>
+                    <el-table-column label="成功弹幕" prop="successMsgCount" width="80"></el-table-column>
+                    <el-table-column label="状态" prop="status" width="100">
+                        <template slot-scope="scope">
+                            <span class="status-chip" :class="getStatusColor(scope.row.status)">{{ scope.row.status }}</span>
+                        </template>
+                    </el-table-column>
+
+                    <el-table-column label="是否上传" prop="upload" width="90">
+                        <template slot-scope="scope">
+                            <span class="status-chip success" v-if="scope.row.upload">是</span>
+                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>否</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="是否发布成功" prop="publish" width="80">
+                        <template slot-scope="scope">
+                            <span class="status-chip success" v-if="scope.row.publish">已发布</span>
+                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="是否审核通过" prop="code" width="90">
+                        <template slot-scope="scope">
+                            <el-tag size="mini" type="info" v-if="!scope.row.publish">未审核</el-tag>
+                            <el-tag size="mini" type="success" v-else-if="scope.row.code == 0">通过</el-tag>
+                            <el-tag size="mini" class="private-tag" effect="dark" v-else-if="scope.row.code == -50"><i class="el-icon-view"></i> 仅自己可见</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -1">审核中</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == -2">被退回</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == -4">被锁定</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -9">转码中</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -30">已提交</el-tag>
+                            <el-tag size="mini" type="warning" v-else-if="scope.row.code == -40">定时发布</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == 62002">稿件不可见(62002)</el-tag>
+                            <el-tag size="mini" type="danger" v-else-if="scope.row.code == -100">已删除</el-tag>
+                            <el-tag size="mini" type="danger" v-else>未通过</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="开始时间" prop="startTime" width="160">
+                        <template slot-scope="scope">{{ formatDateTime(scope.row.startTime) }}</template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="140" fixed="right">
+                        <template slot-scope="scope">
+                            <el-button @click.stop="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
+                            <el-dropdown trigger="click" size="mini" @command="handleCommand($event, scope.row)">
+                                <el-button size="mini" type="text">
+                                    更多<i class="el-icon-arrow-down el-icon--right"></i>
+                                </el-button>
+                                <el-dropdown-menu slot="dropdown" class="history-page-dropdown-popper">
+                                    <el-dropdown-item command="exportDiagnostic" icon="el-icon-download">导出诊断包</el-dropdown-item>
+                                    <el-dropdown-item divided></el-dropdown-item>
+                                    <el-dropdown-item command="rePublish">转码失败修复</el-dropdown-item>
+                                    <el-dropdown-item command="highEnergyCutPublish">发布高能片段</el-dropdown-item>
+                                    <el-dropdown-item divided></el-dropdown-item>
+                                    <el-dropdown-item command="updatePartStatus">结束分p录制状态</el-dropdown-item>
+                                    <el-dropdown-item command="touchPublish">触发发布事件</el-dropdown-item>
+                                    <el-dropdown-item command="updatePublishStatus">重置为未上传发布</el-dropdown-item>
+                                    <el-dropdown-item divided></el-dropdown-item>
+                                    <el-dropdown-item command="reloadHistoryMsg">重新加载弹幕</el-dropdown-item>
+                                    <el-dropdown-item command="abandonHistoryMsgQueue">放弃待发送队列</el-dropdown-item>
+                                    <el-dropdown-item command="deleteHistoryMsg">删除弹幕</el-dropdown-item>
+                                    <el-dropdown-item divided></el-dropdown-item>
+                                    <el-dropdown-item command="deleteHistory" style="color: #F56C6C;">删除</el-dropdown-item>
+                                </el-dropdown-menu>
+                            </el-dropdown>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+        </transition>
+
+        <!-- 批量操作栏 -->
+        <div class="batch-action-bar" v-if="isMultiSelectMode">
+            <div class="batch-selection-summary">
+                <div class="batch-selection-main">
+                    <el-checkbox v-model="isAllSelected" :indeterminate="isIndeterminate" :disabled="batchVisibilityRunning">全选本页</el-checkbox>
+                    <span class="batch-count">已选 {{ selectedItems.length }} 项</span>
+                    <span class="batch-selection-hint" v-if="selectedItems.length === 0">选择稿件后即可执行批量操作</span>
+                </div>
+                <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" content="退出批量管理" placement="top">
+                    <el-button class="batch-close-button" size="mini" icon="el-icon-close" circle aria-label="退出批量管理" @click="toggleBatchMode" :disabled="batchVisibilityRunning"></el-button>
+                </el-tooltip>
+            </div>
+            <div class="batch-command-row">
+                <div class="batch-action-group">
+                    <span class="batch-action-label">上传状态</span>
+                    <el-button-group>
+                        <el-button class="batch-upload-enable" size="small" icon="el-icon-upload2" plain @click="handleBatchUpload(true)" :disabled="selectedUploadEnableCount === 0 || batchVisibilityRunning">
+                            开启 <span class="batch-action-count">{{ selectedUploadEnableCount }}</span>
+                        </el-button>
+                        <el-button class="batch-upload-disable" size="small" icon="el-icon-circle-close" plain @click="handleBatchUpload(false)" :disabled="selectedUploadDisableCount === 0 || batchVisibilityRunning">
+                            关闭 <span class="batch-action-count">{{ selectedUploadDisableCount }}</span>
+                        </el-button>
+                    </el-button-group>
+                </div>
+                <div class="batch-action-group">
+                    <span class="batch-action-label">稿件处理</span>
+                    <el-button class="batch-force-archive" size="small" icon="el-icon-switch-button" type="warning" plain @click="handleBatchForceArchive" :disabled="selectedForceArchiveEligibleCount === 0 || batchVisibilityRunning">
+                        强制归档 <span class="batch-action-count">{{ selectedForceArchiveEligibleCount }}</span>
+                    </el-button>
+                </div>
+                <div class="batch-action-group">
+                    <span class="batch-action-label">B站可见性</span>
+                    <el-button-group>
+                        <el-button class="batch-visibility-public" size="small" icon="el-icon-unlock" plain @click="handleBatchVisibility(0)" :disabled="selectedVisibilityPublicCount === 0 || batchVisibilityRunning">
+                            公开 <span class="batch-action-count">{{ selectedVisibilityPublicCount }}</span>
+                        </el-button>
+                        <el-button class="batch-visibility-private" size="small" icon="el-icon-lock" plain @click="handleBatchVisibility(1)" :disabled="selectedVisibilityPrivateCount === 0 || batchVisibilityRunning">
+                            仅自己 <span class="batch-action-count">{{ selectedVisibilityPrivateCount }}</span>
+                        </el-button>
+                    </el-button-group>
+                </div>
+                <div class="batch-action-group">
+                    <span class="batch-action-label">更多</span>
+                    <el-dropdown trigger="click" placement="top-start" @command="handleQueueMaintenanceCommand" :disabled="batchVisibilityRunning">
+                        <el-button size="small" icon="el-icon-more" plain :disabled="batchVisibilityRunning">
+                            队列维护<i class="el-icon-arrow-up el-icon--right"></i>
+                        </el-button>
+                        <el-dropdown-menu slot="dropdown" class="history-page-dropdown-popper">
+                            <el-dropdown-item command="selected" :disabled="selectedItems.length === 0" icon="el-icon-remove-outline">放弃已选待发送</el-dropdown-item>
+                            <el-dropdown-item command="historical" icon="el-icon-setting">清理历史待发送队列</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </div>
+                <div class="batch-danger-action">
+                    <el-button type="danger" size="small" icon="el-icon-delete" plain @click="handleBatchDelete" :disabled="selectedItems.length === 0 || batchVisibilityRunning">删除所选</el-button>
+                </div>
+            </div>
+        </div>
+
+        <transition name="fade">
+            <div class="batch-progress-float" v-if="batchVisibilityRunning">
+                <div class="batch-progress-title">{{ batchOperationTitle }}进行中</div>
+                <div class="batch-progress-meta">
+                    <span>目标：{{ batchVisibilityTargetText }}</span>
+                    <span>{{ batchVisibilityDone }}/{{ batchVisibilityTotal }}</span>
+                </div>
+                <el-progress class="batch-progress-bar" :percentage="batchVisibilityPercent" :stroke-width="10" status=""></el-progress>
+                <div class="batch-progress-meta batch-progress-meta-sub">
+                    <span>成功 {{ batchVisibilitySuccess }} / 失败 {{ batchVisibilityFail }}</span>
+                    <span v-if="batchVisibilityCurrentId">当前ID：{{ batchVisibilityCurrentId }}</span>
+                </div>
+            </div>
+        </transition>
+
+        <!-- 分页 -->
+        <div class="pagination-container">
+            <el-pagination
+                    @size-change="handleSizeChange"
+                    @current-change="handleCurrentChange"
+                    :disabled="isMultiSelectMode"
+                    :current-page.sync="form.current"
+                    :page-sizes="pageSizes"
+                    :page-size="form.pageSize || 10"
+                    :layout="isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
+                    :pager-count="isMobile ? 3 : 7"
+                    :small="isMobile"
+                    :total="total">
+            </el-pagination>
+        </div>
+    </main>
+
+    <template data-biliup-fragment="detail"></template>
+    <template data-biliup-fragment="dialogs"></template>
+</div>

@@ -1,0 +1,205 @@
+<div class="room-container mobile-room-container page-surface-room" data-page-scroll-root>
+    <section class="mobile-room-hero">
+        <div class="mobile-room-hero-copy">
+            <span>ROOM MONITOR</span>
+            <h2 data-page-focus-target tabindex="-1">{{ isSortMode ? '调整顺序' : '直播间' }}</h2>
+            <p>{{ isSortMode ? '正在调整房间顺序' : '监控直播、录制与投稿状态' }}</p>
+        </div>
+        <button type="button" class="mobile-room-hero-action" :class="{ 'is-open': mobileRoomActionsVisible }" @click="openMobileRoomActions" :aria-expanded="mobileRoomActionsVisible ? 'true' : 'false'" aria-label="打开房间管理操作">
+            <i class="el-icon-more"></i>
+        </button>
+    </section>
+
+    <section class="mobile-room-stats" aria-label="房间状态筛选">
+        <button type="button" class="mobile-room-stat" :class="{ 'is-active': roomFilter === 'all' }" @click="setRoomFilter('all')">
+            <span>全部</span>
+            <strong>{{ tableData.length }}</strong>
+        </button>
+        <button type="button" class="mobile-room-stat is-live" :class="{ 'is-active': roomFilter === 'live' }" @click="setRoomFilter('live')">
+            <span>直播中</span>
+            <strong>{{ tableData.filter(r => r.streaming).length }}</strong>
+        </button>
+        <button type="button" class="mobile-room-stat is-recording" :class="{ 'is-active': roomFilter === 'recording' }" @click="setRoomFilter('recording')">
+            <span>录制中</span>
+            <strong>{{ tableData.filter(r => r.recording).length }}</strong>
+        </button>
+    </section>
+
+    <transition name="fade-slide">
+        <section v-if="configOperationProgress.visible" class="config-progress-panel" :class="'is-' + configOperationProgress.status">
+            <div class="config-progress-head">
+                <div>
+                    <strong>{{ configOperationProgress.title }}</strong>
+                    <span>{{ configOperationProgress.message }}</span>
+                </div>
+                <em>{{ configOperationProgress.percent }}%</em>
+            </div>
+            <el-progress :percentage="configOperationProgress.percent" :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)" :stroke-width="8"></el-progress>
+            <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>
+        </section>
+    </transition>
+
+    <section class="mobile-room-command-row">
+        <template v-if="isSortMode">
+            <button type="button" class="mobile-room-command is-success" @click="saveSortOrder">
+                <i class="el-icon-check"></i>
+                <span>保存</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="cancelSortMode">
+                <i class="el-icon-close"></i>
+                <span>取消</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="openMobileRoomActions">
+                <i class="el-icon-more"></i>
+                <span>更多</span>
+            </button>
+        </template>
+        <template v-else>
+            <button type="button" class="mobile-room-command is-primary" @click="openMobileAddRoom">
+                <i class="el-icon-plus"></i>
+                <span>添加房间</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="enterSortMode">
+                <i class="el-icon-rank"></i>
+                <span>排序</span>
+            </button>
+            <button type="button" class="mobile-room-command" @click="openMobileRoomActions">
+                <i class="el-icon-more"></i>
+                <span>管理</span>
+            </button>
+        </template>
+    </section>
+
+    <transition name="fade-slide" mode="out-in">
+        <div v-if="loading && tableData.length === 0" class="room-card-grid" key="skeleton">
+            <div class="skeleton-card" v-for="n in 3" :key="'sk-' + n">
+                <div class="skeleton-card-header">
+                    <div class="skeleton-avatar"></div>
+                    <div class="skeleton-info">
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div v-else-if="filteredTableData.length === 0 && !loading" class="room-empty" key="empty">
+            <i class="el-icon-video-camera room-empty-icon"></i>
+            <h3 class="room-empty-title">{{ roomFilter === 'all' ? '还没有添加直播间' : '当前筛选下暂无房间' }}</h3>
+            <p class="room-empty-desc">{{ roomFilter === 'all' ? '点击“添加房间”按钮，开始监控房间' : '请切换筛选查看全部房间，或等待状态变化后再查看' }}</p>
+            <el-button class="modern-btn" type="primary" @click="openMobileAddRoom" icon="el-icon-plus">添加房间</el-button>
+        </div>
+        <div v-else class="mobile-room-list" key="list">
+            <article class="mobile-room-card" v-for="(item, index) in filteredTableData" :key="item.id" role="button" tabindex="0" :class="[roomPrimaryStateClass(item), { 'is-sorting': isSortMode, 'is-dragging': draggingRoomId === item.id, 'is-drag-over': dragOverRoomId === item.id }]" :draggable="isSortMode" @click="handleCardClick(item)" @keydown.enter.prevent="handleCardClick(item)" @keydown.space.prevent="handleCardClick(item)" @dragstart.stop="handleSortDragStart(index, item, $event)" @dragover.prevent="handleSortDragOver(index, item)" @drop.prevent.stop="handleSortDrop(index, item, $event)" @dragend="handleSortDragEnd">
+                <div class="mobile-room-card-main">
+                    <div class="mobile-room-avatar">
+                        <img v-if="!privacyMode && item.userCover" :src="buildAvatarProxyUrl(item.userCover)" referrerpolicy="no-referrer">
+                        <span v-else>{{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}</span>
+                        <em v-if="item.streaming"></em>
+                    </div>
+                    <div class="mobile-room-card-copy">
+                        <div class="mobile-room-card-line">
+                            <span class="mobile-room-state" :class="roomPrimaryStateClass(item)">{{ roomPrimaryStateLabel(item) }}</span>
+                            <span class="mobile-room-id">#{{ maskText(item.roomId) }}</span>
+                        </div>
+                        <h3>{{ maskText(item.uname) }}</h3>
+                        <p>{{ maskText(item.title || '暂无直播标题') }}</p>
+                    </div>
+                    <button v-if="!isSortMode" type="button" class="mobile-room-card-more" @click.stop="openMobileRoomCardActions(item)" aria-label="打开房间操作">
+                        <i class="el-icon-more"></i>
+                    </button>
+                    <div v-else class="mobile-room-sort-index">{{ index + 1 }}</div>
+                </div>
+                <div class="mobile-room-status-grid">
+                    <div>
+                        <span>录制</span>
+                        <strong :class="{ 'is-on': item.recording }">{{ item.recording ? '进行中' : '空闲' }}</strong>
+                    </div>
+                    <div>
+                        <span>上传</span>
+                        <strong :class="{ 'is-on': item.upload }">{{ item.upload ? '自动' : '关闭' }}</strong>
+                    </div>
+                    <div>
+                        <span>可见性</span>
+                        <strong>{{ item.isOnlySelf == 1 ? '仅自己' : '公开' }}</strong>
+                    </div>
+                </div>
+                <div class="mobile-room-meta-strip">
+                    <span>{{ item.copyright == 1 ? '自制' : '转载' }}</span>
+                    <span v-if="item.tid">{{ getTypeName(item.tid) }}</span>
+                    <span>{{ getCoverTypeLabel(item.coverType) }}</span>
+                    <span>{{ getUploadUserName(item.uploadUserId) }}</span>
+                    <span>{{ formatDelete(item) }}</span>
+                </div>
+                <div v-if="isSortMode" class="mobile-room-sort-controls" @click.stop>
+                    <button type="button" :disabled="index === 0" @click="moveRoomInSort(item, -1)"><i class="el-icon-arrow-up"></i> 上移</button>
+                    <button type="button" :disabled="index === filteredTableData.length - 1" @click="moveRoomInSort(item, 1)"><i class="el-icon-arrow-down"></i> 下移</button>
+                </div>
+            </article>
+        </div>
+    </transition>
+
+    <transition name="mobile-room-fade">
+        <div v-if="mobileRoomActionsVisible || mobileRoomCardActionsVisible" class="mobile-room-sheet-backdrop" @click="closeMobileRoomSheets"></div>
+    </transition>
+
+    <transition name="mobile-room-sheet">
+        <aside v-if="mobileRoomActionsVisible" class="mobile-room-action-sheet" role="dialog" aria-label="房间管理操作">
+            <div class="mobile-room-sheet-handle"></div>
+            <div class="mobile-room-sheet-head">
+                <div>
+                    <span>{{ isSortMode ? 'Sorting' : 'Actions' }}</span>
+                    <h3>{{ isSortMode ? '排序中' : '管理操作' }}</h3>
+                </div>
+                <button type="button" @click="closeMobileRoomSheets" aria-label="关闭管理操作"><i class="el-icon-close"></i></button>
+            </div>
+            <div class="mobile-room-sheet-actions mobile-room-management-actions">
+                <template v-if="isSortMode">
+                    <div class="mobile-room-sort-sheet-note"><i class="el-icon-rank"></i><span>当前处于排序模式，请完成或取消排序后再进行其他管理操作。</span></div>
+                    <button type="button" class="mobile-room-sheet-primary is-success" @click="saveSortOrder(); closeMobileRoomSheets()"><i class="el-icon-check"></i><span>保存排序</span></button>
+                    <div class="mobile-room-sheet-action-grid is-two">
+                        <button type="button" @click="cancelSortMode(); closeMobileRoomSheets()"><i class="el-icon-close"></i><span>取消排序</span></button>
+                        <button type="button" @click="resetSortOrder(); closeMobileRoomSheets()"><i class="el-icon-refresh-left"></i><span>重置默认</span></button>
+                    </div>
+                </template>
+                <template v-else>
+                    <button type="button" class="mobile-room-sheet-primary is-primary" @click="openMobileAddRoom"><i class="el-icon-plus"></i><span>添加房间</span></button>
+                    <div class="mobile-room-sheet-action-grid">
+                        <button type="button" @click="enterSortMode(); closeMobileRoomSheets()"><i class="el-icon-rank"></i><span>调整顺序</span></button>
+                        <button type="button" @click="openMobileExportConfig"><i class="el-icon-download"></i><span>导出配置</span></button>
+                        <el-upload class="mobile-room-upload-action" action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false">
+                            <button type="button" @click="mobileRoomActionsVisible = false"><i class="el-icon-upload2"></i><span>导入配置</span></button>
+                        </el-upload>
+                    </div>
+                </template>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-room-sheet">
+        <aside v-if="mobileRoomCardActionsVisible && mobileActionRoom" class="mobile-room-action-sheet" role="dialog" aria-label="房间操作">
+            <div class="mobile-room-sheet-handle"></div>
+            <div class="mobile-room-sheet-head">
+                <div><span>Room</span><h3>{{ maskText(mobileActionRoom.uname) }}</h3></div>
+                <button type="button" @click="closeMobileRoomSheets" aria-label="关闭房间操作"><i class="el-icon-close"></i></button>
+            </div>
+            <div class="mobile-room-sheet-summary mobile-room-card-action-summary">
+                <div>
+                    <span class="mobile-room-state" :class="roomPrimaryStateClass(mobileActionRoom)">{{ roomPrimaryStateLabel(mobileActionRoom) }}</span>
+                    <span class="mobile-room-sheet-room-id">#{{ maskText(mobileActionRoom.roomId) }}</span>
+                </div>
+                <p>{{ maskText(mobileActionRoom.title || '暂无直播标题') }}</p>
+            </div>
+            <div class="mobile-room-sheet-actions mobile-room-card-actions">
+                <button type="button" class="mobile-room-sheet-primary is-primary" @click="openMobileDetail(mobileActionRoom)"><i class="el-icon-view"></i><span>查看详情</span></button>
+                <div class="mobile-room-sheet-action-grid is-two">
+                    <button type="button" @click="openMobileEditRoom(mobileActionRoom)"><i class="el-icon-edit"></i><span>编辑配置</span></button>
+                    <button type="button" @click="openMobileDanmakuRoom(mobileActionRoom)"><i class="el-icon-chat-line-round"></i><span>弹幕规则</span></button>
+                </div>
+                <button type="button" class="mobile-room-sheet-danger" @click="deleteMobileActionRoom"><i class="el-icon-delete"></i><span>删除房间</span></button>
+            </div>
+        </aside>
+    </transition>
+    <template data-biliup-fragment="config"></template>
+    <template data-biliup-fragment="dialogs"></template>
+</div>

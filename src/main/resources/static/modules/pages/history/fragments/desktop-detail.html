@@ -1,0 +1,564 @@
+    <!-- 详情弹窗 -->
+    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body :custom-class="'history-page-dialog detail-dialog' + (editPartsEditing ? ' detail-dialog--parts-editing' : '')" :before-close="beforeCloseDetailDialog" @closed="onDetailClosed">
+        <div class="detail-content-modern" ref="detailContent" v-if="currentDetail.id" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
+            <!-- 头部信息 -->
+            <div class="detail-header-modern">
+                <div class="detail-header-main">
+                    <h2 class="detail-title">{{ maskText(currentDetail.title) }}</h2>
+                    <div class="detail-meta-row">
+                        <el-tag size="small" type="info" effect="plain" class="meta-tag">
+                            <i class="el-icon-user"></i> {{ maskText(currentDetail.roomName) }}
+                        </el-tag>
+                        <span class="meta-divider"></span>
+                        <span class="meta-time">
+                            <i class="el-icon-time"></i> {{ formatDateTime(currentDetail.startTime) }}
+                            <span v-if="currentDetail.endTime"> - {{ formatDateTime(currentDetail.endTime) }}</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="detail-header-side">
+                    <div class="detail-bvid-box" v-if="currentDetail.bvId">
+                        <span class="bvid-label">BV号</span>
+                        <a :href="'https://www.bilibili.com/video/' + currentDetail.bvId" target="_blank" rel="noopener noreferrer" class="bvid-link">
+                            {{ maskText(currentDetail.bvId) }} <i class="el-icon-link"></i>
+                        </a>
+                    </div>
+                    <div class="detail-bvid-box empty" v-else>
+                        <span class="bvid-label">BV号</span>
+                        <span class="bvid-text">未生成</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 状态栏 -->
+            <div class="detail-status-bar">
+                <div class="status-item-modern" :class="{'active': isActuallyRecording(currentDetail), 'warning': isActuallyRecording(currentDetail)}">
+                    <div class="status-icon"><i class="el-icon-video-camera"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">录制状态</div>
+                        <div class="status-value">
+                            {{ isActuallyRecording(currentDetail) ? '录制中' : '已结束' }}
+                            <span v-if="hasRecordingMismatch(currentDetail)" class="status-badge-mini">未同步</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="status-connector" :class="{'active': currentDetail.upload}"></div>
+                <div class="status-item-modern" :class="{'active': currentDetail.upload}">
+                    <div class="status-icon"><i class="el-icon-upload2"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">上传状态</div>
+                        <div class="status-value">{{ currentDetail.upload ? '上传:开' : '上传:否' }}</div>
+                    </div>
+                </div>
+                <div class="status-connector" :class="{'active': currentDetail.publish}"></div>
+                <div class="status-item-modern" :class="{'active': currentDetail.publish}">
+                    <div class="status-icon"><i class="el-icon-s-release"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">发布状态</div>
+                        <div class="status-value">{{ currentDetail.publish ? '已发布' : '未发布' }}</div>
+                    </div>
+                </div>
+                <div class="status-connector" :class="getAuditStatusClass(currentDetail)"></div>
+                <el-tooltip popper-class="history-page-tooltip-popper"
+                        v-if="canOpenAuditStatusDetail"
+                        effect="dark"
+                        placement="top"
+                        :content="auditStatusTooltipText">
+                    <div class="status-item-modern"
+                         :class="[getAuditStatusClass(currentDetail), {'audit-clickable': canOpenAuditStatusDetail, 'audit-breathing': shouldHighlightAuditReject}]"
+                         @click="openAuditStatusDetail">
+                        <div class="status-icon"><i class="el-icon-s-check"></i></div>
+                        <div class="status-info">
+                            <div class="status-label">审核状态</div>
+                            <div class="status-value">
+                                {{ getAuditStatusText(currentDetail) }}
+                                <span class="status-badge-mini" v-if="auditStatusActionText">{{ auditStatusActionText }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </el-tooltip>
+                <div v-else class="status-item-modern" :class="getAuditStatusClass(currentDetail)">
+                    <div class="status-icon"><i class="el-icon-s-check"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">审核状态</div>
+                        <div class="status-value">{{ getAuditStatusText(currentDetail) }}</div>
+                    </div>
+                </div>
+                <div class="status-connector" :class="getDanmakuStatusClass(currentDetail)"></div>
+                <div class="status-item-modern" :class="getDanmakuStatusClass(currentDetail)">
+                    <div class="status-icon"><i class="el-icon-chat-dot-round"></i></div>
+                    <div class="status-info">
+                        <div class="status-label">弹幕状态</div>
+                        <div class="status-value">{{ getDanmakuStatusText(currentDetail) }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-config-notice" v-if="hasUploadConfigMismatch">
+                <div class="config-notice-icon"><i class="el-icon-info"></i></div>
+                <div class="config-notice-body">
+                    <div class="config-notice-title">直播间上传配置已变更</div>
+                    <div class="config-notice-text">
+                        该稿件沿用创建时的上传配置；当前直播间上传开关为{{ currentDetail.roomUpload ? '开启' : '关闭' }}，不会自动回溯影响已创建稿件。
+                    </div>
+                </div>
+            </div>
+            <div class="detail-config-notice" v-if="currentDetail && currentDetail.code == -4">
+                <div class="config-notice-icon"><i class="el-icon-lock"></i></div>
+                <div class="config-notice-body">
+                    <div class="config-notice-title">稿件已被平台锁定</div>
+                    <div class="config-notice-text">
+                        该状态通常无法继续修改可见性或发送弹幕，系统会按强制归档处理，后续任务不再触发该稿件。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据统计 -->
+            <div class="detail-section-title">数据统计</div>
+            <div class="detail-stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">文件大小</div>
+                    <div class="stat-value" :class="getFileSizeColorType(currentDetail.fileSize)">
+                        {{ formatFileSize(currentDetail.fileSize) }}
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">总时长</div>
+                    <div class="stat-value">
+                        {{ formatDuration(currentDetail.partDuration) }}
+                        <el-tag v-if="isVeryLongDuration(currentDetail.partDuration)" size="mini" type="danger" effect="dark" style="margin-left: 5px;">铁人</el-tag>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">分P数量</div>
+                    <div class="stat-value">
+                        {{ getEffectiveTotalParts() }}
+                        <span class="stat-sub">录:{{ getEffectiveRecordingParts() }} / 传:{{ getEffectiveUploadedParts() }}</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-card--danmaku">
+                    <div class="stat-label">弹幕数量</div>
+                    <div class="stat-value stat-value--danmaku">
+                        <span>{{ currentDetail.msgCount }}</span>
+                        <el-popover placement="top" width="320" trigger="click" popper-class="history-page-popover danmaku-stat-popover">
+                            <div class="danmaku-stat-popover-content">
+                                <div class="danmaku-stat-popover-title">弹幕明细</div>
+                                <div class="danmaku-stat-popover-row">
+                                    <span class="danmaku-stat-popover-label">全部弹幕</span>
+                                    <strong>{{ currentDetail.msgCount || 0 }}</strong>
+                                </div>
+                                <div class="danmaku-stat-popover-row">
+                                    <span class="danmaku-stat-popover-label">成功发送</span>
+                                    <strong>{{ currentDetail.successMsgCount || 0 }}</strong>
+                                </div>
+                                <div class="danmaku-stat-popover-help-wrap"
+                                     @mouseenter="showDanmakuFailedHint"
+                                     @mouseleave="hideDanmakuFailedHint">
+                                    <div class="danmaku-stat-popover-row is-failed is-helpable"
+                                         :class="{ 'is-help-open': isDanmakuFailedHintVisible() }"
+                                         role="button"
+                                         tabindex="0"
+                                         :aria-expanded="isDanmakuFailedHintVisible() ? 'true' : 'false'"
+                                         aria-label="查看未成功说明"
+                                         @click.stop="toggleDanmakuFailedHint"
+                                         @keydown.enter.prevent="toggleDanmakuFailedHint"
+                                         @keydown.space.prevent="toggleDanmakuFailedHint"
+                                         @focus="showDanmakuFailedHint(true)"
+                                         @blur="hideDanmakuFailedHint">
+                                        <span class="danmaku-stat-popover-label">未成功</span>
+                                        <strong>{{ getDanmakuFailedCount(currentDetail) }}</strong>
+                                    </div>
+                                    <div v-if="canRetryFailedDanmaku(currentDetail)"
+                                         class="danmaku-stat-popover-actions"
+                                         @mouseenter="holdDanmakuFailedHint"
+                                         @mouseleave="hideDanmakuFailedHint">
+                                        <button type="button"
+                                                class="danmaku-retry-button"
+                                                :disabled="danmakuRetryLoading"
+                                                aria-label="重试可发送弹幕"
+                                                @focus="holdDanmakuFailedHint"
+                                                @blur="hideDanmakuFailedHint"
+                                                @click.stop="retryFailedDanmaku(currentDetail)">
+                                            <i :class="danmakuRetryLoading && danmakuRetryMode === 'normal' ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+                                            <span>{{ danmakuRetryLoading && danmakuRetryMode === 'normal' ? '加入中' : '重试可发送' }}</span>
+                                        </button>
+                                        <button type="button"
+                                                class="danmaku-retry-button is-force"
+                                                :disabled="danmakuRetryLoading"
+                                                aria-label="强制重新入队未成功弹幕"
+                                                @focus="holdDanmakuFailedHint"
+                                                @blur="hideDanmakuFailedHint"
+                                                @click.stop="forceRetryFailedDanmaku(currentDetail)">
+                                            <i :class="danmakuRetryLoading && danmakuRetryMode === 'force' ? 'el-icon-loading' : 'el-icon-warning-outline'"></i>
+                                            <span>{{ danmakuRetryLoading && danmakuRetryMode === 'force' ? '强制加入中' : '强制重新入队' }}</span>
+                                        </button>
+                                    </div>
+                                    <transition name="danmaku-failed-hint-motion">
+                                        <div v-if="isDanmakuFailedHintVisible()"
+                                             class="danmaku-failed-hint"
+                                             @mouseenter="holdDanmakuFailedHint"
+                                             @mouseleave="hideDanmakuFailedHint">
+                                            <p>{{ getDanmakuFailedReasonIntro() }}</p>
+                                            <ul>
+                                                <li v-for="line in getDanmakuFailedReasonLines()" :key="line">{{ line }}</li>
+                                            </ul>
+                                            <p>{{ getDanmakuFailedReasonFooter() }}</p>
+                                        </div>
+                                    </transition>
+                                </div>
+                                <div class="danmaku-stat-popover-row is-queue">
+                                    <span class="danmaku-stat-popover-label">队列中</span>
+                                    <strong>{{ getDanmakuQueueCount(currentDetail) }}</strong>
+                                </div>
+                                <div class="danmaku-stat-popover-row is-task">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>普通弹幕</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'normal') }}</small>
+                                    </span>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <strong>{{ currentDetail.normalMsgCount || 0 }}</strong>
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'normal')]">{{ getDanmakuTaskStateText(currentDetail, 'normal') }}</em>
+                                    </span>
+                                </div>
+                                <div class="danmaku-stat-popover-row is-task">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>SC/上舰高级弹幕</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'advanced') }}</small>
+                                    </span>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <strong>{{ getAdvancedDanmakuCount(currentDetail) }}</strong>
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'advanced')]">{{ getDanmakuTaskStateText(currentDetail, 'advanced') }}</em>
+                                    </span>
+                                </div>
+                                <div class="danmaku-stat-popover-row is-task">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>SC、上舰评论</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'highReply') }}</small>
+                                    </span>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'highReply')]">{{ getDanmakuTaskStateText(currentDetail, 'highReply') }}</em>
+                                    </span>
+                                </div>
+                                <div class="danmaku-stat-popover-row is-task">
+                                    <span class="danmaku-stat-popover-label">
+                                        <span>高价值礼物评论</span>
+                                        <small>{{ getDanmakuTaskSubtext(currentDetail, 'giftReply') }}</small>
+                                    </span>
+                                    <span class="danmaku-stat-popover-meta">
+                                        <em :class="['danmaku-task-badge', getDanmakuTaskStateBadgeClass(currentDetail, 'giftReply')]">{{ getDanmakuTaskStateText(currentDetail, 'giftReply') }}</em>
+                                    </span>
+                                </div>
+                            </div>
+                            <button slot="reference" type="button" class="stat-detail-trigger" aria-label="查看弹幕明细">
+                                <i class="el-icon-pie-chart"></i>
+                                <span>明细</span>
+                            </button>
+                        </el-popover>
+                    </div>
+                    <div class="stat-breakdown stat-breakdown--danmaku">
+                        <span>普通 {{currentDetail.normalMsgCount || 0}}</span>
+                        <span>高级 {{getAdvancedDanmakuCount(currentDetail)}}</span>
+                        <span>队列 {{getDanmakuQueueCount(currentDetail)}}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 异常信息 -->
+            <div class="detail-exception-box" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => !isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
+                <div class="exception-header">
+                    <div class="exception-header-left">
+                        <i class="el-icon-warning"></i> 异常分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => !isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
+                    </div>
+                    <div class="exception-header-right" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length > 0">
+                        <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                            <span v-if="!isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" :key="'reason-' + idx" class="exception-reason-badge">
+                                {{ formatGiveUpType(idx) }}：{{ getGiveUpReason(idx, p) }}
+                            </span>
+                        </template>
+                    </div>
+                </div>
+                <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
+                    <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                        <div v-if="!isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="idx">
+                            <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" :content="maskTooltip(p)" placement="top">
+                                <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                            </el-tooltip>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 已跳过分P（低于阈值，符合预期） -->
+            <div class="detail-skip-box" :class="{ 'is-expanded': showSkipParts }" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length > 0">
+                <div class="skip-header is-clickable"
+                     role="button"
+                     tabindex="0"
+                     :aria-expanded="showSkipParts ? 'true' : 'false'"
+                     @click="showSkipParts = !showSkipParts"
+                     @keydown.enter.prevent="showSkipParts = !showSkipParts"
+                     @keydown.space.prevent="showSkipParts = !showSkipParts">
+                    <div class="skip-header-left">
+                        <i class="el-icon-warning"></i> 已跳过分P ({{ currentDetail.giveUpPartFiles.filter((p,i) => isSkippedType((currentDetail.giveUpPartTypes||[])[i])).length }})
+                        <span class="skip-note">文件低于配置阈值，已自动跳过</span>
+                    </div>
+                    <i :class="showSkipParts ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="skip-toggle-icon"></i>
+                </div>
+                <el-collapse-transition>
+                    <div v-show="showSkipParts" class="skip-content">
+                        <div class="exception-list" v-if="currentDetail.giveUpPartFiles && currentDetail.giveUpPartFiles.length">
+                            <template v-for="(p, idx) in currentDetail.giveUpPartFiles">
+                                <div v-if="isSkippedType((currentDetail.giveUpPartTypes||[])[idx])" class="exception-item" :key="'skip-' + idx">
+                                    <el-tooltip popper-class="history-page-tooltip-popper" effect="dark" :content="maskTooltip(p)" placement="top">
+                                        <span class="exception-file">{{ maskText(((p || '').split('/').pop() || p)) }}</span>
+                                    </el-tooltip>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </el-collapse-transition>
+            </div>
+
+            <!-- 上传进度 -->
+            <div class="detail-section-title detail-section-title--actions" style="margin-top: 20px;">
+                <span>上传进度</span>
+                <span class="detail-title-actions" v-if="currentDetail && currentDetail.id">
+                    <el-button v-if="canShowHistoryPauseButton" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="uploadPauseLoading" :disabled="isHistoryUploadPauseSettling()" @click="pauseHistoryUpload">暂停上传</el-button>
+                    <el-button v-if="canShowHistoryResumeButton" size="mini" type="success" plain icon="el-icon-video-play" :loading="uploadPauseLoading" :disabled="isHistoryUploadPauseSettling()" @click="resumeHistoryUpload">继续上传</el-button>
+                    <template v-if="canEditPublishedParts()">
+                    <el-button v-if="!editPartsEditing" size="mini" type="primary" plain icon="el-icon-edit" @click="startEditParts">编辑分P</el-button>
+                    <template v-else>
+                        <el-button size="mini" type="success" plain icon="el-icon-check" :loading="editPartsSaving" @click="confirmSaveEditParts">保存</el-button>
+                        <el-button size="mini" plain icon="el-icon-close" :disabled="editPartsSaving" @click="cancelEditParts">取消</el-button>
+                    </template>
+                    </template>
+                </span>
+            </div>
+            <div class="detail-progress-container">
+                <transition name="edit-parts-slide">
+                <div v-if="editPartsEditing" class="edit-parts-panel">
+                    <div class="edit-parts-toolbar">
+                        <div class="edit-parts-hint">保存前不会修改线上稿件。保存时会刷新线上分P后提交完整列表。</div>
+                        <div class="edit-parts-actions">
+                            <el-button size="mini" type="primary" plain icon="el-icon-folder-add" @click="openEditPartFileDialog(null, 'add')">从工作目录添加</el-button>
+                            <el-upload
+                                    :action="'/history/' + currentDetail.id + '/edit-parts/local-upload'"
+                                    :data="{ sessionId: editPartsSessionId }"
+                                    :http-request="uploadAddLocalEditPart"
+                                    :show-file-list="false"
+                                    :on-success="handleAddLocalEditPartSuccess"
+                                    :on-error="handleEditPartUploadError"
+                                    accept=".flv,.mp4,.ts,.mkv,.mov,.m4v"
+                                    style="display:inline-block;">
+                                <el-button size="mini" type="primary" plain icon="el-icon-upload">本地添加</el-button>
+                            </el-upload>
+                        </div>
+                    </div>
+                    <div v-loading="editPartsLoading" class="edit-parts-list">
+                        <div class="edit-part-row" v-for="(p, idx) in editPartsDraft" :key="p.localKey" :class="{ 'is-deleted': p.deleted, 'is-new': p.source === 'local' || p.source === 'workdir', 'is-changed': isEditPartChanged(p, idx) }">
+                            <div class="edit-part-order">
+                                <span class="part-badge">P{{ calcEditPartPage(idx) }}</span>
+                                <div class="edit-part-order-buttons">
+                                    <el-button class="edit-part-sort-btn" size="mini" icon="el-icon-arrow-up" circle :disabled="idx === 0 || p.deleted" @click="moveEditPart(idx, -1)"></el-button>
+                                    <el-button class="edit-part-sort-btn" size="mini" icon="el-icon-arrow-down" circle :disabled="idx === editPartsDraft.length - 1 || p.deleted" @click="moveEditPart(idx, 1)"></el-button>
+                                </div>
+                            </div>
+                            <div class="edit-part-main">
+                                <el-input size="small" v-model="p.title" :disabled="p.deleted" placeholder="分P标题"></el-input>
+                                <div class="edit-part-meta">
+                                    <span v-if="p.deleted || p.source !== 'online'">{{ p.deleted ? '待删除' : editPartSourceText(p) }}</span>
+                                    <span v-if="p.name">{{ maskText(p.name) }}</span>
+                                    <span v-if="editPartDisplaySize(p)">{{ formatSize(editPartDisplaySize(p)) }}</span>
+                                </div>
+                            </div>
+                            <div class="edit-part-row-actions">
+                                <el-button size="mini" plain icon="el-icon-folder-opened" :disabled="p.deleted" @click="openEditPartFileDialog(idx, 'replace')">工作目录替换</el-button>
+                                <el-upload
+                                        :action="'/history/' + currentDetail.id + '/edit-parts/local-upload'"
+                                        :data="{ sessionId: editPartsSessionId }"
+                                        :http-request="function(option){ uploadReplaceLocalEditPart(idx, option); }"
+                                        :show-file-list="false"
+                                        :on-success="function(resp){ handleReplaceLocalEditPartSuccess(idx, resp); }"
+                                        :on-error="handleEditPartUploadError"
+                                        accept=".flv,.mp4,.ts,.mkv,.mov,.m4v"
+                                        style="display:inline-block;">
+                                    <el-button size="mini" plain icon="el-icon-upload" :disabled="p.deleted">本地替换</el-button>
+                                </el-upload>
+                                <el-button v-if="!p.deleted" size="mini" type="danger" plain icon="el-icon-delete" @click="markEditPartDeleted(idx)">删除</el-button>
+                                <el-button v-else size="mini" type="warning" plain icon="el-icon-refresh-left" @click="undoEditPartDeleted(idx)">撤销</el-button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </transition>
+                <template v-if="!editPartsEditing">
+                <!-- 整体进度 -->
+                <div class="progress-row-modern main">
+                    <div class="progress-info">
+                        <span class="progress-label">整体进度</span>
+                        <span class="progress-text" v-if="historyUploadProgress || currentDetailParts.length > 0">{{ calcOverallUploadText() }}</span>
+                    </div>
+                    <div class="progress-bar-wrapper">
+                        <el-progress :percentage="calcOverallUploadPercent()" :status="calcOverallUploadStatus()" :stroke-width="10" :show-text="false"></el-progress>
+                    </div>
+                    <div class="progress-main-percent">{{ calcOverallUploadPercent() }}%</div>
+                </div>
+
+                <!-- 等待提醒 -->
+                <div v-if="isWaitingForUpload" class="waiting-tip waiting-tip--queue">
+                    <i class="el-icon-info"></i>
+                    <span>正在等待其他稿件分P上传...</span>
+                </div>
+                <div v-if="duplicatePartCount > 0" class="waiting-tip waiting-tip--merged" role="status">
+                    <i class="el-icon-connection"></i>
+                    <span>已自动合并 {{ duplicatePartCount }} 条重复分P记录，进度和投稿按唯一文件计算</span>
+                </div>
+                <div v-if="hasEffectiveBlockingIssues" class="waiting-tip waiting-tip--blocking" role="alert">
+                    <i class="el-icon-warning"></i>
+                    <span>暂停投稿：存在 {{ effectiveBlockingIssueCount }} 个异常分P，需要处理后继续</span>
+                </div>
+
+                <!-- 分P进度展开/收起按钮 -->
+                <div class="parts-toggle-container" style="text-align: center; margin-top: 10px;" v-if="mergedParts.length > 0">
+                    <el-button type="text" @click="toggleParts" size="mini">
+                        {{ showAllParts ? '收起分P进度' : '展开分P进度 (' + mergedParts.length + ')' }}
+                        <i :class="showAllParts ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                    </el-button>
+                </div>
+
+                <!-- 分P进度列表 -->
+                <transition name="parts-slide">
+                <div v-show="showAllParts" class="progress-list-modern" ref="partsList">
+                    <div class="progress-row-modern item" v-for="(p, idx) in mergedParts" :key="p.partId || idx">
+                        <div class="progress-info-mini">
+                            <span class="part-badge">P{{ p.page }}</span>
+                            <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
+                            <span class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</span>
+                            <span class="part-meta">
+                                 <span v-if="p.state === 'SUCCESS' || p.percent >= 100">{{ formatSize(p.fileSize) }}</span>
+                                 <span v-else-if="p.state === 'SKIPPED'">{{ formatSize(p.fileSize) }}</span>
+                                 <span v-else-if="p.activeChunkTotal > 0">
+                                    {{ p.activeChunkDone }}/{{ p.activeChunkTotal }} 分片
+                                    <span v-if="p.fileSize > 0" style="margin-left: 5px; opacity: 0.8;">({{ formatSize(p.fileSize) }})</span>
+                                 </span>
+                                 <span v-else>
+                                    {{ p.state === 'WAITING' ? '准备上传' : '等待进度' }}
+                                    <span v-if="p.fileSize > 0" style="margin-left: 5px; opacity: 0.8;">({{ formatSize(p.fileSize) }})</span>
+                                 </span>
+                            </span>
+                            <span v-if="p.state !== 'SUCCESS' && p.state !== 'SKIPPED' && calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
+                        </div>
+                        <div class="progress-bar-mini" :class="p.state === 'SKIPPED' ? 'skipped' : ''">
+                            <el-progress :percentage="p.state === 'SKIPPED' ? 0 : (p.percent || 0)" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
+                        </div>
+                        <div class="progress-percent-text" :class="p.state === 'SKIPPED' ? 'skipped-text' : ''">{{ p.state === 'SKIPPED' ? '-' : ((p.percent || 0) + '%') }}</div>
+                        <div v-if="canPreviewPart(p)" class="progress-filepath-mini part-preview-actions">
+                            <el-button class="part-action-btn part-action-btn--preview" size="mini" type="primary" plain icon="el-icon-video-play" @click.stop="openPartPreview(p)">预览</el-button>
+                        </div>
+                        <div v-if="(p.stateMsg || p.issueMessage) && p.state !== 'SKIPPED'" class="progress-msg-mini">{{ p.stateMsg || p.issueMessage }}</div>
+                        <div v-if="shouldShowPartFilePath(p)" class="progress-filepath-mini">
+                            <el-tooltip popper-class="history-page-tooltip-popper" v-if="!privacyMode" effect="dark" :content="maskTooltip(getPartFilePath(p))" placement="top">
+                                <span class="filepath-text">{{ maskText(getPartFileName(p)) }}</span>
+                            </el-tooltip>
+                            <span v-else class="filepath-text">***</span>
+                        </div>
+                        <div v-if="p.actions && p.actions.length > 0" class="progress-filepath-mini part-actions">
+                            <el-button v-if="p.actions.indexOf('PAUSE_UPLOAD') !== -1" class="part-action-btn part-action-btn--pause" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="pausePartUpload(p)">暂停</el-button>
+                            <el-button v-if="p.actions.indexOf('RESUME_UPLOAD') !== -1" class="part-action-btn part-action-btn--resume" size="mini" type="success" plain icon="el-icon-video-play" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="resumePartUpload(p)">继续</el-button>
+                            <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
+                            <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">标记结束</el-button>
+                            <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
+                            <el-button v-if="p.actions.indexOf('RETRY_FILE_PROCESS') !== -1" class="part-action-btn" size="mini" type="danger" plain icon="el-icon-refresh" :loading="!!p.fileOperationRetrying" @click.stop="retryFileProcess(p)">重试文件处理</el-button>
+                        </div>
+                    </div>
+                </div>
+                </transition>
+                </template>
+            </div>
+        </div>
+        <div slot="footer" class="detail-footer" ref="detailFooter">
+            <div class="detail-footer-actions" v-if="currentDetail.id">
+                <!-- 常用操作 -->
+                <div class="action-group-primary">
+                    <el-button class="modern-btn" @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit" :disabled="currentDetail.forceArchived">编辑</el-button>
+                    <el-button class="modern-btn" @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
+                    <el-button v-if="currentDetail.waitingForPublish && !currentDetail.forceArchived" class="modern-btn breathing" @click="touchPublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-s-release">立即投稿</el-button>
+                </div>
+
+                <!-- 更多操作开关 -->
+                <div class="action-group-more-toggle">
+                    <el-button :class="{ 'modern-btn': true, 'breathing': currentDetail.waitingForPublish }" @click="showMoreActions = !showMoreActions" size="small" plain :icon="showMoreActions ? 'el-icon-arrow-left' : 'el-icon-more'">
+                        {{ showMoreActions ? '收起' : '更多操作' }}
+                    </el-button>
+                </div>
+
+                <!-- 更多操作面板 (动画展开) -->
+                <transition name="fade">
+                    <div class="action-backdrop" v-show="showMoreActions" @click="showMoreActions = false"></div>
+                </transition>
+                <transition name="actions-slide">
+                    <div class="action-group-secondary" v-show="showMoreActions">
+                        <div class="action-sub-group">
+                            <span class="action-group-label">发布管理</span>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
+                            <el-button v-if="!currentDetail.forceArchived && currentDetail.upload && !currentDetail.publish && allEffectivePartsUploaded" class="modern-btn" @click="retryPublishOnly(currentDetail.id)" size="mini" type="primary" plain icon="el-icon-refresh">重试发布</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
+                            <el-button v-if="currentDetail.forceArchived" class="modern-btn" @click="restoreForceArchive(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">恢复处理</el-button>
+                        </div>
+                        <div class="action-divider"></div>
+                        <div class="action-sub-group">
+                            <span class="action-group-label">录制与数据</span>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
+                            <el-tooltip popper-class="history-page-tooltip-popper" v-if="!currentDetail.forceArchived" effect="dark" content="强制停止所有未完成操作并归档（适用于卡住的任务）" placement="top">
+                                <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button">强制归档</el-button>
+                            </el-tooltip>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="abandonHistoryMsgQueue(currentDetail.id, currentDetail)" size="mini" type="warning" plain icon="el-icon-remove-outline">放弃发送</el-button>
+                            <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
+                        </div>
+                        <div class="action-divider"></div>
+                        <div class="action-sub-group">
+                            <span class="action-group-label">排查工具</span>
+                            <el-button class="modern-btn" @click="showMoreActions = false; openDiagnosticExport(currentDetail)" size="mini" type="primary" plain icon="el-icon-download">导出诊断包</el-button>
+                        </div>
+                        <div class="action-divider"></div>
+                        <div class="action-sub-group">
+                            <el-button class="modern-btn" @click="deleteHistory(currentDetail.id)" size="mini" type="danger" icon="el-icon-delete">删除记录</el-button>
+                        </div>
+                    </div>
+                </transition>
+            </div>
+            <el-button class="modern-btn" @click="requestCloseDetailDialog">关 闭</el-button>
+        </div>
+    </el-dialog>
+
+    <transition name="edit-upload-float">
+        <div v-if="editPartUploadQueue.length > 0" class="edit-upload-float">
+            <div class="edit-upload-float-head">
+                <div>
+                    <div class="edit-upload-float-title">本地分P上传</div>
+                    <div class="edit-upload-float-sub">{{ editPartUploadSummary }}</div>
+                </div>
+                <el-button v-if="currentEditPartUploadTask" size="mini" type="danger" plain @click="cancelEditPartUpload(currentEditPartUploadTask.id)">终止</el-button>
+            </div>
+            <div v-if="currentEditPartUploadTask" class="edit-upload-current">
+                <div class="edit-upload-name">{{ maskText(currentEditPartUploadTask.name) }}</div>
+                <el-progress :percentage="currentEditPartUploadTask.percent || 0" :stroke-width="8"></el-progress>
+                <div class="edit-upload-meta">
+                    <span>{{ formatSize(currentEditPartUploadTask.uploaded || 0) }} / {{ formatSize(currentEditPartUploadTask.size || 0) }}</span>
+                    <span>{{ formatSize(currentEditPartUploadTask.speed || 0) }}/s</span>
+                    <span>剩余 {{ formatDurationBrief(currentEditPartUploadTask.eta) }}</span>
+                    <span>{{ currentEditPartUploadTask.percent || 0 }}%</span>
+                    <span>动态分片 {{ formatSize(currentEditPartUploadTask.chunkSize || 0) }}</span>
+                    <span>响应 {{ formatDurationBrief((currentEditPartUploadTask.serverWaitMs || 0) / 1000) }}</span>
+                </div>
+            </div>
+            <div v-if="queuedEditPartUploadTasks.length > 0" class="edit-upload-queue">
+                <div class="edit-upload-queue-item" v-for="task in queuedEditPartUploadTasks.slice(0, 3)" :key="task.id">
+                    <span>{{ maskText(task.name) }}</span>
+                    <el-button type="text" size="mini" @click="cancelEditPartUpload(task.id)">移除</el-button>
+                </div>
+            </div>
+        </div>
+    </transition>

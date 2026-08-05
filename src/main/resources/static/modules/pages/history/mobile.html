@@ -1,0 +1,443 @@
+<div class="history-container mobile-history-container page-surface-history" data-page-scroll-root :class="{ 'is-batch-mode': isMultiSelectMode }">
+    <section class="mobile-history-page" aria-label="移动端录制历史">
+        <header class="mobile-history-hero">
+            <div class="mobile-history-hero-copy">
+                <span>{{ form.viewType === 'working' ? 'TASK FLOW' : 'ARCHIVE LIBRARY' }}</span>
+                <h1 data-page-focus-target tabindex="-1">{{ form.viewType === 'working' ? '稿件任务流' : '稿件资料库' }}</h1>
+                <p>{{ getMobileHistorySubtitle() }}</p>
+            </div>
+            <button type="button"
+                    class="mobile-history-icon-btn"
+                    :class="{ 'is-active': loading }"
+                    title="刷新"
+                    :disabled="loading || isMultiSelectMode"
+                    @click="initTable">
+                <i class="el-icon-refresh"></i>
+            </button>
+        </header>
+
+        <section class="mobile-history-overview" aria-label="录制历史概览">
+            <button type="button"
+                    class="mobile-history-mode"
+                    :class="{ 'is-active': form.viewType === 'working' }"
+                    :disabled="isMultiSelectMode || batchVisibilityRunning"
+                    @click="switchMobileHistoryView('working')">
+                <span>工作中</span>
+                <strong>{{ workingCount }}</strong>
+            </button>
+            <button type="button"
+                    class="mobile-history-mode"
+                    :class="{ 'is-active': form.viewType === 'archived' }"
+                    :disabled="isMultiSelectMode || batchVisibilityRunning"
+                    @click="switchMobileHistoryView('archived')">
+                <span>已归档</span>
+                <strong>{{ archivedCount }}</strong>
+            </button>
+            <button type="button"
+                    class="mobile-history-mode is-filter"
+                    :class="{ 'is-active': activeFilterCount > 0 || filterExpanded }"
+                    :disabled="isMultiSelectMode"
+                    @click="filterExpanded = true">
+                <span>筛选</span>
+                <strong>{{ activeFilterCount || '全部' }}</strong>
+            </button>
+        </section>
+
+        <nav class="mobile-history-quick" :class="{ 'is-disabled': isMultiSelectMode || batchVisibilityRunning }" aria-label="快速状态筛选">
+            <button type="button" :class="{ 'is-active': quickFilter === 'recording' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('recording')">
+                <i class="el-icon-video-camera"></i>
+                <span>录制中</span>
+            </button>
+            <button type="button" :class="{ 'is-active': quickFilter === 'success' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('success')">
+                <i class="el-icon-circle-check"></i>
+                <span>已通过</span>
+            </button>
+            <button type="button" :class="{ 'is-active': quickFilter === 'self' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('self')">
+                <i class="el-icon-view"></i>
+                <span>仅自己可见</span>
+            </button>
+            <button type="button" :class="{ 'is-active': quickFilter === 'fail' }" :disabled="isMultiSelectMode || batchVisibilityRunning" @click="setQuickFilter('fail')">
+                <i class="el-icon-warning-outline"></i>
+                <span>异常</span>
+            </button>
+        </nav>
+
+        <section class="mobile-history-toolbar">
+            <button type="button"
+                    class="mobile-history-command is-primary"
+                    :disabled="isMultiSelectMode"
+                    @click="filterExpanded = true">
+                <i class="el-icon-search"></i>
+                <span>{{ getMobileFilterSummary() }}</span>
+            </button>
+            <button type="button"
+                    class="mobile-history-command"
+                    :class="{ 'is-active': isMultiSelectMode }"
+                    :disabled="batchVisibilityRunning"
+                    @click="toggleBatchMode">
+                <i class="el-icon-files"></i>
+                <span>{{ isMultiSelectMode ? '退出管理' : '批量管理' }}</span>
+            </button>
+        </section>
+
+        <transition name="mobile-history-rise">
+            <section v-if="isMultiSelectMode" class="mobile-history-selection-panel">
+                <div class="mobile-history-batch-head">
+                    <div>
+                        <span>批量管理</span>
+                        <strong>已选择 {{ selectedItems.length }} 项</strong>
+                    </div>
+                    <button type="button" class="mobile-history-batch-close" title="退出批量管理" aria-label="退出批量管理" @click="toggleBatchMode" :disabled="batchVisibilityRunning">
+                        <i class="el-icon-close"></i>
+                    </button>
+                </div>
+                <label class="mobile-history-check">
+                    <el-checkbox v-model="isAllSelected" :indeterminate="isIndeterminate" :disabled="batchVisibilityRunning">全选本页</el-checkbox>
+                </label>
+                <div class="mobile-history-batch-section">
+                    <span class="mobile-history-batch-label">上传状态</span>
+                    <div class="mobile-history-batch-actions is-two-column">
+                        <button type="button" class="is-primary" :disabled="selectedUploadEnableCount === 0 || batchVisibilityRunning" @click="handleBatchUpload(true)">
+                            <i class="el-icon-upload2"></i>
+                            <span>开启</span>
+                            <b>{{ selectedUploadEnableCount }}</b>
+                        </button>
+                        <button type="button" :disabled="selectedUploadDisableCount === 0 || batchVisibilityRunning" @click="handleBatchUpload(false)">
+                            <i class="el-icon-circle-close"></i>
+                            <span>关闭</span>
+                            <b>{{ selectedUploadDisableCount }}</b>
+                        </button>
+                    </div>
+                </div>
+                <div class="mobile-history-batch-section">
+                    <span class="mobile-history-batch-label">稿件处理</span>
+                    <div class="mobile-history-batch-actions">
+                        <button type="button" class="is-warning" :disabled="selectedForceArchiveEligibleCount === 0 || batchVisibilityRunning" @click="handleBatchForceArchive">
+                            <i class="el-icon-switch-button"></i>
+                            <span>强制归档</span>
+                            <b>{{ selectedForceArchiveEligibleCount }}</b>
+                        </button>
+                    </div>
+                </div>
+                <div class="mobile-history-batch-section">
+                    <span class="mobile-history-batch-label">B站可见性</span>
+                    <div class="mobile-history-batch-actions is-two-column">
+                        <button type="button" class="is-success" :disabled="selectedVisibilityPublicCount === 0 || batchVisibilityRunning" @click="handleBatchVisibility(0)">
+                            <i class="el-icon-unlock"></i>
+                            <span>公开</span>
+                            <b>{{ selectedVisibilityPublicCount }}</b>
+                        </button>
+                        <button type="button" class="is-warning" :disabled="selectedVisibilityPrivateCount === 0 || batchVisibilityRunning" @click="handleBatchVisibility(1)">
+                            <i class="el-icon-lock"></i>
+                            <span>仅自己</span>
+                            <b>{{ selectedVisibilityPrivateCount }}</b>
+                        </button>
+                    </div>
+                </div>
+                <div class="mobile-history-batch-section">
+                    <span class="mobile-history-batch-label">更多操作</span>
+                    <div class="mobile-history-batch-maintenance">
+                        <button type="button" :disabled="selectedItems.length === 0 || batchVisibilityRunning" @click="openBatchAbandonQueue">
+                            <i class="el-icon-remove-outline"></i>
+                            <span>放弃已选待发送</span>
+                        </button>
+                        <button type="button" :disabled="batchVisibilityRunning" @click="openMsgQueueCleanupDialog">
+                            <i class="el-icon-setting"></i>
+                            <span>清理历史队列</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="mobile-history-batch-footer">
+                    <button type="button" class="is-danger" :disabled="selectedItems.length === 0 || batchVisibilityRunning" @click="handleBatchDelete">
+                        <i class="el-icon-delete"></i>
+                        <span>删除所选</span>
+                    </button>
+                    <button type="button" @click="toggleBatchMode" :disabled="batchVisibilityRunning">
+                        <i class="el-icon-check"></i>
+                        <span>完成</span>
+                    </button>
+                </div>
+            </section>
+        </transition>
+
+        <transition name="mobile-history-rise">
+            <div v-if="batchVisibilityRunning" class="mobile-history-progress">
+                <div class="mobile-history-progress-head">
+                    <span>{{ batchOperationTitle }}</span>
+                    <strong>{{ batchVisibilityDone }}/{{ batchVisibilityTotal }}</strong>
+                </div>
+                <div class="mobile-history-progress-track">
+                    <div :style="{ width: batchVisibilityPercent + '%' }"></div>
+                </div>
+                <p>{{ batchVisibilityTargetText }} · 成功 {{ batchVisibilitySuccess }} / 失败 {{ batchVisibilityFail }}</p>
+            </div>
+        </transition>
+
+        <section class="mobile-history-feed-head">
+            <div>
+                <span>{{ form.viewType === 'working' ? 'LIVE WORKBOARD' : 'RECORD ARCHIVE' }}</span>
+                <h2>{{ form.viewType === 'working' ? '当前稿件' : '历史稿件' }}</h2>
+            </div>
+            <strong>{{ total }} 项</strong>
+        </section>
+
+        <transition :name="transitionName">
+            <section v-if="!loading && tableData.length === 0" key="mobile-empty" class="mobile-history-empty">
+                <i :class="activeFilterCount > 0 ? 'el-icon-search' : 'el-icon-folder-opened'"></i>
+                <h3>{{ activeFilterCount > 0 ? '没有符合条件的稿件' : '暂无录制历史' }}</h3>
+                <p>{{ activeFilterCount > 0 ? '可以调整筛选条件，或回到全部状态。' : '录制结束后会显示在这里。' }}</p>
+                <button v-if="activeFilterCount > 0" type="button" @click="resetFilters">
+                    <i class="el-icon-refresh-left"></i>
+                    <span>重置筛选</span>
+                </button>
+            </section>
+
+            <section v-else key="mobile-list"
+                     class="mobile-history-list data-card-grid"
+                     :class="{ 'is-multi-select-mode': isMultiSelectMode, 'is-archive': form.viewType === 'archived' }"
+                     v-loading="loading"
+                     element-loading-text="加载中...">
+                <template v-for="(item, index) in tableData">
+                    <div v-if="getMobileDateGroup(item, index)" :key="'group-' + item.id" class="mobile-history-date-group">
+                        {{ getMobileDateGroup(item, index) }}
+                    </div>
+                    <article class="mobile-history-card data-card"
+                             :key="item.id"
+                             :data-id="item.id"
+                             :class="[
+                                getMobileHistoryPhaseClass(item),
+                                {
+                                    'is-selected': isMultiSelectMode && isSelected(item),
+                                    'press-anim': pressedCardId === item.id
+                                }
+                             ]"
+                             :style="{ animationDelay: (index * 34) + 'ms' }"
+                             @click="handleMobileCardTap(item)">
+                        <div class="mobile-history-select-mark" :class="{ 'is-on': isMultiSelectMode && isSelected(item) }">
+                            <i :class="isSelected(item) ? 'el-icon-check' : 'el-icon-plus'"></i>
+                        </div>
+                        <div class="mobile-history-card-top">
+                            <div class="mobile-history-title-block">
+                                <span class="mobile-history-room">{{ maskText(item.roomName || item.roomId || '未知房间') }}</span>
+                                <h3>{{ maskText(item.title || '无标题稿件') }}</h3>
+                            </div>
+                            <span class="mobile-history-phase" :class="getMobileHistoryPhaseClass(item)">
+                                {{ getMobileHistoryPhaseText(item) }}
+                            </span>
+                        </div>
+                        <div class="mobile-history-subline">
+                            <span v-if="item.bvId">{{ maskText(item.bvId) }}</span>
+                            <span v-else>未生成 BV</span>
+                            <span>{{ formatDateTime(item.startTime) || '--' }}</span>
+                        </div>
+                        <div class="mobile-history-pipeline" aria-label="稿件状态">
+                            <span :class="{ 'is-on': isActuallyRecording(item), 'is-warning': hasRecordingMismatch(item) }">录</span>
+                            <span :class="{ 'is-on': item.upload }">传</span>
+                            <span :class="{ 'is-on': item.publish }">发</span>
+                            <span :class="getAuditStatusClass(item)">审</span>
+                            <span :class="getDanmakuStatusClass(item)">幕</span>
+                        </div>
+                        <div class="mobile-history-progress-line">
+                            <div>
+                                <span>分P进度</span>
+                                <strong>{{ item.uploadPartCount || 0 }}/{{ item.partCount || 0 }}</strong>
+                            </div>
+                            <div class="mobile-history-progress-track">
+                                <div :style="{ width: getMobileUploadPercent(item) + '%' }"></div>
+                            </div>
+                        </div>
+                        <div class="mobile-history-metrics">
+                            <span><i class="el-icon-coin"></i>{{ formatFileSize(item.fileSize) }}</span>
+                            <span><i class="el-icon-time"></i>{{ formatDuration(item.partDuration) }}</span>
+                        </div>
+                        <div class="mobile-history-alerts" v-if="abnormalPartCount(item) > 0 || skippedOnlyCount(item) > 0 || uploadFlowFallbackCount(item) > 0 || item.code === -50">
+                            <span v-if="item.code === -50" class="is-private"><i class="el-icon-view"></i>仅自己可见</span>
+                            <span v-if="abnormalPartCount(item) > 0" class="is-danger"><i class="el-icon-warning"></i>异常分P {{ abnormalPartCount(item) }}</span>
+                            <span v-if="skippedOnlyCount(item) > 0" class="is-warning"><i class="el-icon-remove-outline"></i>跳过 {{ skippedOnlyCount(item) }}</span>
+                            <span v-if="uploadFlowFallbackCount(item) > 0" class="is-warning"><i class="el-icon-refresh-left"></i>上传回退 {{ uploadFlowFallbackCount(item) }}</span>
+                        </div>
+                    </article>
+                </template>
+            </section>
+        </transition>
+
+        <div class="mobile-history-pagination">
+            <button type="button"
+                    :disabled="isMultiSelectMode || form.current <= 1"
+                    @click="handleCurrentChange(form.current - 1)">
+                <i class="el-icon-arrow-left"></i>
+                <span>上一页</span>
+            </button>
+            <strong>{{ form.current }} / {{ Math.max(1, Math.ceil(total / (form.pageSize || 10))) }}</strong>
+            <button type="button"
+                    :disabled="isMultiSelectMode || form.current * (form.pageSize || 10) >= total"
+                    @click="handleCurrentChange(form.current + 1)">
+                <span>下一页</span>
+                <i class="el-icon-arrow-right"></i>
+            </button>
+        </div>
+
+        <transition name="mobile-history-sheet">
+            <div v-if="filterExpanded" class="mobile-history-filter-backdrop" @click="filterExpanded = false"></div>
+        </transition>
+        <transition name="mobile-history-sheet">
+            <aside v-if="filterExpanded" class="mobile-history-filter-sheet" role="dialog" aria-modal="true" aria-label="筛选录制历史">
+                <div class="mobile-history-sheet-grabber"></div>
+                <header class="mobile-history-sheet-head">
+                    <div>
+                        <span>FILTER</span>
+                        <h3>筛选稿件</h3>
+                    </div>
+                    <button type="button" title="关闭" @click="filterExpanded = false">
+                        <i class="el-icon-close"></i>
+                    </button>
+                </header>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">快捷状态</span>
+                    <div class="mobile-history-filter-pills">
+                        <button type="button" :class="{ 'is-active': quickFilter === 'recording' }" @click="setQuickFilter('recording')">录制中</button>
+                        <button type="button" :class="{ 'is-active': quickFilter === 'success' }" @click="setQuickFilter('success')">已通过</button>
+                        <button type="button" :class="{ 'is-active': quickFilter === 'self' }" @click="setQuickFilter('self')">仅自己可见</button>
+                        <button type="button" :class="{ 'is-active': quickFilter === 'fail' }" @click="setQuickFilter('fail')">异常/不通过</button>
+                    </div>
+                </section>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">基础信息</span>
+                    <div class="mobile-history-filter-form">
+                        <label>
+                            <span>房间</span>
+                            <el-select v-model="form.roomId" clearable filterable placeholder="全部房间" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option
+                                        v-for="room in roomList"
+                                        :key="room.roomId"
+                                        :label="privacyMode ? '***' : (room.roomId + ' - ' + room.uname)"
+                                        :value="room.roomId">
+                                    <span class="mobile-history-option-row">
+                                        <span>{{ maskText(room.uname) }}</span>
+                                        <em>{{ maskText(room.roomId) }}</em>
+                                    </span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>BV 号</span>
+                            <el-input v-model="form.bvId" clearable placeholder="输入 BV 号" size="small" @clear="onFilterChange"></el-input>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">状态</span>
+                    <div class="mobile-history-filter-grid">
+                        <label>
+                            <span>录制</span>
+                            <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option label="录制中" :value="true">
+                                    <i class="mobile-history-option-icon is-warning el-icon-video-camera"></i>
+                                    <span>录制中</span>
+                                </el-option>
+                                <el-option label="已结束" :value="false">
+                                    <i class="mobile-history-option-icon is-muted el-icon-video-pause"></i>
+                                    <span>已结束</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>上传</span>
+                            <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option label="已上传" :value="true">
+                                    <i class="mobile-history-option-icon is-success el-icon-circle-check"></i>
+                                    <span>已上传</span>
+                                </el-option>
+                                <el-option label="未上传" :value="false">
+                                    <i class="mobile-history-option-icon is-danger el-icon-circle-close"></i>
+                                    <span>未上传</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>发布</span>
+                            <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode" popper-class="mobile-history-filter-popper">
+                                <el-option label="已发布" :value="true">
+                                    <i class="mobile-history-option-icon is-success el-icon-circle-check"></i>
+                                    <span>已发布</span>
+                                </el-option>
+                                <el-option label="未发布" :value="false">
+                                    <i class="mobile-history-option-icon is-muted el-icon-circle-close"></i>
+                                    <span>未发布</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                        <label>
+                            <span>审核</span>
+                            <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" popper-class="mobile-history-filter-popper">
+                                <el-option label="未审核" :value="-999">
+                                    <i class="mobile-history-option-icon is-muted el-icon-remove-outline"></i>
+                                    <span>未审核</span>
+                                </el-option>
+                                <el-option label="通过" :value="0">
+                                    <i class="mobile-history-option-icon is-success el-icon-success"></i>
+                                    <span>通过</span>
+                                </el-option>
+                                <el-option label="仅自己可见" :value="-50">
+                                    <i class="mobile-history-option-icon is-success el-icon-view"></i>
+                                    <span>仅自己可见</span>
+                                </el-option>
+                                <el-option label="不通过" :value="1">
+                                    <i class="mobile-history-option-icon is-danger el-icon-circle-close"></i>
+                                    <span>不通过</span>
+                                </el-option>
+                            </el-select>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="mobile-history-sheet-section">
+                    <span class="mobile-history-section-label">结束时间</span>
+                    <div class="mobile-history-date-shortcuts">
+                        <button type="button" @click="setDateRange(0)">今天</button>
+                        <button type="button" @click="setDateRange(1)">24h</button>
+                        <button type="button" @click="setDateRange(3)">3天</button>
+                        <button type="button" @click="setDateRange(7)">7天</button>
+                    </div>
+                    <div class="mobile-history-date-fields">
+                        <el-date-picker
+                                v-model="form.from"
+                                type="datetime"
+                                placeholder="开始时间"
+                                value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                size="small"
+                                popper-class="mobile-history-filter-popper"
+                                @change="onFilterChange">
+                        </el-date-picker>
+                        <el-date-picker
+                                v-model="form.to"
+                                type="datetime"
+                                placeholder="结束时间"
+                                value-format="yyyy-MM-dd HH:mm:ss.SSS"
+                                size="small"
+                                popper-class="mobile-history-filter-popper"
+                                @change="onFilterChange">
+                        </el-date-picker>
+                    </div>
+                </section>
+
+                <footer class="mobile-history-sheet-actions">
+                    <button type="button" @click="resetFilters">
+                        <i class="el-icon-refresh-left"></i>
+                        <span>重置</span>
+                    </button>
+                    <button type="button" class="is-primary" :disabled="loading" @click="filterExpanded = false; initTable()">
+                        <i class="el-icon-check"></i>
+                        <span>应用筛选</span>
+                    </button>
+                </footer>
+            </aside>
+        </transition>
+    </section>
+
+    <template data-biliup-fragment="detail"></template>
+    <template data-biliup-fragment="dialogs"></template>
+</div>

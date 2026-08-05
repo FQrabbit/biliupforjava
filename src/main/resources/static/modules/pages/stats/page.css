@@ -1,0 +1,196 @@
+.stats-toolbar .el-select {
+    width: 220px;
+}
+
+.stats-date-range .el-date-editor.el-input {
+    flex: 1;
+    width: 0;
+}
+
+.stats-date-range .el-input__inner {
+    height: 34px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary, #303133);
+    text-align: center;
+}
+
+.stats-action-menu .el-button {
+    margin-left: 0;
+}
+
+.stats-xml-repair-dialog .el-dialog__body {
+    padding-top: 12px;
+}
+
+.stats-xml-issue-dialog .el-dialog__body {
+    padding: 16px 20px 14px;
+}
+
+.xml-issue-toolbar-actions .el-input {
+    min-width: 160px;
+}
+
+.xml-issue-action-bar .el-button {
+    margin-left: 0;
+}
+
+.xml-issue-toolbar .el-button:focus-visible,
+.xml-issue-action-bar .el-button:focus-visible,
+.xml-issue-banner .el-button:focus-visible,
+.xml-issue-expanded .el-button:focus-visible {
+    outline: 2px solid var(--primary-color, #409eff);
+    outline-offset: 2px;
+}
+
+.xml-repair-result.is-error .xml-repair-result-title {
+    color: #e6a23c;
+}
+
+.xml-repair-meta span.is-success {
+    border-color: rgba(32, 168, 107, 0.45);
+    background: rgba(32, 168, 107, 0.12);
+    color: var(--success-color, #20a86b);
+}
+
+.xml-repair-meta span.is-danger {
+    border-color: rgba(245, 108, 108, 0.48);
+    background: rgba(245, 108, 108, 0.12);
+    color: var(--danger-color, #f56c6c);
+}
+
+.xml-repair-meta span.is-muted {
+    border-color: var(--border-color-light, #ebeef5);
+    background: var(--bg-secondary, #f5f7fa);
+    color: var(--text-secondary, #606266);
+}
+
+.coverage-strip.is-complete {
+    border-color: #b3e5c8;
+    background: #eefaf3;
+    color: #187243;
+}
+
+.operation-progress-panel.is-error {
+    border-color: rgba(245, 108, 108, 0.36);
+    background:
+            radial-gradient(circle at 0% 0%, rgba(245, 108, 108, 0.14), transparent 34%),
+            var(--bg-primary, #ffffff);
+}
+
+.stats-container .el-radio-button:not(.is-active) .el-radio-button__inner:hover {
+    color: var(--primary-color, #409eff);
+    background: var(--brand-soft-bg, rgba(64, 158, 255, 0.1));
+}
+
+.session-select .el-input__inner {
+    padding-right: 34px;
+}
+
+html[data-theme="dark"] .coverage-strip.is-complete,
+[data-theme="dark"] .coverage-strip.is-complete {
+    background: rgba(39, 179, 106, 0.14);
+    border-color: rgba(39, 179, 106, 0.35);
+    color: #8fe0b5;
+}
+
+html[data-theme="dark"] .operation-progress-panel.is-error,
+[data-theme="dark"] .operation-progress-panel.is-error {
+    background:
+            radial-gradient(circle at 0% 0%, rgba(245, 108, 108, 0.18), transparent 34%),
+            var(--bg-primary, #1f2024);
+}
+
+html[data-theme="dark"] .stats-container .el-radio-button:not(.is-active) .el-radio-button__inner:hover,
+[data-theme="dark"] .stats-container .el-radio-button:not(.is-active) .el-radio-button__inner:hover {
+    color: var(--primary-color, #409eff);
+    background: rgba(64, 158, 255, 0.13);
+}
+
+html[data-theme="dark"] .stats-date-range .el-input__inner,
+[data-theme="dark"] .stats-date-range .el-input__inner {
+    color: var(--text-primary, #e5e7eb);
+    background: transparent;
+}
+
+html[data-theme="dark"] .stats-date-range .el-input__inner::placeholder,
+[data-theme="dark"] .stats-date-range .el-input__inner::placeholder,
+html[data-theme="dark"] .stats-date-range > i,
+[data-theme="dark"] .stats-date-range > i,
+html[data-theme="dark"] .stats-date-separator,
+[data-theme="dark"] .stats-date-separator {
+    color: var(--text-secondary, #a8abb2);
+}
+
+@media (max-width: 760px) {
+    .stats-toolbar .el-select,
+    .stats-toolbar .el-date-editor,
+    .stats-date-range {
+        width: 100%;
+    }
+    .stats-more > .el-button {
+        width: 100%;
+    }}
+
+.stats-toolbar .el-select {
+    width: 260px;
+}
+
+.stats-toolbar .el-button,
+.stats-action-menu .el-button {
+    min-height: 40px;
+    border-radius: 13px;
+    font-weight: 700;
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.stats-toolbar .el-button:hover,
+.stats-action-menu .el-button:hover {
+    transform: translateY(-1px);
+}
+
+.coverage-strip.is-complete {
+    border-color: var(--success-border, rgba(82, 196, 26, 0.4));
+    background:
+            linear-gradient(135deg, var(--success-soft-bg-faint, rgba(82, 196, 26, 0.05)), transparent 54%),
+            var(--stats-surface);
+    color: color-mix(in srgb, var(--success-color, #27b36a) 78%, var(--text-primary, #303133));
+}
+
+@keyframes statsTableRowResort {
+    0% {
+        opacity: 0.42;
+        transform: translateY(8px) scale(0.992);
+        filter: saturate(0.88);
+    }
+    55% {
+        opacity: 1;
+        transform: translateY(-1px) scale(1);
+        filter: saturate(1.08);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: none;
+    }
+}
+
+@media (max-width: 1120px) {
+    .stats-toolbar .el-select {
+        width: min(320px, 100%);
+    }}
+
+@media (max-width: 760px) {
+    .stats-toolbar,
+    .stats-toolbar .el-select,
+    .stats-refresh-btn,
+    .stats-more,
+    .stats-more > .el-button,
+    .session-select {
+        width: 100%;
+        max-width: none;
+    }
+    .xml-issue-toolbar-actions .el-input {
+        flex: 1 1 180px;
+    }}

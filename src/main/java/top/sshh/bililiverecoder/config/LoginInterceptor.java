@@ -45,7 +45,7 @@ public class LoginInterceptor implements HandlerInterceptor {
 
         String accept = request.getHeader("Accept");
         if (StringUtils.contains(accept, "text/html") && !"XMLHttpRequest".equals(request.getHeader("X-Requested-With"))) {
-            response.sendRedirect("/html/login.html");
+            response.sendRedirect(request.getContextPath() + "/html/login.html");
             return false;
         }
         

@@ -1,0 +1,229 @@
+/* user.html 页面专属样式 */
+
+/* ========== 页面基础布局 ========== */
+
+.user-container {
+
+    height: 100%;
+
+    overflow-y: auto;
+
+    box-sizing: border-box;
+
+    padding: 20px;
+
+    background: var(--bg-secondary);
+
+}
+
+.user-header-title .icon {
+
+    font-size: 24px;
+
+    color: var(--primary-color);
+
+    transition: transform var(--transition-base);
+
+}
+
+.user-header:hover .user-header-title .icon {
+
+    transform: rotate(10deg) scale(1.1);
+
+}
+
+.user-header-actions .el-button {
+
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast) !important;
+
+}
+
+.status-icon.success {
+
+    background: var(--success-soft-bg-strong);
+
+    color: var(--success-color);
+
+}
+
+.status-value.success {
+
+    color: var(--success-color);
+
+}
+
+/* ========== 弹窗样式 ========== */
+
+.user-page-dialog {
+
+    border-radius: var(--radius-lg) !important;
+
+    overflow: hidden;
+
+}
+
+.user-page-dialog .el-dialog__header {
+
+    padding: 20px 24px;
+
+    border-bottom: 1px solid var(--border-light);
+
+    background: var(--bg-primary);
+
+}
+
+.user-page-dialog .el-dialog__title {
+
+    font-size: 18px;
+
+    font-weight: 600;
+
+}
+
+.user-page-dialog .el-dialog__body {
+
+    padding: 24px;
+
+}
+
+.user-page-dialog .el-dialog__footer {
+
+    padding: 16px 24px;
+
+    border-top: 1px solid var(--border-light);
+
+    background: var(--bg-secondary);
+
+}
+
+/* 登录弹窗 */
+
+.login-dialog {
+
+    border-radius: var(--radius-lg) !important;
+
+}
+
+.login-qr-wrapper {
+
+    text-align: center;
+
+    padding: 20px 0;
+
+}
+
+.login-tips {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 8px;
+
+    margin-bottom: 20px;
+
+    padding: 12px 20px;
+
+    background: var(--bg-secondary);
+
+    border-radius: var(--radius-md);
+
+    color: var(--text-secondary);
+
+    font-size: 14px;
+
+}
+
+.login-tips i {
+
+    font-size: 20px;
+
+    color: var(--primary-color);
+
+}
+
+.login-status {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 6px;
+
+    margin-bottom: 16px;
+
+    font-size: 13px;
+
+    font-weight: 500;
+
+    transition: color var(--duration-base) var(--ease-apple);
+
+}
+
+.qr-container {
+
+    display: inline-block;
+
+    padding: 16px;
+
+    background: var(--bg-primary);
+
+    border-radius: var(--radius-lg);
+
+    box-shadow: var(--shadow-md);
+
+}
+
+.qr-container img,
+
+.qr-container .el-image {
+
+    display: block;
+
+    width: 200px !important;
+
+    height: 200px !important;
+
+    border-radius: var(--radius-md);
+
+}
+
+/* ========== 响应式适配 ========== */
+
+@media (max-width: 768px) {
+
+    .user-container {
+
+        padding: 12px;
+
+    }
+
+    .user-page-dialog.el-dialog.is-fullscreen {
+
+        width: 95% !important;
+
+        height: auto !important;
+
+        max-height: 90vh !important;
+
+        border-radius: 8px;
+
+    }}
+
+[data-theme="dark"] .qr-container {
+
+    background: var(--bg-primary);
+
+}
+
+.brec-sync-result.is-success .brec-sync-result-icon {
+    color: #67c23a;
+}
+
+.brec-sync-result.is-error .brec-sync-result-icon {
+    color: #f56c6c;
+}

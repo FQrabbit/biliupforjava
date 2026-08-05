@@ -545,6 +545,13 @@ body > .el-color-dropdown {
     background: rgba(255, 255, 255, 0.08);
 }
 
+.mobile-shell .privacy-toggle.is-active {
+    color: var(--text-inverse);
+    background: var(--privacy-active-gradient);
+    border-color: var(--privacy-active-border);
+    box-shadow: var(--privacy-active-shadow);
+}
+
 [data-theme="dark"] .mobile-shell .header-nav {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
@@ -644,6 +651,11 @@ body > .el-color-dropdown {
 }
 
 .mobile-shell .nav-item {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: center;
     position: relative;
     z-index: 1;
     min-width: 0;
@@ -690,6 +702,13 @@ body > .el-color-dropdown {
 
 .mobile-shell .nav-item:active {
     transform: translateY(0) scale(0.965);
+}
+
+.mobile-shell .nav-item:focus-visible,
+.mobile-shell .privacy-toggle:focus-visible,
+.mobile-shell .theme-toggle:focus-visible {
+    outline: 2px solid var(--mobile-accent-1, var(--primary-color));
+    outline-offset: -2px;
 }
 
 .mobile-shell.is-operation-locked .header-actions,
@@ -766,8 +785,8 @@ body > .el-color-dropdown {
     content: none !important;
 }
 
-.mobile-shell.is-iframe-workspace .header-nav,
-.mobile-shell.is-iframe-modal .header-nav,
+.mobile-shell.is-page-workspace .header-nav,
+.mobile-shell.is-page-modal .header-nav,
 .mobile-shell.is-input-focused .header-nav,
 body.mobile-input-focused .mobile-shell .header-nav {
     transform: translateY(calc(110px + var(--mobile-safe-bottom)));
@@ -775,14 +794,14 @@ body.mobile-input-focused .mobile-shell .header-nav {
     pointer-events: none;
 }
 
-.mobile-shell.is-iframe-modal .app-header {
+.mobile-shell.is-page-modal .app-header {
     transform: translateY(calc(-100% - var(--mobile-safe-top)));
     opacity: 0;
     pointer-events: none;
 }
 
-.mobile-shell.is-iframe-workspace .app-main,
-.mobile-shell.is-iframe-modal .app-main,
+.mobile-shell.is-page-workspace .app-main,
+.mobile-shell.is-page-modal .app-main,
 .mobile-shell.is-input-focused .app-main,
 body.mobile-input-focused .mobile-shell .app-main {
     padding-bottom: 0;
@@ -800,25 +819,14 @@ body.mobile-input-focused .mobile-shell .theme-popover-backdrop {
     pointer-events: none;
 }
 
-.mobile-shell.is-iframe-modal .tab-frame {
-    position: fixed;
-    inset: 0;
-    z-index: 2500;
-    width: var(--mobile-viewport-width);
-    height: var(--mobile-viewport-height);
-    min-height: var(--mobile-viewport-height);
-    pointer-events: auto;
-    transform: translateZ(0);
-}
-
 body.mobile-input-focused,
-body.mobile-iframe-modal-open {
+body.mobile-page-modal-open {
     overflow: hidden;
     height: var(--mobile-viewport-height);
 }
 
-@supports selector(body:has(.mobile-shell.is-iframe-modal)) {
-    body:has(.mobile-shell.is-iframe-modal) {
+@supports selector(body:has(.mobile-shell.is-page-modal)) {
+    body:has(.mobile-shell.is-page-modal) {
         overflow: hidden;
         height: var(--mobile-viewport-height);
     }
@@ -844,17 +852,6 @@ body.mobile-iframe-modal-open {
 .mobile-shell .el-message-box__wrapper,
 .el-message-box__wrapper {
     z-index: 4100 !important;
-}
-
-.mobile-shell .tab-frame {
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    margin: 0;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    background: transparent;
 }
 
 .mobile-shell .changelog-container {

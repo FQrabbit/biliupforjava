@@ -1,0 +1,413 @@
+/* ========== Multi-select Mode Styles ========== */
+
+.data-card.is-selected {
+    transform: none;
+    box-shadow: 0 1px 8px var(--brand-soft-bg), 0 0 0 2px color-mix(in srgb, var(--primary-color) 42%, transparent);
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--bg-primary));
+
+    z-index: 10;
+
+    transition:
+
+        transform var(--duration-slow) var(--ease-apple),
+
+        box-shadow var(--duration-slow) var(--ease-apple),
+
+        border-color var(--duration-slow) var(--ease-apple),
+
+        background var(--duration-slow) var(--ease-apple);
+
+}
+
+[data-theme='dark'] .data-card.is-selected {
+    box-shadow: 0 1px 8px color-mix(in srgb, var(--primary-color) 12%, transparent), 0 0 0 2px color-mix(in srgb, var(--primary-color) 48%, transparent);
+    border-color: var(--primary-color);
+
+}
+
+.selection-overlay {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    background: var(--primary-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 5;
+    border: 2px solid var(--bg-primary);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+    transition: opacity var(--duration-fast) var(--ease-apple), background var(--duration-fast) var(--ease-apple);
+    pointer-events: none;
+}
+
+[data-theme='dark'] .selection-overlay {
+    background: var(--primary-color);
+
+}
+
+.selection-icon {
+    color: var(--text-inverse);
+    font-size: 16px;
+    opacity: 1;
+    animation: applePopIn 0.24s var(--ease-spring) both;
+
+}
+
+@keyframes applePopIn {
+
+  0%   { transform: scale(0.5); opacity: 0; }
+
+  60%  { transform: scale(1.06); opacity: 0.75; }
+
+  100% { transform: scale(1); opacity: 0.8; }
+
+}
+
+@keyframes batchBarIn {
+
+    from { transform: translate(-50%, 24px); opacity: 0; }
+
+    to   { transform: translate(-50%, 0); opacity: 1; }
+
+}
+
+.tab-help-icon {
+
+    color: var(--text-secondary);
+
+    cursor: help;
+
+}
+
+.tab-help-icon {
+
+    margin-left: 4px;
+
+    font-size: 13px;
+
+}
+
+.history-container.is-batch-mode .history-main {
+    padding-bottom: 160px;
+}
+
+.batch-action-group .el-button-group,
+.batch-action-group .el-dropdown {
+    display: inline-flex;
+}
+
+.batch-delete-confirm {
+    display: grid;
+    gap: 14px;
+}
+
+.batch-delete-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, #f56c6c 28%, var(--border-light));
+    border-radius: 8px;
+    background: color-mix(in srgb, #f56c6c 7%, var(--bg-primary));
+}
+
+.batch-delete-warning > i {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: #f56c6c;
+    font-size: 20px;
+}
+
+.batch-delete-warning > div {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.batch-delete-warning strong {
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.batch-delete-warning span {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.batch-delete-options {
+    display: grid;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+
+.batch-delete-options-title {
+    margin-bottom: 2px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.batch-delete-options .el-checkbox {
+    margin: 0;
+}
+
+.batch-delete-danger-note {
+    color: #f56c6c;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.queue-cleanup-dialog {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.queue-cleanup-dialog .el-checkbox {
+    margin-right: 14px;
+}
+
+.queue-cleanup-unit {
+    margin-left: 8px;
+    color: var(--text-secondary);
+}
+
+.queue-cleanup-preview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.queue-cleanup-warning {
+    grid-column: 1 / -1;
+    color: #e6a23c;
+}
+
+[data-theme='dark'] .edit-upload-float,
+[data-theme='dark'] .batch-progress-float {
+
+    border-color: var(--batch-progress-float-border);
+
+}
+
+.edit-upload-float {
+    position: fixed;
+    right: 24px;
+    bottom: 108px;
+    width: 380px;
+    max-width: calc(100vw - 32px);
+    padding: 14px;
+    background: var(--batch-progress-float-bg);
+    border: 1px solid var(--batch-progress-float-border);
+    border-radius: 14px;
+    box-shadow: var(--batch-progress-float-shadow);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    z-index: 3100;
+}
+
+.edit-upload-float-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.edit-upload-float-title {
+    color: var(--batch-progress-title-color);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.edit-upload-float-sub {
+    margin-top: 3px;
+    color: var(--batch-progress-meta-color);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.edit-upload-current {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.edit-upload-name {
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.edit-upload-meta {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+    color: var(--batch-progress-meta-color);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.edit-upload-meta span:nth-child(even) {
+    text-align: right;
+}
+
+.edit-upload-queue {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-light);
+}
+
+.edit-upload-queue-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 28px;
+    color: var(--batch-progress-meta-color);
+    font-size: 12px;
+}
+
+.edit-upload-queue-item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@keyframes batchStripeMove {
+
+    from { background-position: 0 0, 0 0, 0 0; }
+
+    to { background-position: 0 0, 28px 0, 0 0; }
+
+}
+
+@keyframes batchFloatIn {
+
+    from { transform: translateY(10px); opacity: 0; }
+
+    to { transform: translateY(0); opacity: 1; }
+
+}
+
+@keyframes appleJiggle {
+
+  from { transform: rotate(-2.5deg) scale(1); }
+
+  to   { transform: rotate(2.5deg) scale(1.02); }
+
+}
+
+/* 批量操作栏移动端适配 */
+
+@media (max-width: 1100px) {
+    .history-container.is-batch-mode .history-main {
+        padding-bottom: 215px;
+    }}
+
+@media (max-width: 768px) {
+
+    .history-container.is-batch-mode .history-main {
+        padding-bottom: 300px;
+    }
+
+    .batch-action-group .el-button-group,
+    .batch-action-group .el-dropdown,
+    .batch-action-group .el-dropdown .el-button {
+        width: 100%;
+    }
+
+    .batch-action-group .el-button-group .el-button {
+        flex: 1 1 0;
+    }
+
+    .batch-danger-action .el-button {
+        width: 100%;
+    }
+
+    .edit-upload-float {
+        right: 10px;
+        left: 10px;
+        bottom: 120px;
+        width: auto;
+        border-radius: 12px;
+    }
+
+    .edit-upload-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .edit-upload-meta span:nth-child(even) {
+        text-align: left;
+    }}
+
+/* ========== 已跳过分P 提示框 ========== */
+.detail-skip-box {
+    background: var(--warning-soft-bg-faint);
+    border: 1px solid var(--warning-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+}
+
+.detail-skip-box .skip-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warning-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.detail-skip-box .skip-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.detail-skip-box .skip-header.is-clickable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.detail-skip-box .skip-toggle-icon {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.detail-skip-box.is-expanded .skip-header {
+    margin-bottom: 12px;
+}
+
+.detail-skip-box .skip-note {
+    font-size: 12px;
+    font-weight: normal;
+    color: var(--text-secondary);
+}
+
+.dark-mode .detail-skip-box {
+    background: var(--warning-soft-bg-faint);
+    border-color: var(--warning-border);
+}

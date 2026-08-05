@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "pages": {
+    "stats": {
+      "mode": "module",
+      "module": "page.stats",
+      "component": "stats-page",
+      "templates": {
+        "desktop": "/modules/pages/stats/desktop.html",
+        "mobile": "/modules/pages/stats/mobile.html"
+      },
+      "styles": {
+        "common": [
+          "/modules/pages/stats/page.css"
+        ],
+        "desktop": [
+          "/modules/pages/stats/desktop.css"
+        ],
+        "mobile": [
+          "/mobile/css/mobile-pages.css",
+          "/modules/pages/stats/mobile.css"
+        ]
+      },
+      "scripts": [
+        "/js/echarts.min.js",
+        "/js/api/stats-api.js",
+        "/modules/pages/stats/methods/runtime-methods.js",
+        "/modules/pages/stats/methods/xml-methods.js",
+        "/modules/pages/stats/methods/maintenance-methods.js",
+        "/modules/pages/stats/methods/chart-methods.js",
+        "/modules/pages/stats/methods/format-methods.js"
+      ],
+      "entry": "/modules/pages/stats/page.js"
+    },
+    "history": {
+      "mode": "module",
+      "module": "page.history",
+      "component": "history-page",
+      "templates": {
+        "desktop": "/modules/pages/history/desktop.html",
+        "mobile": "/modules/pages/history/mobile.html"
+      },
+      "fragments": {
+        "desktop": {
+          "detail": "/modules/pages/history/fragments/desktop-detail.html",
+          "dialogs": "/modules/pages/history/fragments/desktop-dialogs.html"
+        },
+        "mobile": {
+          "detail": "/modules/pages/history/fragments/mobile-detail.html",
+          "dialogs": "/modules/pages/history/fragments/mobile-dialogs.html"
+        }
+      },
+      "styles": {
+        "common": [
+          "/modules/pages/history/page.css",
+          "/modules/pages/history/detail-dialog.css",
+          "/modules/pages/history/detail-workspace.css",
+          "/modules/pages/history/detail-stats.css",
+          "/modules/pages/history/detail-exception.css",
+          "/modules/pages/history/upload-progress.css",
+          "/modules/pages/history/part-status.css",
+          "/modules/pages/history/batch.css",
+          "/modules/pages/history/preview.css",
+          "/css/global-preview-player.css"
+        ],
+        "desktop": [
+          "/modules/pages/history/desktop.css"
+        ],
+        "mobile": [
+          "/mobile/css/mobile-pages.css",
+          "/modules/pages/history/mobile.css",
+          "/modules/pages/history/mobile-detail.css",
+          "/modules/pages/history/mobile-danmaku.css"
+        ]
+      },
+      "scripts": [
+        "/js/api/history-api.js",
+        "/js/api/part-api.js",
+        "/js/api/preview-api.js",
+        "/js/api/room-api.js",
+        "/js/global-preview-player.js",
+        "/modules/pages/history/options/state.js",
+        "/modules/pages/history/options/computed.js",
+        "/modules/pages/history/options/watchers.js",
+        "/modules/pages/history/methods/common-methods.js",
+        "/modules/pages/history/methods/batch-methods.js",
+        "/modules/pages/history/methods/detail-methods.js",
+        "/modules/pages/history/methods/danmaku-methods.js",
+        "/modules/pages/history/methods/archive-status-methods.js",
+        "/modules/pages/history/methods/archive-progress-methods.js",
+        "/modules/pages/history/methods/audit-methods.js",
+        "/modules/pages/history/methods/detail-view-methods.js",
+        "/modules/pages/history/methods/progress-methods.js",
+        "/modules/pages/history/methods/edit-parts-methods.js",
+        "/modules/pages/history/methods/preview-methods.js",
+        "/modules/pages/history/methods/upload-methods.js",
+        "/modules/pages/history/methods/record-methods.js"
+      ],
+      "entry": "/modules/pages/history/page.js"
+    },
+    "room": {
+      "mode": "module",
+      "module": "page.room",
+      "component": "room-page",
+      "templates": {
+        "desktop": "/modules/pages/room/desktop.html",
+        "mobile": "/modules/pages/room/mobile.html"
+      },
+      "fragments": {
+        "desktop": {
+          "config": "/modules/pages/room/fragments/desktop-config.html",
+          "dialogs": "/modules/pages/room/fragments/desktop-dialogs.html"
+        },
+        "mobile": {
+          "config": "/modules/pages/room/fragments/mobile-config.html",
+          "dialogs": "/modules/pages/room/fragments/mobile-dialogs.html"
+        }
+      },
+      "styles": {
+        "common": [
+          "/modules/pages/room/page.css",
+          "/modules/pages/room/detail.css",
+          "/modules/pages/room/dialog-base.css",
+          "/modules/pages/room/danmaku-dialog.css",
+          "/modules/pages/room/config-dialog.css",
+          "/modules/pages/room/polish.css"
+        ],
+        "desktop": [
+          "/modules/pages/room/desktop.css",
+          "/modules/pages/room/desktop-table.css",
+          "/modules/pages/room/desktop-dialog.css",
+          "/modules/pages/room/desktop-config.css"
+        ],
+        "mobile": [
+          "/mobile/css/mobile-pages.css",
+          "/modules/pages/room/mobile.css"
+        ]
+      },
+      "scripts": [
+        "/js/api/room-api.js",
+        "/js/api/user-api.js",
+        "/js/data/bili-partitions.js",
+        "/modules/pages/room/methods/ui-methods.js",
+        "/modules/pages/room/methods/config-methods.js",
+        "/modules/pages/room/methods/deletion-methods.js",
+        "/modules/pages/room/methods/media-methods.js",
+        "/modules/pages/room/methods/runtime-methods.js"
+      ],
+      "entry": "/modules/pages/room/page.js"
+    },
+    "user": {
+      "mode": "module",
+      "module": "page.user",
+      "component": "user-page",
+      "templates": {
+        "desktop": "/modules/pages/user/desktop.html",
+        "mobile": "/modules/pages/user/mobile.html"
+      },
+      "styles": {
+        "common": [
+          "/modules/pages/user/page.css"
+        ],
+        "desktop": [
+          "/modules/pages/user/desktop.css"
+        ],
+        "mobile": [
+          "/modules/pages/user/mobile.css"
+        ]
+      },
+      "scripts": [
+        "/js/api/user-api.js"
+      ],
+      "entry": "/modules/pages/user/page.js"
+    },
+    "log": {
+      "mode": "module",
+      "module": "page.log",
+      "component": "log-page",
+      "templates": {
+        "desktop": "/modules/pages/log/desktop.html",
+        "mobile": "/modules/pages/log/mobile.html"
+      },
+      "styles": {
+        "common": [
+          "/modules/pages/log/page.css"
+        ],
+        "desktop": [
+          "/modules/pages/log/desktop.css"
+        ],
+        "mobile": [
+          "/modules/pages/log/mobile.css"
+        ]
+      },
+      "scripts": [
+        "/js/api/log-api.js",
+        "/modules/pages/log/methods/stream-methods.js",
+        "/modules/pages/log/methods/render-methods.js",
+        "/modules/pages/log/methods/alert-methods.js",
+        "/modules/pages/log/methods/ui-methods.js"
+      ],
+      "entry": "/modules/pages/log/page.js"
+    }
+  },
+  "shell": {
+    "system-settings": {
+      "mode": "module",
+      "module": "shell.system-settings",
+      "component": "biliup-system-settings",
+      "templates": {
+        "desktop": "/modules/shell/system-settings/desktop.html",
+        "mobile": "/modules/shell/system-settings/mobile.html"
+      },
+      "styles": {
+        "common": [
+          "/modules/shell/system-settings/page.css"
+        ],
+        "desktop": [],
+        "mobile": [
+          "/modules/shell/system-settings/mobile.css"
+        ]
+      },
+      "scripts": [
+        "/js/api/storage-api.js",
+        "/js/app/shell/system-settings.js",
+        "/js/app/shell/storage-settings.js"
+      ],
+      "entry": "/modules/shell/system-settings/page.js"
+    },
+    "notification-settings": {
+      "mode": "module",
+      "module": "shell.notification-settings",
+      "component": "biliup-notification-settings",
+      "templates": {
+        "desktop": "/modules/shell/notification-settings/desktop.html",
+        "mobile": "/modules/shell/notification-settings/mobile.html"
+      },
+      "fragments": {
+        "channelFields": "/modules/shell/notification-settings/channel-fields.html"
+      },
+      "styles": {
+        "common": [
+          "/modules/shell/notification-settings/page.css"
+        ],
+        "desktop": [],
+        "mobile": [
+          "/modules/shell/notification-settings/mobile.css"
+        ]
+      },
+      "scripts": [
+        "/js/api/notification-api.js",
+        "/js/components/notification-channel-fields.js",
+        "/js/app/shell/notifications/channel-methods.js",
+        "/js/app/shell/notifications/rule-editor-methods.js",
+        "/js/app/shell/notifications/rule-persistence-methods.js",
+        "/js/app/shell/notifications/migration-methods.js",
+        "/js/app/shell/notifications.js"
+      ],
+      "entry": "/modules/shell/notification-settings/page.js"
+    }
+  }
+}

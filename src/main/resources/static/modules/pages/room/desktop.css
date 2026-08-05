@@ -1,0 +1,1237 @@
+/* ========== 页面头部 ========== */
+
+.room-header {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: 16px;
+
+    margin-bottom: 24px;
+
+    padding: 20px 24px;
+
+    background: var(--bg-primary);
+
+    backdrop-filter: blur(12px);
+
+    -webkit-backdrop-filter: blur(12px);
+
+    border-radius: var(--radius-lg);
+
+    box-shadow: var(--shadow-sm);
+
+    border: 1px solid var(--border-light);
+
+    position: relative;
+
+    overflow: hidden;
+
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+
+}
+
+.room-header:hover {
+
+    box-shadow: var(--shadow-md);
+
+    transform: translateY(-2px);
+
+}
+
+[data-theme="dark"] .room-header {
+
+    background: var(--bg-tertiary);
+
+}
+
+/* 头部背景装饰 */
+
+.room-header::before {
+
+    display: none;
+
+}
+
+.room-header-left {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 20px;
+
+}
+
+.room-header-title {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+}
+
+.room-card-legend {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-left: 8px;
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    user-select: none;
+
+    flex-wrap: wrap;
+
+}
+
+.room-card-legend-compact {
+
+    display: none;
+
+    align-items: center;
+
+    margin-left: 8px;
+
+}
+
+.room-legend-toggle {
+
+    padding: 4px 6px;
+
+    border-radius: var(--radius-md);
+
+    color: var(--text-secondary);
+
+    transition: background var(--transition-fast), color var(--transition-fast);
+
+}
+
+.room-legend-toggle:hover {
+
+    background: var(--brand-soft-bg-hover);
+
+    color: var(--primary-color);
+
+}
+
+/* 图例收缩动画 (Apple-style) */
+
+.room-legend-collapse-enter-active {
+
+    transition: max-width var(--duration-base) var(--ease-decel),
+
+                opacity var(--duration-base) var(--ease-decel),
+
+                transform var(--duration-base) var(--ease-decel);
+
+}
+
+.room-legend-collapse-leave-active {
+
+    transition: max-width var(--duration-fast) var(--ease-accel),
+
+                opacity var(--duration-fast) var(--ease-accel),
+
+                transform var(--duration-fast) var(--ease-accel);
+
+}
+
+.room-legend-collapse-enter,
+
+.room-legend-collapse-leave-to {
+
+    max-width: 0;
+
+    opacity: 0;
+
+    transform: scaleX(0.95);
+
+}
+
+.room-legend-collapse-enter-to,
+
+.room-legend-collapse-leave {
+
+    max-width: 420px;
+
+    opacity: 1;
+
+    transform: scaleX(1);
+
+}
+
+.room-card-legend,
+
+.room-card-legend-compact {
+
+    overflow: hidden;
+
+    transform-origin: left center;
+
+}
+
+.room-legend-item {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    padding: 4px 8px;
+
+    border-radius: var(--radius-md);
+
+    background: var(--bg-tertiary);
+
+    border: 1px solid var(--border-light);
+
+    line-height: 1;
+
+    transition: background var(--transition-fast), transform var(--transition-fast);
+
+    cursor: default;
+
+}
+
+.room-legend-item:hover {
+
+    background: var(--bg-secondary);
+
+    transform: translateY(-1px);
+
+}
+
+.room-legend-dot {
+
+    width: 10px;
+
+    height: 10px;
+
+    border-radius: 50%;
+
+    flex: 0 0 10px;
+
+}
+
+/* 与卡片状态颜色保持一致 */
+
+.room-legend-dot.legend-streaming {
+
+    background: var(--danger-hot);
+
+}
+
+.room-legend-dot.legend-recording {
+
+    background: var(--success-color);
+
+}
+
+.room-legend-compact-pill {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    padding: 4px 8px;
+
+    border-radius: var(--radius-md);
+
+    background: var(--bg-tertiary);
+
+    border: 1px solid var(--border-light);
+
+    line-height: 1;
+
+    color: var(--text-secondary);
+
+}
+
+.room-legend-compact-text {
+
+    margin-left: 2px;
+
+    font-size: 12px;
+
+}
+
+.room-header-title h2 {
+
+    margin: 0;
+
+    font-size: 22px;
+
+    font-weight: 700;
+
+    color: var(--text-primary);
+
+    letter-spacing: -0.5px;
+
+}
+
+.room-stats {
+
+    display: flex;
+
+    gap: 24px;
+
+    padding-left: 20px;
+
+    border-left: 2px solid var(--border-light);
+
+}
+
+.room-stat-item {
+
+    text-align: center;
+
+    position: relative;
+
+    transition: transform var(--transition-base);
+
+    cursor: pointer;
+
+    padding: 4px 10px;
+
+    border-radius: 10px;
+
+    border: 1px solid transparent;
+
+    user-select: none;
+
+}
+
+.room-stat-item:hover {
+
+    transform: translateY(-2px);
+
+    background: var(--brand-soft-bg-subtle);
+
+    border-color: var(--brand-accent-border-light);
+
+}
+
+.room-stat-value {
+
+    font-size: 28px;
+
+    font-weight: 800;
+
+    line-height: 1.1;
+
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+
+    -webkit-background-clip: text;
+
+    -webkit-text-fill-color: transparent;
+
+    background-clip: text;
+
+}
+
+.room-stat-label {
+
+    font-size: 12px;
+
+    color: var(--text-secondary);
+
+    margin-top: 2px;
+
+}
+
+.room-header-actions {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    flex-wrap: wrap;
+
+}
+
+/* 头部视图切换：与霓虹按钮同高对齐 */
+
+.room-header-actions .el-radio-group {
+
+    display: inline-flex;
+
+    align-items: center;
+
+}
+
+.room-header-actions .el-radio-button__inner {
+
+    padding: 10px 14px !important;
+
+    line-height: 1 !important;
+
+}
+
+/* 头部按钮/视图切换的像素级对齐（避免baseline/line-height导致的细微偏移） */
+
+.room-header-actions .el-radio-button__inner {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+}
+
+.room-header-actions .el-radio-button__inner [class^="el-icon-"] {
+
+    line-height: 1;
+
+}
+
+/* ========== 直播间卡片 ========== */
+
+.room-card {
+
+    background: var(--bg-primary);
+
+    border-radius: var(--radius-lg);
+
+    box-shadow: var(--shadow-sm);
+
+    overflow: hidden;
+
+    transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+
+    border: 1px solid var(--border-light);
+
+    position: relative;
+
+    cursor: pointer;
+
+}
+
+.room-sort-handle {
+
+    width: 38px;
+
+    height: 38px;
+
+    flex: 0 0 38px;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 3px;
+
+    border-radius: var(--radius-md);
+
+    background: var(--brand-soft-bg);
+
+    color: var(--primary-color);
+
+    border: 1px solid var(--brand-accent-border);
+
+    cursor: grab;
+
+    font-weight: 700;
+
+}
+
+.room-sort-handle:active {
+
+    cursor: grabbing;
+
+}
+
+.room-sort-handle span {
+
+    font-size: 12px;
+
+}
+
+.room-card::before {
+
+    content: '';
+
+    position: absolute;
+
+    top: 0;
+
+    left: 0;
+
+    right: 0;
+
+    height: 4px;
+
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+
+    opacity: 0;
+
+    transition: opacity var(--duration-base) var(--ease-apple);
+
+}
+
+.room-card:hover {
+
+    transform: translateY(-4px);
+
+    box-shadow: var(--shadow-md);
+
+    border-color: var(--primary-light);
+
+}
+
+.room-card:hover::before {
+
+    opacity: 1;
+
+}
+
+/* 直播中状态 */
+
+.room-card.is-streaming {
+
+    border-color: var(--danger-border);
+
+    box-shadow:
+
+        var(--shadow-sm),
+
+        0 0 30px var(--danger-shadow-soft);
+
+}
+
+.room-card.is-streaming::before {
+
+    background: linear-gradient(90deg, var(--danger-hot), var(--warning-accent));
+
+    opacity: 1;
+
+}
+
+.room-card.is-streaming:hover {
+
+    box-shadow:
+
+        var(--shadow-md),
+
+        0 0 40px var(--danger-shadow);
+
+}
+
+/* 卡片头部 */
+
+.room-card-header {
+
+    display: flex;
+
+    align-items: flex-start;
+
+    padding: 20px;
+
+    gap: 16px;
+
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+
+}
+
+.room-avatar {
+
+    width: 60px;
+
+    height: 60px;
+
+    border-radius: var(--radius-md);
+
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 24px;
+
+    font-weight: 700;
+
+    color: white;
+
+    flex-shrink: 0;
+
+    box-shadow: var(--brand-shadow-md);
+
+    position: relative;
+
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+
+}
+
+.room-card:hover .room-avatar {
+
+    transform: scale(1.05);
+
+    box-shadow: var(--brand-shadow-lg);
+
+}
+
+.room-avatar img {
+
+    width: 100%;
+
+    height: 100%;
+
+    object-fit: cover;
+
+    border-radius: var(--radius-md);
+
+}
+
+/* 性别图标 */
+.gender-icon {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-inverse);
+    z-index: 2;
+    border: 2px solid var(--bg-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.gender-icon.male {
+    background: var(--primary-color);
+}
+
+.gender-icon.female {
+    background: var(--danger-color);
+}
+
+/* 直播状态指示器 */
+
+.live-indicator {
+
+    position: absolute;
+
+    bottom: -2px;
+
+    right: -2px;
+
+    width: 18px;
+
+    height: 18px;
+
+    border-radius: 50%;
+
+    background: var(--success-color);
+
+    border: 3px solid var(--bg-primary);
+
+    animation: pulse-live 1.5s ease-in-out infinite;
+
+}
+
+.room-info {
+
+    flex: 1;
+
+    min-width: 0;
+
+}
+
+.room-name {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    color: var(--text-primary);
+
+    margin: 0 0 6px 0;
+
+    white-space: nowrap;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+}
+
+.room-title {
+
+    font-size: 13px;
+
+    color: var(--text-secondary);
+
+    margin: 0 0 8px 0;
+
+    display: -webkit-box;
+
+    -webkit-line-clamp: 2;
+
+    line-clamp: 2;
+
+    -webkit-box-orient: vertical;
+
+    overflow: hidden;
+
+    line-height: 1.4;
+
+}
+
+.room-id {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    font-size: 12px;
+
+    color: var(--text-disabled);
+
+    font-family: 'Monaco', 'Consolas', monospace;
+
+}
+
+/* 卡片内容 */
+
+.room-card-body {
+
+    padding: 16px 20px;
+
+}
+
+.room-tags {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 8px;
+
+    margin-bottom: 12px;
+
+}
+
+.room-tag {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    padding: 4px 10px;
+
+    border-radius: 20px;
+
+    font-size: 12px;
+
+    font-weight: 500;
+
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+
+}
+
+.room-tag.offline {
+
+    background: var(--bg-tertiary);
+
+    color: var(--text-disabled);
+
+    border: 1px solid var(--border-light);
+
+}
+
+.room-meta {
+
+    display: flex;
+
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: 8px;
+
+    padding-top: 12px;
+
+    border-top: 1px dashed var(--border-light);
+
+}
+
+.room-copyright {
+
+    font-size: 12px;
+
+    padding: 3px 8px;
+
+    border-radius: var(--radius-sm);
+
+    font-weight: 500;
+
+}
+
+.room-copyright.original {
+
+    background: var(--warning-soft-bg);
+
+    color: var(--warning-color);
+
+}
+
+.room-copyright.repost {
+
+    background: var(--bg-tertiary);
+
+    color: var(--text-secondary);
+
+}
+
+.room-partition {
+
+    font-size: 12px;
+
+    padding: 3px 8px;
+
+    border-radius: var(--radius-sm);
+
+    background: var(--brand-soft-bg-active);
+
+    color: var(--primary-color);
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    max-width: 120px;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+}
+
+.room-partition i {
+
+    font-size: 11px;
+
+    flex-shrink: 0;
+
+}
+
+.room-visibility {
+
+    font-size: 12px;
+
+    padding: 3px 8px;
+
+    border-radius: var(--radius-sm);
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+}
+
+.room-visibility.public {
+
+    background: var(--success-soft-bg);
+
+    color: var(--success-color);
+
+}
+
+.room-visibility.private {
+
+    background: var(--danger-soft-bg);
+
+    color: var(--danger-color);
+
+}
+
+.room-visibility i {
+
+    font-size: 11px;
+
+}
+
+.room-delete-info {
+
+    font-size: 11px;
+
+    color: var(--text-disabled);
+
+    max-width: 140px;
+
+    text-align: right;
+
+    line-height: 1.3;
+
+    margin-left: auto;
+
+}
+
+/* 卡片底部操作 */
+
+.room-card-footer {
+
+    display: flex;
+
+    justify-content: flex-end;
+
+    gap: 8px;
+
+    padding: 14px 20px;
+
+    background: var(--bg-secondary);
+
+    border-top: 1px solid var(--border-light);
+
+}
+
+/* 淡入淡出过渡 (Apple-style) */
+
+.fade-transform-enter-active {
+
+    transition: opacity var(--duration-base) var(--ease-decel),
+
+                transform var(--duration-base) var(--ease-decel);
+
+}
+
+.fade-transform-leave-active {
+
+    transition: opacity var(--duration-fast) var(--ease-accel),
+
+                transform var(--duration-fast) var(--ease-accel);
+
+}
+
+.fade-transform-enter {
+
+    opacity: 0;
+
+    transform: translateX(-16px);
+
+}
+
+.fade-transform-leave-to {
+
+    opacity: 0;
+
+    transform: translateX(16px);
+
+}
+
+/* 滑动过渡 (Apple-style) */
+
+.slide-left-enter-active,
+
+.slide-right-enter-active {
+
+    transition: transform var(--duration-base) var(--ease-decel);
+
+}
+
+.slide-left-leave-active,
+
+.slide-right-leave-active {
+
+    transition: transform var(--duration-fast) var(--ease-accel);
+
+}
+
+.slide-left-enter {
+
+    transform: translateX(100%);
+
+}
+
+.slide-left-leave-to {
+
+    transform: translateX(-100%);
+
+}
+
+.slide-right-enter {
+
+    transform: translateX(-100%);
+
+}
+
+.slide-right-leave-to {
+
+    transform: translateX(100%);
+
+}
+
+/* ========== 响应式适配 ========== */
+
+@media (max-width: 768px) {
+
+    .room-header {
+
+        padding: 16px;
+
+        flex-direction: column;
+
+        align-items: stretch;
+
+    }
+
+    .room-header-left {
+
+        flex-direction: column;
+
+        align-items: flex-start;
+
+        gap: 12px;
+
+    }
+
+    .room-card-legend {
+
+        display: none;
+
+    }
+
+    .room-card-legend-compact {
+
+        display: inline-flex;
+
+        margin-left: 0;
+
+    }
+
+    .room-stats {
+
+        padding-left: 0;
+
+        padding-top: 12px;
+
+        border-left: none;
+
+        border-top: 1px solid var(--border-light);
+
+        justify-content: flex-start;
+
+    }
+
+    .room-header-actions {
+
+        justify-content: flex-start;
+
+        flex-wrap: wrap;
+
+    }
+
+    .room-card-header {
+
+        padding: 16px;
+
+    }
+
+    .room-avatar {
+
+        width: 50px;
+
+        height: 50px;
+
+        font-size: 20px;
+
+    }
+
+    .room-name {
+
+        font-size: 16px;
+
+    }
+
+    .neon-btn {
+
+        padding: 8px 14px !important;
+
+        font-size: 13px !important;
+
+    }}
+
+/* ========== 暗色主题适配 ========== */
+
+[data-theme="dark"] .room-header {
+
+    background: var(--glass-bg);
+
+    border-color: var(--glass-border);
+
+}
+
+[data-theme="dark"] .room-header::before {
+
+    opacity: 1;
+
+}
+
+[data-theme="dark"] .room-card {
+
+    background: var(--glass-bg);
+
+    border-color: var(--glass-border);
+
+}
+
+[data-theme="dark"] .room-card:hover {
+
+    background: var(--glass-border);
+
+    border-color: var(--brand-accent-border-strong);
+
+}
+
+[data-theme="dark"] .room-card.is-streaming {
+
+    background: var(--danger-soft-bg);
+
+    border-color: var(--danger-border);
+
+    box-shadow: 0 0 35px var(--danger-shadow);
+
+}
+
+[data-theme="dark"] .room-card-header {
+
+    background: linear-gradient(135deg, var(--glass-border) 0%, transparent 100%);
+
+}
+
+[data-theme="dark"] .room-card-footer {
+
+    background: var(--bg-secondary);
+
+    border-color: var(--glass-border);
+
+}
+
+[data-theme="dark"] .room-partition {
+
+    background: var(--brand-soft-bg-strong);
+
+    color: var(--primary-light);
+
+}
+
+[data-theme="dark"] .room-visibility.public {
+
+    background: var(--success-soft-bg-strong);
+
+}
+
+[data-theme="dark"] .room-visibility.private {
+
+    background: var(--danger-soft-bg-strong);
+
+}
+
+/* ========== 页面切换动画 (Apple-style) ========== */
+
+/* 入场：macOS 弹性缩放弹开 */
+
+.fade-slide-enter-active {
+
+    transition: opacity var(--duration-base) var(--ease-decel),
+
+                transform var(--duration-base) var(--ease-spring);
+
+}
+
+/* 离场：平滑缩回消失*/
+
+.fade-slide-leave-active {
+
+    transition: opacity var(--duration-fast) var(--ease-accel),
+
+                transform var(--duration-fast) var(--ease-accel);
+
+}
+
+.fade-slide-enter {
+
+    opacity: 0;
+
+    transform: scale(0.95);
+
+}
+
+.fade-slide-leave-to {
+
+    opacity: 0;
+
+    transform: scale(0.95);
+
+}
+
+/* 缩放淡入动画 (Apple-style) */
+
+.zoom-fade-enter-active {
+
+    transition: opacity var(--duration-base) var(--ease-decel),
+
+                transform var(--duration-base) var(--ease-spring);
+
+}
+
+.zoom-fade-leave-active {
+
+    transition: opacity var(--duration-fast) var(--ease-accel),
+
+                transform var(--duration-fast) var(--ease-accel);
+
+}
+
+.zoom-fade-enter {
+
+    opacity: 0;
+
+    transform: scale(0.96);
+
+}
+
+.zoom-fade-leave-to {
+
+    opacity: 0;
+
+    transform: scale(0.96);
+
+}

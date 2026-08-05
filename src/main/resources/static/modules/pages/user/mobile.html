@@ -1,0 +1,317 @@
+<div class="user-container mobile-user-container" data-page-scroll-root>
+    <section class="mobile-user-hero">
+        <div class="mobile-user-hero-copy">
+            <span>ACCOUNT CENTER</span>
+            <h2 data-page-focus-target tabindex="-1">用户账号</h2>
+            <p>{{ mobileUserHeroText }}</p>
+        </div>
+        <button type="button" class="mobile-user-hero-action" @click="openMobileLogin" aria-label="添加账号">
+            <i class="el-icon-plus"></i>
+        </button>
+    </section>
+
+    <section class="mobile-user-summary" aria-label="用户状态概览">
+        <div class="mobile-user-summary-item is-total">
+            <span>总账号</span>
+            <strong>{{ totalUserCount }}</strong>
+        </div>
+        <div class="mobile-user-summary-item is-login">
+            <span>已登录</span>
+            <strong>{{ loggedInUserCount }}</strong>
+        </div>
+        <div class="mobile-user-summary-item is-enable">
+            <span>分摊中</span>
+            <strong>{{ enabledUserCount }}</strong>
+        </div>
+        <div class="mobile-user-summary-item is-expired">
+            <span>待处理</span>
+            <strong>{{ expiredUserCount }}</strong>
+        </div>
+    </section>
+
+    <section class="mobile-user-command-row">
+        <button type="button" class="mobile-user-command is-primary" @click="openMobileLogin">
+            <i class="el-icon-plus"></i>
+            <span>添加账号</span>
+        </button>
+        <button type="button" class="mobile-user-command" @click="fetchUserList">
+            <i :class="loading ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+            <span>刷新列表</span>
+        </button>
+    </section>
+
+    <section class="mobile-brec-panel" :class="{ 'is-expanded': brecConfigExpanded }">
+        <button type="button" class="mobile-brec-header" @click="toggleBrecConfig">
+            <div class="mobile-brec-header-title">
+                <i class="el-icon-video-camera"></i>
+                <span>录播姬 Cookie 设置</span>
+                <em v-if="brecConfig.enabled" class="mobile-brec-badge">已启用</em>
+            </div>
+            <i :class="brecConfigExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+        </button>
+
+        <transition name="filter-slide">
+            <div class="mobile-brec-body" v-show="brecConfigExpanded" v-loading="brecConfigLoading">
+                <p class="mobile-brec-intro">
+                    开启后每小时把所选账号的最新 Cookie 自动推送到录播姬，保持登录态。只需填地址与端口，接口路径自动拼接。
+                </p>
+
+                <div class="mobile-brec-field">
+                    <label>启用自动同步</label>
+                    <el-switch v-model="brecConfig.enabled" active-text="开启" inactive-text="关闭"></el-switch>
+                </div>
+
+                <div class="mobile-brec-field">
+                    <label>连接协议</label>
+                    <el-radio-group v-model="brecConfig.https" size="small">
+                        <el-radio-button :label="false">HTTP</el-radio-button>
+                        <el-radio-button :label="true">HTTPS</el-radio-button>
+                    </el-radio-group>
+                </div>
+
+                <div class="mobile-brec-field">
+                    <label>录播姬地址</label>
+                    <el-input v-model="brecConfig.host" placeholder="IP 或域名，如 192.168.1.10" size="small"></el-input>
+                    <small>只填地址，不要带 http:// 和端口</small>
+                </div>
+
+                <div class="mobile-brec-field">
+                    <label>端口</label>
+                    <el-input v-model="brecConfig.port" inputmode="numeric" placeholder="默认 2356" size="small"></el-input>
+                    <small>填写录播姬 Web 页面端口，默认 2356</small>
+                </div>
+
+                <div class="mobile-brec-field">
+                    <label>提供 Cookie 的账号</label>
+                    <el-select v-model="brecConfig.uid" placeholder="选择账号" size="small" filterable class="mobile-brec-full-field" popper-class="mobile-user-popper">
+                        <el-option
+                            v-for="item in tableData"
+                            :key="item.uid"
+                            :label="(item.uname || '未命名') + ' (UID:' + item.uid + ')'"
+                            :value="String(item.uid)">
+                        </el-option>
+                    </el-select>
+                </div>
+
+                <div class="mobile-brec-field">
+                    <label>认证用户名（可选）</label>
+                    <el-input v-model="brecConfig.username" placeholder="录播姬未开启认证时留空" size="small" autocomplete="off"></el-input>
+                </div>
+
+                <div class="mobile-brec-field">
+                    <label>认证密码（可选）</label>
+                    <el-input v-model="brecConfig.password" placeholder="留空表示不修改" size="small" type="password" show-password autocomplete="new-password"></el-input>
+                    <small>密码不会回显，留空保存即保持原密码不变</small>
+                </div>
+
+                <button type="button" class="mobile-brec-save" :disabled="brecConfigSaving" @click="saveBrecConfig">
+                    <i :class="brecConfigSaving ? 'el-icon-loading' : 'el-icon-check'"></i>
+                    <span>保存设置</span>
+                </button>
+            </div>
+        </transition>
+    </section>
+
+    <transition name="fade-transform" mode="out-in">
+        <div v-if="loading && totalUserCount === 0" class="mobile-user-empty is-loading" key="loading">
+            <i class="el-icon-loading"></i>
+            <h3>正在同步账号</h3>
+            <p>请稍候</p>
+        </div>
+
+        <div v-else-if="totalUserCount === 0" class="mobile-user-empty" key="empty">
+            <i class="el-icon-user"></i>
+            <h3>暂无关联账号</h3>
+            <p>添加 Bilibili 账号后，程序会使用账号参与弹幕发送与互动。</p>
+            <button type="button" class="mobile-user-empty-action" @click="openMobileLogin">
+                <i class="el-icon-plus"></i>
+                <span>立即添加</span>
+            </button>
+        </div>
+
+        <transition-group v-else name="mobile-user-card" tag="div" class="mobile-user-list" key="list">
+            <article class="mobile-user-card"
+                     v-for="item in tableData"
+                     :key="mobileUserKey(item) || item.uid || item.uname"
+                     :class="[mobileUserStateClass(item), { 'is-open': mobileUserActionsVisible && mobileUserKey(mobileActionUser) === mobileUserKey(item) }]"
+                     @click="toggleMobileUserActions(item)">
+                <div class="mobile-user-card-main">
+                    <div class="mobile-user-avatar">
+                        <img v-if="shouldShowAvatar(item)"
+                             :src="buildAvatarProxyUrl(item.face)"
+                             :alt="maskText(item.uname || '用户头像')"
+                             referrerpolicy="no-referrer"
+                             @error="handleAvatarError(item)">
+                        <span v-else>{{ mobileUserInitial(item) }}</span>
+                        <em :class="mobileUserStateClass(item)"></em>
+                    </div>
+                    <div class="mobile-user-card-copy">
+                        <div class="mobile-user-card-line">
+                            <span class="mobile-user-state" :class="mobileUserStateClass(item)">
+                                {{ mobileUserStateLabel(item) }}
+                            </span>
+                            <span class="mobile-user-id">UID: {{ maskText(item.uid) || '--' }}</span>
+                        </div>
+                        <h3>{{ maskText(item.uname || '未命名用户') }}</h3>
+                        <p>{{ item.enable ? '普通弹幕分摊已开启' : '普通弹幕分摊未开启' }}</p>
+                    </div>
+                    <button type="button" class="mobile-user-card-more" @click.stop="toggleMobileUserActions(item)" aria-label="账号操作">
+                        <i class="el-icon-more"></i>
+                    </button>
+                </div>
+
+                <div class="mobile-user-status-grid">
+                    <div>
+                        <span>登录</span>
+                        <strong :class="item.login ? 'is-on' : 'is-off'">{{ item.login ? '有效' : '失效' }}</strong>
+                    </div>
+                    <div>
+                        <span>弹幕</span>
+                        <strong :class="item.enable ? 'is-on' : 'is-off'">{{ item.enable ? '开启' : '关闭' }}</strong>
+                    </div>
+                    <div>
+                        <span>更新</span>
+                        <strong>{{ mobileUserTimeText(item) }}</strong>
+                    </div>
+                </div>
+            </article>
+        </transition-group>
+    </transition>
+
+    <transition name="mobile-user-sheet-fade">
+        <div v-if="mobileUserActionsVisible" class="mobile-user-sheet-backdrop" @click="closeMobileUserActions"></div>
+    </transition>
+
+    <transition name="mobile-user-sheet">
+        <aside v-if="mobileUserActionsVisible && mobileActionUser"
+               class="mobile-user-action-sheet"
+               role="dialog"
+               aria-label="账号操作"
+               @click.stop>
+            <div class="mobile-user-sheet-handle"></div>
+            <div class="mobile-user-sheet-head">
+                <div class="mobile-user-sheet-avatar">
+                    <img v-if="shouldShowAvatar(mobileActionUser)"
+                         :src="buildAvatarProxyUrl(mobileActionUser.face)"
+                         :alt="maskText(mobileActionUser.uname || '用户头像')"
+                         referrerpolicy="no-referrer"
+                         @error="handleAvatarError(mobileActionUser)">
+                    <span v-else>{{ mobileUserInitial(mobileActionUser) }}</span>
+                </div>
+                <div class="mobile-user-sheet-title">
+                    <span>ACCOUNT</span>
+                    <h3>{{ maskText(mobileActionUser.uname || '未命名用户') }}</h3>
+                    <p>UID: {{ maskText(mobileActionUser.uid) || '--' }}</p>
+                </div>
+                <button type="button" @click="closeMobileUserActions" aria-label="关闭账号操作">
+                    <i class="el-icon-close"></i>
+                </button>
+            </div>
+            <div class="mobile-user-sheet-summary">
+                <div>
+                    <span>登录状态</span>
+                    <strong :class="mobileActionUser.login ? 'is-on' : 'is-off'">{{ mobileActionUser.login ? '已登录' : '未登录' }}</strong>
+                </div>
+                <div>
+                    <span>弹幕分摊</span>
+                    <strong :class="mobileActionUser.enable ? 'is-on' : 'is-off'">{{ mobileActionUser.enable ? '已开启' : '已关闭' }}</strong>
+                </div>
+            </div>
+            <div class="mobile-user-sheet-actions">
+                <button type="button" class="is-primary" @click="openMobileUserEdit(mobileActionUser)">
+                    <i class="el-icon-setting"></i>
+                    <span>账号设置</span>
+                </button>
+                <button type="button" @click="refreshMobileUserProfile(mobileActionUser)">
+                    <i class="el-icon-refresh"></i>
+                    <span>刷新资料</span>
+                </button>
+                <button type="button" @click="openMobileLogin">
+                    <i class="el-icon-mobile-phone"></i>
+                    <span>重新扫码</span>
+                </button>
+                <button type="button" class="is-danger" :disabled="!mobileActionUser.id" @click="deleteMobileUser(mobileActionUser)">
+                    <i class="el-icon-delete"></i>
+                    <span>移除账号</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+
+    <!-- 登录弹窗 -->
+    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="false" append-to-body @close="cancelLogin" title="扫码登录" center custom-class="user-page-dialog login-dialog mobile-user-login-dialog" width="420px">
+        <div class="login-qr-wrapper mobile-user-login-wrapper">
+            <div class="login-tips mobile-user-login-tips">
+                <i class="el-icon-mobile-phone"></i>
+                <span>哔哩哔哩 APP 扫码登录</span>
+            </div>
+            <div class="login-status mobile-user-login-status" :style="{color: loginStatusColor}">
+                <i :class="loginStatusIcon"></i>
+                <span>{{ loginStatusText }}</span>
+            </div>
+            <div class="qr-container mobile-user-qr-container">
+                <el-image v-if="image" :src="'data:image/png;base64,' + image" fit="contain"></el-image>
+                <div v-else class="mobile-user-qr-placeholder">
+                    <i :class="loginLoading ? 'el-icon-loading' : 'el-icon-picture-outline'"></i>
+                </div>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer mobile-user-dialog-footer">
+            <el-button @click="getLoginImage();" type="primary" icon="el-icon-refresh" :loading="loginLoading">刷新二维码</el-button>
+            <el-button @click="cancelLogin">关闭</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 编辑弹窗 -->
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="false" append-to-body title="账号设置" custom-class="user-page-dialog mobile-user-settings-dialog" width="500px">
+        <el-form :model="user" label-position="top" class="mobile-user-settings-form">
+            <div class="mobile-user-settings-account">
+                <div class="mobile-user-settings-avatar">{{ mobileUserInitial(user) }}</div>
+                <div>
+                    <h3>{{ maskText(user.uname || '未命名用户') }}</h3>
+                    <p>UID: {{ maskText(user.uid) || '--' }}</p>
+                </div>
+            </div>
+            <el-form-item label="弹幕分摊">
+                <div class="mobile-user-switch-row">
+                    <div>
+                        <strong>{{ user.enable ? '已开启' : '已关闭' }}</strong>
+                        <span>普通弹幕任务分摊</span>
+                    </div>
+                    <el-switch v-model="user.enable"></el-switch>
+                </div>
+                <div class="mobile-user-settings-hint">
+                    <i class="el-icon-info"></i>
+                    <span>不会发送 SC、上舰等高级弹幕。</span>
+                </div>
+            </el-form-item>
+        </el-form>
+        <div class="dialog-footer mobile-user-dialog-footer" slot="footer">
+            <el-button @click="dialogFormVisible = false">取消</el-button>
+            <el-button @click="updateUser()" type="primary" :loading="saveLoading">保存设置</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 录播姬同步结果悬浮窗 -->
+    <el-dialog
+        :visible.sync="brecSyncResultVisible"
+        :fullscreen="isMobile"
+        :title="brecSyncResult.success ? '同步成功' : '同步失败'"
+        append-to-body
+        center
+        custom-class="user-page-dialog brec-sync-dialog mobile-brec-sync-dialog">
+        <div class="mobile-brec-sync-result" :class="brecSyncResult.success ? 'is-success' : 'is-error'">
+            <div class="mobile-brec-sync-result-icon">
+                <i :class="brecSyncResult.success ? 'el-icon-circle-check' : 'el-icon-circle-close'"></i>
+            </div>
+            <div class="mobile-brec-sync-result-status" v-if="!brecSyncResult.success">
+                {{ brecSyncStatusLabel(brecSyncResult.status) }}
+                <span v-if="brecSyncResult.httpCode" class="mobile-brec-sync-result-code">HTTP {{ brecSyncResult.httpCode }}</span>
+            </div>
+            <div class="mobile-brec-sync-result-message">{{ brecSyncResult.message }}</div>
+        </div>
+        <div slot="footer" class="dialog-footer mobile-user-dialog-footer">
+            <el-button type="primary" @click="brecSyncResultVisible = false">我知道了</el-button>
+        </div>
+    </el-dialog>
+</div>

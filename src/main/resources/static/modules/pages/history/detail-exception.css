@@ -1,0 +1,99 @@
+/* 异常框 */
+
+.detail-exception-box {
+
+    background: var(--danger-soft-bg-faint);
+
+    border: 1px solid var(--danger-border-soft);
+
+    border-radius: var(--radius-md);
+
+    padding: 12px 16px;
+
+    margin-bottom: 20px;
+
+}
+
+.exception-header {
+
+    color: var(--danger-color);
+
+    font-weight: 600;
+
+    margin-bottom: 8px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 12px;
+
+}
+
+.exception-header-left {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+}
+
+.exception-header-right {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    flex-wrap: wrap;
+
+}
+
+.exception-reason-badge {
+
+    font-size: 12px;
+
+    font-weight: 500;
+
+    color: var(--danger-color);
+
+    background: var(--danger-soft-bg-faint);
+
+    padding: 4px 10px;
+
+    border-radius: var(--radius-sm);
+
+    border: 1px solid var(--danger-border-soft);
+
+}
+
+.exception-list {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 8px;
+
+}
+
+.exception-item {
+
+    background: var(--bg-primary);
+
+    border: 1px solid var(--danger-border);
+
+    color: var(--danger-color);
+
+    font-size: 12px;
+
+    padding: 2px 8px;
+
+    border-radius: 4px;
+
+}

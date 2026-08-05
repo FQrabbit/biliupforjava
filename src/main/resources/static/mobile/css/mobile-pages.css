@@ -1,4 +1,4 @@
-/* Dedicated iframe page styling for the mobile frontend. */
+/* Shared styling for on-demand mobile page modules. */
 
 :root {
     --mobile-page-safe-top: env(safe-area-inset-top, 0px);
@@ -412,34 +412,34 @@ body > .el-color-dropdown,
     z-index: 4100 !important;
 }
 
-body.mobile-iframe-modal-open > .v-modal {
+body.mobile-page-modal-open > .v-modal {
     z-index: 3000 !important;
 }
 
-body.mobile-iframe-modal-open > .el-dialog__wrapper {
+body.mobile-page-modal-open > .el-dialog__wrapper {
     z-index: 3010 !important;
     overflow-y: auto;
     padding-bottom: calc(12px + var(--mobile-page-safe-bottom));
     -webkit-overflow-scrolling: touch;
 }
 
-body.mobile-iframe-modal-open,
+body.mobile-page-modal-open,
 body.mobile-room-overlay-open {
     overflow: hidden;
     height: var(--mobile-page-viewport-height);
 }
 
-body.mobile-iframe-modal-open > .el-select-dropdown,
-body.mobile-iframe-modal-open > .el-picker-panel,
-body.mobile-iframe-modal-open > .el-popover,
-body.mobile-iframe-modal-open > .el-tooltip__popper,
-body.mobile-iframe-modal-open > .el-cascader__dropdown,
-body.mobile-iframe-modal-open > .el-dropdown-menu,
-body.mobile-iframe-modal-open > .el-autocomplete-suggestion,
-body.mobile-iframe-modal-open > .el-time-panel,
-body.mobile-iframe-modal-open > .el-color-dropdown,
-body.mobile-iframe-modal-open > .el-popper,
-body.mobile-iframe-modal-open > .el-message-box__wrapper {
+body.mobile-page-modal-open > .el-select-dropdown,
+body.mobile-page-modal-open > .el-picker-panel,
+body.mobile-page-modal-open > .el-popover,
+body.mobile-page-modal-open > .el-tooltip__popper,
+body.mobile-page-modal-open > .el-cascader__dropdown,
+body.mobile-page-modal-open > .el-dropdown-menu,
+body.mobile-page-modal-open > .el-autocomplete-suggestion,
+body.mobile-page-modal-open > .el-time-panel,
+body.mobile-page-modal-open > .el-color-dropdown,
+body.mobile-page-modal-open > .el-popper,
+body.mobile-page-modal-open > .el-message-box__wrapper {
     z-index: 4100 !important;
 }
 
@@ -508,7 +508,8 @@ svg {
 .room-container,
 .history-container,
 .stats-container {
-    min-height: var(--mobile-page-viewport-height);
+    height: 100%;
+    min-height: 0;
     padding: 14px 12px var(--mobile-page-bottom-nav-clearance);
     scroll-padding-bottom: var(--mobile-page-bottom-nav-clearance);
     background: transparent;

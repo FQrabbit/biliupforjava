@@ -1,0 +1,531 @@
+/* room.html 页面专属样式 - 现代科技风格 */
+
+/* ========== 页面基础布局 ========== */
+
+.room-container {
+
+    height: 100%;
+
+    overflow-y: auto;
+
+    box-sizing: border-box;
+
+    padding: 20px;
+
+    background: var(--bg-secondary);
+
+}
+
+.room-header-title .icon {
+
+    font-size: 28px;
+
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+
+    -webkit-background-clip: text;
+
+    -webkit-text-fill-color: transparent;
+
+    background-clip: text;
+
+    transition: transform var(--transition-base);
+
+}
+
+.room-header:hover .room-header-title .icon {
+
+    transform: rotate(10deg) scale(1.1);
+
+}
+
+.room-stat-item.is-active {
+
+    background: var(--brand-soft-bg-active);
+
+    border-color: var(--brand-accent-border);
+
+}
+
+.room-stat-value.live {
+
+    background: linear-gradient(135deg, var(--danger-hot), var(--warning-accent));
+
+    -webkit-background-clip: text;
+
+    background-clip: text;
+
+}
+
+.room-stat-value.recording {
+
+    background: linear-gradient(135deg, var(--success-color), var(--success-light));
+
+    -webkit-background-clip: text;
+
+    background-clip: text;
+
+}
+
+/* el-upload 作为 flex 子项时，确保与按钮同一对齐方式 */
+
+.room-header-actions .el-upload {
+
+    display: inline-flex;
+
+    align-items: center;
+
+}
+
+/* ========== 直播间卡片网格 ========== */
+
+.room-card-grid {
+
+    display: grid;
+
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+
+    gap: 20px;
+
+}
+
+.room-card.is-sorting {
+
+    cursor: grab;
+
+    user-select: none;
+
+    border-color: var(--primary-light);
+
+}
+
+.room-card.is-sorting:hover {
+
+    transform: translateY(-2px);
+
+}
+
+.room-card.is-dragging {
+
+    opacity: 0.55;
+
+    transform: scale(0.98);
+
+}
+
+.room-card.is-drag-over {
+
+    border-color: var(--primary-color);
+
+    box-shadow: 0 0 0 3px var(--brand-soft-bg-active), var(--shadow-md);
+
+}
+
+.export-live-msg-warning {
+
+    margin: 0 0 12px 160px;
+
+    padding: 10px 12px;
+
+    border-radius: var(--radius-md);
+
+    border: 1px solid var(--warning-line);
+
+    background: var(--warning-soft-bg);
+
+    color: var(--warning-color);
+
+    line-height: 1.6;
+
+    font-size: 13px;
+
+}
+
+[data-theme="dark"] .export-config-dialog .el-checkbox,
+[data-theme="dark"] .export-config-dialog .el-checkbox__label {
+
+    color: var(--text-primary);
+
+}
+
+[data-theme="dark"] .export-config-dialog .el-checkbox.is-checked .el-checkbox__label {
+
+    color: var(--primary-color);
+
+}
+
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled + .el-checkbox__label,
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled.is-checked + .el-checkbox__label {
+
+    color: var(--text-disabled);
+
+}
+
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled .el-checkbox__inner {
+
+    background-color: var(--bg-primary);
+
+    border-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .export-config-dialog .el-checkbox__input.is-disabled.is-checked .el-checkbox__inner {
+
+    background-color: var(--bg-tertiary);
+
+    border-color: var(--border-color);
+
+}
+
+/* 录制中状态 */
+
+.room-card.is-recording {
+
+    border-color: var(--success-border);
+
+    box-shadow:
+
+        var(--shadow-sm),
+
+        0 0 30px var(--success-glow);
+
+    animation: pulse-recording 2s ease-in-out infinite;
+
+}
+
+.room-card.is-recording::before {
+
+    background: linear-gradient(90deg, var(--success-color), var(--success-light));
+
+    opacity: 1;
+
+}
+
+.room-card.is-recording:hover {
+
+    box-shadow:
+
+        var(--shadow-md),
+
+        0 0 45px var(--success-glow-strong);
+
+}
+
+@keyframes pulse-recording {
+
+    0%, 100% {
+
+        box-shadow: var(--shadow-sm), 0 0 25px var(--success-glow);
+
+    }
+
+    50% {
+
+        box-shadow: var(--shadow-sm), 0 0 35px var(--success-glow-strong);
+
+    }
+
+}
+
+@keyframes pulse-live {
+
+    0%, 100% {
+
+        transform: scale(1);
+
+        box-shadow: 0 0 0 0 var(--success-border);
+
+    }
+
+    50% {
+
+        transform: scale(1.1);
+
+        box-shadow: 0 0 0 6px transparent;
+
+    }
+
+}
+
+.room-tag.live {
+
+    background: linear-gradient(135deg, var(--danger-soft-bg-strong), var(--warning-soft-bg));
+
+    color: var(--danger-hot);
+
+    border: 1px solid var(--danger-shadow-strong);
+
+}
+
+.room-tag.recording {
+
+    background: linear-gradient(135deg, var(--success-soft-bg-strong), var(--success-soft-bg));
+
+    color: var(--success-color);
+
+    border: 1px solid var(--success-glow-strong);
+
+    animation: tag-pulse 2s ease-in-out infinite;
+
+}
+
+@keyframes tag-pulse {
+
+    0%, 100% { opacity: 1; }
+
+    50% { opacity: 0.7; }
+
+}
+
+.room-tag.upload {
+
+    background: var(--brand-soft-bg);
+
+    color: var(--primary-color);
+
+    border: 1px solid var(--brand-accent-border);
+
+}
+
+.room-card-footer .el-button {
+
+    transition: color var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple), border-color var(--duration-base) var(--ease-apple), box-shadow var(--duration-base) var(--ease-apple), transform var(--duration-base) var(--ease-apple) !important;
+
+}
+
+.room-card-footer .el-button:hover {
+
+    transform: translateY(-2px);
+
+}
+
+.room-card-footer .el-button:active {
+
+    transform: translateY(0) scale(0.95);
+
+}
+
+/* ========== 空状态 ========== */
+
+.room-empty {
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 100px 20px;
+
+    text-align: center;
+
+    background: var(--bg-primary);
+
+    border-radius: var(--radius-lg);
+
+    border: 2px dashed var(--border-color);
+
+}
+
+.room-empty-icon {
+
+    font-size: 80px;
+
+    margin-bottom: 24px;
+
+    background: linear-gradient(135deg, var(--text-disabled), var(--text-secondary));
+
+    -webkit-background-clip: text;
+
+    -webkit-text-fill-color: transparent;
+
+    background-clip: text;
+
+}
+
+.room-empty-title {
+
+    font-size: 20px;
+
+    font-weight: 600;
+
+    color: var(--text-primary);
+
+    margin: 0 0 8px 0;
+
+}
+
+.room-empty-desc {
+
+    font-size: 14px;
+
+    color: var(--text-secondary);
+
+    margin: 0 0 28px 0;
+
+}
+
+/* ========== 表格视图 ========== */
+
+.room-table-wrapper {
+
+    background: var(--bg-primary);
+
+    border-radius: var(--radius-lg);
+
+    box-shadow: var(--shadow-sm);
+
+    overflow: hidden;
+
+    border: 1px solid var(--border-light);
+
+}
+
+.el-message-box__wrapper:has(.room-page-message-box) {
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+}
+
+/* 分区选择器样式 */
+
+.partition-dialog .el-dialog__body {
+
+    padding: 0 !important;
+
+    overflow: hidden !important;
+
+    height: 500px !important;
+
+    flex: none !important;
+
+}
+
+@media (max-width: 768px) {
+
+    .partition-dialog .el-dialog__body {
+
+        height: auto !important;
+
+        flex: 1 !important;
+
+    }}
+
+.partition-container {
+
+    position: relative;
+
+    width: 100%;
+
+    height: 100%;
+
+    overflow: hidden;
+
+}
+
+.partition-list {
+
+    position: absolute;
+
+    top: 0;
+
+    left: 0;
+
+    width: 100%;
+
+    height: 100%;
+
+    overflow-y: auto;
+
+    background-color: var(--bg-primary);
+
+}
+
+.partition-item {
+
+    padding: 15px 20px;
+
+    border-bottom: 1px solid var(--border-light);
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    cursor: pointer;
+
+    font-size: 16px;
+
+    color: var(--text-primary);
+
+    transition: background var(--transition-fast);
+
+}
+
+.partition-item:hover {
+
+    background: var(--brand-soft-bg-faint);
+
+}
+
+.partition-item:active {
+
+    background-color: var(--bg-tertiary);
+
+}
+
+.partition-header {
+
+    padding: 15px 20px;
+
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+
+    color: var(--primary-color);
+
+    font-weight: bold;
+
+    cursor: pointer;
+
+    border-bottom: 1px solid var(--border-light);
+
+    transition: background var(--transition-fast);
+
+}
+
+.partition-header:hover {
+
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
+
+}
+
+/* 暗色主题优化 */
+
+[data-theme="dark"] .partition-list {
+
+    background: var(--bg-secondary);
+
+}
+
+[data-theme="dark"] .partition-item {
+
+    border-bottom-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .partition-item:hover {
+
+    background: var(--brand-soft-bg-hover);
+
+}
+
+[data-theme="dark"] .partition-header {
+
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-tertiary) 80%, transparent) 0%, color-mix(in srgb, var(--bg-primary) 90%, transparent) 100%);
+
+}

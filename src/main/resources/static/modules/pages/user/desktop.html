@@ -1,0 +1,352 @@
+<div class="user-container" data-page-scroll-root>
+    <!-- 页面头部 -->
+    <div class="user-header">
+        <div class="user-header-left">
+            <div class="user-header-title">
+                <i class="el-icon-user icon"></i>
+                <h2 data-page-focus-target tabindex="-1">用户管理</h2>
+            </div>
+            <div class="user-stats">
+                <div class="user-stat-item">
+                    <div class="user-stat-value">{{ tableData.length }}</div>
+                    <div class="user-stat-label">总用户</div>
+                </div>
+                <div class="user-stat-item">
+                    <div class="user-stat-value">{{ tableData.filter(u => u.login).length }}</div>
+                    <div class="user-stat-label">已登录</div>
+                </div>
+            </div>
+        </div>
+        <div class="user-header-actions">
+            <el-button class="modern-btn" @click="openLoginDialog" icon="el-icon-plus" type="primary">
+                添加账号
+            </el-button>
+            <el-radio-group v-model="viewMode" size="small">
+                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
+                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
+            </el-radio-group>
+        </div>
+    </div>
+
+    <!-- 录播姬 Cookie 同步设置 -->
+    <div class="config-panel brec-config-panel" :class="{ 'is-expanded': brecConfigExpanded }">
+        <button type="button"
+                class="config-header"
+                :aria-expanded="brecConfigExpanded ? 'true' : 'false'"
+                aria-controls="brec-config-body"
+                @click="toggleBrecConfig">
+            <div class="config-title">
+                <i class="el-icon-video-camera"></i>
+                <span>录播姬 Cookie 设置</span>
+                <el-tag v-if="brecConfig.enabled" size="mini" type="success" effect="plain" style="margin-left: 8px;">已启用</el-tag>
+            </div>
+            <div class="config-actions">
+                <i :class="brecConfigExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="expand-icon"></i>
+            </div>
+        </button>
+
+        <transition name="filter-slide">
+            <div id="brec-config-body" class="config-body" v-show="brecConfigExpanded" v-loading="brecConfigLoading">
+                <div class="config-help" style="margin-bottom: 16px;">
+                    开启后，程序会每小时把所选账号的最新 Cookie 自动推送到录播姬，使录播姬保持有效登录态。只需填写地址与端口，接口路径由程序自动拼接。
+                </div>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-switch-button"></i>
+                            启用自动同步
+                        </label>
+                        <el-switch
+                            v-model="brecConfig.enabled"
+                            active-text="开启"
+                            inactive-text="关闭">
+                        </el-switch>
+                        <div class="config-help">关闭后定时任务不会向录播姬推送 Cookie</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-connection"></i>
+                            连接协议
+                        </label>
+                        <el-radio-group v-model="brecConfig.https" size="small">
+                            <el-radio-button :label="false">HTTP</el-radio-button>
+                            <el-radio-button :label="true">HTTPS</el-radio-button>
+                        </el-radio-group>
+                        <div class="config-help">录播姬若配置了 HTTPS 才选 HTTPS，一般为 HTTP</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-monitor"></i>
+                            录播姬地址
+                        </label>
+                        <el-input
+                            v-model="brecConfig.host"
+                            placeholder="IP 或域名，如 192.168.1.10"
+                            size="small"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">只填地址，不要带 http:// 和端口</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-position"></i>
+                            端口
+                        </label>
+                        <el-input
+                            v-model="brecConfig.port"
+                            placeholder="默认 2356"
+                            size="small"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">填写录播姬 Web 页面端口，默认 2356</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-user"></i>
+                            提供 Cookie 的账号
+                        </label>
+                            <el-select
+                                v-model="brecConfig.uid"
+                            placeholder="选择账号"
+                            size="small"
+                            filterable
+                                class="config-input"
+                                popper-class="user-page-select-popper">
+                            <el-option
+                                v-for="item in tableData"
+                                :key="item.uid"
+                                :label="(item.uname || '未命名') + ' (UID:' + item.uid + ')'"
+                                :value="String(item.uid)">
+                            </el-option>
+                        </el-select>
+                        <div class="config-help">将使用该账号的登录 Cookie 推送到录播姬</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-key"></i>
+                            认证用户名
+                            <span class="config-unit">可选</span>
+                        </label>
+                        <el-input
+                            v-model="brecConfig.username"
+                            placeholder="录播姬未开启认证时留空"
+                            size="small"
+                            autocomplete="off"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">录播姬开启 Basic 认证时填写</div>
+                    </div>
+
+                    <div class="config-item">
+                        <label class="config-label">
+                            <i class="el-icon-lock"></i>
+                            认证密码
+                            <span class="config-unit">可选</span>
+                        </label>
+                        <el-input
+                            v-model="brecConfig.password"
+                            placeholder="留空表示不修改"
+                            size="small"
+                            type="password"
+                            show-password
+                            autocomplete="new-password"
+                            class="config-input">
+                        </el-input>
+                        <div class="config-help">与用户名一起用于 Basic 认证。出于安全考虑密码不会回显，留空保存即保持原密码不变</div>
+                    </div>
+                </div>
+
+                <div class="config-footer">
+                    <el-button class="modern-btn" type="primary" @click="saveBrecConfig" :loading="brecConfigSaving" icon="el-icon-check" size="small">
+                        保存设置
+                    </el-button>
+                </div>
+            </div>
+        </transition>
+    </div>
+
+    <!-- 内容区域 -->
+    <transition name="fade-transform">
+        <!-- 空状态 -->
+        <div v-if="tableData.length === 0 && !loading" class="empty-state" key="empty">
+            <i class="el-icon-user empty-icon"></i>
+            <h3 class="empty-title">暂无关联账号</h3>
+            <p class="empty-desc">添加 Bilibili 账号后，程序将自动使用该账号进行弹幕发送与互动。</p>
+            <el-button class="modern-btn" type="primary" @click="openLoginDialog" icon="el-icon-plus">
+                立即添加账号
+            </el-button>
+        </div>
+
+        <!-- 卡片视图 -->
+        <div v-else-if="viewMode === 'card'" class="user-card-grid" key="card">
+            <div class="user-card"
+                 :class="{ 'is-active': item.login && item.enable, 'is-warning': !item.login }"
+                 v-for="item in tableData" :key="item.id">
+                <div class="user-card-header">
+                    <div class="user-avatar">
+                        <img v-if="shouldShowAvatar(item)"
+                             :src="buildAvatarProxyUrl(item.face)"
+                             referrerpolicy="no-referrer"
+                             @error="handleAvatarError(item)">
+                        <span v-else>{{ privacyMode ? '*' : (item.uname || 'U').charAt(0).toUpperCase() }}</span>
+                    </div>
+                    <div class="user-info">
+                        <h3 class="user-name">{{ maskText(item.uname || '未命名用户') }}</h3>
+                        <div class="user-uid">UID: {{ maskText(item.uid) }}</div>
+                    </div>
+                </div>
+                <div class="user-card-body">
+                    <div class="user-status-grid">
+                    <el-tooltip popper-class="user-page-popper" :content="item.login ? '账号已登录，Token 有效' : '账号未登录或 Token 已过期'" placement="top">
+                            <div class="status-item">
+                                <div class="status-icon" :class="item.login ? 'success' : 'danger'">
+                                    <i :class="item.login ? 'el-icon-check' : 'el-icon-close'"></i>
+                                </div>
+                                <div class="status-text">
+                                    <div class="status-label">登录状态</div>
+                                    <div class="status-value" :class="item.login ? 'success' : 'danger'">
+                                        {{ item.login ? '已登录' : '未登录' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </el-tooltip>
+                    <el-tooltip popper-class="user-page-popper" :content="item.enable ? '已开启自动分摊弹幕任务' : '已关闭弹幕任务分摊'" placement="top">
+                            <div class="status-item">
+                                <div class="status-icon" :class="item.enable ? 'success' : 'danger'">
+                                    <i :class="item.enable ? 'el-icon-chat-dot-round' : 'el-icon-turn-off'"></i>
+                                </div>
+                                <div class="status-text">
+                                    <div class="status-label">弹幕发送</div>
+                                    <div class="status-value" :class="item.enable ? 'success' : 'danger'">
+                                        {{ item.enable ? '已开启' : '已关闭' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </el-tooltip>
+                    </div>
+                    <div class="user-update-time">
+                        <i class="el-icon-time"></i>
+                        <span>最后活跃：{{ item.updateTime }}</span>
+                    </div>
+                </div>
+                <div class="user-card-footer">
+                    <el-button size="small" icon="el-icon-refresh" @click="refreshUserProfile(item)">刷新资料</el-button>
+                    <el-button size="small" icon="el-icon-edit" @click="handleEdit(0, item)">设置</el-button>
+                    <el-popconfirm @confirm="deleteUser(item.id)" title="确定移除该账号吗？" confirm-button-text="移除" cancel-button-text="取消" confirm-button-type="danger">
+                        <el-button slot="reference" size="small" type="danger" icon="el-icon-delete">移除</el-button>
+                    </el-popconfirm>
+                </div>
+            </div>
+        </div>
+
+        <!-- 表格视图 -->
+        <div v-else class="table-wrapper" key="table">
+            <el-table
+                    v-loading="loading"
+                    :data="tableData"
+                    style="width: 100%">
+                <el-table-column label="用户ID" width="130">
+                    <template slot-scope="scope">{{ maskText(scope.row.uid) }}</template>
+                </el-table-column>
+                <el-table-column label="昵称" min-width="150">
+                    <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
+                </el-table-column>
+                <el-table-column label="登录状态" width="120">
+                    <template slot-scope="scope">
+                        <el-tag :type="scope.row.login ? 'success' : 'danger'" size="small">
+                            {{ scope.row.login ? '已登录' : '未登录' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="弹幕发送" width="120">
+                    <template slot-scope="scope">
+                        <el-tag :type="scope.row.enable ? 'success' : 'info'" size="small">
+                            {{ scope.row.enable ? '已开启' : '已关闭' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="更新时间" prop="updateTime" width="200"></el-table-column>
+                <el-table-column label="操作" width="180" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" icon="el-icon-edit">编辑</el-button>
+                        <el-popconfirm @confirm="deleteUser(scope.row.id)" title="确定删除吗？" confirm-button-type="danger">
+                            <el-button slot="reference" size="mini" type="danger" icon="el-icon-delete">删除</el-button>
+                        </el-popconfirm>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+    </transition>
+
+    <!-- 登录弹窗 -->
+    <el-dialog :visible.sync="dialogLoginVisible" :fullscreen="isMobile" @close="cancelLogin" title="扫码登录" center custom-class="user-page-dialog login-dialog" width="420px">
+        <div class="login-qr-wrapper">
+            <div class="login-tips">
+                <i class="el-icon-mobile-phone"></i>
+                <span>请使用哔哩哔哩APP扫描二维码</span>
+            </div>
+            <div class="login-status" :style="{color: loginStatusColor}">
+                <i :class="loginStatusIcon"></i>
+                <span>{{ loginStatusText }}</span>
+            </div>
+            <div class="qr-container">
+                <el-image :src="'data:image/png;base64,' + image" fit="contain"></el-image>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="getLoginImage();" type="primary" icon="el-icon-refresh" :loading="loginLoading">刷新二维码</el-button>
+            <el-button @click="cancelLogin">关闭</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 编辑弹窗 -->
+    <el-dialog :visible.sync="dialogFormVisible" :fullscreen="isMobile" title="用户账号设置" width="500px" custom-class="user-page-dialog user-settings-dialog">
+        <el-form :model="user" label-width="120px">
+            <el-form-item label="当前账号">
+                <el-tag type="info" size="medium">{{ maskText(user.uname) }}</el-tag>
+                <span style="margin-left: 10px; color: var(--text-disabled); font-size: 12px;">UID: {{ maskText(user.uid) }}</span>
+            </el-form-item>
+            <el-form-item label="弹幕分摊">
+                <el-switch v-model="user.enable" active-text="开启" inactive-text="关闭"></el-switch>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.6;">
+                    开启后，该账号将参与全站投稿的普通弹幕任务分摊。<br/>
+                    <i class="el-icon-info"></i> 不会发送高级弹幕（SC/上舰等）。
+                </div>
+            </el-form-item>
+        </el-form>
+        <div class="dialog-footer" slot="footer">
+            <el-button @click="dialogFormVisible = false">取消</el-button>
+            <el-button @click="updateUser()" type="primary" :loading="saveLoading">保存设置</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 录播姬同步结果悬浮窗 -->
+    <el-dialog
+        :visible.sync="brecSyncResultVisible"
+        :fullscreen="isMobile"
+        :title="brecSyncResult.success ? '同步成功' : '同步失败'"
+        center
+        custom-class="user-page-dialog brec-sync-dialog"
+        width="460px">
+        <div class="brec-sync-result" :class="brecSyncResult.success ? 'is-success' : 'is-error'">
+            <div class="brec-sync-result-icon">
+                <i :class="brecSyncResult.success ? 'el-icon-circle-check' : 'el-icon-circle-close'"></i>
+            </div>
+            <div class="brec-sync-result-body">
+                <div class="brec-sync-result-status" v-if="!brecSyncResult.success">
+                    {{ brecSyncStatusLabel(brecSyncResult.status) }}
+                    <span v-if="brecSyncResult.httpCode" class="brec-sync-result-code">HTTP {{ brecSyncResult.httpCode }}</span>
+                </div>
+                <div class="brec-sync-result-message">{{ brecSyncResult.message }}</div>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button type="primary" @click="brecSyncResultVisible = false">我知道了</el-button>
+        </div>
+    </el-dialog>
+</div>

@@ -31,7 +31,7 @@ public class IndexController {
 
         response.setContentType("text/html;charset=UTF-8");
         frontendVersionService.setNoStoreHeaders(response);
-        response.getWriter().write(frontendVersionService.renderHtml(content));
+        response.getWriter().write(frontendVersionService.renderHtml(content, request.getContextPath()));
     }
 
     @GetMapping(value = {"", "/"}, produces = MediaType.TEXT_HTML_VALUE)

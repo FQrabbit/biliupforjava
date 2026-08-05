@@ -6,6 +6,7 @@
     <script src="../js/vue.min.js"></script>
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/element-ui.js"></script>
+    <script src="../js/app/url-resolver.js"></script>
     <script src="../js/frontend-cache-refresh.js"></script>
     <script src="../js/api.js"></script>
     <script src="../js/api/captcha-api.js"></script>
@@ -59,7 +60,7 @@
                     <template slot="title">
                         <div style="font-weight: bold; margin-bottom: 5px;">如果上方验证失败，请使用此“逃课”方案：</div>
                         <ol style="margin-left: 20px; line-height: 1.8;">
-                            <li>在浏览器新标签页打开 <a href="https://member.bilibili.com/platform/upload/video/frame" target="_blank">B站投稿页</a> 并登录。</li>
+                            <li>在浏览器新标签页打开 <a href="https://member.bilibili.com/platform/upload/video/frame" target="_blank" rel="noopener noreferrer">B站投稿页</a> 并登录。</li>
                             <li>按 <kbd>F12</kbd> 打开控制台 (Console)，复制并运行下方代码：</li>
                         </ol>
                         <div style="margin: 5px 0;">

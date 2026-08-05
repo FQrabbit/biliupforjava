@@ -1,0 +1,233 @@
+<div class="system-settings-module system-settings-module--mobile">
+<transition name="mobile-sheet-fade">
+        <div v-show="configExpanded" class="mobile-config-backdrop" @click="closeMobileConfigPanel"></div>
+</transition>
+<transition name="mobile-config-sheet">
+        <aside v-show="configExpanded" class="mobile-config-sheet" role="dialog" aria-label="系统配置" @click.stop>
+        <div class="mobile-sheet-handle"></div>
+        <div class="mobile-sheet-header">
+            <div>
+                <span>Settings</span>
+                <h3>系统配置</h3>
+            </div>
+            <button type="button" class="mobile-sheet-close" @click="closeMobileConfigPanel" aria-label="关闭系统配置">
+                <i class="el-icon-close"></i>
+            </button>
+        </div>
+        <div class="mobile-sheet-content">
+            <section class="mobile-config-group">
+                <div class="mobile-config-group-title">
+                    <i class="el-icon-s-promotion"></i>
+                    <span>请求与上传</span>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
+                        <div class="mobile-config-label">
+                            <span>API 请求限速</span>
+                            <em>QPS</em>
+                        </div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="systemConfig.apiQps" inputmode="decimal" @input="validateNumber($event, 'apiQps', true)" size="small" class="mobile-config-input"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'apiQps' }" @click="toggleConfigHint('apiQps')" aria-label="查看 API 请求限速说明">
+                                <i class="el-icon-info"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint">
+                        <div v-if="activeConfigHint === 'apiQps'" class="mobile-config-hint">
+                            限制每秒请求 B 站 API 的次数，防止风控。系统已对各项请求增加合理延迟，此项是全局兜底，无需设置过低。
+                        </div>
+                    </transition>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
+                        <div class="mobile-config-label">
+                            <span>上传带宽限速</span>
+                            <button type="button" class="mobile-config-unit-toggle" @click="toggleUploadSpeedUnit" :aria-label="'切换上传带宽单位，当前' + uploadSpeedUnitLabel">
+                                {{ uploadSpeedUnitLabel }}
+                            </button>
+                        </div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="uploadSpeedInputValue" inputmode="decimal" @input="validateUploadSpeedDisplay" size="small" class="mobile-config-input"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'uploadSpeedLimit' }" @click="toggleConfigHint('uploadSpeedLimit')" aria-label="查看上传带宽限速说明">
+                                <i class="el-icon-info"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint">
+                        <div v-if="activeConfigHint === 'uploadSpeedLimit'" class="mobile-config-hint">
+                            限制上传视频时的最大带宽，0 为不限速。限速只保证最高值不超过设定值，非必要不建议开启，避免影响上传效率。
+                        </div>
+                    </transition>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
+                        <div class="mobile-config-label">
+                            <span>短时间开播合并</span>
+                            <em>分钟</em>
+                        </div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="systemConfig.mergeIntervalMinutes" inputmode="numeric" @input="validateNumber($event, 'mergeIntervalMinutes', false)" size="small" class="mobile-config-input"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'mergeIntervalMinutes' }" @click="toggleConfigHint('mergeIntervalMinutes')" aria-label="查看短时间开播合并说明">
+                                <i class="el-icon-info"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint">
+                        <div v-if="activeConfigHint === 'mergeIntervalMinutes'" class="mobile-config-hint">
+                            下播后等待多长时间再投稿，同时间隔内再次开播会算作同一次直播，避免短时间开播下播拆分稿件。
+                        </div>
+                    </transition>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
+                        <div class="mobile-config-label">
+                            <span>上传并发连接</span>
+                            <em>个</em>
+                        </div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="systemConfig.maxConnections" inputmode="numeric" @input="validateNumber($event, 'maxConnections', false)" size="small" class="mobile-config-input"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'maxConnections' }" @click="toggleConfigHint('maxConnections')" aria-label="查看上传并发连接说明">
+                                <i class="el-icon-info"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint">
+                        <div v-if="activeConfigHint === 'maxConnections'" class="mobile-config-hint">
+                            限制同时进行的上传连接数，值越小对网络占用越少。多账号同时上传时建议保持较低值，避免网络拥塞影响其他应用。
+                        </div>
+                    </transition>
+                </div>
+            </section>
+
+            <section class="mobile-config-group">
+                <div class="mobile-config-group-title">
+                    <i class="el-icon-chat-dot-round"></i>
+                    <span>弹幕节流</span>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
+                        <div class="mobile-config-label">
+                            <span>弹幕发送间隔</span>
+                            <em>秒</em>
+                        </div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="systemConfig.normalDanmakuIntervalSeconds" inputmode="numeric" @input="validateNumber($event, 'normalDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'normalDanmakuIntervalSeconds' }" @click="toggleConfigHint('normalDanmakuIntervalSeconds')" aria-label="查看弹幕发送间隔说明">
+                                <i class="el-icon-info"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint">
+                        <div v-if="activeConfigHint === 'normalDanmakuIntervalSeconds'" class="mobile-config-hint">
+                            普通弹幕与 SC/上舰高级弹幕共用的全局发送间隔，默认 25 秒。数值过低可能更容易触发风控。
+                        </div>
+                    </transition>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
+                        <div class="mobile-config-label">
+                            <span>评论发送间隔</span>
+                            <em>秒</em>
+                        </div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="systemConfig.highLevelDanmakuIntervalSeconds" inputmode="numeric" @input="validateNumber($event, 'highLevelDanmakuIntervalSeconds', false)" size="small" class="mobile-config-input"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'highLevelDanmakuIntervalSeconds' }" @click="toggleConfigHint('highLevelDanmakuIntervalSeconds')" aria-label="查看评论发送间隔说明">
+                                <i class="el-icon-info"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint">
+                        <div v-if="activeConfigHint === 'highLevelDanmakuIntervalSeconds'" class="mobile-config-hint">
+                            SC/上舰列表评论与礼物评论共用的全局发送间隔，默认 25 秒。
+                        </div>
+                    </transition>
+                </div>
+            </section>
+
+            <section class="mobile-config-group">
+                <div class="mobile-config-group-title">
+                    <i class="el-icon-guide"></i>
+                    <span>实验功能</span>
+                </div>
+                <div class="mobile-upload-flow-card" :class="{ 'is-active': systemConfig.newUploadFlowEnabled }">
+                    <div class="mobile-upload-flow-main"
+                         role="button"
+                         tabindex="0"
+                         @click="toggleNewUploadFlow"
+                         @keydown.enter.prevent="toggleNewUploadFlow"
+                         @keydown.space.prevent="toggleNewUploadFlow"
+                         aria-label="切换新版上传流程">
+                        <span class="mobile-upload-flow-icon">
+                            <i class="el-icon-guide"></i>
+                        </span>
+                        <span class="mobile-upload-flow-copy">
+                            <strong>新版上传流程</strong>
+                            <span>{{ systemConfig.newUploadFlowEnabled ? '优先使用浏览器 multipart 链路' : '当前保持旧流程稳定链路' }}</span>
+                        </span>
+                        <span class="mobile-upload-flow-state">{{ systemConfig.newUploadFlowEnabled ? '新流程' : '旧流程' }}</span>
+                        <el-switch v-model="systemConfig.newUploadFlowEnabled" @click.native.stop="noop" @change="checkConfigChanges"></el-switch>
+                    </div>
+                    <button type="button" class="mobile-upload-flow-info" :class="{ 'is-active': activeConfigHint === 'newUploadFlowEnabled' }" @click="toggleConfigHint('newUploadFlowEnabled')">
+                        {{ activeConfigHint === 'newUploadFlowEnabled' ? '收起说明' : '查看说明' }}
+                    </button>
+                </div>
+                <transition name="mobile-config-hint">
+                    <div v-if="activeConfigHint === 'newUploadFlowEnabled'" class="mobile-config-hint mobile-upload-flow-hint">
+                        默认使用旧上传流程。开启后优先使用浏览器 multipart 上传链路，支持分 P 暂停、继续上传，以及进程意外关闭后的分片级断点续传；遇到异常会自动回退旧流程，并在录制历史中标记回退状态。
+                    </div>
+                </transition>
+            </section>
+
+            <section class="mobile-config-group mobile-storage-group" v-loading="storageLoading">
+                <div class="mobile-config-group-title">
+                    <i class="el-icon-folder-opened"></i>
+                    <span>存储目录</span>
+                </div>
+                <div v-if="workPathChange && workPathChange.pending" class="mobile-storage-warning" role="alert">
+                    <strong>工作目录变更待确认</strong>
+                    <p>新目录：{{ workPathChange.configuredPath || '-' }}</p>
+                    <p>{{ workPathChange.h2Warning }}</p>
+                    <div>
+                        <button type="button" :disabled="storageResolving" @click="resolveWorkPathChange('FUTURE_ONLY')">仅影响新文件</button>
+                        <button type="button" class="is-warning" :disabled="storageResolving" @click="resolveWorkPathChange('RELOCATE_EXISTING')">迁移现有目录</button>
+                    </div>
+                </div>
+                <div class="mobile-storage-roots">
+                    <div v-for="root in storageRoots" :key="root.id" class="mobile-storage-root">
+                        <div>
+                            <span>{{ root.rootType === 'WORK' ? '工作目录' : '归档目录' }}</span>
+                            <strong>{{ root.path }}</strong>
+                            <em>{{ storageRootStatusLabel(root) }}</em>
+                        </div>
+                        <button v-if="!root.lastCheckedAt || root.status === 'OFFLINE'" type="button" @click="remapStorageRoot(root)" aria-label="重新映射存储目录">
+                            <i class="el-icon-edit"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <biliup-shell-module-host
+                ref="notificationSettingsHost"
+                module-name="notification-settings"
+                :surface="surface"
+                :active="configExpanded">
+            </biliup-shell-module-host>
+        </div>
+        <div class="mobile-sheet-actions">
+            <button type="button" class="mobile-secondary-action" @click="resetConfig" :disabled="!hasConfigChanges">
+                <i class="el-icon-refresh-left"></i>
+                重置
+            </button>
+            <button type="button" class="mobile-primary-action" @click="saveSystemConfig" :disabled="configLoading">
+                <i :class="configLoading ? 'el-icon-loading' : 'el-icon-check'"></i>
+                保存配置
+            </button>
+            <button type="button" class="mobile-full-action" @click="openSetupWizard">
+                <i class="el-icon-setting"></i>
+                向导参数配置
+            </button>
+        </div>
+    </aside>
+</transition>
+</div>

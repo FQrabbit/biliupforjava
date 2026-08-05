@@ -47,6 +47,7 @@ public class MvcConfig implements WebMvcConfigurer{
                         "/mobile/**",
                         "/css/**",
                         "/js/**",
+                        "/modules/**",
                         "/img/**",
                         "/ws/**",
                         "/favicon.ico",

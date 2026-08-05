@@ -1,0 +1,911 @@
+/* 上传进度（现代风格） */
+
+.detail-progress-container {
+
+    background: var(--bg-tertiary);
+
+    border-radius: var(--radius-lg);
+
+    padding: 16px;
+
+    border: 1px solid var(--border-light);
+
+}
+
+.progress-row-modern {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 16px;
+
+}
+
+.progress-row-modern.main {
+
+    margin-bottom: 16px;
+
+    padding-bottom: 16px;
+
+    border-bottom: 1px solid var(--border-color);
+
+}
+
+.progress-info {
+
+    width: 120px;
+
+    flex-shrink: 0;
+
+}
+
+.progress-label {
+
+    display: block;
+
+    font-size: 14px;
+
+    font-weight: 600;
+
+    color: var(--text-primary);
+
+}
+
+.progress-text {
+
+    display: block;
+
+    font-size: 12px;
+
+    color: var(--text-secondary);
+
+    margin-top: 4px;
+
+}
+
+.progress-bar-wrapper {
+
+    flex: 1;
+
+}
+
+.progress-list-modern {
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 10px;
+
+    margin-top: 10px;
+
+    border: 1px solid var(--border-light);
+
+    border-radius: 4px;
+
+    background-color: var(--bg-secondary);
+
+    max-height: clamp(180px, 48vh, 520px);
+
+    overflow-y: auto;
+
+    overflow-x: hidden;
+
+    overscroll-behavior: contain;
+
+    -webkit-overflow-scrolling: touch;
+
+    padding-right: 6px;
+
+}
+
+.progress-list-modern::-webkit-scrollbar {
+
+    width: 6px;
+
+}
+
+.progress-list-modern::-webkit-scrollbar-thumb {
+
+    background-color: var(--text-disabled);
+
+    border-radius: 3px;
+
+}
+
+.progress-list-modern::-webkit-scrollbar-track {
+
+    background-color: var(--bg-tertiary);
+
+}
+
+.progress-row-modern.item {
+
+    background: var(--bg-primary);
+
+    padding: 8px 12px;
+
+    border-radius: var(--radius-md);
+
+    border: 1px solid var(--border-light);
+
+}
+
+.progress-info-mini {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    min-width: 240px;
+
+    flex-shrink: 0;
+
+    flex-wrap: wrap;
+
+}
+
+.part-badge {
+
+    background: var(--bg-secondary);
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    padding: 2px 6px;
+
+    border-radius: 4px;
+
+    font-weight: 600;
+
+    flex-shrink: 0;
+
+}
+
+.part-status {
+
+    font-size: 12px;
+
+    color: var(--text-secondary);
+
+    flex-shrink: 0;
+
+}
+
+.part-status.UPLOADING { color: var(--primary-color); }
+
+.part-status.SUCCESS { color: var(--success-color); }
+
+.part-status.FAILED { color: var(--danger-color); }
+
+.part-status.RETRY_WAIT { color: var(--warning-color); }
+
+.part-status.ISSUE { color: var(--danger-color); }
+
+.part-status.SKIPPED { color: var(--text-secondary); }
+
+.local-file-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 7px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    background: var(--background-color);
+    font-size: 11px;
+    font-style: normal;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.local-file-badge.is-available { color: var(--success-color); border-color: rgba(103, 194, 58, 0.4); }
+.local-file-badge.is-cleaned { color: var(--text-secondary); background: rgba(144, 147, 153, 0.09); }
+.local-file-badge.is-warning { color: var(--warning-color); border-color: rgba(230, 162, 60, 0.45); background: rgba(230, 162, 60, 0.08); }
+.local-file-badge.is-danger { color: var(--danger-color); border-color: rgba(245, 108, 108, 0.45); background: rgba(245, 108, 108, 0.08); }
+
+.part-meta {
+
+    font-size: 11px;
+
+    color: var(--text-disabled);
+
+    flex-shrink: 0;
+
+}
+
+.part-remaining-time {
+
+    font-size: 11px;
+
+    color: var(--primary-color);
+
+    padding: 2px 6px;
+
+    background: var(--brand-soft-bg);
+
+    border-radius: 4px;
+
+    font-weight: 500;
+
+    white-space: nowrap;
+
+    flex-shrink: 0;
+
+}
+
+.progress-bar-mini {
+
+    flex: 1;
+
+    margin: 0 12px;
+
+}
+
+.progress-percent-text {
+
+    width: 40px;
+
+    text-align: right;
+
+    font-size: 12px;
+
+    color: var(--text-secondary);
+
+    font-family: monospace;
+
+}
+
+.progress-msg-mini {
+
+    font-size: 11px;
+
+    color: var(--danger-color);
+
+    margin-left: 10px;
+
+}
+
+.progress-filepath-mini {
+
+    font-size: 11px;
+
+    color: var(--text-secondary);
+
+    margin-left: 10px;
+
+    word-break: break-all;
+
+}
+
+.progress-filepath-mini .filepath-text {
+
+    text-decoration: underline;
+
+    text-decoration-style: dotted;
+
+    cursor: help;
+
+}
+
+.waiting-tip {
+
+    margin-top: 10px;
+
+    font-size: 13px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    padding: 8px 10px;
+
+    border-radius: var(--radius-md);
+
+    border: 1px solid transparent;
+
+}
+
+.waiting-tip > i {
+
+    font-size: 14px;
+
+}
+
+.waiting-tip--queue {
+
+    color: var(--warning-color);
+
+    background: var(--warning-soft-bg-faint);
+
+    border-color: var(--warning-border-strong);
+
+}
+
+.waiting-tip--merged {
+
+    color: var(--primary-color);
+
+    background: var(--brand-soft-bg-faint);
+
+    border-color: var(--brand-accent-border-light);
+
+}
+
+.waiting-tip--blocking {
+
+    color: var(--danger-color);
+
+    background: var(--danger-soft-bg-faint);
+
+    border-color: var(--danger-border-strong);
+
+}
+
+.part-actions {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 6px;
+
+    align-items: center;
+
+}
+
+.part-actions .el-button {
+
+    margin: 0;
+
+    min-width: 76px;
+
+    min-height: 32px;
+
+    padding: 5px 10px;
+
+    border-radius: 14px;
+
+    font-weight: 500;
+
+}
+
+.part-action-btn {
+
+    transition: all 0.2s ease;
+
+}
+
+.part-action-btn:hover {
+
+    transform: translateY(-1px);
+
+}
+
+.part-action-btn--bind {
+
+    border-color: var(--brand-accent-border-strong);
+
+}
+
+.part-action-btn--finish {
+
+    border-color: var(--warning-border-strong);
+
+}
+
+.part-action-btn--pause {
+
+    border-color: var(--warning-border-strong);
+
+}
+
+.part-action-btn--resume {
+
+    border-color: var(--success-border-strong, var(--success-color));
+
+}
+
+.part-action-btn--rescan {
+
+    border-color: var(--border-color);
+
+}
+
+.exception-item {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    padding: 6px 10px;
+
+    background: var(--bg-tertiary);
+
+    border-radius: var(--radius-md);
+
+    margin-right: 8px;
+
+    margin-bottom: 8px;
+
+}
+
+.exception-file {
+
+    color: var(--text-primary);
+
+}
+
+/* 移动端自适应 */
+
+@media (max-width: 768px) {
+
+    .detail-header-modern {
+
+        flex-direction: column;
+
+        gap: 12px;
+
+    }
+
+    .detail-header-side {
+
+        width: 100%;
+
+    }
+
+    .detail-bvid-box {
+
+        flex-direction: row;
+
+        justify-content: space-between;
+
+        width: 100%;
+
+    }
+
+    .detail-status-bar {
+
+        display: flex;
+
+        overflow-x: auto;
+
+        grid-template-columns: none;
+
+        padding: 16px 12px;
+
+        gap: 4px;
+
+        scroll-snap-type: x proximity;
+
+        -webkit-overflow-scrolling: touch;
+
+        scrollbar-width: none;
+
+    }
+
+    .detail-status-bar::-webkit-scrollbar {
+
+        display: none;
+
+    }
+
+    /* 移动端分页优化*/
+
+    .pagination-container {
+
+        padding: 0 16px;
+
+        margin-top: 16px;
+
+    }
+
+    .pagination-container .el-pagination {
+
+        display: flex;
+
+        justify-content: center;
+
+        padding: 8px 0;
+
+    }
+
+    .pagination-container .el-pagination .btn-prev,
+
+    .pagination-container .el-pagination .btn-next {
+
+        min-width: 36px;
+
+        height: 36px;
+
+        line-height: 36px;
+
+        border-radius: var(--radius-md);
+
+        background: var(--bg-secondary);
+
+        border: 1px solid var(--border-light);
+
+        margin: 0 4px;
+
+    }
+
+    .pagination-container .el-pagination .el-pager li {
+
+        min-width: 36px;
+
+        height: 36px;
+
+        line-height: 36px;
+
+        border-radius: var(--radius-md);
+
+        background: var(--bg-secondary);
+
+        border: 1px solid var(--border-light);
+
+        margin: 0 2px;
+
+    }
+
+    .pagination-container .el-pagination .el-pager li.active {
+
+        background: var(--primary-color);
+
+        border-color: var(--primary-color);
+
+        color: var(--text-inverse);
+
+    }
+
+    .swipe-hint {
+
+        font-size: 12px;
+
+        padding: 6px 12px;
+
+        margin-bottom: 8px;
+
+        background: var(--bg-tertiary);
+
+        border-radius: var(--radius-md);
+
+        color: var(--text-secondary);
+
+    }
+
+    .status-connector {
+
+        width: 30px;
+
+        height: 3px;
+
+        min-width: 30px;
+
+        flex: 0 0 30px;
+
+        margin: auto 0;
+
+        border-radius: 2px;
+
+    }
+
+    .status-connector::before {
+
+        display: block;
+
+    }
+
+    /* 移动端状态显示优化*/
+
+    .status-item-modern {
+
+        flex: 0 0 auto;
+
+        width: 120px;
+
+        flex-direction: column;
+
+        text-align: center;
+
+        padding: 12px 8px;
+
+        gap: 8px;
+
+        background: var(--bg-secondary);
+
+        border-radius: var(--radius-md);
+
+        margin: 0;
+
+        min-height: auto;
+
+        justify-content: center;
+
+        scroll-snap-align: center;
+
+    }
+
+    .status-icon {
+
+        width: 36px;
+
+        height: 36px;
+
+        font-size: 18px;
+
+        margin: 0 auto;
+
+        flex-shrink: 0;
+
+    }
+
+    .status-info {
+
+        display: flex;
+
+        flex-direction: column;
+
+        align-items: center;
+
+        width: 100%;
+
+        gap: 2px;
+
+    }
+
+    .status-label {
+
+        font-size: 12px;
+
+        margin-bottom: 0;
+
+        font-weight: 500;
+
+        white-space: nowrap;
+
+    }
+
+    .status-value {
+
+        font-size: 14px;
+
+        font-weight: 600;
+
+        line-height: 1.2;
+
+    }
+
+    .status-badge-mini {
+
+        font-size: 9px;
+
+        padding: 1px 3px;
+
+        margin-left: 2px;
+
+        margin-top: 2px;
+
+    }
+
+    .status-item-modern {
+
+        padding: 12px;
+
+    }
+
+    .detail-stats-grid {
+
+        grid-template-columns: repeat(2, 1fr);
+
+    }
+
+    .progress-row-modern.item {
+
+        flex-direction: column;
+
+        align-items: stretch;
+
+        gap: 8px;
+
+        padding: 12px;
+
+    }
+
+    .progress-info-mini {
+
+        width: 100%;
+
+        margin-bottom: 0;
+
+        flex-wrap: wrap;
+
+    }
+
+    .progress-bar-mini {
+
+        margin: 0;
+
+        width: 100%;
+
+        order: 2;
+
+    }
+
+    .progress-percent-text {
+
+        order: 3;
+
+        width: auto;
+
+        text-align: left;
+
+        margin-left: auto;
+
+    }
+
+    .progress-msg-mini,
+
+    .progress-filepath-mini {
+
+        width: 100%;
+
+        margin: 4px 0 0 0;
+
+        order: 4;
+
+    }
+
+    .part-actions {
+
+        gap: 8px;
+
+    }
+
+    .part-actions .el-button {
+
+        flex: 1 1 calc(50% - 4px);
+
+        min-width: 0;
+
+        padding-left: 8px;
+
+        padding-right: 8px;
+
+    }
+
+    .progress-list-modern {
+
+        max-height: clamp(160px, 36vh, 360px);
+
+        padding-right: 0;
+
+    }
+
+    .detail-progress-container {
+
+        margin-bottom: 16px;
+
+    }
+
+    .detail-content-modern {
+
+        padding-bottom: calc(var(--detail-footer-offset, 160px) + 24px);
+
+    }}
+
+/* 科技风格进度条（高品质） */
+
+.detail-progress-container .el-progress-bar__outer {
+
+    background-color: var(--border-light) !important;
+
+    border-radius: 10px !important;
+
+    box-shadow: inset 0 1px 3px var(--glass-border);
+
+    overflow: hidden;
+
+    border: none;
+
+}
+
+.detail-progress-container .el-progress-bar__inner {
+
+    border-radius: 10px !important;
+
+    background-image: linear-gradient(90deg, var(--primary-light) 0%, var(--primary-color) 100%);
+
+    position: relative;
+
+    transition: width var(--duration-slow) var(--ease-apple);
+
+    box-shadow: 0 0 10px var(--brand-soft-bg-strong);
+
+}
+
+/* 闪光效果叠加层 */
+
+.detail-progress-container .el-progress-bar__inner::before {
+
+    content: '';
+
+    position: absolute;
+
+    top: 0;
+
+    left: 0;
+
+    bottom: 0;
+
+    right: 0;
+
+    background-image: linear-gradient(
+
+        90deg,
+
+        transparent 0%,
+
+        var(--glass-border) 50%,
+
+        transparent 100%
+
+    );
+
+    background-size: 200% 100%;
+
+    animation: shimmer-reverse 2s infinite linear;
+
+    z-index: 1;
+
+}
+
+/* 成功状态 */
+
+.detail-progress-container .el-progress.is-success .el-progress-bar__inner {
+
+    background-image: linear-gradient(90deg, var(--success-dark) 0%, var(--success-light) 100%);
+
+    box-shadow: 0 0 10px var(--success-glow-strong);
+
+}
+
+/* 异常状态 */
+
+.detail-progress-container .el-progress.is-exception .el-progress-bar__inner {
+
+    background-image: linear-gradient(90deg, var(--danger-color) 0%, var(--danger-accent) 100%);
+
+    box-shadow: 0 0 10px var(--danger-shadow);
+
+}
+
+/* 迷你进度条调整 */
+
+.progress-bar-mini .el-progress-bar__outer {
+
+    height: 6px !important;
+
+    background-color: var(--bg-tertiary) !important;
+
+}
+
+.progress-bar-mini .el-progress-bar__inner {
+
+    box-shadow: none; /* 移除迷你进度条的光晕效果，保持整洁 */
+
+}
+
+.progress-bar-mini .el-progress-bar__inner::before {
+
+    animation: shimmer-reverse 3s infinite linear; /* 迷你进度条的较慢闪光效果 */
+
+}

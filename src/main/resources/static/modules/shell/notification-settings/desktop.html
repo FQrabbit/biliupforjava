@@ -1,0 +1,349 @@
+<div class="notification-settings-module notification-settings-module--desktop">
+<div class="notification-config" v-loading="notificationConfigLoading">
+                                        <section class="notification-section notification-overview">
+                                            <div class="notification-section-head">
+                                                <div>
+                                                    <h3>推送配置</h3>
+                                                    <p>当前 {{ notificationEnabledChannelCount }} 个启用渠道，{{ notificationRuleCount }} 条已保存规则，最近 {{ notificationDeliveryCount }} 条投递记录</p>
+                                                </div>
+                                                <div class="notification-toolbar">
+                                                    <el-button class="modern-btn" size="small" icon="el-icon-refresh" @click="loadNotificationConfig">刷新</el-button>
+                                                    <el-button class="modern-btn" size="small" icon="el-icon-warning-outline" @click="loadLegacyNotificationMigration(false, true)">检查旧配置</el-button>
+                                                    <el-switch
+                                                        v-model="notificationConfig.enabled"
+                                                        active-text="启用"
+                                                        inactive-text="停用"
+                                                        :disabled="notificationEnabledSaving"
+                                                        @change="saveNotificationEnabled">
+                                                    </el-switch>
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        <section class="notification-section">
+                                            <div class="notification-section-head">
+                                                <div>
+                                                    <h3>推送渠道</h3>
+                                                </div>
+                                            </div>
+                                            <div class="notification-new-channel-wrap">
+                                                <notification-channel-fields
+                                                    v-model="notificationNewChannel"
+                                                    size="small"
+                                                    :is-new="true"
+                                                    :type-options="notificationChannelTypeOptions">
+                                                    <!-- actions 作为 slot 内容注入组件根节点，才能参与 grid 布局 -->
+                                                    <div class="notification-channel-actions">
+                                                        <el-switch v-model="notificationNewChannel.enabled" active-text="启用" inactive-text="停用"></el-switch>
+                                                        <el-button class="modern-btn" type="primary" size="small" icon="el-icon-plus" :loading="notificationNewChannel.saving" @click="saveNotificationChannel(notificationNewChannel, true)">新增渠道</el-button>
+                                                    </div>
+                                                </notification-channel-fields>
+                                            </div>
+
+                                            <div v-if="notificationChannelDrafts.length > 0" class="notification-table-wrap">
+                                            <el-table
+                                                ref="notificationChannelTable"
+                                                :data="notificationChannelDrafts"
+                                                size="small"
+                                                style="width: 100%"
+                                                class="notification-table"
+                                                empty-text="暂无推送渠道">
+                                                <el-table-column label="渠道" min-width="180">
+                                                    <template slot-scope="scope">
+                                                        <div class="notification-channel-title">
+                                                            <el-tag size="mini" effect="plain">{{ notificationTypeLabel(scope.row.type) }}</el-tag>
+                                                            <el-input v-model="scope.row.name" size="mini" placeholder="本地备注，仅在本插件显示"></el-input>
+                                                        </div>
+                                                    </template>
+                                                </el-table-column>
+                                                <el-table-column label="参数" min-width="260">
+                                                    <template slot-scope="scope">
+                                                        <notification-channel-fields
+                                                            v-model="notificationChannelDrafts[scope.$index]"
+                                                            size="mini"
+                                                            :is-new="false"
+                                                            :type-options="notificationChannelTypeOptions">
+                                                        </notification-channel-fields>
+                                                    </template>
+                                                </el-table-column>
+                                                <el-table-column label="启用" width="90" align="center">
+                                                    <template slot-scope="scope">
+                                                        <el-switch v-model="scope.row.enabled"></el-switch>
+                                                    </template>
+                                                </el-table-column>
+                                                <el-table-column label="操作" width="170" align="right">
+                                                    <template slot-scope="scope">
+                                                        <el-button type="text" size="mini" :loading="scope.row.testing" @click="testNotificationChannel(scope.row)">测试</el-button>
+                                                        <el-button type="text" size="mini" :loading="scope.row.saving" @click="saveNotificationChannel(scope.row, false)">保存</el-button>
+                                                    </template>
+                                                </el-table-column>
+                                            </el-table>
+                                            </div>
+                                            <div v-else class="notification-empty">暂无推送渠道</div>
+                                        </section>
+
+                                        <section class="notification-section notification-rule-section">
+                                            <div class="notification-section-head">
+                                                <div>
+                                                    <h3>事件规则</h3>
+                                                    <p>按事件设置适用范围、直播间和推送渠道。</p>
+                                                </div>
+                                                <el-button class="modern-btn" size="small" type="primary" icon="el-icon-edit-outline" @click="openNotificationRuleEditor()">编辑规则</el-button>
+                                            </div>
+                                            <div class="notification-rule-grid">
+                                                <article v-for="rule in notificationDefaultRuleDrafts" :key="'desktop-rule-' + rule.eventType" class="notification-rule-card">
+                                                    <div class="notification-rule-card-head">
+                                                        <div>
+                                                            <h4>{{ rule.eventLabel }}</h4>
+                                                            <p>{{ rule.virtual ? '尚未保存默认规则' : '默认规则已保存' }}</p>
+                                                        </div>
+                                                        <el-tag size="mini" :type="notificationRuleStatusType(rule)" effect="plain">{{ notificationRuleStatusText(rule) }}</el-tag>
+                                                    </div>
+                                                    <div class="notification-rule-card-body">
+                                                        <div class="notification-rule-summary-row">
+                                                            <span>适用范围</span>
+                                                            <strong>{{ notificationRuleScopeSummary(rule) }}</strong>
+                                                        </div>
+                                                        <div class="notification-rule-summary-row">
+                                                            <span>推送渠道</span>
+                                                            <strong>{{ notificationRuleChannelSummary(rule) }}</strong>
+                                                        </div>
+                                                    </div>
+                                                    <div class="notification-room-rule-list" v-if="getNotificationRoomRuleDrafts(rule.eventType).length > 0">
+                                                        <div class="notification-room-rule-title">直播间规则</div>
+                                                        <el-tag
+                                                            v-for="roomRule in getNotificationRoomRuleDrafts(rule.eventType)"
+                                                            :key="roomRule.id || (roomRule.eventType + '-' + roomRule.roomId)"
+                                                            size="mini"
+                                                            :type="notificationRuleModeType(roomRule)"
+                                                            effect="plain"
+                                                            closable
+                                                            @close="deleteNotificationRule(roomRule)">
+                                                            {{ notificationRoomLabel(roomRule.roomId) }} · {{ notificationRuleModeText(roomRule) }}
+                                                        </el-tag>
+                                                    </div>
+                                                    <div class="notification-rule-card-actions">
+                                                        <el-button class="modern-btn" size="small" plain icon="el-icon-edit" @click="openNotificationRuleEditor(rule.eventType)">编辑</el-button>
+                                                    </div>
+                                                </article>
+                                            </div>
+                                        </section>
+
+                                        <section class="notification-section">
+                                            <div class="notification-section-head">
+                                                <div>
+                                                    <h3>最近投递</h3>
+                                                </div>
+                                            </div>
+                                            <div class="notification-table-wrap">
+                                            <el-table
+                                                ref="notificationDeliveryTable"
+                                                :data="notificationConfig.deliveries || []"
+                                                size="small"
+                                                max-height="240"
+                                                style="width: 100%"
+                                                class="notification-table"
+                                                empty-text="暂无投递记录">
+                                                <el-table-column label="时间" width="155">
+                                                    <template slot-scope="scope">{{ formatNotificationTime(scope.row.createTime) }}</template>
+                                                </el-table-column>
+                                                <el-table-column prop="eventLabel" label="事件" width="110"></el-table-column>
+                                                <el-table-column prop="channelName" label="渠道" min-width="160"></el-table-column>
+                                                <el-table-column label="状态" width="90" align="center">
+                                                    <template slot-scope="scope">
+                                                        <el-tag size="mini" :type="notificationDeliveryStatusType(scope.row.status)">{{ scope.row.status || 'PENDING' }}</el-tag>
+                                                    </template>
+                                                </el-table-column>
+                                                <el-table-column prop="errorMessage" label="错误" min-width="220" show-overflow-tooltip></el-table-column>
+                                            </el-table>
+                                            </div>
+                                        </section>
+                                    </div>
+<el-drawer
+        :title="'编辑推送规则'"
+        :visible.sync="notificationRuleEditor.visible"
+        direction="rtl"
+        :size="notificationRuleEditorSize"
+        append-to-body
+        custom-class="notification-rule-drawer">
+        <div class="notification-rule-editor">
+            <div class="notification-editor-head">
+                <div>
+                    <h3>{{ notificationRuleEditor.eventLabel || '推送规则' }}</h3>
+                    <p>先选择事件，再决定推送状态、适用范围和推送渠道。</p>
+                </div>
+                <el-tag size="small" effect="plain">{{ notificationRuleEditorBadgeText() }}</el-tag>
+            </div>
+            <el-form label-position="top" size="small" class="notification-editor-form">
+                <el-form-item label="事件">
+                    <el-select v-model="notificationRuleEditor.eventType" placeholder="选择事件" class="notification-editor-control" popper-class="notification-settings-popper">
+                        <el-option v-for="item in notificationConfig.eventTypes" :key="item.key" :label="item.label" :value="item.key"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item v-if="isNotificationWorkspaceUsageEvent(notificationRuleEditor.eventType)" label="预警阈值">
+                    <div class="notification-threshold-control">
+                        <el-input-number
+                            v-model="notificationRuleEditor.workspaceUsageAlertThresholdPercent"
+                            :min="1"
+                            :max="99"
+                            :step="1"
+                            controls-position="right">
+                        </el-input-number>
+                        <span>%</span>
+                        <em>工作目录所在磁盘使用率达到该比例时发送预警</em>
+                    </div>
+                </el-form-item>
+                <el-form-item :label="isNotificationSystemEvent(notificationRuleEditor.eventType) ? '事件状态' : '适用范围'" class="option-card-form-item">
+                    <div class="notification-scope-card-grid" :class="{ 'is-system': isNotificationSystemEvent(notificationRuleEditor.eventType) }" role="radiogroup" aria-label="适用范围">
+                        <button
+                            v-for="item in (isNotificationSystemEvent(notificationRuleEditor.eventType) ? notificationSystemRuleModeOptions : notificationRuleModeOptions)"
+                            :key="item.value"
+                            type="button"
+                            class="notification-scope-card"
+                            :class="{ 'is-active': notificationRuleEditor.scope === item.value }"
+                            role="radio"
+                            :aria-checked="notificationRuleEditor.scope === item.value"
+                            @click="setNotificationRuleEditorScope(item.value)">
+                            <span class="notification-scope-card-icon">
+                                <i :class="notificationRuleScopeCardIcon(item.value)"></i>
+                            </span>
+                            <span class="notification-scope-card-main">
+                                <strong>{{ item.label }}</strong>
+                                <em>{{ notificationRuleScopeCardDescription(item.value) }}</em>
+                            </span>
+                            <i class="el-icon-check notification-scope-card-check"></i>
+                        </button>
+                    </div>
+                </el-form-item>
+                <el-form-item v-if="!isNotificationSystemEvent(notificationRuleEditor.eventType) && notificationRuleEditor.scope === 'rooms'" label="选择直播间">
+                    <div class="notification-room-picker">
+                        <el-input
+                            v-model="notificationRuleEditor.roomKeyword"
+                            size="small"
+                            clearable
+                            prefix-icon="el-icon-search"
+                            placeholder="搜索房间号、主播或标题">
+                        </el-input>
+                        <div class="notification-room-picker-tools">
+                            <el-radio-group v-model="notificationRuleEditor.roomFilter" size="mini">
+                                <el-radio-button v-for="item in notificationRuleEditorRoomFilters" :key="item.value" :label="item.value">{{ item.label }}</el-radio-button>
+                            </el-radio-group>
+                            <div class="notification-room-picker-actions">
+                                <el-button class="modern-btn notification-picker-action-btn" size="mini" plain icon="el-icon-finished" @click="selectAllNotificationRooms">全选</el-button>
+                                <el-button class="modern-btn notification-picker-action-btn" size="mini" plain icon="el-icon-close" @click="clearNotificationRoomSelection">清空</el-button>
+                            </div>
+                        </div>
+                        <div class="notification-room-picker-list">
+                            <button
+                                v-for="room in notificationRoomSelectorOptions"
+                                :key="room.roomId"
+                                type="button"
+                                class="notification-room-option"
+                                :class="{ 'is-selected': room.selected }"
+                                @click="toggleNotificationRoomSelection(room.roomId)">
+                                <span class="notification-room-option-check">
+                                    <i :class="room.selected ? 'el-icon-check' : 'el-icon-plus'"></i>
+                                </span>
+                                <span class="notification-room-option-main">
+                                    <strong>{{ room.roomName }}</strong>
+                                    <em>{{ room.roomId }}<template v-if="room.title"> · {{ room.title }}</template></em>
+                                </span>
+                                <span class="notification-room-option-tags">
+                                    <el-tag v-if="room.streaming" size="mini" type="success" effect="plain">开播中</el-tag>
+                                    <el-tag v-if="room.recording" size="mini" type="warning" effect="plain">录制中</el-tag>
+                                </span>
+                            </button>
+                            <div v-if="notificationRoomSelectorOptions.length === 0" class="notification-room-picker-empty">没有匹配的直播间</div>
+                        </div>
+                    </div>
+                </el-form-item>
+                <el-form-item v-if="notificationRuleEditor.scope !== 'mute'" label="推送渠道">
+                    <el-select
+                        v-model="notificationRuleEditor.channelIdList"
+                        multiple
+                        collapse-tags
+                        placeholder="选择推送渠道"
+                        class="notification-editor-control notification-rule-channel-select"
+                        popper-class="notification-settings-popper">
+                        <el-option v-for="item in notificationChannelOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-alert
+                    v-if="notificationRuleEditor.scope === 'mute'"
+                    title="保存后这个事件默认不再发送推送。"
+                    type="warning"
+                    show-icon
+                    :closable="false">
+                </el-alert>
+            </el-form>
+        </div>
+        <div class="drawer-footer notification-rule-drawer-footer">
+            <el-button class="modern-btn" size="small" @click="closeNotificationRuleEditor">取消</el-button>
+            <el-button class="modern-btn" type="primary" size="small" icon="el-icon-check" :loading="notificationRuleEditor.saving" @click="saveNotificationRoomRules">保存规则</el-button>
+        </div>
+    </el-drawer>
+
+    <el-dialog
+        title="发现旧版推送设置"
+        :visible.sync="notificationLegacyMigration.visible"
+        :fullscreen="true"
+        append-to-body
+        custom-class="notification-migration-dialog"
+        :close-on-click-modal="false">
+        <div class="notification-migration" v-loading="notificationLegacyMigration.loading">
+            <div class="notification-migration-head">
+                <div>
+                    <h3>旧版房间推送参数</h3>
+                    <p>共 {{ notificationLegacyMigration.data ? notificationLegacyMigration.data.count : 0 }} 个房间仍在使用旧版推送字段</p>
+                </div>
+                <div class="notification-migration-actions">
+                    <el-button class="modern-btn" size="small" icon="el-icon-view" :disabled="notificationLegacyMigration.revealSecrets" @click="revealLegacyNotificationSecrets">显示完整参数</el-button>
+                    <el-button class="modern-btn" size="small" icon="el-icon-document-copy" @click="copyLegacyNotificationBackup">复制备份</el-button>
+                </div>
+            </div>
+            <el-alert
+                title="迁移后会写入新的推送渠道和规则，并清理旧字段；不迁移会只清理旧字段。"
+                type="warning"
+                show-icon
+                :closable="false">
+            </el-alert>
+            <div class="notification-table-wrap">
+                <el-table
+                    :data="(notificationLegacyMigration.data && notificationLegacyMigration.data.rooms) || []"
+                    class="notification-migration-table"
+                    size="small"
+                    max-height="360"
+                    style="width: 100%"
+                    empty-text="暂无旧版推送设置">
+                    <el-table-column prop="roomId" label="房间ID" width="110"></el-table-column>
+                    <el-table-column prop="uname" label="主播" min-width="140" show-overflow-tooltip></el-table-column>
+                    <el-table-column label="渠道" min-width="130">
+                        <template slot-scope="scope">{{ (scope.row.channels || []).join('、') || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="事件" min-width="220">
+                        <template slot-scope="scope">
+                            <el-tag v-for="item in (scope.row.events || [])" :key="item" size="mini" effect="plain" class="notification-migration-tag">{{ item }}</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="wxuid" label="WxPusher UID" min-width="160" show-overflow-tooltip></el-table-column>
+                    <el-table-column prop="serverChanSendKey" label="Server酱 SendKey" min-width="180" show-overflow-tooltip></el-table-column>
+                    <el-table-column prop="serverChanChannel" label="Server酱标签" min-width="130" show-overflow-tooltip></el-table-column>
+                </el-table>
+            </div>
+            <div class="notification-backup">
+                <div class="notification-backup-title">备份 JSON</div>
+                <el-input
+                    type="textarea"
+                    :autosize="{ minRows: 6, maxRows: 10 }"
+                    :value="notificationLegacyBackupJson"
+                    readonly>
+                </el-input>
+            </div>
+        </div>
+        <span slot="footer" class="dialog-footer notification-migration-footer">
+            <el-button class="modern-btn" size="small" @click="notificationLegacyMigration.visible = false">稍后处理</el-button>
+            <el-button class="modern-btn" type="primary" size="small" :loading="notificationLegacyMigration.loading" @click="applyLegacyNotificationMigration">迁移并清理旧配置</el-button>
+            <el-button class="modern-btn" type="danger" plain size="small" :loading="notificationLegacyMigration.loading" @click="discardLegacyNotificationMigration">不迁移并清理旧配置</el-button>
+        </span>
+    </el-dialog>
+</div>

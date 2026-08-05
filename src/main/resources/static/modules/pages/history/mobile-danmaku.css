@@ -1,0 +1,710 @@
+
+.mobile-history-danmaku-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 7200;
+    background: color-mix(in srgb, var(--mobile-page-surface-strong) 22%, rgba(0, 0, 0, 0.45));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+body.mobile-danmaku-stats-open #app.mobile-shell ~ .el-dialog__wrapper:has(.mobile-history-detail-dialog) {
+    z-index: 7100 !important;
+}
+
+body.mobile-danmaku-stats-open > .el-dialog__wrapper:has(.mobile-history-detail-dialog) {
+    z-index: 7100 !important;
+}
+
+body.mobile-danmaku-stats-open .mobile-history-detail-wrapper--behind-danmaku {
+    z-index: 7100 !important;
+}
+
+body.mobile-danmaku-stats-open .mobile-history-danmaku-backdrop {
+    z-index: 8200;
+}
+
+.mobile-history-danmaku-portal {
+    position: fixed;
+    inset: 0;
+    z-index: 8300;
+    pointer-events: none;
+    animation: mobile-history-danmaku-backdrop-in 180ms ease-out both;
+}
+
+.mobile-history-danmaku-portal .mobile-history-danmaku-backdrop,
+.mobile-history-danmaku-portal .mobile-history-danmaku-sheet {
+    pointer-events: auto;
+}
+
+.mobile-history-danmaku-portal.is-leaving {
+    animation: mobile-history-danmaku-backdrop-out 180ms ease-in both;
+}
+
+.mobile-history-danmaku-sheet {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(14px + var(--mobile-page-safe-bottom));
+    z-index: 7201;
+    box-sizing: border-box;
+    display: grid;
+    gap: 12px;
+    width: auto;
+    max-height: min(620px, calc(var(--mobile-page-viewport-height) - 48px - var(--mobile-page-safe-top) - var(--mobile-page-safe-bottom)));
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 14px 14px;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 28px;
+    background: var(--mobile-page-surface-strong);
+    color: var(--text-primary);
+    box-shadow: var(--mobile-page-shadow);
+    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
+    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
+    animation: mobile-history-danmaku-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
+    z-index: 8201;
+}
+
+.mobile-history-danmaku-portal.is-leaving .mobile-history-danmaku-sheet {
+    animation: mobile-history-danmaku-sheet-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes mobile-history-danmaku-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes mobile-history-danmaku-backdrop-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes mobile-history-danmaku-sheet-in {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 28px, 0) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+@keyframes mobile-history-danmaku-sheet-out {
+    from {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translate3d(0, 24px, 0) scale(0.985);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mobile-history-danmaku-portal,
+    .mobile-history-danmaku-portal.is-leaving,
+    .mobile-history-danmaku-sheet,
+    .mobile-history-danmaku-portal.is-leaving .mobile-history-danmaku-sheet {
+        animation-duration: 1ms;
+    }
+}
+
+.mobile-history-danmaku-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 46px;
+    gap: 12px;
+    align-items: start;
+}
+
+.mobile-history-danmaku-head div {
+    min-width: 0;
+}
+
+.mobile-history-danmaku-head span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 820;
+    text-transform: uppercase;
+}
+
+.mobile-history-danmaku-head h3 {
+    margin: 7px 0 0;
+    color: var(--text-primary);
+    font-size: 24px;
+    line-height: 1.1;
+    font-weight: 860;
+    letter-spacing: 0;
+}
+
+.mobile-history-danmaku-head p {
+    margin: 6px 0 0;
+    max-width: 100%;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mobile-history-danmaku-head button,
+.mobile-history-danmaku-actions button {
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+    min-height: 46px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 17px;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--mobile-page-surface) 78%, transparent);
+    font-size: 14px;
+    font-weight: 820;
+    cursor: pointer;
+    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.mobile-history-danmaku-head button {
+    width: 46px;
+    min-width: 46px;
+    padding: 0;
+}
+
+.mobile-history-danmaku-head button:active,
+.mobile-history-danmaku-actions button:active {
+    transform: scale(0.96);
+}
+
+.mobile-history-danmaku-summary,
+.mobile-history-danmaku-grid {
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 22px;
+    background: color-mix(in srgb, var(--mobile-page-surface) 72%, transparent);
+}
+
+.mobile-history-danmaku-summary {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+}
+
+.mobile-history-danmaku-summary > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.mobile-history-danmaku-summary span,
+.mobile-history-danmaku-stat span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 780;
+}
+
+.mobile-history-danmaku-summary strong,
+.mobile-history-danmaku-stat strong {
+    color: var(--text-primary);
+    font-size: 20px;
+    line-height: 1.05;
+    font-weight: 860;
+    font-variant-numeric: tabular-nums;
+}
+
+.mobile-history-danmaku-progress {
+    height: 9px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-secondary) 14%, transparent);
+}
+
+.mobile-history-danmaku-progress > div {
+    height: 100%;
+    min-width: 3px;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--mobile-blue), var(--mobile-teal));
+    transition: width 260ms ease;
+}
+
+.mobile-history-danmaku-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+}
+
+.mobile-history-danmaku-stat {
+    min-width: 0;
+    min-height: 76px;
+    display: grid;
+    align-content: center;
+    gap: 6px;
+    padding: 11px;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--mobile-page-surface-strong) 58%, transparent);
+}
+
+.mobile-history-danmaku-stat.is-task {
+    align-content: start;
+    min-height: 112px;
+}
+
+.mobile-history-danmaku-stat small {
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.mobile-history-danmaku-stat .danmaku-task-badge {
+    justify-self: start;
+    margin-top: 2px;
+}
+
+.danmaku-task-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 20px;
+    padding: 2px 7px;
+    border: 1px solid var(--mobile-page-border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.mobile-history-danmaku-stat.is-success {
+    border-color: color-mix(in srgb, var(--mobile-teal) 30%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-teal) 9%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat.is-failed {
+    border-color: color-mix(in srgb, var(--danger-color) 30%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 8%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat.is-helpable {
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.mobile-history-danmaku-stat.is-helpable:active {
+    transform: scale(0.985);
+}
+
+.mobile-history-danmaku-stat.is-helpable:focus-visible,
+.mobile-history-danmaku-stat.is-helpable.is-help-open {
+    outline: none;
+    border-color: color-mix(in srgb, var(--danger-color) 55%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-failed-hint {
+    grid-column: 1 / -1;
+    min-width: 0;
+    display: grid;
+    gap: 7px;
+    padding: 11px 12px;
+    border: 1px solid color-mix(in srgb, var(--danger-color) 30%, var(--mobile-page-border));
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--danger-color) 8%, var(--mobile-page-surface-strong));
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+    transform-origin: top center;
+    will-change: opacity, transform;
+}
+
+.danmaku-failed-hint-motion-enter-active {
+    transition: opacity 180ms ease-out, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.danmaku-failed-hint-motion-leave-active {
+    transition: opacity 130ms ease-in, transform 130ms ease-in;
+}
+
+.danmaku-failed-hint-motion-enter,
+.danmaku-failed-hint-motion-leave-to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+}
+
+.danmaku-failed-hint-motion-enter-to,
+.danmaku-failed-hint-motion-leave {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .danmaku-failed-hint-motion-enter-active,
+    .danmaku-failed-hint-motion-leave-active {
+        transition: none;
+    }
+
+    .danmaku-failed-hint-motion-enter,
+    .danmaku-failed-hint-motion-enter-to,
+    .danmaku-failed-hint-motion-leave,
+    .danmaku-failed-hint-motion-leave-to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.mobile-history-danmaku-failed-hint p {
+    margin: 0;
+}
+
+.mobile-history-danmaku-failed-hint ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.mobile-history-danmaku-failed-hint li + li {
+    margin-top: 4px;
+}
+
+.mobile-history-danmaku-retry {
+    grid-column: 1 / -1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.mobile-history-danmaku-retry button {
+    width: 100%;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 34%, var(--mobile-page-border));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--mobile-page-surface-strong));
+    color: var(--primary-color);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    touch-action: manipulation;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.mobile-history-danmaku-retry button.is-force {
+    border-color: color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 9%, var(--mobile-page-surface-strong));
+    color: var(--danger-color);
+}
+
+.mobile-history-danmaku-retry button:active {
+    transform: scale(0.985);
+}
+
+.mobile-history-danmaku-retry button:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--primary-color) 58%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--primary-color) 13%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-retry button.is-force:focus-visible {
+    border-color: color-mix(in srgb, var(--danger-color) 58%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 13%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-retry button:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.mobile-history-danmaku-feedback {
+    grid-column: 1 / -1;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 30%, var(--mobile-page-border));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--mobile-page-surface-strong));
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    transform-origin: top center;
+    will-change: opacity, transform;
+}
+
+.mobile-history-danmaku-feedback i {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    font-size: 14px;
+}
+
+.mobile-history-danmaku-feedback span {
+    min-width: 0;
+}
+
+.mobile-history-danmaku-feedback.is-success {
+    color: var(--mobile-teal);
+    border-color: color-mix(in srgb, var(--mobile-teal) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-teal) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-feedback.is-warning {
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 36%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--warning-color) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-feedback.is-error {
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 10%, var(--mobile-page-surface-strong));
+}
+
+.danmaku-retry-feedback-motion-enter-active {
+    transition: opacity 190ms ease-out, transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.danmaku-retry-feedback-motion-leave-active {
+    transition: opacity 130ms ease-in, transform 130ms ease-in;
+}
+
+.danmaku-retry-feedback-motion-enter,
+.danmaku-retry-feedback-motion-leave-to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+}
+
+.danmaku-retry-feedback-motion-enter-to,
+.danmaku-retry-feedback-motion-leave {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mobile-history-danmaku-retry button,
+    .danmaku-retry-feedback-motion-enter-active,
+    .danmaku-retry-feedback-motion-leave-active {
+        transition: none;
+    }
+
+    .mobile-history-danmaku-retry button:active {
+        transform: none;
+    }
+
+    .danmaku-retry-feedback-motion-enter,
+    .danmaku-retry-feedback-motion-enter-to,
+    .danmaku-retry-feedback-motion-leave,
+    .danmaku-retry-feedback-motion-leave-to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.mobile-history-danmaku-stat .danmaku-task-badge.is-done {
+    color: var(--mobile-teal);
+    border-color: color-mix(in srgb, var(--mobile-teal) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-teal) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat .danmaku-task-badge.is-failed {
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat .danmaku-task-badge.is-pending {
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 34%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--warning-color) 10%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat .danmaku-task-badge.is-muted {
+    color: var(--text-secondary);
+    border-color: var(--mobile-page-border);
+    background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+    opacity: 0.7;
+}
+
+.mobile-history-danmaku-stat.is-sc {
+    border-color: color-mix(in srgb, var(--mobile-coral) 32%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-coral) 9%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-stat.is-guard {
+    border-color: color-mix(in srgb, var(--mobile-blue) 32%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-blue) 9%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-actions {
+    display: grid;
+}
+
+.mobile-history-danmaku-actions button {
+    min-height: 50px;
+    color: var(--mobile-blue);
+    border-color: color-mix(in srgb, var(--mobile-blue) 32%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--mobile-blue) 11%, var(--mobile-page-surface-strong));
+}
+
+.mobile-history-danmaku-sheet-enter-active,
+.mobile-history-danmaku-sheet-leave-active {
+    transition: opacity 220ms ease, transform 280ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.mobile-history-danmaku-sheet-enter,
+.mobile-history-danmaku-sheet-leave-to {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+}
+
+.mobile-history-rise-enter-active,
+.mobile-history-rise-leave-active,
+.mobile-history-sheet-enter-active,
+.mobile-history-sheet-leave-active {
+    transition: opacity 220ms ease, transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.mobile-history-rise-enter,
+.mobile-history-rise-leave-to {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+}
+
+.mobile-history-sheet-enter,
+.mobile-history-sheet-leave-to {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.985);
+}
+
+@keyframes mobileHistoryCardIn {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 390px) {
+    .mobile-history-container {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .mobile-history-hero-copy h1,
+    .mobile-history-feed-head h2,
+    .mobile-history-sheet-head h3 {
+        font-size: 23px;
+    }
+
+    .mobile-history-filter-grid,
+    .mobile-history-batch-actions {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .mobile-history-pipeline,
+    .mobile-history-detail-pipeline {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .mobile-history-card-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .mobile-history-card-layout .card-info-right {
+        max-width: none;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .mobile-history-file-search {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .mobile-history-file-search .el-button {
+        width: 100%;
+    }
+
+    .mobile-history-file-options,
+    .mobile-history-file-switch {
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .mobile-history-file-switch {
+        justify-content: space-between;
+        min-height: 44px;
+        padding: 8px 10px;
+        border: 1px solid var(--mobile-page-border);
+        border-radius: 15px;
+        background: var(--mobile-page-surface);
+    }
+}
+
+@media (max-width: 340px) {
+    .mobile-history-pipeline,
+    .mobile-history-detail-pipeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mobile-history-batch-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-history-batch-actions.is-two-column,
+    .mobile-history-batch-footer,
+    .mobile-history-batch-maintenance {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-history-card-layout .card-info-right {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-history-visibility-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mobile-history-visibility-actions .el-tooltip,
+    .mobile-history-visibility-actions span,
+    .mobile-history-visibility-actions .el-button {
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mobile-history-card,
+    .mobile-history-rise-enter-active,
+    .mobile-history-rise-leave-active,
+    .mobile-history-sheet-enter-active,
+    .mobile-history-sheet-leave-active {
+        animation-duration: 1ms !important;
+        transition-duration: 1ms !important;
+    }
+}

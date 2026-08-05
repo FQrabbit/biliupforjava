@@ -601,13 +601,10 @@
 
     function postRestoreWhenReady(snapshot, attempts) {
         attempts = attempts || 0;
-        var iframe = document.querySelector('.tab-frame');
-        if (iframe && iframe.contentWindow) {
+        var historyRoot = document.querySelector('.page-host--history [data-page-scroll-root]');
+        if (historyRoot) {
             try {
-                iframe.contentWindow.postMessage({
-                    type: 'globalPartPreviewRestore',
-                    payload: snapshot
-                }, window.location.origin);
+                window.dispatchEvent(new CustomEvent('global-part-preview-restore', { detail: snapshot }));
                 stop();
                 return;
             } catch (e) {}

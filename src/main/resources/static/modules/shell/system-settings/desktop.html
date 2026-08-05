@@ -1,0 +1,195 @@
+<div class="system-settings-module system-settings-module--desktop">
+<!-- 系统配置面板 -->
+<div class="config-panel" :class="{ 'is-expanded': configExpanded }">
+    <div class="config-header"
+         role="button"
+         tabindex="0"
+         :aria-expanded="configExpanded ? 'true' : 'false'"
+         aria-controls="system-config-body"
+         @click="configExpanded = !configExpanded"
+         @keydown.enter.prevent="configExpanded = !configExpanded"
+         @keydown.space.prevent="configExpanded = !configExpanded">
+        <div class="config-title">
+            <i class="el-icon-setting"></i>
+            <span>系统配置</span>
+            <el-badge v-if="hasConfigChanges" is-dot class="config-badge"></el-badge>
+        </div>
+        <div class="config-actions">
+            <el-button v-if="hasConfigChanges" type="text" size="mini" @click.stop="resetConfig" class="reset-btn">
+                <i class="el-icon-refresh-left"></i> 重置
+            </el-button>
+            <i :class="configExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="expand-icon"></i>
+        </div>
+    </div>
+
+    <transition name="filter-slide">
+        <div id="system-config-body" class="config-body" v-show="configExpanded">
+            <el-tabs v-model="configActiveTab" class="config-tabs">
+                <el-tab-pane label="基础配置" name="base">
+            <div class="config-grid">
+                <div class="config-item">
+                    <label class="config-label">
+                        <i class="el-icon-s-promotion"></i>
+                        API请求限速
+                        <span class="config-unit">QPS</span>
+                    </label>
+                    <el-input
+                        v-model="systemConfig.apiQps"
+                        @input="validateNumber($event, 'apiQps', true)"
+                        placeholder="请输入数字"
+                        size="small"
+                        class="config-input">
+                    </el-input>
+                    <div class="config-help">限制每秒请求B站API的次数，防止风控。系统本身已对各项请求增加合理延迟，此配置为全局限制以防意外频繁请求，无需设置过低。</div>
+                </div>
+
+                <div class="config-item">
+                    <label class="config-label">
+                        <i class="el-icon-upload"></i>
+                        上传带宽限速
+                    <el-tooltip popper-class="system-settings-popper" effect="dark" content="限速只能保证最高值不超过设定值，不保证最小速度稳定设定值，非必要请不要打开限速功能，避免影响上传效率。" placement="top">
+                            <span class="upload-speed-tip-icon">!</span>
+                        </el-tooltip>
+                        <button type="button" class="config-unit config-unit-toggle" @click="toggleUploadSpeedUnit" :title="'切换为' + (uploadSpeedUnit === 'Mbps' ? 'MB/s' : 'Mbps')">
+                            {{ uploadSpeedUnitLabel }}
+                        </button>
+                    </label>
+                    <el-input
+                        v-model="uploadSpeedInputValue"
+                        @input="validateUploadSpeedDisplay"
+                        placeholder="请输入数字"
+                        size="small"
+                        class="config-input">
+                    </el-input>
+                    <div class="config-help">限制上传视频时的最大带宽，0为不限速。建议不要设置过低；多任务并发时系统会按活跃任务分配份额，低速检测会结合限速阈值做平滑判断。</div>
+                </div>
+
+                <div class="config-item">
+                    <label class="config-label">
+                        <i class="el-icon-connection"></i>
+                        短时间开播合并时间
+                        <span class="config-unit">分钟</span>
+                    </label>
+                    <el-input
+                        v-model="systemConfig.mergeIntervalMinutes"
+                        @input="validateNumber($event, 'mergeIntervalMinutes', false)"
+                        placeholder="请输入数字"
+                        size="small"
+                        class="config-input">
+                    </el-input>
+                    <div class="config-help">下播后等待多长时间再投稿，同时间隔多少分钟内开播算同一次直播，避免短时间开播下播拆分稿件</div>
+                </div>
+
+                <div class="config-item">
+                    <label class="config-label">
+                        <i class="el-icon-sort"></i>
+                        上传并发连接数
+                        <span class="config-unit">个</span>
+                    </label>
+                    <el-input
+                        v-model="systemConfig.maxConnections"
+                        @input="validateNumber($event, 'maxConnections', false)"
+                        placeholder="请输入数字"
+                        size="small"
+                        class="config-input">
+                    </el-input>
+                    <div class="config-help">限制同时进行的上传连接数(1-16)，值越小对网络占用越少。多账号同时上传时建议保持较低值避免网络拥塞影响其他应用</div>
+                </div>
+
+                <div class="config-item">
+                    <label class="config-label">
+                        <i class="el-icon-chat-dot-round"></i>
+                        弹幕发送间隔
+                        <span class="config-unit">秒</span>
+                    </label>
+                    <el-input
+                        v-model="systemConfig.normalDanmakuIntervalSeconds"
+                        @input="validateNumber($event, 'normalDanmakuIntervalSeconds', false)"
+                        placeholder="请输入数字"
+                        size="small"
+                        class="config-input">
+                    </el-input>
+                    <div class="config-help">普通弹幕与 SC/上舰高级弹幕共用的全局发送间隔，默认 25 秒。数值过低可能更容易触发风控</div>
+                </div>
+
+                <div class="config-item">
+                    <label class="config-label">
+                        <i class="el-icon-medal"></i>
+                        评论发送间隔
+                        <span class="config-unit">秒</span>
+                    </label>
+                    <el-input
+                        v-model="systemConfig.highLevelDanmakuIntervalSeconds"
+                        @input="validateNumber($event, 'highLevelDanmakuIntervalSeconds', false)"
+                        placeholder="请输入数字"
+                        size="small"
+                        class="config-input">
+                    </el-input>
+                    <div class="config-help">SC/上舰列表评论与礼物评论共用的全局发送间隔，默认 25 秒</div>
+                </div>
+
+                <div class="config-item">
+                    <label class="config-label">
+                        <i class="el-icon-guide"></i>
+                        新版上传流程
+                        <span class="config-unit">实验</span>
+                    </label>
+                    <el-switch
+                        v-model="systemConfig.newUploadFlowEnabled"
+                        active-text="新流程(浏览器)"
+                        inactive-text="旧流程(稳定)"
+                        @change="checkConfigChanges">
+                    </el-switch>
+                    <div class="config-help">默认使用旧上传流程(稳定)。开启后优先使用浏览器 multipart 上传链路，支持分P暂停、继续上传，以及进程意外关闭后的分片级断点续传；已完成分片会保留，最多重传最后一个未完成分片。遇到异常会自动回退旧流程，并在录制历史中标记回退状态。新流程可能无法使用用户自定义上传节点，会更多使用平台自动下发的节点。</div>
+                </div>
+            </div>
+
+            <div class="config-footer">
+                <el-button class="modern-btn" type="primary" @click="saveSystemConfig" :loading="configLoading" icon="el-icon-check" size="small">
+                    保存配置
+                </el-button>
+                <el-button class="modern-btn" type="info" @click="openSetupWizard" icon="el-icon-setting" size="small" style="margin-left: 12px;">
+                    向导参数配置
+                </el-button>
+            </div>
+                </el-tab-pane>
+                <el-tab-pane label="存储目录" name="storage">
+                    <div class="storage-root-panel" v-loading="storageLoading">
+                        <div v-if="workPathChange && workPathChange.pending" class="storage-change-warning" role="alert">
+                            <div>
+                                <strong><i class="el-icon-warning-outline"></i> 工作目录变更待确认</strong>
+                                <p>当前活动目录：{{ workPathChange.activeRoot ? workPathChange.activeRoot.path : '-' }}</p>
+                                <p>配置文件目录：{{ workPathChange.configuredPath || '-' }}</p>
+                                <p>{{ workPathChange.h2Warning }}</p>
+                            </div>
+                            <div class="storage-change-actions">
+                                <el-button size="small" type="primary" plain :loading="storageResolving" @click="resolveWorkPathChange('FUTURE_ONLY')">仅影响新文件</el-button>
+                                <el-button size="small" type="warning" plain :loading="storageResolving" @click="resolveWorkPathChange('RELOCATE_EXISTING')">迁移现有目录</el-button>
+                            </div>
+                        </div>
+                        <div class="storage-root-list">
+                            <div v-for="root in storageRoots" :key="root.id" class="storage-root-row">
+                                <div class="storage-root-main">
+                                    <span class="storage-root-type">{{ root.rootType === 'WORK' ? '工作目录' : '归档目录' }}</span>
+                                    <strong>{{ root.path }}</strong>
+                                    <span class="storage-root-status" :class="{ 'is-online': root.status === 'ONLINE', 'is-warning': root.status !== 'ONLINE' }">{{ storageRootStatusLabel(root) }}</span>
+                                </div>
+                                <el-button v-if="!root.lastCheckedAt || root.status === 'OFFLINE'" type="text" icon="el-icon-folder-opened" @click="remapStorageRoot(root)">重新映射</el-button>
+                            </div>
+                            <el-empty v-if="!storageLoading && storageRoots.length === 0" description="暂无存储根"></el-empty>
+                        </div>
+                    </div>
+                </el-tab-pane>
+                <el-tab-pane label="推送配置" name="notification">
+                    <biliup-shell-module-host
+                        ref="notificationSettingsHost"
+                        module-name="notification-settings"
+                        :surface="surface"
+                        :active="configActiveTab === 'notification'">
+                    </biliup-shell-module-host>
+                                            </el-tab-pane>
+            </el-tabs>
+        </div>
+    </transition>
+</div>
+</div>

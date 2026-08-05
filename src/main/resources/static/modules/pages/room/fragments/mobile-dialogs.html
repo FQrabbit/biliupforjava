@@ -1,0 +1,370 @@
+    <el-dialog :visible.sync="partitionDialogVisible" title="选择分区" :fullscreen="true" append-to-body custom-class="room-page-dialog partition-dialog">
+        <div class="partition-container">
+            <transition :name="partitionTransitionName">
+                <div v-if="currentPartitionLevel === 0" key="level0" class="partition-list">
+                    <div v-for="item in typeList" :key="item.id" class="partition-item" role="button" tabindex="0" @click="selectParent(item)" @keydown.enter.prevent="selectParent(item)" @keydown.space.prevent="selectParent(item)">
+                        <span>{{ item.name }}</span>
+                        <i class="el-icon-arrow-right"></i>
+                    </div>
+                </div>
+                <div v-else key="level1" class="partition-list">
+                    <div class="partition-header" role="button" tabindex="0" @click="backToParent" @keydown.enter.prevent="backToParent" @keydown.space.prevent="backToParent">
+                        <i class="el-icon-arrow-left"></i> 返回上一级
+                    </div>
+                    <div v-for="item in currentPartitionParent.children" :key="item.id" class="partition-item" role="button" tabindex="0" @click="selectChild(item)" @keydown.enter.prevent="selectChild(item)" @keydown.space.prevent="selectChild(item)">
+                        <span>{{ item.name }}</span>
+                    </div>
+                </div>
+            </transition>
+        </div>
+    </el-dialog>
+
+
+    <transition name="mobile-room-fade">
+        <div v-if="detailDialogVisible && currentDetail" class="mobile-room-detail-backdrop" @click="closeMobileRoomDetail"></div>
+    </transition>
+
+    <transition name="mobile-room-detail">
+        <aside v-if="detailDialogVisible && currentDetail" class="mobile-room-detail-sheet" role="dialog" aria-label="房间详情">
+            <div class="mobile-room-sheet-handle"></div>
+            <div class="mobile-room-detail-head">
+                <div class="mobile-room-detail-avatar">
+                    <img v-if="!privacyMode && currentDetail.userCover" :src="buildAvatarProxyUrl(currentDetail.userCover)" referrerpolicy="no-referrer">
+                    <span v-else>{{ privacyMode ? '*' : (currentDetail.uname || 'R').charAt(0).toUpperCase() }}</span>
+                    <em v-if="currentDetail.streaming"></em>
+                </div>
+                <div class="mobile-room-detail-title">
+                    <span class="mobile-room-state" :class="roomPrimaryStateClass(currentDetail)">{{ roomPrimaryStateLabel(currentDetail) }}</span>
+                    <h3>{{ maskText(currentDetail.uname) }}</h3>
+                    <p>#{{ maskText(currentDetail.roomId) }} · {{ maskText(currentDetail.title || '暂无直播标题') }}</p>
+                </div>
+                <button type="button" class="mobile-room-detail-close" @click="closeMobileRoomDetail" aria-label="关闭房间详情"><i class="el-icon-close"></i></button>
+            </div>
+            <div class="mobile-room-detail-body">
+                <div class="mobile-room-detail-status">
+                    <div><span>录制</span><strong :class="{ 'is-on': currentDetail.recording }">{{ currentDetail.recording ? '录制中' : '空闲' }}</strong></div>
+                    <div><span>上传</span><strong :class="{ 'is-on': currentDetail.upload }">{{ currentDetail.upload ? '自动' : '关闭' }}</strong></div>
+                    <div><span>弹幕</span><strong :class="{ 'is-on': currentDetail.sendDm || currentDetail.sendSc }">{{ currentDetail.sendDm || currentDetail.sendSc ? '开启' : '关闭' }}</strong></div>
+                </div>
+                <div class="mobile-room-detail-grid">
+                    <div><span>投稿分区</span><strong>{{ getTypeName(currentDetail.tid) || '--' }}</strong></div>
+                    <div><span>投稿账号</span><strong>{{ getUploadUserName(currentDetail.uploadUserId) }}</strong></div>
+                    <div><span>版权</span><strong>{{ currentDetail.copyright == 1 ? '自制' : '转载' }}</strong></div>
+                    <div><span>可见性</span><strong>{{ currentDetail.isOnlySelf == 1 ? '仅自己' : '公开' }}</strong></div>
+                </div>
+                <div class="mobile-room-detail-path"><span>文件后处理</span><strong>{{ formatDelete(currentDetail) }}</strong></div>
+                <div class="mobile-room-detail-group">
+                    <div class="mobile-room-detail-group-title">
+                        <i class="el-icon-setting"></i>
+                        <span>录制与封面</span>
+                    </div>
+                    <div class="mobile-room-detail-grid">
+                        <div><span>录制线路</span><strong>{{ currentDetail.line || '--' }}</strong></div>
+                        <div><span>封面策略</span><strong>{{ getCoverTypeLabel(currentDetail.coverType) }}</strong></div>
+                        <div><span>大小限制</span><strong>{{ currentDetail.fileSizeLimit || '--' }} MB</strong></div>
+                        <div><span>时长限制</span><strong>{{ currentDetail.durationLimit || '--' }} 秒</strong></div>
+                    </div>
+                    <div v-if="currentDetail.moveDir" class="mobile-room-detail-path"><span>移动目录</span><strong>{{ currentDetail.moveDir }}</strong></div>
+                </div>
+                <div class="mobile-room-detail-group">
+                    <div class="mobile-room-detail-group-title">
+                        <i class="el-icon-document"></i>
+                        <span>投稿模板</span>
+                    </div>
+                    <div class="mobile-room-template-list">
+                        <div><span>标题模板</span><p>{{ currentDetail.titleTemplate || '--' }}</p></div>
+                        <div><span>分P标题</span><p>{{ currentDetail.partTitleTemplate || '--' }}</p></div>
+                        <div><span>简介模板</span><p>{{ currentDetail.descriptionTemplate || '--' }}</p></div>
+                        <div><span>动态模板</span><p>{{ currentDetail.dynamicTemplate || '--' }}</p></div>
+                    </div>
+                </div>
+            </div>
+            <div class="mobile-room-detail-actions">
+                <button type="button" class="is-primary" @click="openMobileEditRoom(currentDetail)"><i class="el-icon-edit"></i><span>编辑配置</span></button>
+                <button type="button" @click="openMobileDanmakuRoom(currentDetail)"><i class="el-icon-chat-line-round"></i><span>弹幕规则</span></button>
+            </div>
+        </aside>
+    </transition>
+
+
+    <el-dialog :visible.sync="addRoomDialog" :fullscreen="true" title="添加房间" append-to-body custom-class="room-page-dialog mobile-room-simple-dialog">
+        <el-form :model="addRoom">
+            <el-form-item :label-width="formLabelWidth" label="房间号(长号)">
+                <el-input autocomplete="off" type="number" inputmode="numeric" v-model="addRoom.roomId"></el-input>
+            </el-form-item>
+        </el-form>
+        <div class="dialog-footer" slot="footer">
+            <el-button @click="addRoomDialog = false">放 弃</el-button>
+            <el-button @click="addRoomF()" type="primary">保 存</el-button>
+        </div>
+    </el-dialog>
+    <el-dialog :visible.sync="exportConfigDialog" :fullscreen="true" title="导出配置" append-to-body custom-class="room-page-dialog export-config-dialog mobile-room-simple-dialog">
+        <el-form :model="exportConfig">
+            <el-form-item :label-width="formLabelWidth" label="导出选项">
+                <el-checkbox v-model="exportConfig.exportRoom">导出房间信息</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportUser">导出用户信息</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportSystemConfig">导出系统配置</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportHistory">导出录制历史信息</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportLiveMsg" :disabled="!exportConfig.exportHistory" @change="handleExportLiveMsgChange">导出弹幕数据</el-checkbox>
+            </el-form-item>
+            <div v-if="exportConfig.exportLiveMsg" class="export-live-msg-warning">
+                弹幕数据可能非常庞大，导出时可能耗时、卡顿、失败或生成很大的文件，请确认确实需要完整备份弹幕。
+            </div>
+        </el-form>
+        <div class="dialog-footer" slot="footer">
+            <el-button @click="exportConfigDialog = false">放 弃</el-button>
+            <el-button @click="exportConfigF()" type="success">导 出</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 弹幕过滤设置对话框 -->
+    <el-dialog :visible.sync="editLiveMsgSettingVisible" :fullscreen="true" append-to-body custom-class="room-page-dialog danmaku-filter-dialog mobile-room-simple-dialog">
+        <div slot="title" class="dialog-header">
+            <div class="dialog-title-wrapper">
+                <i class="el-icon-chat-line-round"></i>
+                <span class="el-dialog__title">弹幕过滤设置</span>
+                <span class="dialog-room-info" v-if="room.uname">{{ maskText(room.uname) }}</span>
+            </div>
+        </div>
+
+        <div class="danmaku-settings">
+            <!-- 基础过滤 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-filter"></i>
+                    <span>基础过滤</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="filter-item">
+                        <div class="filter-item-info">
+                            <span class="filter-item-label">重复弹幕过滤</span>
+                            <span class="filter-item-desc">过滤同一场直播中的重复弹幕内容</span>
+                        </div>
+                        <el-switch v-model="room.dmDistinct" active-color="#52c41a" inactive-color="#d9d9d9"></el-switch>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 粉丝勋章过滤 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-medal"></i>
+                    <span>粉丝勋章过滤</span>
+                    <span class="filter-section-tip">需录制原始数据生效</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="medal-filter-options">
+                        <div class="medal-option"
+                             :class="{ 'is-active': room.dmFanMedal === 0 }"
+                             @click="room.dmFanMedal = 0">
+                            <i class="el-icon-close-notification"></i>
+                            <span>不过滤</span>
+                            <small>接收所有弹幕</small>
+                        </div>
+                        <div class="medal-option"
+                             :class="{ 'is-active': room.dmFanMedal === 1 }"
+                             @click="room.dmFanMedal = 1">
+                            <i class="el-icon-medal-1"></i>
+                            <span>需佩戴勋章</span>
+                            <small>佩戴任意粉丝勋章</small>
+                        </div>
+                        <div class="medal-option"
+                             :class="{ 'is-active': room.dmFanMedal === 2 }"
+                             @click="room.dmFanMedal = 2">
+                            <i class="el-icon-star-on"></i>
+                            <span>需佩戴主播勋章</span>
+                            <small>仅限该主播的勋章</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 用户等级过滤 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-user"></i>
+                    <span>用户等级过滤</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="level-filter">
+                        <div class="level-filter-info">
+                            <span class="filter-item-label">最低UL等级</span>
+                            <span class="filter-item-desc">低于此等级的弹幕将被过滤（佩戴勋章用户不受限制）</span>
+                        </div>
+                        <div class="level-input-wrapper">
+                            <el-input-number v-model="room.dmUlLevel" :min="0" :max="60" size="small"></el-input-number>
+                            <span class="level-suffix">级</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 关键词屏蔽 -->
+            <div class="filter-section">
+                <div class="filter-section-title">
+                    <i class="el-icon-document-delete"></i>
+                    <span>关键词屏蔽</span>
+                </div>
+                <div class="filter-section-body">
+                    <div class="keyword-filter">
+                        <div class="keyword-filter-info">
+                            <span class="filter-item-desc">包含以下关键词的弹幕将被过滤，每行一个关键词</span>
+                        </div>
+                        <el-input
+                            type="textarea"
+                            v-model="room.dmKeywordBlacklist"
+                            :rows="4"
+                            placeholder="输入关键词，每行一个&#10;例如：&#10;广告&#10;推销"
+                            class="keyword-textarea">
+                        </el-input>
+                        <div class="keyword-count" v-if="room.dmKeywordBlacklist">
+                            已添加 {{ (room.dmKeywordBlacklist.match(/\n/g) || []).length + (room.dmKeywordBlacklist.trim() ? 1 : 0) }} 个关键词
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dialog-footer" slot="footer">
+            <el-button @click="editLiveMsgSettingVisible = false">取消</el-button>
+            <el-button @click="editLiveMsgSetting()" type="primary" icon="el-icon-check">保存设置</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog :visible.sync="wxDialogVisible" title="扫码获取UID" width="300px" append-to-body center custom-class="room-page-dialog mobile-room-qr-dialog">
+        <div class="mobile-room-qr-body">
+            <el-image
+                    src="https://wxpusher.zjiecode.com/api/qrcode/gg2nIKVGMMp1paStVFVtFWrdoQFWHCymwGVXXTStk5c4k8Dp4DSQFNRJAKwtLZ7G.jpg"
+                    fit="fill"
+                    class="mobile-room-qr-image"></el-image>
+        </div>
+        <div class="dialog-footer" slot="footer">
+            <el-button @click="wxDialogVisible = false" type="primary">关 闭</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog
+            :title="deleteRoomSubmitting ? '正在删除直播间' : '删除直播间'"
+            :visible.sync="deleteRoomDialogVisible"
+            width="520px"
+            :fullscreen="true"
+            append-to-body
+            :close-on-click-modal="false"
+            :close-on-press-escape="!deleteRoomSubmitting"
+            :show-close="!deleteRoomSubmitting"
+            :before-close="beforeDeleteRoomDialogClose"
+            custom-class="room-page-dialog room-delete-dialog">
+        <div class="room-delete-dialog-body" v-loading="deleteRoomPreviewLoading" element-loading-text="正在计算删除影响范围">
+            <template v-if="!deleteRoomPreviewLoading">
+                <div class="room-delete-target">
+                    <span class="room-delete-target-icon" aria-hidden="true"><i class="el-icon-delete"></i></span>
+                    <div>
+                        <strong>{{ maskText(deleteRoomPreview.uname || deleteRoomTarget.uname || '未命名房间') }}</strong>
+                        <span>房间号 {{ maskText(deleteRoomPreview.roomId || deleteRoomTarget.roomId || '--') }}</span>
+                    </div>
+                </div>
+                <div v-if="deleteRoomProgress.visible" class="room-delete-progress" role="status" aria-live="polite">
+                    <div class="room-delete-progress-head">
+                        <span class="room-delete-progress-icon" aria-hidden="true">
+                            <i :class="deleteRoomProgress.status === 'exception' ? 'el-icon-warning' : (deleteRoomProgress.status === 'success' ? 'el-icon-success' : 'el-icon-loading')"></i>
+                        </span>
+                        <div>
+                            <strong>{{ deleteRoomProgress.message || '正在删除直播间数据' }}</strong>
+                            <span v-if="deleteRoomSubmitting">删除正在进行，请勿切换页面、刷新或关闭窗口。</span>
+                            <span v-else-if="deleteRoomProgress.status === 'exception'">删除任务已停止，请查看下方错误信息后关闭窗口。</span>
+                            <span v-else>删除任务已完成。</span>
+                        </div>
+                    </div>
+                    <el-progress :percentage="deleteRoomProgress.percent"
+                                 :status="deleteRoomProgress.status === 'active' ? undefined : deleteRoomProgress.status"
+                                 :stroke-width="10"></el-progress>
+                    <div class="room-delete-progress-meta">
+                        <span>阶段：{{ deleteRoomPhaseLabel(deleteRoomProgress.phase) }}</span>
+                        <span v-if="deleteRoomProgressCountLabel">{{ deleteRoomProgressCountLabel }}</span>
+                    </div>
+                    <p v-if="deleteRoomProgress.detail" class="room-delete-progress-detail">{{ deleteRoomProgress.detail }}</p>
+                </div>
+                <div v-if="deleteRoomPreview.active" class="room-delete-active-warning" role="alert">
+                    <i :class="deleteRoomPreview.uploadingActive && !deleteRoomPreview.recordingActive ? 'el-icon-upload2' : 'el-icon-video-camera'" aria-hidden="true"></i>
+                    <div><strong>{{ deleteRoomBlockTitle }}</strong><span>{{ deleteRoomBlockMessage }}</span></div>
+                </div>
+                <div class="room-delete-impact" aria-label="删除影响范围">
+                    <div class="room-delete-impact-row">
+                        <el-checkbox v-model="deleteRoomOptions.deleteHistories"
+                                     :disabled="deleteRoomSubmitting || deleteRoomPreview.active || !deleteRoomPreview.historyCount"
+                                     @change="onDeleteRoomHistoriesChange">
+                            同时删除 {{ deleteRoomPreview.historyCount || 0 }} 条录制历史
+                        </el-checkbox>
+                        <p>删除数据库中的历史、分P、弹幕队列及该房间的统计数据；不会删除 B 站上的已投稿视频。</p>
+                    </div>
+                    <div class="room-delete-child-options" :class="{ 'is-disabled': !deleteRoomOptions.deleteHistories }">
+                        <div class="room-delete-impact-row">
+                            <el-checkbox v-model="deleteRoomOptions.deleteVideoFiles"
+                                         :disabled="deleteRoomSubmitting || !deleteRoomOptions.deleteHistories">
+                                同时删除视频文件
+                            </el-checkbox>
+                            <p>{{ deleteRoomPreview.partCount || 0 }} 个分P，约 {{ formatDeleteBytes(deleteRoomPreview.estimatedVideoBytes) }}</p>
+                        </div>
+                        <div class="room-delete-impact-row">
+                            <el-checkbox v-model="deleteRoomOptions.deleteSidecarFiles"
+                                         :disabled="deleteRoomSubmitting || !deleteRoomOptions.deleteHistories">
+                                同时删除封面和弹幕文件
+                            </el-checkbox>
+                            <p>删除视频所在存储位置中的封面图片、XML 和 ASS 文件。</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="room-delete-webhook-warning" role="note">
+                    <i class="el-icon-warning-outline" aria-hidden="true"></i>
+                    <div v-if="deleteRoomPreview.webhookManaged">
+                        <strong>此房间由 {{ webhookSourceLabel(deleteRoomPreview.webhookSource) }} Webhook 管理</strong>
+                        <span>还需要在录播姬中删除或停用该房间，否则下次开播时会再次自动创建。</span>
+                    </div>
+                    <div v-else>
+                        <strong>请确认录播姬中的房间配置</strong>
+                        <span>若此房间通过 Webhook 管理，请同时在 BililiveRecorder 或 blrec 中删除或停用。</span>
+                    </div>
+                </div>
+            </template>
+        </div>
+        <div slot="footer" class="room-delete-dialog-footer">
+            <el-button :disabled="deleteRoomSubmitting" @click="deleteRoomDialogVisible = false">{{ deleteRoomProgress.status === 'exception' ? '关闭' : '取消' }}</el-button>
+            <el-button type="danger" icon="el-icon-delete" :loading="deleteRoomSubmitting"
+                       :disabled="deleteRoomPreviewLoading || deleteRoomPreview.active || deleteRoomSubmitting || deleteRoomProgress.status === 'exception'" @click="confirmDeleteRoom">
+                {{ deleteRoomConfirmLabel }}
+            </el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog :visible.sync="manualPasteDialogVisible" :fullscreen="true" title="手动粘贴配置" append-to-body custom-class="room-page-dialog mobile-room-simple-dialog mobile-room-paste-dialog">
+        <div class="mobile-room-paste-help">
+            <p>由于浏览器安全限制，无法自动读取剪贴板。</p>
+            <p>请手动将配置内容粘贴到下方的文本框中，然后点击“应用”。</p>
+            <el-link type="primary" @click="showPasteHelp" class="mobile-room-paste-link">为什么无法自动粘贴？</el-link>
+        </div>
+        <el-input
+            type="textarea"
+            :rows="10"
+            placeholder="在此处粘贴配置内容..."
+            v-model="manualPasteContent">
+        </el-input>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="manualPasteDialogVisible = false">取 消</el-button>
+            <el-button type="primary" @click="handleManualPaste">应 用</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog :visible.sync="pasteConfirmDialogVisible" :fullscreen="true" title="确认粘贴配置" append-to-body custom-class="room-page-dialog mobile-room-simple-dialog mobile-room-paste-dialog">
+        <div class="mobile-room-paste-confirm">
+            <div class="mobile-room-paste-confirm-copy">
+                <p>粘贴将会覆盖当前配置的大部分参数。</p>
+                <p class="mobile-room-paste-confirm-tip">
+                    💡 提示：某些参数（如房间ID、直播间ID等）将被保留，不会被覆盖。
+                </p>
+            </div>
+        </div>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="pasteConfirmDialogVisible = false">取 消</el-button>
+            <el-button type="primary" @click="confirmPaste">确 认 粘 贴</el-button>
+        </div>
+    </el-dialog>

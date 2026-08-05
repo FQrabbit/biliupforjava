@@ -2,6 +2,87 @@
   "resources":{
   "includes":[
     {
+      "pattern":"static/modules/.*"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/module-registry.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/url-resolver.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/module-loader.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/page-state-coordinator.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/page-portal-services.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/components/page-host.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/components/shell-module-host.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/components/notification-channel-fields.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/shell/system-settings.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/shell/storage-settings.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/app/shell/notifications.js\\E"
+    },
+    {
+      "pattern":"static/js/app/shell/notifications/.*"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/storage-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/notification-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/css/base/module-runtime.css\\E"
+    },
+    {
+      "pattern":"\\Qstatic/mobile/css/mobile-pages.css\\E"
+    },
+    {
+      "pattern":"\\Qstatic/css/global-preview-player.css\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/global-preview-player.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/data/bili-partitions.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/stats-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/history-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/part-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/preview-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/room-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/user-api.js\\E"
+    },
+    {
+      "pattern":"\\Qstatic/js/api/log-api.js\\E"
+    },
+    {
       "pattern":"\\QMETA-INF/services/ch.qos.logback.classic.spi.Configurator\\E"
     }, 
     {
@@ -863,37 +944,13 @@
       "pattern":"\\Qstatic/css/fonts/element-icons.woff\\E"
     }, 
     {
-      "pattern":"\\Qstatic/css/history.css\\E"
-    }, 
-    {
-      "pattern":"\\Qstatic/css/log.css\\E"
-    }, 
-    {
       "pattern":"\\Qstatic/css/login.css\\E"
     }, 
     {
       "pattern":"\\Qstatic/css/pages/home.css\\E"
     }, 
     {
-      "pattern":"\\Qstatic/css/room.css\\E"
-    }, 
-    {
-      "pattern":"\\Qstatic/css/stats.css\\E"
-    }, 
-    {
-      "pattern":"\\Qstatic/css/user.css\\E"
-    }, 
-    {
-      "pattern":"\\Qstatic/html/history.html\\E"
-    }, 
-    {
       "pattern":"\\Qstatic/html/login.html\\E"
-    }, 
-    {
-      "pattern":"\\Qstatic/html/room.html\\E"
-    }, 
-    {
-      "pattern":"\\Qstatic/html/stats.html\\E"
     }, 
     {
       "pattern":"\\Qstatic/img/icon.svg\\E"
@@ -921,9 +978,6 @@
     }, 
     {
       "pattern":"\\Qstatic/js/mpegts.min.js\\E"
-    }, 
-    {
-      "pattern":"\\Qstatic/js/pages/user.js\\E"
     }, 
     {
       "pattern":"\\Qstatic/js/privacy.js\\E"

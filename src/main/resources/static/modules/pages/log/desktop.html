@@ -1,0 +1,312 @@
+<div class="app-container log-page">
+    <el-container class="log-layout">
+        <el-header class="log-header" height="auto">
+            <el-card shadow="never" class="log-toolbar-card">
+                <!-- 标题栏 -->
+                <div class="log-toolbar-head">
+                    <div class="log-title-section">
+                        <span class="log-title" role="heading" aria-level="1" data-page-focus-target tabindex="-1">
+                            <i class="el-icon-document"></i> 日志控制台
+                        </span>
+                        <transition name="el-zoom-in-top">
+                            <el-tag size="mini" :type="statusTagType" effect="dark">{{ statusText }}</el-tag>
+                        </transition>
+                    </div>
+                    <div class="log-actions">
+                        <el-button size="mini" class="modern-btn" type="primary" plain icon="el-icon-download" @click="openDiagnosticExport">导出诊断包</el-button>
+                        <el-button size="mini" class="modern-btn" icon="el-icon-setting" @click="settingsDrawerVisible = true">设置</el-button>
+                        <el-button size="mini" class="modern-btn" type="danger" plain icon="el-icon-delete" @click="clearLogs">清空</el-button>
+                    </div>
+                </div>
+
+                <!-- 统计摘要条 -->
+                <div class="log-stats-bar">
+                    <div class="stat-card stat-info" role="button" tabindex="0" :aria-pressed="visibleLevels.includes('INFO') ? 'true' : 'false'" :class="{inactive: !visibleLevels.includes('INFO')}" @click="toggleLevel('INFO')" @keydown.enter.prevent="toggleLevel('INFO')" @keydown.space.prevent="toggleLevel('INFO')">
+                        <span class="stat-icon"><i class="el-icon-info"></i></span>
+                        <span class="stat-label">INFO</span>
+                        <span class="stat-count">{{ logStats.INFO }}</span>
+                    </div>
+                    <div class="stat-card stat-warn" role="button" tabindex="0" :aria-pressed="visibleLevels.includes('WARN') ? 'true' : 'false'" :class="{inactive: !visibleLevels.includes('WARN')}" @click="toggleLevel('WARN')" @keydown.enter.prevent="toggleLevel('WARN')" @keydown.space.prevent="toggleLevel('WARN')">
+                        <span class="stat-icon"><i class="el-icon-warning-outline"></i></span>
+                        <span class="stat-label">WARN</span>
+                        <span class="stat-count">{{ logStats.WARN }}</span>
+                    </div>
+                    <div class="stat-card stat-error" role="button" tabindex="0" :aria-pressed="visibleLevels.includes('ERROR') ? 'true' : 'false'" :class="{inactive: !visibleLevels.includes('ERROR')}" @click="toggleLevel('ERROR')" @keydown.enter.prevent="toggleLevel('ERROR')" @keydown.space.prevent="toggleLevel('ERROR')">
+                        <span class="stat-icon"><i class="el-icon-circle-close"></i></span>
+                        <span class="stat-label">ERROR</span>
+                        <span class="stat-count">{{ logStats.ERROR }}</span>
+                    </div>
+                    <div class="stat-card stat-freq">
+                        <div class="stat-freq-header">
+                            <span class="stat-freq-label" v-show="hoveredFreqIdx < 0">近 {{ freqRangeLabel }}</span>
+                            <span class="stat-freq-hover" v-show="hoveredFreqIdx >= 0">{{ hoveredFreqIdx >= 0 && logFrequency[hoveredFreqIdx] ? logFrequency[hoveredFreqIdx].fullLabel : '' }}</span>
+                            <div class="freq-range-pills">
+                                <span v-for="opt in freqRangeOptions" :key="opt.value"
+                                      class="freq-range-pill"
+                                      role="button"
+                                      tabindex="0"
+                                      :aria-pressed="freqRange === opt.value ? 'true' : 'false'"
+                                      :class="{ active: freqRange === opt.value }"
+                                      @click.stop="freqRange = opt.value; hoveredFreqIdx = -1"
+                                      @keydown.enter.stop.prevent="freqRange = opt.value; hoveredFreqIdx = -1"
+                                      @keydown.space.stop.prevent="freqRange = opt.value; hoveredFreqIdx = -1">{{ opt.label }}</span>
+                            </div>
+                        </div>
+                        <div class="log-freq-chart">
+                            <div v-for="(bar, idx) in logFrequency" :key="idx"
+                                 class="log-freq-bar"
+                                 :class="{
+                                     'bar-error':   bar.hasError,
+                                     'bar-warn':    bar.hasWarn && !bar.hasError,
+                                     'bar-empty':   bar.count === 0,
+                                     'bar-hovered': hoveredFreqIdx === idx
+                                 }"
+                                 :style="{ height: bar.height }"
+                                 @mouseenter="hoveredFreqIdx = idx"
+                                 @mouseleave="hoveredFreqIdx = -1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 搜索和级别筛选行 -->
+                <div class="log-filter-row">
+                    <div class="log-search-wrapper">
+                        <el-input
+                            v-model="searchKeyword"
+                            size="small"
+                            placeholder="搜索日志内容..."
+                            clearable
+                            @input="onSearchInput">
+                            <i slot="prefix" class="el-icon-search"></i>
+                        </el-input>
+                    </div>
+                    <div class="log-level-pills">
+                        <span class="level-pill pill-info" role="button" tabindex="0" :aria-pressed="visibleLevels.includes('INFO') ? 'true' : 'false'" :class="{active: visibleLevels.includes('INFO')}" @click="toggleLevel('INFO')" @keydown.enter.prevent="toggleLevel('INFO')" @keydown.space.prevent="toggleLevel('INFO')">● INFO</span>
+                        <span class="level-pill pill-warn" role="button" tabindex="0" :aria-pressed="visibleLevels.includes('WARN') ? 'true' : 'false'" :class="{active: visibleLevels.includes('WARN')}" @click="toggleLevel('WARN')" @keydown.enter.prevent="toggleLevel('WARN')" @keydown.space.prevent="toggleLevel('WARN')">● WARN</span>
+                        <span class="level-pill pill-error" role="button" tabindex="0" :aria-pressed="visibleLevels.includes('ERROR') ? 'true' : 'false'" :class="{active: visibleLevels.includes('ERROR')}" @click="toggleLevel('ERROR')" @keydown.enter.prevent="toggleLevel('ERROR')" @keydown.space.prevent="toggleLevel('ERROR')">● ERROR</span>
+                        <span class="level-pill pill-debug" role="button" tabindex="0" :aria-pressed="visibleLevels.includes('DEBUG') ? 'true' : 'false'" :class="{active: visibleLevels.includes('DEBUG')}" @click="toggleLevel('DEBUG')" @keydown.enter.prevent="toggleLevel('DEBUG')" @keydown.space.prevent="toggleLevel('DEBUG')">● DEBUG</span>
+                    </div>
+                </div>
+            </el-card>
+        </el-header>
+
+        <el-main class="log-content">
+            <div class="log-body">
+                <!-- 日志控制台 -->
+                <div class="log-console" ref="console" data-page-scroll-root v-loading="rendering"
+                     element-loading-text="正在处理大量日志..."
+                     element-loading-spinner="el-icon-loading"
+                     element-loading-background="rgba(0, 0, 0, 0.7)">
+                    <div class="log-list">
+                        <div v-for="(log, index) in displayedLogs" :key="log.__id"
+                             class="log-line"
+                             :class="{
+                                 'nowrap': !autoWrap,
+                                 'selection-mode': selectionMode,
+                                 'selected': isSelected(log),
+                                 'new-log': log.__isNew,
+                                 'line-warn': log.level === 'WARN',
+                                 'line-error': log.level === 'ERROR'
+                             }"
+                             :data-log-id="log.__id"
+                             @click="handleLogClick(log)">
+                            <span class="log-time">{{ log.timestamp }}</span>
+                            <span class="log-level" :class="'level-' + log.level">{{ log.level }}</span>
+                            <span class="log-thread" v-if="log.thread">[{{ log.thread }}]</span>
+                            <span class="log-message" v-html="getFormattedMessage(log)"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧异常面板 -->
+                <transition name="sidebar-slide">
+                    <div class="log-alert-sidebar" v-if="sidebarVisible && alerts.length > 0">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">
+                                <i class="el-icon-warning-outline"></i> 系统异常
+                                <el-badge :value="alerts.length" class="sidebar-badge"></el-badge>
+                            </span>
+                            <el-button size="mini" type="text" icon="el-icon-close" @click="sidebarVisible = false" class="sidebar-close"></el-button>
+                        </div>
+                        <div class="sidebar-list">
+                            <div v-for="(alert, idx) in alerts" :key="idx" class="alert-sidebar-item">
+                                <div class="alert-sidebar-meta">
+                                    <el-tag :type="getAlertType(alert.type)" size="mini" effect="plain">{{ alert.type }}</el-tag>
+                                    <span class="alert-sidebar-count" v-if="alert.count > 1">×{{ alert.count }}</span>
+                                </div>
+                                <div class="alert-sidebar-time">{{ formatDate(alert.lastTime || alert.timestamp) }}</div>
+                                <div class="alert-sidebar-msg">{{ getBriefMessage(alert.message) }}</div>
+                                <div class="alert-sidebar-actions">
+                                    <el-button size="mini" type="text" @click="showContext(alert)">上下文</el-button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sidebar-footer">
+                            <el-button size="mini" type="primary" plain class="modern-btn" @click="showAllAlertDetails">
+                                <i class="el-icon-document"></i> 查看所有详细信息
+                            </el-button>
+                            <el-button size="mini" type="danger" plain class="modern-btn" @click="clearAlerts">清除所有异常</el-button>
+                        </div>
+                    </div>
+                </transition>
+
+                <!-- 异常面板收起时的浮动按钮 -->
+                <transition name="el-zoom-in-right">
+                    <el-button v-if="!sidebarVisible && alerts.length > 0"
+                               class="sidebar-toggle-btn modern-btn"
+                               type="warning" plain size="mini"
+                               @click="sidebarVisible = true">
+                        <i class="el-icon-warning-outline"></i>
+                        <el-badge :value="alerts.length" class="alert-badge"></el-badge>
+                    </el-button>
+                </transition>
+            </div>
+        </el-main>
+    </el-container>
+
+    <!-- 设置抽屉 -->
+    <el-drawer title="日志设置" :visible.sync="settingsDrawerVisible" direction="rtl" size="290px" append-to-body custom-class="log-page-drawer settings-drawer">
+        <div class="settings-drawer">
+            <div class="setting-item">
+                <div class="setting-label">
+                    <div class="setting-name"><i class="el-icon-tickets"></i> 详细模式</div>
+                    <div class="setting-desc">开启后保留最多 2000 条日志</div>
+                </div>
+                <el-switch v-model="detailedMode" @change="handleDetailedModeChange"></el-switch>
+            </div>
+            <div class="setting-item">
+                <div class="setting-label">
+                    <div class="setting-name"><i class="el-icon-sort"></i> 自动换行</div>
+                    <div class="setting-desc">关闭则单行不折行，便于对齐</div>
+                </div>
+                <el-switch v-model="autoWrap"></el-switch>
+            </div>
+            <div class="setting-item">
+                <div class="setting-label">
+                    <div class="setting-name"><i class="el-icon-bottom"></i> 自动滚动</div>
+                    <div class="setting-desc">新日志到来时自动滚至底部</div>
+                </div>
+                <el-switch v-model="autoScroll"></el-switch>
+            </div>
+            <div class="setting-item">
+                <div class="setting-label">
+                    <div class="setting-name"><i class="el-icon-connection"></i> 实时推送</div>
+                    <div class="setting-desc">通过 WebSocket 实时接收日志</div>
+                </div>
+                <el-switch v-model="realtime" @change="toggleRealtime"></el-switch>
+            </div>
+            <div class="setting-item">
+                <div class="setting-label">
+                    <div class="setting-name"><i class="el-icon-document-checked"></i> 多选模式</div>
+                    <div class="setting-desc">点击日志行可多选并复制</div>
+                </div>
+                <el-switch v-model="selectionMode" @change="handleSelectionModeChange"></el-switch>
+            </div>
+        </div>
+    </el-drawer>
+
+    <!-- 详情弹窗 -->
+    <el-dialog title="异常详情" :visible.sync="detailDialogVisible" width="80%" append-to-body custom-class="log-page-dialog detail-dialog">
+        <div class="detail-content">
+            <pre class="detail-pre" v-html="formatLogMessage(currentDetail)"></pre>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button class="modern-btn" type="primary" size="small" @click="copyDetail">复制内容</el-button>
+            <el-button class="modern-btn" size="small" @click="detailDialogVisible = false">关 闭</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 上下文弹窗 -->
+    <el-dialog title="日志上下文 (上下50条)" :visible.sync="contextDialogVisible" width="90%" append-to-body custom-class="log-page-dialog context-dialog">
+        <div ref="contextContent" class="context-content" v-loading="loadingContext">
+             <div v-if="contextLogs.length === 0 && !loadingContext" class="no-data">暂无上下文数据</div>
+             <div v-for="(line, index) in contextLogs" :key="index" class="log-line-item" :class="{'highlight-line': isTargetLine(line)}" :data-context-target="isTargetLine(line) ? 'true' : null">
+                <span class="log-line-text" v-html="formatLogMessage(line)"></span>
+             </div>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button class="modern-btn" size="small" @click="contextDialogVisible = false">关 闭</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 所有告警详细信息弹窗 -->
+    <el-dialog
+        title="所有告警详情"
+        :visible.sync="allDetailsDialogVisible"
+        :fullscreen="true"
+        append-to-body
+        custom-class="log-page-dialog all-details-dialog"
+        @opened="onAllDetailsOpened">
+        <div class="all-details-content">
+            <!-- 顶部筛选栏 -->
+            <div class="details-filter-bar">
+                <div class="filter-left">
+                    <el-select v-model="detailsFilter" placeholder="筛选级别" size="small" style="width: 150px;" popper-class="log-page-select-popper">
+                        <el-option label="全部" :value="''"></el-option>
+                        <el-option label="ERROR" value="ERROR"></el-option>
+                        <el-option label="WARN" value="WARN"></el-option>
+                    </el-select>
+                    <el-input
+                        v-model="detailsSearch"
+                        placeholder="搜索告警..."
+                        size="small"
+                        clearable
+                        style="width: 250px; margin-left: 10px;">
+                        <i slot="prefix" class="el-icon-search"></i>
+                    </el-input>
+                </div>
+                <div class="filter-right">
+                    <span style="color: #909399; font-size: 12px;">{{ filteredAllDetails.length }} / {{ alerts.length }} 条</span>
+                </div>
+            </div>
+
+            <!-- 詳情表格 -->
+            <div class="details-table-wrapper">
+                <el-table
+                    :data="filteredAllDetails"
+                    style="width: 100%"
+                    stripe
+                    height="calc(100vh - 200px)">
+                    <el-table-column label="级别" width="80" align="center">
+                        <template slot-scope="scope">
+                            <el-tag :type="getAlertType(scope.row.type)" effect="dark">
+                                {{ scope.row.type }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="数量" width="60" align="center">
+                        <template slot-scope="scope">
+                            <span v-if="scope.row.count > 1" style="font-weight: 600;">×{{ scope.row.count }}</span>
+                            <span v-else>-</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="时间" width="160" align="center">
+                        <template slot-scope="scope">
+                            {{ formatDate(scope.row.lastTime || scope.row.timestamp) }}
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="告警信息" min-width="400">
+                        <template slot-scope="scope">
+                            <span style="font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; display: block;">
+                                {{ scope.row.message }}
+                            </span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="80" fixed="right" align="center">
+                        <template slot-scope="scope">
+                            <el-button size="mini" type="text" @click="showContext(scope.row)">上下文</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button class="modern-btn" size="small" type="primary" @click="copyAllDetails">
+                <i class="el-icon-document-copy"></i> 复制所有
+            </el-button>
+            <el-button class="modern-btn" size="small" @click="allDetailsDialogVisible = false">关 闭</el-button>
+        </span>
+    </el-dialog>
+
+</div>

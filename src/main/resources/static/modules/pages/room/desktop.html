@@ -1,0 +1,394 @@
+<div class="room-container page-surface-room" data-page-scroll-root>
+    <!-- 页面头部 -->
+    <div class="room-header">
+        <div class="room-header-left">
+            <div class="room-header-title">
+                <i class="el-icon-video-camera icon"></i>
+                <h2 data-page-focus-target tabindex="-1">直播间监控</h2>
+
+                <transition name="room-legend-collapse">
+                    <div v-if="viewMode === 'card' && !legendCollapsed" class="room-card-legend" aria-label="卡片颜色说明">
+                        <el-tooltip popper-class="room-page-popper" effect="dark" content="直播中（未录制）" placement="bottom">
+                            <div class="room-legend-item">
+                                <span class="room-legend-dot legend-streaming"></span>
+                                <span>直播中</span>
+                            </div>
+                        </el-tooltip>
+                        <el-tooltip popper-class="room-page-popper" effect="dark" content="录制中（优先显示此状态）" placement="bottom">
+                            <div class="room-legend-item">
+                                <span class="room-legend-dot legend-recording"></span>
+                                <span>录制中</span>
+                            </div>
+                        </el-tooltip>
+                    </div>
+                </transition>
+
+                <transition name="room-legend-collapse">
+                    <div v-if="viewMode === 'card' && !legendCollapsed" class="room-card-legend-compact" aria-label="卡片颜色说明(移动端)">
+                        <el-tooltip popper-class="room-page-popper" effect="dark" placement="bottom">
+                            <div slot="content">
+                                <div>红色：直播中（未录制）</div>
+                                <div>绿色：录制中（优先）</div>
+                            </div>
+                            <div class="room-legend-compact-pill">
+                                <span class="room-legend-dot legend-streaming"></span>
+                                <span class="room-legend-dot legend-recording"></span>
+                                <span class="room-legend-compact-text">颜色说明</span>
+                            </div>
+                        </el-tooltip>
+                    </div>
+                </transition>
+
+                <el-tooltip popper-class="room-page-popper" v-if="viewMode === 'card'" effect="dark" :content="legendCollapsed ? '显示颜色说明' : '隐藏颜色说明'" placement="bottom">
+                    <el-button type="text" class="room-legend-toggle" @click.stop="legendCollapsed = !legendCollapsed">
+                        <i :class="legendCollapsed ? 'el-icon-arrow-right' : 'el-icon-arrow-left'"></i>
+                    </el-button>
+                </el-tooltip>
+            </div>
+            <div class="room-stats">
+                <div class="room-stat-item" role="button" tabindex="0" :aria-pressed="roomFilter === 'all' ? 'true' : 'false'" :class="{ 'is-active': roomFilter === 'all' }" @click="setRoomFilter('all')" @keydown.enter.prevent="setRoomFilter('all')" @keydown.space.prevent="setRoomFilter('all')">
+                    <transition name="count-flip" mode="out-in">
+                        <div class="room-stat-value" :key="'total-' + tableData.length">{{ tableData.length }}</div>
+                    </transition>
+                    <div class="room-stat-label">总房间</div>
+                </div>
+                <div class="room-stat-item" role="button" tabindex="0" :aria-pressed="roomFilter === 'live' ? 'true' : 'false'" :class="{ 'is-active': roomFilter === 'live' }" @click="setRoomFilter('live')" @keydown.enter.prevent="setRoomFilter('live')" @keydown.space.prevent="setRoomFilter('live')">
+                    <transition name="count-flip" mode="out-in">
+                        <div class="room-stat-value live" :key="'live-' + tableData.filter(r => r.streaming).length">{{ tableData.filter(r => r.streaming).length }}</div>
+                    </transition>
+                    <div class="room-stat-label">直播中</div>
+                </div>
+                <div class="room-stat-item" role="button" tabindex="0" :aria-pressed="roomFilter === 'recording' ? 'true' : 'false'" :class="{ 'is-active': roomFilter === 'recording' }" @click="setRoomFilter('recording')" @keydown.enter.prevent="setRoomFilter('recording')" @keydown.space.prevent="setRoomFilter('recording')">
+                    <transition name="count-flip" mode="out-in">
+                        <div class="room-stat-value recording" :key="'rec-' + tableData.filter(r => r.recording).length">{{ tableData.filter(r => r.recording).length }}</div>
+                    </transition>
+                    <div class="room-stat-label">录制中</div>
+                </div>
+            </div>
+        </div>
+        <div class="room-header-actions">
+            <el-button class="modern-btn" type="primary" @click="addRoomDialog = true" icon="el-icon-plus">
+                添加房间
+            </el-button>
+            <el-button v-if="viewMode === 'card' && !isSortMode" class="modern-btn" type="primary" plain @click="enterSortMode" icon="el-icon-rank">
+                调整顺序
+            </el-button>
+            <template v-if="viewMode === 'card' && isSortMode">
+                <el-button class="modern-btn" type="success" @click="saveSortOrder" icon="el-icon-check">保存排序</el-button>
+                <el-button class="modern-btn" plain @click="cancelSortMode" icon="el-icon-close">取消</el-button>
+                <el-button class="modern-btn" plain @click="resetSortOrder" icon="el-icon-refresh-left">重置默认</el-button>
+            </template>
+            <el-tooltip popper-class="room-page-popper" content="导出用户后若程序继续运行，则用户登录状态会失效" effect="dark" placement="top">
+                <el-button class="modern-btn" type="primary" @click="exportConfigDialog=true" icon="el-icon-download">
+                    导出配置
+                </el-button>
+            </el-tooltip>
+            <el-upload action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false" style="display: inline-block;">
+                <el-button class="modern-btn" type="primary" icon="el-icon-upload2">导入配置</el-button>
+            </el-upload>
+            <el-radio-group v-model="viewMode" size="small">
+                <el-radio-button label="card"><i class="el-icon-menu"></i></el-radio-button>
+                <el-radio-button label="table"><i class="el-icon-s-grid"></i></el-radio-button>
+            </el-radio-group>
+        </div>
+    </div>
+
+    <transition name="fade-slide">
+        <section v-if="configOperationProgress.visible" class="config-progress-panel" :class="'is-' + configOperationProgress.status">
+            <div class="config-progress-head">
+                <div>
+                    <strong>{{ configOperationProgress.title }}</strong>
+                    <span>{{ configOperationProgress.message }}</span>
+                </div>
+                <em>{{ configOperationProgress.percent }}%</em>
+            </div>
+            <el-progress
+                    :percentage="configOperationProgress.percent"
+                    :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)"
+                    :stroke-width="8">
+            </el-progress>
+            <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>
+        </section>
+    </transition>
+
+    <!-- 内容区域 -->
+    <transition name="fade-slide">
+        <!-- 骨架屏加载状态 -->
+        <div v-if="loading && tableData.length === 0" class="room-card-grid" key="skeleton">
+            <div class="skeleton-card" v-for="n in 3" :key="'sk-' + n">
+                <div class="skeleton-card-header">
+                    <div class="skeleton-avatar"></div>
+                    <div class="skeleton-info">
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+                <div class="skeleton-card-tags">
+                    <div class="skeleton-tag"></div>
+                    <div class="skeleton-tag"></div>
+                    <div class="skeleton-tag"></div>
+                </div>
+                <div class="skeleton-card-footer">
+                    <div class="skeleton-btn"></div>
+                    <div class="skeleton-btn"></div>
+                    <div class="skeleton-btn"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-else-if="filteredTableData.length === 0 && !loading" class="room-empty" key="empty">
+            <i class="el-icon-video-camera room-empty-icon"></i>
+            <h3 class="room-empty-title">{{ roomFilter === 'all' ? '还没有添加直播间' : '当前筛选下暂无房间' }}</h3>
+            <p class="room-empty-desc">{{ roomFilter === 'all' ? '点击"添加房间"按钮，开始监控房间' : '请切换筛选查看全部房间，或等待状态变化后再查看' }}</p>
+            <el-button class="modern-btn" type="primary" @click="addRoomDialog = true" icon="el-icon-plus">
+                添加房间
+            </el-button>
+        </div>
+
+        <!-- 卡片视图 -->
+        <div v-else-if="viewMode === 'card'" class="room-card-grid" key="card">
+            <div class="room-card"
+                 :class="{
+                    'is-recording': item.recording,
+                    'is-streaming': item.streaming && !item.recording,
+                    'is-sorting': isSortMode,
+                    'is-dragging': draggingRoomId === item.id,
+                    'is-drag-over': dragOverRoomId === item.id
+                 }"
+                 :draggable="isSortMode"
+                 data-stagger
+                 :style="{ animationDelay: index * 40 + 'ms' }"
+                      v-for="(item, index) in filteredTableData" :key="item.id"
+                 @click="handleCardClick(item)"
+                 @dragstart.stop="handleSortDragStart(index, item, $event)"
+                 @dragover.prevent="handleSortDragOver(index, item, $event)"
+                 @drop.prevent.stop="handleSortDrop(index, item, $event)"
+                 @dragend="handleSortDragEnd">
+
+                <div class="room-card-header">
+                    <div v-if="isSortMode" class="room-sort-handle" @click.stop title="拖动排序">
+                        <i class="el-icon-rank"></i>
+                        <span>{{ index + 1 }}</span>
+                    </div>
+                    <div class="room-avatar">
+                        <img v-if="!privacyMode && item.userCover" :src="buildAvatarProxyUrl(item.userCover)" referrerpolicy="no-referrer">
+                        <span v-else>{{ privacyMode ? '*' : (item.uname || 'R').charAt(0).toUpperCase() }}</span>
+                        <span v-if="item.streaming" class="live-indicator"></span>
+
+                        <!-- 性别图标 -->
+                        <div v-if="!privacyMode && item.gender !== null && item.gender !== -1"
+                             class="gender-icon"
+                             :class="item.gender === 1 ? 'male' : 'female'">
+                            <i :class="item.gender === 1 ? 'el-icon-male' : 'el-icon-female'"></i>
+                        </div>
+                    </div>
+                    <div class="room-info">
+                        <h3 class="room-name">{{ maskText(item.uname) }}</h3>
+                        <p class="room-title">{{ maskText(item.title || '暂无直播标题') }}</p>
+                        <div class="room-id">
+                            <i class="el-icon-house"></i>
+                            <span>{{ maskText(item.roomId) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="room-card-body">
+                    <div class="room-tags">
+                        <span class="room-tag" :class="item.streaming ? 'live' : 'offline'">
+                            <i :class="item.streaming ? 'el-icon-video-camera' : 'el-icon-video-pause'"></i>
+                            {{ item.streaming ? '直播中' : '未直播' }}
+                        </span>
+                        <span class="room-tag" :class="item.recording ? 'recording' : 'offline'">
+                            <i :class="item.recording ? 'el-icon-video-play' : 'el-icon-video-pause'"></i>
+                            {{ item.recording ? '录制中' : '未录制' }}
+                        </span>
+                        <span class="room-tag" :class="item.upload ? 'upload' : 'offline'">
+                            <i :class="item.upload ? 'el-icon-upload' : 'el-icon-close'"></i>
+                            {{ item.upload ? '自动上传' : '关闭上传' }}
+                        </span>
+                    </div>
+                    <div class="room-meta">
+                        <span class="room-copyright" :class="item.copyright == 1 ? 'original' : 'repost'">
+                            {{ item.copyright == 1 ? '自制' : '转载' }}
+                        </span>
+                        <span class="room-partition" v-if="item.tid">
+                            <i class="el-icon-folder"></i>
+                            {{ getTypeName(item.tid) }}
+                        </span>
+                        <span class="room-visibility" :class="item.isOnlySelf == 1 ? 'private' : 'public'">
+                            <i :class="item.isOnlySelf == 1 ? 'el-icon-lock' : 'el-icon-view'"></i>
+                            {{ item.isOnlySelf == 1 ? '仅自己' : '公开' }}
+                        </span>
+                        <span class="room-delete-info">{{ formatDelete(item) }}</span>
+                    </div>
+                </div>
+
+                <div v-if="!isSortMode" class="room-card-footer" @click.stop>
+                    <el-button size="mini" type="primary" icon="el-icon-edit" @click="handleEdit(index, item)">编辑</el-button>
+                    <el-button size="mini" icon="el-icon-chat-line-round" @click="handleEeditLiveMsg(index, item)">弹幕</el-button>
+                    <el-button size="mini" type="danger" icon="el-icon-delete" @click="deleteRoom(item.id)">删除</el-button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 表格视图 -->
+        <div v-else class="room-table-wrapper" key="table">
+        <el-table :data="filteredTableData" border style="width: 100%">
+            <el-table-column type="expand">
+                <template slot-scope="props">
+                    <el-form class="demo-table-expand" inline label-position="left">
+                        <el-form-item label="投稿分区id">
+                            <span>{{ props.row.tid }}</span>
+                        </el-form-item>
+                        <el-form-item label="上传线路">
+                            <span>{{ props.row.line }}</span>
+                        </el-form-item>
+                        <el-form-item label="投稿封面类型">
+                            <span v-if="props.row.coverType==='default'">系统默认</span>
+                            <span v-if="props.row.coverType==='live'">直播封面</span>
+                            <span v-if="props.row.coverType==='diy'">自定义上传</span>
+                        </el-form-item>
+                        <el-form-item label="消息通知用户">
+                            <span v-if="props.row.wxuid == null || props.row.wxuid == '' || props.row.wxuid == 'undefined'">不通知</span>
+                            <span v-if="props.row.wxuid != null && props.row.wxuid != '' && props.row.wxuid != 'undefined'">{{props.row.wxuid}}</span>
+                        </el-form-item>
+                        <el-form-item label="Server酱3">
+                            <span v-if="!props.row.serverChanSendKey">未配置</span>
+                            <span v-else>已配置</span>
+                        </el-form-item>
+                        <el-form-item label="消息通知类型">
+                            <span>{{ props.row.pushMsgTags }}</span>
+                        </el-form-item>
+                        <el-form-item label="忽略小分片">
+                            <span>{{ props.row.fileSizeLimit }}MB(小于该大小的分片会直接删除)</span>
+                        </el-form-item>
+                        <el-form-item label="忽略小分片">
+                            <span>{{ props.row.durationLimit }}秒(小于该时长的分片会直接删除)</span>
+                        </el-form-item>
+                        <el-form-item label="标题模板">
+                            <span>{{ props.row.titleTemplate }}</span>
+                        </el-form-item>
+                        <el-form-item label="分p标题模板">
+                            <span>{{ props.row.partTitleTemplate }}</span>
+                        </el-form-item>
+                        <el-form-item label="描述模板">
+                            <span>{{ props.row.descTemplate }}</span>
+                        </el-form-item>
+                        <el-form-item label="空间动态模板">
+                            <span>{{ props.row.dynamicTemplate }}</span>
+                        </el-form-item>
+                    </el-form>
+                </template>
+            </el-table-column>
+            <el-table-column label="直播间" min-width="120">
+                <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
+            </el-table-column>
+            <el-table-column label="主播" min-width="100">
+                <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
+            </el-table-column>
+            <el-table-column label="标题" min-width="150">
+                <template slot-scope="scope">{{ maskText(scope.row.title) }}</template>
+            </el-table-column>
+            <el-table-column id="copyright" label="是否自制" prop="copyright" width="120">
+                <template slot-scope="scope">
+                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.copyright==1"></el-button>
+                    <el-button circle class="el-icon-close" type="danger" v-if="scope.row.copyright==2"></el-button>
+                </template>
+            </el-table-column>
+            <el-table-column label="直播中" prop="streaming" width="100">
+                <template slot-scope="scope">
+                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.streaming"></el-button>
+                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.streaming"></el-button>
+                </template>
+            </el-table-column>
+            <el-table-column label="录制中" prop="recording" width="100">
+                <template slot-scope="scope">
+                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.recording"></el-button>
+                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.recording"></el-button>
+                </template>
+            </el-table-column>
+            <el-table-column label="是否上传" prop="recording" width="120">
+                <template slot-scope="scope">
+                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.upload"></el-button>
+                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.upload"></el-button>
+                </template>
+            </el-table-column>
+            <el-table-column prop="sendDm" width="200">
+                <template slot="header" slot-scope="scope">
+                    <span>普通弹幕</span>
+                    <el-tooltip popper-class="room-page-popper" effect="dark" placement="top">
+                        <div slot="content">
+                            房间级开关；控制投稿后普通弹幕任务是否执行。此列为状态展示，需点击“编辑”在配置中修改。
+                        </div>
+                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                    </el-tooltip>
+                </template>
+                <template slot-scope="scope">
+                    <el-tag :type="scope.row.sendDm ? 'success' : 'info'" size="small">
+                        {{ scope.row.sendDm ? '已开启' : '已关闭' }}
+                    </el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column prop="sendSc" width="260">
+                <template slot="header" slot-scope="scope">
+                    <span>高级弹幕（SC/上舰）</span>
+                    <el-tooltip popper-class="room-page-popper" effect="dark" placement="top">
+                        <div slot="content">
+                            房间级开关；控制投稿后高级弹幕（SC/上舰）任务是否执行。仅由投稿账号发送。此列为状态展示，需点击“编辑”在配置中修改。
+                        </div>
+                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                    </el-tooltip>
+                </template>
+                <template slot-scope="scope">
+                    <el-tag :type="scope.row.sendSc ? 'success' : 'info'" size="small">
+                        {{ scope.row.sendSc ? '已开启' : '已关闭' }}
+                    </el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="文件后处理" prop="deleteFile" width="120">
+                <template slot-scope="scope">
+                    <span v-if="scope.row.deleteType == 0">不删除</span>
+                    <span v-if="scope.row.deleteType == 1">上传完成后删除</span>
+                    <span v-if="scope.row.deleteType == 2">审核通过后删除</span>
+                    <span v-if="scope.row.deleteType == 3">{{scope.row.deleteDay}}天后删除</span>
+                    <span v-if="scope.row.deleteType == 4">上传完成后移动到{{scope.row.moveDir}}</span>
+                    <span v-if="scope.row.deleteType == 5">审核通过后移动到{{scope.row.moveDir}}</span>
+                    <span v-if="scope.row.deleteType == 6">录制结束后移动到{{scope.row.moveDir}}</span>
+                    <span v-if="scope.row.deleteType == 7">录制结束后复制到{{scope.row.moveDir}}</span>
+                    <span v-if="scope.row.deleteType == 8">{{scope.row.deleteDay}}天后移动到{{scope.row.moveDir}}</span>
+                    <span v-if="scope.row.deleteType == 9">投稿成功后删除</span>
+                    <span v-if="scope.row.deleteType == 10">投稿成功后移动到{{scope.row.moveDir}}</span>
+                    <span v-if="scope.row.deleteType == 11">审核通过后复制到{{scope.row.moveDir}}</span>
+                </template>
+            </el-table-column>
+            <el-table-column label="投稿用户" prop="uploadUserId" width="120">
+                <template slot-scope="scope">
+                    <div v-for="item in users">
+                        <span type="primary" v-if="scope.row.uploadUserId == item.id">{{ maskText(item.uname) }}</span>
+                    </div>
+                </template>
+            </el-table-column>
+            <el-table-column label="操作" width="140" fixed="right">
+                <template slot-scope="scope">
+                    <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
+                    <el-dropdown trigger="click" size="mini">
+                        <el-button size="mini" type="text">
+                            更多<i class="el-icon-arrow-down el-icon--right"></i>
+                        </el-button>
+                                <el-dropdown-menu slot="dropdown" class="room-page-dropdown-popper">
+                            <el-dropdown-item @click.native="handleEeditLiveMsg(scope.$index, scope.row)">弹幕规则</el-dropdown-item>
+                            <el-dropdown-item divided></el-dropdown-item>
+                            <el-dropdown-item @click.native="deleteRoom(scope.row.id)" style="color: #F56C6C;">删除</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </template>
+            </el-table-column>
+        </el-table>
+        </div>
+    </transition>
+
+    <template data-biliup-fragment="config"></template>
+    <template data-biliup-fragment="dialogs"></template>
+</div>

@@ -1,0 +1,444 @@
+<div class="app-container log-page mobile-log-page">
+    <div class="mobile-log-scroll" ref="console" data-page-scroll-root v-loading="rendering"
+         element-loading-text="正在整理日志"
+         element-loading-spinner="el-icon-loading"
+         element-loading-background="rgba(0, 0, 0, 0.28)">
+        <section class="mobile-log-hero">
+            <div class="mobile-log-hero-copy">
+                <span>LOG STREAM</span>
+                <h2 data-page-focus-target tabindex="-1">运行日志</h2>
+                <p>{{ filteredLogs.length }} 条匹配日志 · 保留 {{ getHistoryLines() }} 条</p>
+            </div>
+            <button type="button"
+                    class="mobile-log-status"
+                    :class="'is-' + statusTagType"
+                    @click="settingsDrawerVisible = true"
+                    aria-label="日志连接状态">
+                <i :class="realtime ? 'el-icon-connection' : 'el-icon-video-pause'"></i>
+                <span>{{ statusText }}</span>
+            </button>
+        </section>
+
+        <section class="mobile-log-actions" aria-label="日志操作">
+            <button type="button" class="is-primary" @click="mobileFilterVisible = true">
+                <i class="el-icon-search"></i>
+                <span>筛选</span>
+            </button>
+            <button type="button" @click="settingsDrawerVisible = true">
+                <i class="el-icon-setting"></i>
+                <span>设置</span>
+            </button>
+            <button type="button" @click="openDiagnosticExport">
+                <i class="el-icon-download"></i>
+                <span>诊断</span>
+            </button>
+            <button type="button" class="is-danger" @click="clearLogs">
+                <i class="el-icon-delete"></i>
+                <span>清空</span>
+            </button>
+        </section>
+
+        <section class="mobile-log-stat-grid" aria-label="日志级别统计">
+            <button type="button"
+                    class="mobile-log-stat is-info"
+                    :class="{ 'is-inactive': !visibleLevels.includes('INFO') }"
+                    @click="toggleLevel('INFO')">
+                <span>INFO</span>
+                <strong>{{ logStats.INFO }}</strong>
+                <i class="el-icon-info"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-warn"
+                    :class="{ 'is-inactive': !visibleLevels.includes('WARN') }"
+                    @click="toggleLevel('WARN')">
+                <span>WARN</span>
+                <strong>{{ logStats.WARN }}</strong>
+                <i class="el-icon-warning-outline"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-error"
+                    :class="{ 'is-inactive': !visibleLevels.includes('ERROR') }"
+                    @click="toggleLevel('ERROR')">
+                <span>ERROR</span>
+                <strong>{{ logStats.ERROR }}</strong>
+                <i class="el-icon-circle-close"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-debug"
+                    :class="{ 'is-inactive': !visibleLevels.includes('DEBUG') }"
+                    @click="toggleLevel('DEBUG')">
+                <span>DEBUG</span>
+                <strong>{{ logStats.DEBUG }}</strong>
+                <i class="el-icon-cpu"></i>
+            </button>
+            <button type="button"
+                    class="mobile-log-stat is-alert"
+                    :class="{ 'is-inactive': alerts.length === 0 }"
+                    :disabled="alerts.length === 0"
+                    @click="showAllAlertDetails">
+                <span>告警</span>
+                <strong>{{ alerts.length }}</strong>
+                <i class="el-icon-bell"></i>
+            </button>
+        </section>
+
+        <section class="mobile-log-frequency" aria-label="日志频率">
+            <div class="mobile-log-section-head">
+                <div>
+                    <span>RECENT ACTIVITY</span>
+                    <h3>近 {{ freqRangeLabel }}</h3>
+                </div>
+                <div class="mobile-log-range">
+                    <button v-for="opt in freqRangeOptions"
+                            :key="opt.value"
+                            type="button"
+                            :class="{ 'is-active': freqRange === opt.value }"
+                            :aria-pressed="freqRange === opt.value ? 'true' : 'false'"
+                            @click.stop="freqRange = opt.value; hoveredFreqIdx = -1; mobileFrequencyIndex = 29">
+                        {{ opt.label }}
+                    </button>
+                </div>
+            </div>
+            <div class="mobile-log-bars">
+                <span v-for="(bar, idx) in logFrequency"
+                        :key="idx"
+                        class="mobile-log-bar"
+                        :class="{
+                            'is-error': bar.hasError,
+                            'is-warn': bar.hasWarn && !bar.hasError,
+                            'is-empty': bar.count === 0,
+                            'is-active': mobileFrequencyIndex === idx
+                        }"
+                        :style="{ '--bar-height': bar.height }"
+                        aria-hidden="true">
+                </span>
+                <input class="mobile-log-frequency-slider"
+                       v-model.number="mobileFrequencyIndex"
+                       type="range"
+                       min="0"
+                       max="29"
+                       step="1"
+                       aria-label="选择日志频率时间段"
+                       :aria-valuetext="mobileFrequencyLabel">
+            </div>
+            <p class="mobile-log-bar-tip" aria-live="polite">
+                {{ mobileFrequencyLabel }}
+            </p>
+        </section>
+
+        <transition name="mobile-log-card">
+            <section v-if="alerts.length > 0" class="mobile-log-alert-card" @click="showAllAlertDetails">
+                <div>
+                    <span>ALERT INBOX</span>
+                    <h3>{{ alerts.length }} 条异常记录</h3>
+                    <p>{{ getBriefMessage(alerts[0].message) }}</p>
+                </div>
+                <i class="el-icon-arrow-right"></i>
+            </section>
+        </transition>
+
+        <section class="mobile-log-list" aria-label="日志列表">
+            <div class="mobile-log-section-head">
+                <div>
+                    <span>LIVE FEED</span>
+                    <h3>日志流</h3>
+                </div>
+                <button type="button" class="mobile-log-ghost" @click="loadHistory">
+                    <i :class="loadingHistory ? 'el-icon-loading' : 'el-icon-refresh'"></i>
+                    <span>刷新</span>
+                </button>
+            </div>
+
+            <div v-if="displayedLogs.length === 0" class="mobile-log-empty">
+                <i :class="loadingHistory ? 'el-icon-loading' : 'el-icon-document'"></i>
+                <h3>{{ loadingHistory ? '正在加载日志' : '暂无匹配日志' }}</h3>
+                <p>{{ searchKeyword ? '调整筛选条件后再查看' : '实时连接建立后会自动显示' }}</p>
+            </div>
+
+            <article v-for="(log, index) in displayedLogs"
+                     :key="log.__id"
+                     class="log-line mobile-log-row"
+                     :class="{
+                         'nowrap': !autoWrap,
+                         'selection-mode': selectionMode,
+                         'selected': isSelected(log),
+                         'line-warn': log.level === 'WARN',
+                         'line-error': log.level === 'ERROR',
+                         'line-debug': log.level === 'DEBUG'
+                     }"
+                     :data-log-id="log.__id"
+                     @click="handleMobileLogTap(log)">
+                <div class="mobile-log-row-meta">
+                    <span class="mobile-log-level" :class="'is-' + log.level">{{ log.level }}</span>
+                    <time>{{ log.timestamp || '--' }}</time>
+                    <em v-if="log.thread">{{ log.thread }}</em>
+                </div>
+                <div class="mobile-log-message" v-html="getFormattedMessage(log)"></div>
+                <i class="el-icon-arrow-right"></i>
+            </article>
+        </section>
+    </div>
+
+    <transition name="mobile-log-backtop">
+        <button v-if="showMobileBackTop"
+                type="button"
+                class="mobile-log-backtop"
+                @click="scrollMobileLogTop"
+                aria-label="返回日志顶部"
+                title="返回顶部">
+            <i class="el-icon-arrow-up"></i>
+        </button>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="mobileFilterVisible"
+             class="mobile-log-overlay"
+             @click="mobileFilterVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="mobileFilterVisible"
+               class="mobile-log-sheet mobile-log-filter-sheet"
+               role="dialog"
+               aria-label="日志筛选"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>FILTER</span>
+                    <h3>筛选日志</h3>
+                </div>
+                <button type="button" @click="mobileFilterVisible = false" aria-label="关闭筛选">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <label class="mobile-log-search-field">
+                <i class="el-icon-search"></i>
+                <input v-model="searchKeyword"
+                       type="search"
+                       inputmode="search"
+                       enterkeyhint="search"
+                       autocapitalize="off"
+                       spellcheck="false"
+                       placeholder="搜索内容、时间或线程"
+                       @input="onSearchInput">
+            </label>
+            <div class="mobile-log-filter-group">
+                <span>级别</span>
+                <div class="mobile-log-level-grid">
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('INFO') }" @click="toggleLevel('INFO')">INFO</button>
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('WARN') }" @click="toggleLevel('WARN')">WARN</button>
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('ERROR') }" @click="toggleLevel('ERROR')">ERROR</button>
+                    <button type="button" :class="{ 'is-active': visibleLevels.includes('DEBUG') }" @click="toggleLevel('DEBUG')">DEBUG</button>
+                </div>
+            </div>
+            <div class="mobile-log-sheet-actions">
+                <button type="button" @click="resetMobileFilters">
+                    <i class="el-icon-refresh-left"></i>
+                    <span>重置</span>
+                </button>
+                <button type="button" class="is-primary" @click="mobileFilterVisible = false">
+                    <i class="el-icon-check"></i>
+                    <span>完成</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="settingsDrawerVisible"
+             class="mobile-log-overlay"
+             @click="settingsDrawerVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="settingsDrawerVisible"
+               class="mobile-log-sheet mobile-log-settings-sheet"
+               role="dialog"
+               aria-label="日志设置"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>SETTINGS</span>
+                    <h3>日志设置</h3>
+                </div>
+                <button type="button" @click="settingsDrawerVisible = false" aria-label="关闭设置">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <div class="mobile-log-setting-list">
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>实时推送</strong>
+                        <em>通过 WebSocket 接收新日志</em>
+                    </span>
+                    <el-switch v-model="realtime" @change="toggleRealtime"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>自动滚动</strong>
+                        <em>新日志到来时停在最新位置</em>
+                    </span>
+                    <el-switch v-model="autoScroll"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>自动换行</strong>
+                        <em>关闭后保留单行日志形态</em>
+                    </span>
+                    <el-switch v-model="autoWrap"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>详细模式</strong>
+                        <em>最多保留 2000 条历史日志</em>
+                    </span>
+                    <el-switch v-model="detailedMode" @change="handleDetailedModeChange"></el-switch>
+                </label>
+                <label class="mobile-log-setting-row">
+                    <span>
+                        <strong>多选复制</strong>
+                        <em>点按日志后自动复制已选内容</em>
+                    </span>
+                    <el-switch v-model="selectionMode" @change="handleSelectionModeChange"></el-switch>
+                </label>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="detailDialogVisible"
+             class="mobile-log-overlay"
+             @click="detailDialogVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="detailDialogVisible"
+               class="mobile-log-sheet mobile-log-detail-sheet"
+               role="dialog"
+               aria-label="日志详情"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>DETAIL</span>
+                    <h3>日志详情</h3>
+                </div>
+                <button type="button" @click="detailDialogVisible = false" aria-label="关闭详情">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <pre class="mobile-log-pre" v-html="formatLogMessage(currentDetail)"></pre>
+            <div class="mobile-log-sheet-actions">
+                <button type="button" @click="copyDetail">
+                    <i class="el-icon-document-copy"></i>
+                    <span>复制内容</span>
+                </button>
+                <button type="button" class="is-primary" @click="detailDialogVisible = false">
+                    <i class="el-icon-check"></i>
+                    <span>我知道了</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="contextDialogVisible"
+             class="mobile-log-overlay"
+             @click="contextDialogVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="contextDialogVisible"
+               class="mobile-log-sheet mobile-log-context-sheet"
+               role="dialog"
+               aria-label="日志上下文"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>CONTEXT</span>
+                    <h3>上下文日志</h3>
+                </div>
+                <button type="button" @click="contextDialogVisible = false" aria-label="关闭上下文">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <div ref="contextContent" class="mobile-log-context-list" v-loading="loadingContext">
+                <div v-if="contextLogs.length === 0 && !loadingContext" class="mobile-log-empty is-compact">
+                    <i class="el-icon-document"></i>
+                    <h3>暂无上下文数据</h3>
+                </div>
+                <div v-for="(line, index) in contextLogs"
+                     :key="index"
+                     class="mobile-log-context-line"
+                     :class="{ 'is-target': isTargetLine(line) }"
+                     :data-context-target="isTargetLine(line) ? 'true' : null"
+                     v-html="formatLogMessage(line)">
+                </div>
+            </div>
+        </aside>
+    </transition>
+
+    <transition name="mobile-log-fade">
+        <div v-if="allDetailsDialogVisible"
+             class="mobile-log-overlay"
+             @click="allDetailsDialogVisible = false"></div>
+    </transition>
+    <transition name="mobile-log-sheet">
+        <aside v-if="allDetailsDialogVisible"
+               class="mobile-log-sheet mobile-log-alert-sheet"
+               role="dialog"
+               aria-label="告警详情"
+               @click.stop>
+            <div class="mobile-log-sheet-handle"></div>
+            <header class="mobile-log-sheet-head">
+                <div>
+                    <span>ALERTS</span>
+                    <h3>告警详情</h3>
+                    <p>{{ filteredAllDetails.length }} / {{ alerts.length }} 条</p>
+                </div>
+                <button type="button" @click="allDetailsDialogVisible = false" aria-label="关闭告警详情">
+                    <i class="el-icon-close"></i>
+                </button>
+            </header>
+            <label class="mobile-log-search-field">
+                <i class="el-icon-search"></i>
+                <input v-model="detailsSearch"
+                       type="search"
+                       inputmode="search"
+                       enterkeyhint="search"
+                       autocapitalize="off"
+                       spellcheck="false"
+                       placeholder="搜索告警">
+            </label>
+            <div class="mobile-log-alert-tabs">
+                <button type="button" :class="{ 'is-active': detailsFilter === '' }" @click="detailsFilter = ''">全部</button>
+                <button type="button" :class="{ 'is-active': detailsFilter === 'ERROR' }" @click="detailsFilter = 'ERROR'">ERROR</button>
+                <button type="button" :class="{ 'is-active': detailsFilter === 'WARN' }" @click="detailsFilter = 'WARN'">WARN</button>
+            </div>
+            <div class="mobile-log-alert-list">
+                <article v-for="(alert, idx) in filteredAllDetails" :key="idx" class="mobile-log-alert-item">
+                    <div class="mobile-log-alert-meta">
+                        <span :class="'is-' + getAlertType(alert.type)">{{ alert.type }}</span>
+                        <em v-if="alert.count > 1">×{{ alert.count }}</em>
+                        <time>{{ formatDate(alert.lastTime || alert.timestamp) }}</time>
+                    </div>
+                    <p>{{ getBriefMessage(alert.message) }}</p>
+                    <div class="mobile-log-alert-actions">
+                        <button type="button" @click="showContext(alert)">上下文</button>
+                        <button type="button" @click="showDetailContent(alert.message)">详情</button>
+                    </div>
+                </article>
+            </div>
+            <div class="mobile-log-sheet-actions">
+                <button type="button" @click="copyAllDetails" :disabled="alerts.length === 0">
+                    <i class="el-icon-document-copy"></i>
+                    <span>复制</span>
+                </button>
+                <button type="button" class="is-danger" @click="clearAlerts" :disabled="alerts.length === 0">
+                    <i class="el-icon-delete"></i>
+                    <span>清除</span>
+                </button>
+            </div>
+        </aside>
+    </transition>
+
+</div>

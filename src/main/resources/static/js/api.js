@@ -24,6 +24,13 @@ function isMobilePath(pathname) {
     return /(^|\/)mobile(\/|$)/.test(pathname || '');
 }
 
+function resolveAppUrl(url) {
+    if (window.BiliupUrlResolver && typeof window.BiliupUrlResolver.resolve === 'function') {
+        return window.BiliupUrlResolver.resolve(url);
+    }
+    return url;
+}
+
 function getCurrentNavigationPath() {
     var navWindow = getNavigationWindow();
     var loc = navWindow.location || window.location;
@@ -35,16 +42,16 @@ function getLoginReturnPath() {
     var currentPath = (window.location && window.location.pathname) || '';
 
     if (isMobilePath(topPath) || isMobilePath(currentPath)) {
-        return '/mobile/index.html';
+        return resolveAppUrl('/mobile/index.html');
     }
     if (/\/html\//.test(currentPath)) {
-        return '/index.html';
+        return resolveAppUrl('/index.html');
     }
     return topPath || '/index.html';
 }
 
 function getLoginUrl() {
-    return '/html/login.html?redirect=' + encodeURIComponent(getLoginReturnPath());
+    return resolveAppUrl('/html/login.html') + '?redirect=' + encodeURIComponent(getLoginReturnPath());
 }
 
 function redirectToLogin() {
@@ -61,7 +68,14 @@ $.ajaxSetup({
     }
 });
 
+$.ajaxPrefilter(function(options) {
+    if (options && options.url) {
+        options.url = resolveAppUrl(options.url);
+    }
+});
+
 const ApiUtil = {
+    resolveUrl: resolveAppUrl,
     getLoginUrl: getLoginUrl,
     redirectToLogin: redirectToLogin,
     fetchBlob: function(url, options) {
@@ -76,7 +90,7 @@ const ApiUtil = {
             headers = Object.assign({}, headers, { 'Authorization': token });
         }
         requestOptions.headers = headers;
-        return fetch(url, Object.assign({
+        return fetch(resolveAppUrl(url), Object.assign({
             method: 'GET',
             cache: 'no-store'
         }, requestOptions)).then(function (res) {

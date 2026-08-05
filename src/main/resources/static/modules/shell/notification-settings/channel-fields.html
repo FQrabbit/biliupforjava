@@ -1,0 +1,112 @@
+<div :class="rootClass">
+    <el-select :value="value.type" @change="update('type', $event)" :size="size" class="notification-type-select" placeholder="渠道类型" popper-class="notification-settings-popper">
+        <el-option v-for="item in typeOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+    </el-select>
+
+    <!-- Bark -->
+    <template v-if="value.type === 'bark'">
+        <el-input :value="value.deviceKey" @input="update('deviceKey', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-bark-device-key-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? 'Bark 密钥 / 测试链接' : '留空不修改 Bark 密钥'" class="notification-input"></el-input>
+        <el-input :value="value.serverUrl" @input="update('serverUrl', $event)" :size="size" placeholder="服务地址，默认 https://api.day.app" class="notification-input"></el-input>
+        <el-input :value="value.group" @input="update('group', $event)" :size="size" placeholder="推送分组" class="notification-input"></el-input>
+        <el-select :value="value.level" @change="update('level', $event)" :size="size" class="notification-type-select" placeholder="通知级别" popper-class="notification-settings-popper">
+            <el-option label="普通提醒" value="active"></el-option>
+            <el-option label="时效提醒" value="timeSensitive"></el-option>
+            <el-option label="静默收取" value="passive"></el-option>
+            <el-option label="重要警告" value="critical"></el-option>
+        </el-select>
+        <el-input :value="value.sound" @input="update('sound', $event)" :size="size" placeholder="铃声，可留空" class="notification-input"></el-input>
+        <el-input :value="value.icon" @input="update('icon', $event)" :size="size" placeholder="图标链接，可留空" class="notification-input"></el-input>
+    </template>
+
+    <!-- 企业微信应用消息 -->
+    <template v-if="value.type === 'wecom_app'">
+        <div :class="[groupBaseClass, 'notification-channel-group-auth']">
+            <el-input :value="value.corpId" @input="update('corpId', $event)" :size="size" placeholder="企业 ID" class="notification-input"></el-input>
+            <el-input :value="value.agentId" @input="update('agentId', $event)" :size="size" placeholder="应用 AgentId" class="notification-input"></el-input>
+            <el-input :value="value.corpSecret" @input="update('corpSecret', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-wecom-corp-secret-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? '应用 Secret' : '留空不修改应用 Secret'" class="notification-input"></el-input>
+        </div>
+        <div :class="[groupBaseClass, 'notification-channel-group-target']">
+            <el-input :value="value.toUser" @input="update('toUser', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-wecom-to-user-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" placeholder="成员 UserID，默认 @all" class="notification-input"></el-input>
+            <el-input :value="value.toParty" @input="update('toParty', $event)" :size="size" placeholder="部门 ID，可留空" class="notification-input"></el-input>
+            <el-input :value="value.toTag" @input="update('toTag', $event)" :size="size" placeholder="标签 ID，可留空" class="notification-input"></el-input>
+        </div>
+        <div class="notification-channel-flags">
+            <el-switch :value="value.safe" @change="update('safe', $event)" active-text="保密消息" inactive-text="普通消息"></el-switch>
+        </div>
+    </template>
+
+    <!-- 企业微信群机器人 -->
+    <template v-if="value.type === 'wecom_webhook'">
+        <el-input :value="value.webhookKey" @input="update('webhookKey', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-wecom-webhook-key-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? 'Webhook Key / 完整机器人地址' : '留空不修改 Webhook Key'" class="notification-input"></el-input>
+        <el-select :value="value.messageType" @change="update('messageType', $event)" :size="size" class="notification-type-select" placeholder="消息类型" popper-class="notification-settings-popper">
+            <el-option label="文本消息" value="text"></el-option>
+            <el-option label="Markdown" value="markdown"></el-option>
+        </el-select>
+        <el-input :value="value.mentionedList" @input="update('mentionedList', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-wecom-webhook-mentioned-list-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" placeholder="提醒成员 UserID，用 | 分隔，可填 @all" class="notification-input"></el-input>
+        <el-input :value="value.mentionedMobileList" @input="update('mentionedMobileList', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-wecom-webhook-mentioned-mobile-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" placeholder="提醒手机号，用 | 分隔" class="notification-input"></el-input>
+    </template>
+
+    <!-- 钉钉群机器人 -->
+    <template v-if="value.type === 'dingtalk_webhook'">
+        <div :class="[groupBaseClass, 'notification-channel-group-dingtalk-main']">
+            <el-input :value="value.dingtalkWebhookUrl" @input="update('dingtalkWebhookUrl', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-dingtalk-webhook-url-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? 'Webhook 地址 / access_token' : '留空不修改 Webhook'" class="notification-input"></el-input>
+            <el-input :value="value.dingtalkSignSecret" @input="update('dingtalkSignSecret', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-dingtalk-sign-secret-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? '加签 Secret，可留空' : '留空不修改加签 Secret'" class="notification-input"></el-input>
+            <el-select :value="value.dingtalkMessageType" @change="update('dingtalkMessageType', $event)" :size="size" class="notification-type-select" placeholder="消息类型" popper-class="notification-settings-popper">
+                <el-option label="Markdown" value="markdown"></el-option>
+                <el-option label="文本消息" value="text"></el-option>
+            </el-select>
+        </div>
+        <div :class="[groupBaseClass, 'notification-channel-group-dingtalk-extra']">
+            <el-input :value="value.dingtalkKeyword" @input="update('dingtalkKeyword', $event)" :size="size" placeholder="安全关键词，可留空" class="notification-input"></el-input>
+            <el-input :value="value.dingtalkAtMobiles" @input="update('dingtalkAtMobiles', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-dingtalk-at-mobiles-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" placeholder="@ 手机号，用 | 分隔" class="notification-input"></el-input>
+            <el-input :value="value.dingtalkAtUserIds" @input="update('dingtalkAtUserIds', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-dingtalk-at-user-ids-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" placeholder="@ UserID，用 | 分隔" class="notification-input"></el-input>
+            <el-switch :value="value.dingtalkAtAll" @change="update('dingtalkAtAll', $event)" active-text="@所有人" inactive-text="不@所有人"></el-switch>
+        </div>
+    </template>
+
+    <!-- ntfy -->
+    <template v-if="value.type === 'ntfy'">
+        <div :class="[groupBaseClass, 'notification-channel-group-ntfy-main']">
+            <el-input :value="value.ntfyTopic" @input="update('ntfyTopic', $event)" :size="size" placeholder="Topic，例如 room-started" class="notification-input"></el-input>
+            <el-input :value="value.ntfyServerUrl" @input="update('ntfyServerUrl', $event)" :size="size" placeholder="服务地址，默认 https://ntfy.sh" class="notification-input"></el-input>
+            <el-select :value="value.ntfyPriority" @change="update('ntfyPriority', $event)" :size="size" class="notification-type-select" placeholder="优先级" popper-class="notification-settings-popper">
+                <el-option label="默认" value="default"></el-option>
+                <el-option label="最低" value="min"></el-option>
+                <el-option label="较低" value="low"></el-option>
+                <el-option label="较高" value="high"></el-option>
+                <el-option label="紧急" value="urgent"></el-option>
+            </el-select>
+        </div>
+        <div :class="[groupBaseClass, 'notification-channel-group-ntfy-extra']">
+            <el-input :value="value.ntfyTags" @input="update('ntfyTags', $event)" :size="size" placeholder="标签，用逗号分隔，可留空" class="notification-input"></el-input>
+            <el-input :value="value.ntfyClick" @input="update('ntfyClick', $event)" :size="size" placeholder="点击跳转链接，可留空" class="notification-input"></el-input>
+            <el-select :value="value.ntfyAuthType" @change="update('ntfyAuthType', $event)" :size="size" class="notification-type-select" placeholder="鉴权方式" popper-class="notification-settings-popper">
+                <el-option label="无需鉴权" value="none"></el-option>
+                <el-option label="Bearer Token" value="bearer"></el-option>
+                <el-option label="Basic 账号密码" value="basic"></el-option>
+            </el-select>
+            <el-switch :value="value.ntfyMarkdown" @change="update('ntfyMarkdown', $event)" active-text="Markdown" inactive-text="普通文本"></el-switch>
+        </div>
+        <div v-if="value.ntfyAuthType === 'bearer'" :class="[groupBaseClass, 'notification-channel-group-ntfy-secret']">
+            <el-input :value="value.ntfyToken" @input="update('ntfyToken', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-ntfy-token-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? 'Bearer Token' : '留空不修改 Token'" class="notification-input"></el-input>
+        </div>
+        <div v-if="value.ntfyAuthType === 'basic'" :class="[groupBaseClass, 'notification-channel-group-ntfy-secret']">
+            <el-input :value="value.ntfyUsername" @input="update('ntfyUsername', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-ntfy-username-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? '用户名' : '留空不修改用户名'" class="notification-input"></el-input>
+            <el-input :value="value.ntfyPassword" @input="update('ntfyPassword', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-ntfy-password-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? '密码' : '留空不修改密码'" class="notification-input"></el-input>
+        </div>
+    </template>
+
+    <!-- WxPusher -->
+    <el-input v-if="value.type === 'wxpusher'" :value="value.uid" @input="update('uid', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-wxpusher-uid-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? 'WxPusher UID' : '留空不修改 UID'" class="notification-input"></el-input>
+
+    <!-- Server酱3 -->
+    <template v-if="value.type === 'serverchan3'">
+        <el-input :value="value.sendKey" @input="update('sendKey', $event)" :size="size" type="password" show-password autocomplete="new-password" :name="'notification-serverchan-send-key-' + (isNew ? 'new' : 'edit')" data-lpignore="true" data-1p-ignore="true" :placeholder="isNew ? 'Server酱3 SendKey' : '留空不修改 SendKey'" class="notification-input"></el-input>
+        <el-input :value="value.tags" @input="update('tags', $event)" :size="size" placeholder="标签，可留空" class="notification-input"></el-input>
+    </template>
+
+    <!-- 备注名，新增表单专用；编辑表格已在渠道列单独渲染，不重复输出 -->
+    <el-input v-if="isNew" :value="value.name" @input="update('name', $event)" :size="size" placeholder="本地备注，仅在本插件显示" class="notification-input"></el-input>
+    <!-- 默认 slot：新增表单用来塞 actions 按钮，让它加入 grid 布局；编辑行不传，静默忽略 -->
+    <slot></slot>
+</div>

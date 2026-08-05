@@ -1,0 +1,31 @@
+/* ========== 表格展开样式 ========== */
+
+.demo-table-expand {
+
+    font-size: 0;
+
+}
+
+.demo-table-expand label {
+
+    width: 150px;
+
+    color: var(--text-disabled);
+
+}
+
+.avatar-uploader-icon {
+
+    font-size: 28px;
+
+    color: var(--text-disabled);
+
+    width: 178px;
+
+    height: 178px;
+
+    line-height: 178px;
+
+    text-align: center;
+
+}

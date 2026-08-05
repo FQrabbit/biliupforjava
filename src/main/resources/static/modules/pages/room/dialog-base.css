@@ -1,0 +1,389 @@
+/* ========== 弹窗样式优化 ========== */
+
+body.page-active-room .room-page-dialog {
+
+    border-radius: var(--radius-lg) !important;
+
+    overflow: hidden;
+
+    margin-top: 0 !important;
+
+    display: flex;
+
+    flex-direction: column;
+
+    max-height: 85vh;
+
+}
+
+body.page-active-room .room-page-dialog .el-dialog__header {
+
+    padding: 20px 24px;
+
+    border-bottom: 1px solid var(--border-light);
+
+    background: var(--bg-primary);
+
+}
+
+body.page-active-room .room-page-dialog .el-dialog__title {
+
+    font-size: 18px;
+
+    font-weight: 600;
+
+}
+
+body.page-active-room .room-page-dialog .el-dialog__body {
+
+    padding: 24px;
+
+    overflow-y: auto;
+
+    flex: 1;
+
+    position: relative;
+
+}
+
+body.page-active-room .room-page-dialog .el-dialog__footer {
+
+    padding: 16px 24px;
+
+    border-top: 1px solid var(--border-light);
+
+    background: var(--bg-secondary);
+
+    z-index: 10;
+
+}
+
+body.page-active-room .room-page-dialog.is-fullscreen {
+
+    height: 100%;
+
+    max-height: 100%;
+
+}
+
+@media (max-width: 768px) {
+
+    body.page-active-room .room-page-dialog.is-fullscreen {
+
+        width: 95% !important;
+
+        height: calc(100% - 100px) !important;
+
+        max-height: calc(100% - 100px) !important;
+
+        border-radius: var(--radius-lg);
+
+    }}
+
+.demo-table-expand .el-form-item {
+
+    margin-right: 0;
+
+    margin-bottom: 0;
+
+    width: 50%;
+
+}
+
+/* ========== 头像上传样式 ========== */
+
+.avatar-uploader .el-upload {
+
+    border: 1px dashed var(--border-color);
+
+    border-radius: 6px;
+
+    cursor: pointer;
+
+    position: relative;
+
+    overflow: hidden;
+
+}
+
+.avatar-uploader .el-upload:hover {
+
+    border-color: var(--primary-color);
+
+}
+
+.avatar {
+
+    width: 178px;
+
+    height: 178px;
+
+    display: block;
+
+}
+
+/* ========== 过渡动画 (Apple-style) ========== */
+
+.room-page-select-popper.el-zoom-in-top-enter-active,
+.room-page-select-popper.el-zoom-in-top-leave-active,
+.mobile-room-config-popper.el-zoom-in-top-enter-active,
+.mobile-room-config-popper.el-zoom-in-top-leave-active,
+.season-cover-tooltip.el-zoom-in-top-enter-active,
+.season-cover-tooltip.el-zoom-in-top-leave-active {
+
+    transition: transform var(--duration-base) var(--ease-modal),
+
+                opacity var(--duration-base) var(--ease-modal);
+
+    transform-origin: center top;
+
+}
+
+.room-page-select-popper.el-zoom-in-top-enter,
+.room-page-select-popper.el-zoom-in-top-leave-active,
+.mobile-room-config-popper.el-zoom-in-top-enter,
+.mobile-room-config-popper.el-zoom-in-top-leave-active,
+.season-cover-tooltip.el-zoom-in-top-enter,
+.season-cover-tooltip.el-zoom-in-top-leave-active {
+
+    opacity: 0;
+
+    transform: scaleY(0);
+
+}
+
+.room-edit-dialog .el-dialog__header {
+
+    padding: 0 !important;
+
+    border-bottom: 1px solid var(--border-light);
+
+}
+
+.dialog-header {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 16px 20px;
+
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
+
+}
+
+.dialog-title-wrapper {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+}
+
+.dialog-title-wrapper i {
+
+    font-size: 20px;
+
+    color: var(--primary-color);
+
+}
+
+.dialog-title-wrapper .el-dialog__title {
+
+    font-size: 18px;
+
+    font-weight: 600;
+
+}
+
+.dialog-room-info {
+
+    font-size: 13px;
+
+    color: var(--text-secondary);
+
+    padding: 4px 10px;
+
+    background: var(--bg-tertiary);
+
+    border-radius: var(--radius-sm);
+
+    margin-left: 8px;
+
+}
+
+.room-edit-dialog .el-dialog__body {
+
+    padding: 16px 20px;
+
+    max-height: 60vh;
+
+    overflow-y: auto;
+
+}
+
+/* 分区输入框*/
+
+.partition-input-group {
+
+    display: flex;
+
+    gap: 12px;
+
+    align-items: center;
+
+}
+
+.partition-trigger .el-input__inner {
+
+    cursor: pointer;
+
+}
+
+.switch-label {
+
+    font-size: 14px;
+
+    color: var(--text-primary);
+
+    font-weight: 500;
+
+    white-space: nowrap;
+
+}
+
+.gift-threshold-input {
+
+    width: 124px;
+
+    flex-shrink: 0;
+
+}
+
+.gift-threshold-input .el-input__inner {
+
+    height: 32px;
+
+    line-height: 32px;
+
+    padding-left: 12px;
+
+    padding-right: 38px;
+
+    text-align: right;
+
+}
+
+.gift-threshold-input .el-input__suffix {
+
+    right: 12px;
+
+    color: var(--text-secondary);
+
+    font-size: 12px;
+
+    display: inline-flex;
+
+    align-items: center;
+
+}
+
+.gift-threshold-input .el-input__suffix-inner {
+
+    line-height: 32px;
+
+}
+
+.wx-input-group .el-input {
+
+    flex: 1;
+
+}
+
+/* 对话框底部*/
+
+.room-page-dialog .dialog-footer {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    padding-top: 12px;
+
+    border-top: 1px solid var(--border-light);
+
+}
+
+/* ========== 暗色主题 - 编辑对话框========== */
+
+[data-theme="dark"] .room-edit-dialog .el-dialog__header {
+
+    background: var(--bg-tertiary);
+
+    border-bottom-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .dialog-header {
+
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-tertiary) 90%, transparent) 0%, color-mix(in srgb, var(--bg-secondary) 95%, transparent) 100%);
+
+}
+
+[data-theme="dark"] .dialog-room-info {
+
+    background: var(--glass-border);
+
+}
+
+[data-theme="dark"] .room-page-dialog .dialog-footer {
+
+    border-top-color: var(--border-color);
+
+}
+
+/* ========== 移动端响应式 - 编辑对话框========== */
+
+@media (max-width: 768px) {
+
+    .room-edit-dialog .el-dialog__body {
+
+        padding: 12px;
+
+        max-height: 70vh;
+
+    }
+
+    .dialog-header {
+
+        padding: 12px 16px;
+
+    }
+
+    .dialog-room-info {
+
+        display: none;
+
+    }
+
+    .partition-input-group {
+
+        flex-direction: column;
+
+        align-items: stretch;
+
+    }
+
+    .room-page-dialog .dialog-footer {
+
+        flex-direction: column;
+
+        gap: 12px;
+
+    }}

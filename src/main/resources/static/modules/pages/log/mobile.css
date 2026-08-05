@@ -1,0 +1,1197 @@
+/* Dedicated mobile log page. Loaded only by /mobile/index.html. */
+
+.mobile-shell .mobile-log-page {
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    background: transparent;
+}
+
+.mobile-shell .mobile-log-scroll {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 12px var(--mobile-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+}
+
+.mobile-shell .mobile-log-scroll *,
+.mobile-shell .mobile-log-sheet * {
+    box-sizing: border-box;
+}
+
+.mobile-shell .mobile-log-hero {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 16px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 24px;
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--mobile-accent-1) 12%, transparent), transparent 52%),
+        var(--mobile-surface-strong);
+    box-shadow: var(--mobile-shadow-soft);
+    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.2);
+    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.2);
+    animation: mobileLogRise 360ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.mobile-shell .mobile-log-hero-copy {
+    min-width: 0;
+}
+
+.mobile-shell .mobile-log-hero-copy span,
+.mobile-shell .mobile-log-section-head span,
+.mobile-shell .mobile-log-sheet-head span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.mobile-shell .mobile-log-hero-copy h2 {
+    margin: 4px 0 2px;
+    color: var(--text-primary);
+    font-size: 25px;
+    line-height: 1.08;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.mobile-shell .mobile-log-hero-copy p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.mobile-shell .mobile-log-status {
+    min-width: 104px;
+    max-width: 42%;
+    min-height: 74px;
+    padding: 10px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 22px;
+    background: color-mix(in srgb, var(--bg-primary) 74%, transparent);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg-primary) 48%, transparent);
+    cursor: pointer;
+    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, background 220ms ease;
+}
+
+.mobile-shell .mobile-log-status > *,
+.mobile-shell .mobile-log-hero-copy p {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.mobile-shell .mobile-log-status:active,
+.mobile-shell .mobile-log-actions button:active,
+.mobile-shell .mobile-log-stat:active,
+.mobile-shell .mobile-log-ghost:active,
+.mobile-shell .mobile-log-row:active,
+.mobile-shell .mobile-log-sheet-head button:active,
+.mobile-shell .mobile-log-sheet-actions button:active,
+.mobile-shell .mobile-log-filter-group button:active,
+.mobile-shell .mobile-log-alert-tabs button:active,
+.mobile-shell .mobile-log-alert-actions button:active {
+    transform: scale(0.96);
+}
+
+.mobile-shell .mobile-log-status i {
+    font-size: 20px;
+    color: var(--mobile-accent-2);
+}
+
+.mobile-shell .mobile-log-status span {
+    width: 100%;
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.35;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.mobile-shell .mobile-log-status.is-success {
+    border-color: color-mix(in srgb, var(--success-color) 34%, var(--mobile-border));
+    background: color-mix(in srgb, var(--success-color) 12%, var(--mobile-surface-strong));
+}
+
+.mobile-shell .mobile-log-status.is-warning {
+    border-color: color-mix(in srgb, var(--warning-color) 38%, var(--mobile-border));
+    background: color-mix(in srgb, var(--warning-color) 12%, var(--mobile-surface-strong));
+}
+
+.mobile-shell .mobile-log-status.is-danger {
+    border-color: color-mix(in srgb, var(--danger-color) 42%, var(--mobile-border));
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--mobile-surface-strong));
+}
+
+.mobile-shell .mobile-log-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    animation: mobileLogRise 360ms 40ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.mobile-shell .mobile-log-actions button,
+.mobile-shell .mobile-log-ghost,
+.mobile-shell .mobile-log-sheet-actions button,
+.mobile-shell .mobile-log-alert-actions button {
+    min-width: 0;
+    min-height: 48px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 18px;
+    background: var(--mobile-surface-strong);
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
+    line-height: 1.2;
+    font-weight: 800;
+    box-shadow: var(--mobile-shadow-soft);
+    cursor: pointer;
+    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, background 220ms ease, color 220ms ease, box-shadow 220ms ease;
+}
+
+.mobile-shell .mobile-log-actions button.is-primary,
+.mobile-shell .mobile-log-sheet-actions button.is-primary {
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--mobile-accent-1), var(--mobile-accent-2));
+    color: var(--mobile-on-accent);
+}
+
+.mobile-shell .mobile-log-actions button.is-danger,
+.mobile-shell .mobile-log-sheet-actions button.is-danger {
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 26%, var(--mobile-border));
+    background: color-mix(in srgb, var(--danger-color) 9%, var(--mobile-surface-strong));
+}
+
+.mobile-shell .mobile-log-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    animation: mobileLogRise 360ms 80ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.mobile-shell .mobile-log-stat {
+    min-width: 0;
+    min-height: 84px;
+    padding: 10px 8px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 21px;
+    background: var(--mobile-surface-strong);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 4px;
+    box-shadow: var(--mobile-shadow-soft);
+    cursor: pointer;
+    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), opacity 220ms ease, border-color 220ms ease, background 220ms ease;
+}
+
+.mobile-shell .mobile-log-stat span {
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 1.1;
+    font-weight: 900;
+}
+
+.mobile-shell .mobile-log-stat strong {
+    color: var(--text-primary);
+    font-size: clamp(18px, 6vw, 28px);
+    line-height: 1;
+    font-weight: 950;
+    font-variant-numeric: tabular-nums;
+}
+
+.mobile-shell .mobile-log-stat i {
+    align-self: flex-end;
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+
+.mobile-shell .mobile-log-stat.is-info {
+    border-color: color-mix(in srgb, var(--mobile-accent-1) 24%, var(--mobile-border));
+}
+
+.mobile-shell .mobile-log-stat.is-warn {
+    border-color: color-mix(in srgb, var(--warning-color) 28%, var(--mobile-border));
+}
+
+.mobile-shell .mobile-log-stat.is-error {
+    border-color: color-mix(in srgb, var(--danger-color) 32%, var(--mobile-border));
+}
+
+.mobile-shell .mobile-log-stat.is-debug {
+    border-color: color-mix(in srgb, var(--success-color) 26%, var(--mobile-border));
+}
+
+.mobile-shell .mobile-log-stat.is-alert {
+    border-color: color-mix(in srgb, var(--mobile-accent-2) 26%, var(--mobile-border));
+}
+
+.mobile-shell .mobile-log-stat.is-inactive {
+    opacity: 0.52;
+    background: color-mix(in srgb, var(--mobile-surface-strong) 64%, var(--bg-tertiary));
+}
+
+.mobile-shell .mobile-log-stat:disabled {
+    cursor: default;
+}
+
+.mobile-shell .mobile-log-frequency,
+.mobile-shell .mobile-log-list {
+    padding: 14px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 24px;
+    background: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-soft);
+    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.22);
+    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.22);
+    animation: mobileLogRise 360ms 120ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.mobile-shell .mobile-log-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.mobile-shell .mobile-log-section-head h3 {
+    margin: 3px 0 0;
+    color: var(--text-primary);
+    font-size: 20px;
+    line-height: 1.1;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.mobile-shell .mobile-log-range {
+    min-width: 0;
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-primary) 58%, transparent);
+}
+
+.mobile-shell .mobile-log-range button,
+.mobile-shell .mobile-log-alert-tabs button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 13px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-log-range button.is-active,
+.mobile-shell .mobile-log-alert-tabs button.is-active {
+    background: color-mix(in srgb, var(--mobile-accent-1) 14%, var(--mobile-surface-strong));
+    color: var(--mobile-accent-1);
+}
+
+.mobile-shell .mobile-log-bars {
+    position: relative;
+    height: 54px;
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(30, minmax(0, 1fr));
+    align-items: end;
+    gap: 3px;
+    padding: 0 2px;
+    border-radius: 8px;
+}
+
+.mobile-shell .mobile-log-bars:focus-within {
+    outline: 2px solid var(--mobile-accent-1);
+    outline-offset: 3px;
+}
+
+.mobile-shell .mobile-log-bar {
+    min-width: 0;
+    width: 100%;
+    min-height: 44px;
+    height: 44px;
+    border-radius: 999px;
+    display: flex;
+    align-items: flex-end;
+    pointer-events: none;
+    transition: height 220ms ease, transform 180ms ease, opacity 180ms ease, background 180ms ease;
+}
+
+.mobile-shell .mobile-log-bar::after {
+    content: "";
+    display: block;
+    width: 100%;
+    height: var(--bar-height, 2px);
+    min-height: 3px;
+    max-height: 42px;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--mobile-accent-1) 42%, var(--mobile-border));
+    transition: height 220ms ease, background 180ms ease;
+}
+
+.mobile-shell .mobile-log-bar.is-empty {
+    opacity: 0.35;
+}
+
+.mobile-shell .mobile-log-bar.is-empty::after {
+    background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+}
+
+.mobile-shell .mobile-log-bar.is-warn::after {
+    background: var(--warning-color);
+}
+
+.mobile-shell .mobile-log-bar.is-error::after {
+    background: var(--danger-color);
+}
+
+.mobile-shell .mobile-log-bar.is-active {
+    transform: scaleY(1.12);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mobile-accent-1) 14%, transparent);
+}
+
+.mobile-shell .mobile-log-frequency-slider {
+    appearance: none;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 54px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: ew-resize;
+    touch-action: pan-y;
+}
+
+.mobile-shell .mobile-log-frequency-slider:focus {
+    outline: none;
+}
+
+.mobile-shell .mobile-log-frequency-slider::-webkit-slider-runnable-track {
+    height: 54px;
+    background: transparent;
+}
+
+.mobile-shell .mobile-log-frequency-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 54px;
+    border: 0;
+    background: transparent;
+}
+
+.mobile-shell .mobile-log-frequency-slider::-moz-range-track {
+    height: 54px;
+    border: 0;
+    background: transparent;
+}
+
+.mobile-shell .mobile-log-frequency-slider::-moz-range-thumb {
+    width: 20px;
+    height: 54px;
+    border: 0;
+    background: transparent;
+}
+
+.mobile-shell .mobile-log-bar-tip {
+    min-height: 18px;
+    margin: 10px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.mobile-shell .mobile-log-alert-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 98px;
+    padding: 16px;
+    border: 1px solid color-mix(in srgb, var(--warning-color) 34%, var(--mobile-border));
+    border-radius: 24px;
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--warning-color) 16%, transparent), transparent 58%),
+        var(--mobile-surface-strong);
+    box-shadow: var(--mobile-shadow-soft);
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-log-alert-card div {
+    min-width: 0;
+}
+
+.mobile-shell .mobile-log-alert-card span {
+    color: var(--warning-color);
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.mobile-shell .mobile-log-alert-card h3 {
+    margin: 5px 0 5px;
+    color: var(--text-primary);
+    font-size: 20px;
+    line-height: 1.15;
+    font-weight: 900;
+}
+
+.mobile-shell .mobile-log-alert-card p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.45;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.mobile-shell .mobile-log-alert-card > i {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    color: var(--warning-color);
+    background: color-mix(in srgb, var(--warning-color) 12%, var(--mobile-surface-strong));
+}
+
+.mobile-shell .mobile-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mobile-shell .mobile-log-ghost {
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: 15px;
+    box-shadow: none;
+    font-size: 12px;
+    color: var(--mobile-accent-1);
+}
+
+.mobile-shell .mobile-log-empty {
+    min-height: 160px;
+    padding: 24px 18px;
+    border: 1px dashed var(--mobile-border);
+    border-radius: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 46%, transparent);
+}
+
+.mobile-shell .mobile-log-empty.is-compact {
+    min-height: 120px;
+}
+
+.mobile-shell .mobile-log-empty i {
+    font-size: 26px;
+    color: var(--mobile-accent-1);
+}
+
+.mobile-shell .mobile-log-empty h3 {
+    margin: 10px 0 4px;
+    color: var(--text-primary);
+    font-size: 17px;
+    line-height: 1.2;
+    font-weight: 900;
+}
+
+.mobile-shell .mobile-log-empty p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.mobile-shell .mobile-log-row {
+    width: 100%;
+    min-width: 0;
+    min-height: 86px;
+    padding: 13px 42px 13px 13px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 22px;
+    background: color-mix(in srgb, var(--mobile-surface-strong) 86%, var(--bg-primary));
+    color: var(--text-primary);
+    position: relative;
+    display: block;
+    cursor: pointer;
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--bg-secondary) 36%, transparent);
+    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, background 220ms ease, box-shadow 220ms ease;
+}
+
+.mobile-shell .mobile-log-row.line-warn {
+    border-color: color-mix(in srgb, var(--warning-color) 32%, var(--mobile-border));
+}
+
+.mobile-shell .mobile-log-row.line-error {
+    border-color: color-mix(in srgb, var(--danger-color) 38%, var(--mobile-border));
+}
+
+.mobile-shell .mobile-log-row.selected {
+    border-color: color-mix(in srgb, var(--mobile-accent-1) 46%, var(--mobile-border));
+    background: color-mix(in srgb, var(--mobile-accent-1) 10%, var(--mobile-surface-strong));
+}
+
+.mobile-shell .mobile-log-row > i {
+    position: absolute;
+    right: 13px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    font-size: 16px;
+}
+
+.mobile-shell .mobile-log-row-meta {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 9px;
+}
+
+.mobile-shell .mobile-log-row-meta time,
+.mobile-shell .mobile-log-row-meta em {
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.2;
+    font-style: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mobile-shell .mobile-log-row-meta em {
+    flex: 1 1 120px;
+}
+
+.mobile-shell .mobile-log-level {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--mobile-accent-1) 12%, transparent);
+    color: var(--mobile-accent-1);
+    font-size: 11px;
+    line-height: 1.15;
+    font-weight: 950;
+    white-space: nowrap;
+}
+
+.mobile-shell .mobile-log-level.is-WARN {
+    background: color-mix(in srgb, var(--warning-color) 14%, transparent);
+    color: var(--warning-color);
+}
+
+.mobile-shell .mobile-log-level.is-ERROR {
+    background: color-mix(in srgb, var(--danger-color) 14%, transparent);
+    color: var(--danger-color);
+}
+
+.mobile-shell .mobile-log-level.is-DEBUG {
+    background: color-mix(in srgb, var(--success-color) 12%, transparent);
+    color: var(--success-color);
+}
+
+.mobile-shell .mobile-log-message {
+    min-width: 0;
+    color: var(--text-primary);
+    font-family: Consolas, "SFMono-Regular", "Roboto Mono", monospace;
+    font-size: 12px;
+    line-height: 1.58;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.mobile-shell .mobile-log-row.nowrap .mobile-log-message {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mobile-shell .mobile-log-backtop {
+    position: fixed;
+    right: 16px;
+    bottom: calc(102px + var(--mobile-safe-bottom));
+    z-index: 2550;
+    width: 54px;
+    height: 54px;
+    border: 1px solid color-mix(in srgb, var(--mobile-accent-1) 34%, var(--mobile-border));
+    border-radius: 20px;
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--mobile-accent-1) 18%, transparent), color-mix(in srgb, var(--mobile-accent-2) 12%, transparent)),
+        var(--mobile-surface-strong);
+    color: var(--mobile-accent-1);
+    display: grid;
+    place-items: center;
+    box-shadow: var(--mobile-shadow);
+    backdrop-filter: blur(24px) saturate(1.35);
+    -webkit-backdrop-filter: blur(24px) saturate(1.35);
+    cursor: pointer;
+    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), opacity 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.mobile-shell .mobile-log-backtop i {
+    font-size: 22px;
+    font-weight: 900;
+}
+
+.mobile-shell .mobile-log-backtop:active {
+    transform: scale(0.94);
+}
+
+.mobile-shell .log-url,
+.mobile-shell .log-date,
+.mobile-shell .log-path,
+.mobile-shell .log-number,
+.mobile-shell .log-bracket {
+    color: var(--mobile-accent-1);
+}
+
+.mobile-shell .log-number {
+    color: var(--mobile-accent-2);
+}
+
+.mobile-shell .log-bracket {
+    color: var(--text-secondary);
+}
+
+.mobile-shell .mobile-log-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2790;
+    background: color-mix(in srgb, var(--bg-secondary) 66%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+.mobile-shell .mobile-log-sheet {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + var(--mobile-safe-bottom));
+    z-index: 2800;
+    max-height: min(calc(var(--mobile-viewport-height) * 0.82), 720px);
+    padding: 10px 12px 12px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 28px;
+    background: var(--mobile-surface-strong);
+    color: var(--text-primary);
+    box-shadow: var(--mobile-shadow);
+    backdrop-filter: blur(30px) saturate(1.38);
+    -webkit-backdrop-filter: blur(30px) saturate(1.38);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+}
+
+.mobile-shell .mobile-log-alert-sheet,
+.mobile-shell .mobile-log-context-sheet,
+.mobile-shell .mobile-log-detail-sheet {
+    max-height: min(calc(var(--mobile-viewport-height) * 0.86), 760px);
+}
+
+.mobile-shell .mobile-log-sheet-handle {
+    width: 44px;
+    height: 5px;
+    margin: 0 auto 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-secondary) 36%, transparent);
+}
+
+.mobile-shell .mobile-log-sheet-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 2px 0;
+}
+
+.mobile-shell .mobile-log-sheet-head > div {
+    min-width: 0;
+}
+
+.mobile-shell .mobile-log-sheet-head h3 {
+    margin: 4px 0 0;
+    color: var(--text-primary);
+    font-size: 24px;
+    line-height: 1.05;
+    font-weight: 950;
+    letter-spacing: 0;
+}
+
+.mobile-shell .mobile-log-sheet-head p {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.mobile-shell .mobile-log-sheet-head button {
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-primary) 58%, transparent);
+    color: var(--text-secondary);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), background 220ms ease, color 220ms ease;
+}
+
+.mobile-shell .mobile-log-search-field {
+    min-height: 54px;
+    padding: 0 14px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mobile-shell .mobile-log-search-field i {
+    color: var(--text-secondary);
+    font-size: 18px;
+}
+
+.mobile-shell .mobile-log-search-field input {
+    min-width: 0;
+    width: 100%;
+    height: 52px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.4;
+}
+
+.mobile-shell .mobile-log-search-field input::placeholder {
+    color: color-mix(in srgb, var(--text-secondary) 58%, transparent);
+}
+
+.mobile-shell .mobile-log-filter-group,
+.mobile-shell .mobile-log-setting-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mobile-shell .mobile-log-filter-group > span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 900;
+}
+
+.mobile-shell .mobile-log-level-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.mobile-shell .mobile-log-level-grid button {
+    min-width: 0;
+    min-height: 46px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-primary) 54%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 950;
+    cursor: pointer;
+}
+
+.mobile-shell .mobile-log-level-grid button.is-active {
+    border-color: color-mix(in srgb, var(--mobile-accent-1) 36%, var(--mobile-border));
+    background: color-mix(in srgb, var(--mobile-accent-1) 12%, var(--mobile-surface-strong));
+    color: var(--mobile-accent-1);
+}
+
+.mobile-shell .mobile-log-sheet-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 2px;
+}
+
+.mobile-shell .mobile-log-sheet-actions button {
+    box-shadow: none;
+}
+
+.mobile-shell .mobile-log-sheet-actions button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.mobile-shell .mobile-log-setting-row {
+    min-height: 68px;
+    padding: 12px 14px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--bg-primary) 54%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.mobile-shell .mobile-log-setting-row > span {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mobile-shell .mobile-log-setting-row .el-switch {
+    flex: 0 0 auto;
+}
+
+.mobile-shell .mobile-log-setting-row strong {
+    color: var(--text-primary);
+    font-size: 15px;
+    line-height: 1.25;
+    font-weight: 900;
+}
+
+.mobile-shell .mobile-log-setting-row em {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+    font-style: normal;
+}
+
+.mobile-shell .mobile-log-pre {
+    min-height: 180px;
+    max-height: calc(var(--mobile-viewport-height) * 0.52);
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--bg-secondary) 74%, transparent);
+    color: var(--text-primary);
+    font-family: Consolas, "SFMono-Regular", "Roboto Mono", monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.mobile-shell .mobile-log-context-list,
+.mobile-shell .mobile-log-alert-list {
+    min-height: 180px;
+    max-height: calc(var(--mobile-viewport-height) * 0.52);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 2px;
+}
+
+.mobile-shell .mobile-log-context-line {
+    padding: 11px 12px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-primary) 58%, transparent);
+    color: var(--text-primary);
+    font-family: Consolas, "SFMono-Regular", "Roboto Mono", monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.mobile-shell .mobile-log-context-line.is-target {
+    border-color: color-mix(in srgb, var(--warning-color) 44%, var(--mobile-border));
+    background: color-mix(in srgb, var(--warning-color) 12%, var(--mobile-surface-strong));
+}
+
+.mobile-shell .mobile-log-alert-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-primary) 54%, transparent);
+}
+
+.mobile-shell .mobile-log-alert-tabs button {
+    min-height: 44px;
+}
+
+.mobile-shell .mobile-log-alert-item {
+    padding: 13px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--bg-primary) 56%, transparent);
+}
+
+.mobile-shell .mobile-log-alert-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    min-width: 0;
+}
+
+.mobile-shell .mobile-log-alert-meta span,
+.mobile-shell .mobile-log-alert-meta em {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--warning-color) 14%, transparent);
+    color: var(--warning-color);
+    font-size: 11px;
+    line-height: 1.2;
+    font-style: normal;
+    font-weight: 900;
+}
+
+.mobile-shell .mobile-log-alert-meta span.is-danger {
+    background: color-mix(in srgb, var(--danger-color) 14%, transparent);
+    color: var(--danger-color);
+}
+
+.mobile-shell .mobile-log-alert-meta time {
+    flex: 1 1 130px;
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.mobile-shell .mobile-log-alert-item p {
+    margin: 10px 0;
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.mobile-shell .mobile-log-alert-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.mobile-shell .mobile-log-alert-actions button {
+    min-height: 44px;
+    border-radius: 15px;
+    box-shadow: none;
+    color: var(--mobile-accent-1);
+}
+
+.mobile-log-card-enter-active,
+.mobile-log-card-leave-active {
+    transition: opacity 220ms ease, transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.mobile-log-card-enter,
+.mobile-log-card-leave-to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+}
+
+.mobile-log-fade-enter-active,
+.mobile-log-fade-leave-active {
+    transition: opacity 220ms ease;
+}
+
+.mobile-log-fade-enter,
+.mobile-log-fade-leave-to {
+    opacity: 0;
+}
+
+.mobile-log-sheet-enter-active,
+.mobile-log-sheet-leave-active {
+    transition: transform 300ms cubic-bezier(0.2, 0.85, 0.2, 1), opacity 220ms ease;
+}
+
+.mobile-log-sheet-enter,
+.mobile-log-sheet-leave-to {
+    opacity: 0;
+    transform: translateY(28px) scale(0.98);
+}
+
+.mobile-log-backtop-enter-active,
+.mobile-log-backtop-leave-active {
+    transition: opacity 180ms ease, transform 240ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.mobile-log-backtop-enter,
+.mobile-log-backtop-leave-to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.9);
+}
+
+@keyframes mobileLogRise {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 390px) {
+    .mobile-shell .mobile-log-scroll {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .mobile-shell .mobile-log-hero {
+        padding: 14px;
+    }
+
+    .mobile-shell .mobile-log-hero-copy h2 {
+        font-size: 22px;
+    }
+
+    .mobile-shell .mobile-log-stat-grid {
+        gap: 6px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mobile-shell .mobile-log-stat {
+        min-height: 78px;
+        border-radius: 18px;
+        padding: 9px 6px;
+    }
+
+    .mobile-shell .mobile-log-stat span {
+        font-size: 9px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+
+    .mobile-shell .mobile-log-stat i {
+        font-size: 14px;
+    }
+
+    .mobile-shell .mobile-log-level-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 360px) {
+    .mobile-shell .mobile-log-stat-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-log-level-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-log-sheet-head {
+        align-items: center;
+    }
+
+    .mobile-shell .mobile-log-sheet-head h3 {
+        font-size: 21px;
+        line-height: 1.12;
+    }
+
+    .mobile-shell .mobile-log-sheet-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .mobile-shell .mobile-log-setting-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .mobile-shell .mobile-log-setting-row .el-switch {
+        align-self: flex-end;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mobile-shell .mobile-log-hero,
+    .mobile-shell .mobile-log-actions,
+    .mobile-shell .mobile-log-stat-grid,
+    .mobile-shell .mobile-log-frequency,
+    .mobile-shell .mobile-log-list,
+    .mobile-log-card-enter-active,
+    .mobile-log-card-leave-active,
+    .mobile-log-sheet-enter-active,
+    .mobile-log-sheet-leave-active,
+    .mobile-log-backtop-enter-active,
+    .mobile-log-backtop-leave-active,
+    .mobile-log-fade-enter-active,
+    .mobile-log-fade-leave-active {
+        animation-duration: 1ms !important;
+        transition-duration: 1ms !important;
+    }
+}

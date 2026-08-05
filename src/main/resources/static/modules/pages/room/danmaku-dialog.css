@@ -1,0 +1,531 @@
+/* ========== 弹幕过滤对话框样式========== */
+
+.danmaku-filter-dialog {
+
+    border-radius: var(--radius-lg) !important;
+
+    overflow: hidden;
+
+}
+
+.danmaku-filter-dialog .el-dialog__header {
+
+    padding: 0 !important;
+
+    border-bottom: 1px solid var(--border-light);
+
+}
+
+.danmaku-filter-dialog .el-dialog__body {
+
+    padding: 0;
+
+    max-height: 60vh;
+
+    overflow-y: auto;
+
+}
+
+.danmaku-settings {
+
+    padding: 16px 20px;
+
+}
+
+/* 过滤区块 */
+
+.filter-section {
+
+    margin-bottom: 16px;
+
+    border: 1px solid var(--border-light);
+
+    border-radius: var(--radius-lg);
+
+    background: var(--bg-primary);
+
+    overflow: hidden;
+
+}
+
+.filter-section:last-child {
+
+    margin-bottom: 0;
+
+}
+
+.filter-section-title {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    padding: 14px 16px;
+
+    background: var(--bg-tertiary);
+
+    font-weight: 600;
+
+    color: var(--text-primary);
+
+    border-bottom: 1px solid var(--border-light);
+
+}
+
+.filter-section-title i {
+
+    font-size: 18px;
+
+    color: var(--primary-color);
+
+}
+
+.filter-section-tip {
+
+    font-size: 12px;
+
+    font-weight: 400;
+
+    color: var(--text-disabled);
+
+    margin-left: auto;
+
+    padding: 2px 8px;
+
+    background: var(--warning-soft-bg);
+
+    color: var(--warning-color);
+
+    border-radius: var(--radius-sm);
+
+}
+
+.filter-section-body {
+
+    padding: 12px;
+
+}
+
+.filter-section-body:empty {
+
+    padding: 0;
+
+}
+
+/* 过滤容器*/
+
+.filter-item {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 12px 16px;
+
+    background: var(--bg-tertiary);
+
+    border-radius: var(--radius-md);
+
+}
+
+.filter-item-info {
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 4px;
+
+}
+
+.filter-item-label {
+
+    font-size: 14px;
+
+    font-weight: 500;
+
+    color: var(--text-primary);
+
+}
+
+.filter-item-desc {
+
+    font-size: 12px;
+
+    color: var(--text-secondary);
+
+}
+
+/* 勋章过滤选项 */
+
+.medal-filter-options {
+
+    display: grid;
+
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+
+    gap: 12px;
+
+}
+
+.medal-option {
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    gap: 8px;
+
+    padding: 16px 12px;
+
+    background: var(--bg-tertiary);
+
+    border: 2px solid var(--border-light);
+
+    border-radius: var(--radius-lg);
+
+    cursor: pointer;
+
+    transition: border-color var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple), box-shadow var(--duration-base) var(--ease-apple);
+
+    text-align: center;
+
+}
+
+.medal-option:hover {
+
+    border-color: var(--primary-light);
+
+    background: var(--brand-soft-bg-faint);
+
+}
+
+.medal-option.is-active {
+
+    border-color: var(--primary-color);
+
+    background: var(--brand-soft-bg);
+
+    box-shadow: var(--brand-ring);
+
+}
+
+.medal-option i {
+
+    font-size: 28px;
+
+    color: var(--text-disabled);
+
+    transition: color var(--duration-base) var(--ease-apple);
+
+}
+
+.medal-option.is-active i {
+
+    color: var(--primary-color);
+
+}
+
+.medal-option span {
+
+    font-size: 14px;
+
+    font-weight: 600;
+
+    color: var(--text-primary);
+
+}
+
+.medal-option small {
+
+    font-size: 11px;
+
+    color: var(--text-secondary);
+
+    line-height: 1.3;
+
+}
+
+/* 等级过滤 */
+
+.level-filter {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 12px 16px;
+
+    background: var(--bg-tertiary);
+
+    border-radius: var(--radius-md);
+
+    gap: 16px;
+
+}
+
+.level-filter-info {
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 4px;
+
+    flex: 1;
+
+}
+
+.level-input-wrapper {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    flex-shrink: 0;
+
+}
+
+.level-input-wrapper .el-input-number--small {
+
+    width: 130px;
+
+    line-height: 32px;
+
+}
+
+.level-input-wrapper .el-input-number--small .el-input-number__decrease,
+
+.level-input-wrapper .el-input-number--small .el-input-number__increase {
+
+    height: 100%;
+
+    line-height: 32px;
+
+}
+
+.level-suffix {
+
+    font-size: 14px;
+
+    color: var(--text-secondary);
+
+}
+
+/* 关键词过滤*/
+
+.keyword-filter {
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 12px;
+
+}
+
+.keyword-filter-info {
+
+    padding: 0 4px;
+
+}
+
+.keyword-textarea .el-textarea__inner {
+
+    font-family: 'Monaco', 'Consolas', monospace;
+
+    font-size: 13px;
+
+    line-height: 1.6;
+
+}
+
+.keyword-count {
+
+    font-size: 12px;
+
+    color: var(--text-disabled);
+
+    text-align: right;
+
+}
+
+/* ========== 暗色主题 - 弹幕过滤对话框========== */
+
+[data-theme="dark"] .danmaku-filter-dialog .el-dialog__header {
+
+    background: var(--bg-tertiary);
+
+    border-bottom-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .filter-section {
+
+    background: var(--bg-tertiary);
+
+    border-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .filter-section-title {
+
+    background: var(--bg-tertiary);
+
+    border-bottom-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .filter-item,
+
+[data-theme="dark"] .level-filter {
+
+    background: var(--glass-bg);
+
+}
+
+[data-theme="dark"] .medal-option {
+
+    background: var(--glass-border);
+
+    border-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .medal-option:hover {
+
+    border-color: var(--primary-light);
+
+    background: var(--brand-soft-bg);
+
+}
+
+[data-theme="dark"] .medal-option.is-active {
+
+    border-color: var(--primary-color);
+
+    background: var(--brand-soft-bg-strong);
+
+    box-shadow: var(--brand-ring);
+
+}
+
+[data-theme="dark"] .medal-option.is-active i {
+
+    color: var(--primary-light);
+
+}
+
+/* ========== 移动端响应式 - 弹幕过滤对话框========== */
+
+@media (max-width: 768px) {
+
+    .danmaku-filter-dialog .el-dialog__body {
+
+        max-height: 70vh;
+
+    }
+
+    .danmaku-settings {
+
+        padding: 12px;
+
+    }
+
+    .filter-section-title {
+
+        padding: 12px 14px;
+
+        flex-wrap: wrap;
+
+    }
+
+    .filter-section-tip {
+
+        margin-left: 0;
+
+        margin-top: 8px;
+
+        flex-basis: 100%;
+
+    }
+
+    .filter-section-body {
+
+        padding: 12px;
+
+    }
+
+    .filter-item,
+
+    .level-filter {
+
+        flex-direction: column;
+
+        align-items: flex-start;
+
+        gap: 12px;
+
+    }
+
+    .filter-item .el-switch,
+
+    .level-input-wrapper {
+
+        align-self: flex-end;
+
+    }
+
+    .medal-filter-options {
+
+        grid-template-columns: 1fr;
+
+    }
+
+    .medal-option {
+
+        flex-direction: row;
+
+        justify-content: flex-start;
+
+        text-align: left;
+
+        padding: 14px 16px;
+
+    }
+
+    .medal-option i {
+
+        font-size: 24px;
+
+        flex-shrink: 0;
+
+    }
+
+    .medal-option span,
+
+    .medal-option small {
+
+        text-align: left;
+
+    }}
+
+body.page-active-room .el-dialog__wrapper:has(.room-page-dialog) {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+}

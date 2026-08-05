@@ -1,0 +1,545 @@
+/* ========== 编辑对话框样式 ========== */
+
+.room-edit-dialog {
+
+    border-radius: var(--radius-lg) !important;
+
+    overflow: hidden;
+
+}
+
+.room-edit-dialog .el-dialog__headerbtn {
+
+    top: 16px;
+
+    right: 16px;
+
+}
+
+.dialog-header-actions {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+}
+
+.expand-toggle-btn {
+
+    width: 32px;
+
+    height: 32px;
+
+    padding: 0 !important;
+
+    font-size: 16px;
+
+    border-radius: 50%;
+
+    background: var(--bg-tertiary);
+
+    border: 1px solid var(--border-light);
+
+    transition: color var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple), border-color var(--duration-base) var(--ease-apple);
+
+}
+
+.expand-toggle-btn:hover {
+
+    background: var(--primary-color);
+
+    color: white !important;
+
+    border-color: var(--primary-color);
+
+}
+
+.room-edit-form .section-group {
+
+    margin-bottom: 12px;
+
+    border: 1px solid var(--border-light);
+
+    border-radius: var(--radius-lg);
+
+    background: var(--bg-primary);
+
+    overflow: hidden;
+
+    transition: border-color var(--duration-base) var(--ease-apple), box-shadow var(--duration-base) var(--ease-apple);
+
+}
+
+.room-edit-form .section-group.is-expanded {
+
+    border-color: var(--brand-accent-border);
+
+    box-shadow: 0 2px 12px var(--brand-soft-bg-hover);
+
+}
+
+.room-edit-form .section-header {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 14px 16px;
+
+    cursor: pointer;
+
+    background: var(--bg-tertiary);
+
+    transition: background var(--duration-base) var(--ease-apple);
+
+    user-select: none;
+
+}
+
+.room-edit-form .section-header:hover {
+
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--brand-soft-bg-hover) 100%);
+
+}
+
+.room-edit-form .section-header-left {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    font-weight: 600;
+
+    color: var(--text-primary);
+
+}
+
+.room-edit-form .section-icon {
+
+    font-size: 18px;
+
+    color: var(--primary-color);
+
+}
+
+.room-edit-form .section-arrow {
+
+    color: var(--text-secondary);
+
+    transition: transform var(--duration-base) var(--ease-apple);
+
+}
+
+.room-edit-form .section-group.is-expanded .section-arrow {
+
+    color: var(--primary-color);
+
+}
+
+.room-edit-form .section-body {
+
+    padding: 16px;
+
+    border-top: 1px solid var(--border-light);
+
+}
+
+.partition-id-input {
+
+    width: 100px;
+
+    flex-shrink: 0;
+
+}
+
+.partition-trigger {
+
+    flex: 1;
+
+    cursor: pointer;
+
+}
+
+/* 表单容器*/
+
+.form-row {
+
+    margin-bottom: 16px;
+
+}
+
+.form-row.two-col {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+}
+
+.form-grid {
+
+    display: grid;
+
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+    gap: 12px;
+
+    margin-bottom: 16px;
+
+}
+
+/* 开关组 */
+
+.switch-group {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 16px;
+
+    padding: 12px 0;
+
+}
+
+.switch-item {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    padding: 10px 16px;
+
+    background: var(--bg-tertiary);
+
+    border-radius: var(--radius-md);
+
+    transition: background var(--duration-base) var(--ease-apple);
+
+}
+
+.switch-item:hover {
+
+    background: var(--brand-soft-bg-hover);
+
+}
+
+.switch-item.full-width {
+
+    flex: 1 1 100%;
+
+}
+
+.divider {
+
+    height: 1px;
+
+    background: var(--border-light);
+
+    margin: 8px 0;
+
+}
+
+/* 封面上传 */
+
+.cover-uploader {
+
+    width: 100%;
+
+}
+
+.cover-upload-area {
+
+    width: 100%;
+
+    max-width: 320px;
+
+    aspect-ratio: 16/9;
+
+    border: 2px dashed var(--border-color);
+
+    border-radius: var(--radius-md);
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    overflow: hidden;
+
+    cursor: pointer;
+
+    transition: border-color var(--duration-base) var(--ease-apple), background var(--duration-base) var(--ease-apple);
+
+}
+
+.cover-upload-area:hover {
+
+    border-color: var(--primary-color);
+
+    background: var(--brand-soft-bg-faint);
+
+}
+
+.cover-preview {
+
+    width: 100%;
+
+    height: 100%;
+
+    object-fit: cover;
+
+}
+
+.cover-upload-placeholder {
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    gap: 8px;
+
+    color: var(--text-disabled);
+
+}
+
+.cover-upload-placeholder i {
+
+    font-size: 36px;
+
+    color: var(--text-disabled);
+
+}
+
+.cover-upload-placeholder span {
+
+    font-size: 14px;
+
+}
+
+.cover-upload-placeholder small {
+
+    font-size: 12px;
+
+    color: var(--text-disabled);
+
+}
+
+/* 封面类型选择 */
+
+.cover-type-group {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+}
+
+/* 测速链接*/
+
+.speed-test-link {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    font-size: 13px;
+
+    flex-shrink: 0;
+
+}
+
+/* 全宽选择器*/
+
+.full-width-select {
+
+    width: 100%;
+
+}
+
+/* 输入后缀文字 */
+
+.input-suffix-text {
+
+    margin-left: 8px;
+
+    font-size: 13px;
+
+    color: var(--text-secondary);
+
+}
+
+/* 微信输入框*/
+
+.wx-input-group {
+
+    display: flex;
+
+    gap: 8px;
+
+}
+
+.footer-left,
+
+.footer-right {
+
+    display: flex;
+
+    gap: 8px;
+
+}
+
+[data-theme="dark"] .expand-toggle-btn {
+
+    background: var(--glass-border);
+
+    border-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .room-edit-form .section-group {
+
+    background: var(--bg-tertiary);
+
+    border-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .room-edit-form .section-group.is-expanded {
+
+    border-color: var(--brand-accent-border-strong);
+
+    box-shadow: 0 0 20px var(--brand-soft-bg-faint);
+
+}
+
+[data-theme="dark"] .room-edit-form .section-header {
+
+    background: var(--bg-tertiary);
+
+}
+
+[data-theme="dark"] .room-edit-form .section-header:hover {
+
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-tertiary) 90%, transparent) 0%, var(--brand-soft-bg-subtle) 100%);
+
+}
+
+[data-theme="dark"] .room-edit-form .section-body {
+
+    border-top-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .switch-item {
+
+    background: var(--glass-bg);
+
+}
+
+[data-theme="dark"] .switch-item:hover {
+
+    background: var(--brand-soft-bg-subtle);
+
+}
+
+[data-theme="dark"] .cover-upload-area {
+
+    border-color: var(--border-color);
+
+}
+
+[data-theme="dark"] .cover-upload-area:hover {
+
+    border-color: var(--primary-color);
+
+    background: var(--brand-soft-bg-hover);
+
+}
+
+/* ========== 移动端响应式 - 编辑对话框========== */
+
+@media (max-width: 768px) {
+
+    .room-edit-form .section-header {
+
+        padding: 12px 14px;
+
+    }
+
+    .room-edit-form .section-body {
+
+        padding: 12px;
+
+    }
+
+    .partition-id-input {
+
+        width: 100%;
+
+    }
+
+    .form-row.two-col {
+
+        flex-direction: column;
+
+        align-items: stretch;
+
+    }
+
+    .form-grid {
+
+        grid-template-columns: 1fr;
+
+    }
+
+    .switch-group {
+
+        flex-direction: column;
+
+        gap: 8px;
+
+    }
+
+    .switch-item {
+
+        justify-content: space-between;
+
+    }
+
+    .cover-upload-area {
+
+        max-width: 100%;
+
+    }
+
+    .wx-input-group {
+
+        flex-direction: column;
+
+    }
+
+    .footer-left,
+
+    .footer-right {
+
+        width: 100%;
+
+        justify-content: center;
+
+    }}

@@ -402,18 +402,6 @@
         }, 260);
     }
 
-    function postInputFocusState(active) {
-        try {
-            if (window.parent && window.parent !== window) {
-                window.parent.postMessage({
-                    type: 'mobileInputFocusState',
-                    active: !!active
-                }, window.location.origin);
-            }
-        } catch (e) {
-        }
-    }
-
     function setInputFocused(active) {
         var next = !!active;
         if (inputFocused === next) {
@@ -423,7 +411,13 @@
         if (document.body && document.body.classList) {
             document.body.classList.toggle('mobile-input-focused', next);
         }
-        postInputFocusState(next);
+        if (window.BiliupPageStateCoordinator && typeof window.BiliupPageStateCoordinator.setInputFocused === 'function') {
+            window.BiliupPageStateCoordinator.setInputFocused(next);
+        }
+        try {
+            window.dispatchEvent(new CustomEvent('mobile-input-focus-state', { detail: { active: next } }));
+        } catch (e) {
+        }
     }
 
     function onFocusIn(event) {

@@ -1,0 +1,519 @@
+<div class="mobile-stats-container page-surface-stats" data-page-scroll-root v-loading="loading">
+    <section class="mobile-stats-page" aria-label="移动端统计中心">
+        <header class="mobile-stats-hero">
+            <div class="mobile-stats-hero-copy">
+                <span>INSIGHTS</span>
+                <h1 data-page-focus-target tabindex="-1">{{ selectedRoomId ? currentRoomTitle : '统计中心' }}</h1>
+                <p>{{ selectedRoomId ? currentRoomMeta : ('历史 ' + number(coverage.totalHistoryCount) + ' 场 · 已统计 ' + number(coverage.statsSessionCount) + ' 场') }}</p>
+            </div>
+            <div class="mobile-stats-hero-actions">
+                <button type="button" class="mobile-stats-icon-btn" :class="{ 'is-active': loading }" :disabled="loading" @click="reload" aria-label="刷新统计">
+                    <i class="el-icon-refresh"></i>
+                </button>
+            </div>
+        </header>
+
+        <section class="mobile-stats-scope-card">
+            <div class="mobile-stats-field">
+                <span>统计范围</span>
+                <el-select v-model="selectedRoomId" size="small" clearable filterable placeholder="全部房间" @change="loadRoomDetail" popper-class="mobile-stats-popper">
+                    <el-option v-for="room in rooms" :key="room.roomId" :label="roomLabel(room)" :value="room.roomId"></el-option>
+                </el-select>
+            </div>
+            <div class="mobile-stats-date-grid">
+                <label class="mobile-stats-field">
+                    <span>开始日期</span>
+                    <el-date-picker
+                            v-model="dateRangeStart"
+                            type="date"
+                            size="small"
+                            value-format="yyyy-MM-dd"
+                            placeholder="不限"
+                            :clearable="true"
+                            popper-class="mobile-stats-popper"
+                            @change="handleDateRangeChange">
+                    </el-date-picker>
+                </label>
+                <label class="mobile-stats-field">
+                    <span>结束日期</span>
+                    <el-date-picker
+                            v-model="dateRangeEnd"
+                            type="date"
+                            size="small"
+                            value-format="yyyy-MM-dd"
+                            placeholder="不限"
+                            :clearable="true"
+                            popper-class="mobile-stats-popper"
+                            @change="handleDateRangeChange">
+                    </el-date-picker>
+                </label>
+            </div>
+            <button type="button" class="mobile-stats-wide-command" :class="{ 'is-active': moreActionsVisible }" @click="toggleMoreActions">
+                <i class="el-icon-more"></i>
+                <span>统计维护</span>
+            </button>
+        </section>
+
+        <transition name="mobile-stats-fade">
+            <div v-if="moreActionsVisible" class="mobile-stats-actions-backdrop" @click="moreActionsVisible = false"></div>
+        </transition>
+        <transition name="mobile-stats-sheet">
+            <aside v-if="moreActionsVisible" class="mobile-stats-actions-sheet" role="dialog" aria-modal="true" aria-label="统计维护操作" @click.stop>
+                <div class="mobile-stats-sheet-grabber"></div>
+                <header class="mobile-stats-sheet-head">
+                    <div>
+                        <span>MAINTENANCE</span>
+                        <h2>统计维护</h2>
+                    </div>
+                    <button type="button" @click="moreActionsVisible = false" aria-label="关闭统计维护">
+                        <i class="el-icon-close"></i>
+                    </button>
+                </header>
+                <p class="mobile-stats-sheet-note">优先使用补全未统计；重建会清空并重新生成统计缓存，缺少 XML 源文件时数据可能不完整。</p>
+                <div class="mobile-stats-action-list">
+                    <button type="button" class="is-primary" :disabled="backfilling" @click="moreActionsVisible = false; backfillStats()">
+                        <i class="el-icon-finished"></i>
+                        <span>补全未统计</span>
+                    </button>
+                    <button type="button" :disabled="cleaning" @click="moreActionsVisible = false; cleanupStats()">
+                        <i class="el-icon-delete"></i>
+                        <span>清理缓存</span>
+                    </button>
+                    <button type="button" :disabled="cleaningStaleStates" @click="moreActionsVisible = false; cleanupStaleRecordingStates()">
+                        <i class="el-icon-brush"></i>
+                        <span>清理旧录制状态</span>
+                    </button>
+                    <button type="button" :disabled="compacting" @click="moreActionsVisible = false; compactDatabase()">
+                        <i class="el-icon-box"></i>
+                        <span>压缩数据库</span>
+                    </button>
+                    <button type="button" class="mobile-stats-xml-issue-command" @click="openXmlIssueManager()">
+                        <i class="el-icon-warning-outline"></i>
+                        <span>XML 问题管理</span>
+                        <em v-if="showXmlIssueBanner">{{ number(xmlIssueSummary.attentionCount || 0) }}</em>
+                    </button>
+                    <button type="button" :disabled="xmlRepairing" @click="chooseXmlRepairFile">
+                        <i class="el-icon-document-checked"></i>
+                        <span>XML 简单修复</span>
+                    </button>
+                    <button type="button" class="is-danger" :disabled="rebuilding" @click="moreActionsVisible = false; rebuildStats()">
+                        <i class="el-icon-magic-stick"></i>
+                        <span>重建统计</span>
+                    </button>
+                </div>
+            </aside>
+        </transition>
+        <input ref="xmlRepairInput" class="mobile-stats-hidden-file" type="file" accept=".xml,text/xml,application/xml" @change="handleXmlRepairSelected">
+
+        <transition name="mobile-stats-rise">
+            <section v-if="operationProgress.visible" class="mobile-stats-progress" :class="'is-' + operationProgress.status">
+                <div class="mobile-stats-progress-head">
+                    <div>
+                        <span>{{ operationProgress.title }}</span>
+                        <strong>{{ operationProgress.message }}</strong>
+                    </div>
+                    <em>{{ operationProgress.percent }}%</em>
+                </div>
+                <div class="mobile-stats-progress-track">
+                    <div :style="{ width: operationProgress.percent + '%' }"></div>
+                </div>
+                <p v-if="operationProgress.detail">{{ operationProgress.detail }}</p>
+            </section>
+        </transition>
+
+        <section v-if="!selectedRoomId" class="mobile-stats-coverage" :class="{ 'is-complete': coverage.complete }">
+            <div class="mobile-stats-coverage-meter" :style="{ '--coverage': mobileCoveragePercent + '%' }">
+                <strong>{{ mobileCoveragePercent }}%</strong>
+                <span>覆盖率</span>
+            </div>
+            <div class="mobile-stats-coverage-copy">
+                <span>{{ coverage.complete ? '统计已覆盖全部历史' : '统计仍有缺口' }}</span>
+                <h2>{{ coverage.complete ? '数据已同步' : '等待补算 ' + number(coverage.pendingSessionCount) + ' 场' }}</h2>
+                <p>历史 {{ number(coverage.totalHistoryCount) }} 场，已统计 {{ number(coverage.statsSessionCount) }} 场，最后更新 {{ dateTime(coverage.updatedAt) }}</p>
+            </div>
+        </section>
+
+        <button v-if="showXmlIssueBanner" type="button" class="mobile-stats-xml-issue-banner" @click="openXmlIssueManager()">
+            <i class="el-icon-warning-outline"></i>
+            <span>
+                <strong>XML 源文件待处理</strong>
+                <em>缺失 {{ number(xmlIssueSummary.missingCount || 0) }}，解析失败 {{ number(xmlIssueSummary.parseFailedCount || 0) }}，存储离线 {{ number(xmlIssueSummary.storageOfflineCount || 0) }}</em>
+            </span>
+            <b>查看并处理</b>
+        </button>
+
+        <transition name="mobile-stats-rise">
+            <section v-if="!selectedRoomId && pendingCoverageItems.length" class="mobile-stats-pending">
+                <button type="button" class="mobile-stats-pending-head" @click="pendingCoverageExpanded = !pendingCoverageExpanded">
+                    <div>
+                        <span>PENDING</span>
+                        <strong>待统计稿件</strong>
+                    </div>
+                    <em>{{ number(coverage.pendingSessionCount) }}</em>
+                    <i :class="pendingCoverageExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                </button>
+                <transition name="mobile-stats-rise">
+                    <div v-if="pendingCoverageExpanded" class="mobile-stats-pending-list">
+                        <article v-for="item in pendingCoverageItems" :key="item.historyId" class="mobile-stats-pending-item">
+                            <div>
+                                <strong>{{ item.title || item.bvId ? maskedOr(item.title || item.bvId, '未命名稿件') : ('稿件 ' + maskedOr(item.historyId, '--')) }}</strong>
+                                <span>{{ maskedOr(item.roomId, '--') }} · {{ dateTime(item.startTime) }}</span>
+                            </div>
+                            <em>{{ item.status === 'stale' ? '版本旧' : '未生成' }}</em>
+                        </article>
+                    </div>
+                </transition>
+            </section>
+        </transition>
+
+        <section v-if="!selectedRoomId || detail.summary" class="mobile-stats-kpi-grid">
+            <article class="mobile-stats-kpi is-primary">
+                <span>{{ selectedRoomId ? '房间场次' : (coverage.complete ? '总场次' : '已统计场次') }}</span>
+                <strong>{{ compactNumber(metricSource.totalSessions || metricSource.liveCount, '场') }}</strong>
+            </article>
+            <article class="mobile-stats-kpi">
+                <span>总时长</span>
+                <strong>{{ compactDuration(metricSource.totalDurationSeconds) }}</strong>
+            </article>
+            <article class="mobile-stats-kpi">
+                <span>总弹幕</span>
+                <strong>{{ compactNumber(metricSource.totalMsgCount, '条') }}</strong>
+            </article>
+            <article class="mobile-stats-kpi">
+                <span>弹幕密度</span>
+                <strong>{{ compactDensity(metricSource.msgDensityPerMinute) }}</strong>
+            </article>
+            <article class="mobile-stats-kpi">
+                <span>平均时长</span>
+                <strong>{{ compactDuration(metricSource.avgDurationSeconds) }}</strong>
+            </article>
+            <article class="mobile-stats-kpi">
+                <span>投稿成功率</span>
+                <strong>{{ percent(metricSource.publishSuccessRate) }}</strong>
+            </article>
+        </section>
+
+        <template v-if="!selectedRoomId">
+            <section class="mobile-stats-panel mobile-stats-chart-panel">
+                <header class="mobile-stats-section-head">
+                    <div>
+                        <span>FLOW</span>
+                        <h2>{{ mainChartMode === 'hour' ? '整体开播时段' : '整体开播趋势' }}</h2>
+                    </div>
+                    <div class="mobile-stats-segment">
+                        <button type="button" :class="{ 'is-active': mainChartMode === 'hour' }" @click="mainChartMode = 'hour'; renderCharts()">时段</button>
+                        <button type="button" :class="{ 'is-active': mainChartMode === 'trend' }" @click="mainChartMode = 'trend'; renderCharts()">趋势</button>
+                    </div>
+                </header>
+                <div ref="mainChart" class="mobile-stats-chart is-main"></div>
+            </section>
+
+            <section class="mobile-stats-split-grid">
+                <article class="mobile-stats-panel">
+                    <header class="mobile-stats-section-head">
+                        <div>
+                            <span>PUBLISH</span>
+                            <h2>投稿结果</h2>
+                        </div>
+                    </header>
+                    <div class="mobile-stats-status-list">
+                        <div v-for="item in overview.publishStatusDistribution || []" :key="item.name">
+                            <span>{{ item.name }}</span>
+                            <strong>{{ number(item.value) }}</strong>
+                        </div>
+                    </div>
+                </article>
+                <article class="mobile-stats-panel">
+                    <header class="mobile-stats-section-head">
+                        <div>
+                            <span>DURATION</span>
+                            <h2>时长结构</h2>
+                        </div>
+                    </header>
+                    <div ref="durationChart" class="mobile-stats-chart is-compact"></div>
+                </article>
+            </section>
+
+            <section class="mobile-stats-panel mobile-stats-chart-panel">
+                <header class="mobile-stats-section-head">
+                    <div>
+                        <span>ROOMS</span>
+                        <h2>房间对比</h2>
+                    </div>
+                    <el-select v-model="comparisonMetric" size="mini" @change="renderCharts" popper-class="mobile-stats-popper">
+                        <el-option label="场次" value="liveCount"></el-option>
+                        <el-option label="总时长" value="totalDurationSeconds"></el-option>
+                        <el-option label="总弹幕" value="totalMsgCount"></el-option>
+                        <el-option label="弹幕密度" value="msgDensityPerMinute"></el-option>
+                    </el-select>
+                </header>
+                <div ref="roomCompareChart" class="mobile-stats-chart is-compare"></div>
+            </section>
+
+            <section class="mobile-stats-panel">
+                <header class="mobile-stats-section-head">
+                    <div>
+                        <span>RANKING</span>
+                        <h2>房间排行</h2>
+                    </div>
+                    <em>{{ rooms.length }} 个房间</em>
+                </header>
+                <div class="mobile-stats-room-list">
+                    <button v-for="(room, index) in mobileTopRooms" :key="room.roomId" type="button" class="mobile-stats-room-card" @click="selectRoom(room)">
+                        <em>{{ index + 1 }}</em>
+                        <div>
+                            <strong>{{ maskedOr(room.uname || room.roomId, '未知房间') }}</strong>
+                            <span>{{ maskedOr(room.roomId, '--') }} · {{ compactDuration(room.totalDurationSeconds) }}</span>
+                        </div>
+                        <aside>
+                            <strong>{{ compactNumber(room.liveCount, '场') }}</strong>
+                            <span>{{ compactNumber(room.totalMsgCount, '条') }}</span>
+                        </aside>
+                    </button>
+                </div>
+            </section>
+        </template>
+
+        <template v-if="selectedRoomId">
+            <section class="mobile-stats-panel mobile-stats-room-overview" v-if="detail.summary">
+                <header class="mobile-stats-section-head">
+                    <div>
+                        <span>ROOM</span>
+                        <h2>{{ currentRoomTitle }}</h2>
+                    </div>
+                    <button type="button" class="mobile-stats-text-btn" @click="selectedRoomId = ''; loadRoomDetail('')">
+                        <i class="el-icon-arrow-left"></i>
+                        <span>全部房间</span>
+                    </button>
+                </header>
+                <div class="mobile-stats-room-metrics">
+                    <div>
+                        <span>常开播</span>
+                        <strong>{{ hourText(detail.summary.favoriteHour) }}</strong>
+                    </div>
+                    <div>
+                        <span>礼物流水</span>
+                        <strong>{{ compactMoney(detail.summary.totalGiftAmountCny) }}</strong>
+                    </div>
+                    <div>
+                        <span>活跃用户</span>
+                        <strong>{{ compactNumber(detail.summary.totalActiveUserCount, '人') }}</strong>
+                    </div>
+                </div>
+                <div ref="roomTrendChart" class="mobile-stats-chart is-trend"></div>
+            </section>
+
+            <section class="mobile-stats-panel">
+                <header class="mobile-stats-section-head">
+                    <div>
+                        <span>SESSIONS</span>
+                        <h2>最近场次</h2>
+                    </div>
+                </header>
+                <div class="mobile-stats-session-list">
+                    <button v-for="session in mobileRecentSessions" :key="session.historyId" type="button" class="mobile-stats-session-card" :class="{ 'is-active': String(selectedSessionId) === String(session.historyId) }" @click="selectSessionRow(session)">
+                        <div>
+                            <strong>{{ dateTime(session.startTime) }}</strong>
+                            <span>{{ duration(session.durationSeconds) }} · {{ compactNumber(session.msgCount, '条') }}</span>
+                        </div>
+                        <i class="el-icon-arrow-right"></i>
+                    </button>
+                </div>
+            </section>
+
+            <section class="mobile-stats-panel mobile-stats-session-detail">
+                <header class="mobile-stats-section-head">
+                    <div>
+                        <span>SESSION</span>
+                        <h2>单场明细</h2>
+                        <p>{{ selectedSessionTitle || '选择一场直播后查看本场流水、弹幕趋势与用户分布' }}</p>
+                    </div>
+                </header>
+
+                <div v-if="selectedSessionSummary.historyId" class="mobile-stats-session-kpis">
+                    <div>
+                        <span>本场流水</span>
+                        <strong>{{ compactMoney(selectedSessionSummary.giftAmountCny) }}</strong>
+                    </div>
+                    <div>
+                        <span>本场弹幕</span>
+                        <strong>{{ compactNumber(selectedSessionSummary.msgCount, '条') }}</strong>
+                    </div>
+                    <div>
+                        <span>SC 金额</span>
+                        <strong>{{ compactMoney(selectedSessionSummary.scAmount) }}</strong>
+                    </div>
+                    <div>
+                        <span>礼物 / 舰长</span>
+                        <strong>{{ compactNumber(selectedSessionSummary.giftTotalCount, '个') }} / {{ compactNumber(selectedSessionSummary.guardCount, '个') }}</strong>
+                    </div>
+                </div>
+
+                <div v-if="showDanmuDiagnostic" class="mobile-stats-diagnostic" :class="'is-' + danmuDiagnostic.status">
+                    <i :class="danmuDiagnostic.rebuildMayHelp ? 'el-icon-refresh' : 'el-icon-warning-outline'"></i>
+                    <div>
+                        <strong>{{ danmuDiagnosticTitle }}</strong>
+                        <span>{{ danmuDiagnostic.message }}</span>
+                    </div>
+                    <button v-if="selectedSessionSummary.historyId" type="button" class="mobile-stats-diagnostic-action" @click="openXmlIssueManager(selectedSessionSummary.historyId)">
+                        处理这场 XML
+                    </button>
+                </div>
+                <div v-if="showGiftPriceDiagnostic" class="mobile-stats-diagnostic" :class="'is-' + giftPriceDiagnostic.status">
+                    <i :class="giftPriceDiagnostic.rebuildMayHelp ? 'el-icon-refresh' : 'el-icon-warning-outline'"></i>
+                    <div>
+                        <strong>{{ giftPriceDiagnosticTitle }}</strong>
+                        <span>{{ giftPriceDiagnostic.message }}</span>
+                    </div>
+                </div>
+
+                <template v-if="selectedSessionSummary.historyId">
+                    <div ref="bucketChart" class="mobile-stats-chart is-bucket"></div>
+                    <section class="mobile-stats-split-grid">
+                        <article class="mobile-stats-mini-chart">
+                            <h3>礼物分布</h3>
+                            <div ref="giftChart" class="mobile-stats-chart is-pie"></div>
+                        </article>
+                        <article class="mobile-stats-mini-chart">
+                            <h3>弹幕用户</h3>
+                            <div ref="danmuUserChart" class="mobile-stats-chart is-pie"></div>
+                        </article>
+                    </section>
+
+                    <section class="mobile-stats-top-list">
+                        <header>
+                            <h3>弹幕用户 Top 10</h3>
+                        </header>
+                        <div v-for="user in mobileTopDanmuUsers" :key="user.uid || user.uname" class="mobile-stats-user-row">
+                            <span>{{ maskedOr(user.uname || user.uid, '未知用户') }}</span>
+                            <strong>{{ compactNumber(user.value, '条') }}</strong>
+                        </div>
+                    </section>
+                    <section class="mobile-stats-top-list">
+                        <header>
+                            <h3>送礼用户 Top 10</h3>
+                            <div class="mobile-stats-segment is-small">
+                                <button type="button" :class="{ 'is-active': giftTopMode === 'amount' }" @click="giftTopMode = 'amount'">金额</button>
+                                <button type="button" :class="{ 'is-active': giftTopMode === 'count' }" @click="giftTopMode = 'count'">数量</button>
+                            </div>
+                        </header>
+                        <div v-for="user in mobileTopGiftUsers" :key="user.uid || user.uname" class="mobile-stats-user-row">
+                            <span>{{ maskedOr(user.uname || user.uid, '未知用户') }}</span>
+                            <strong>{{ giftTopMode === 'count' ? compactNumber(user.giftCount || user.value, '个') : compactMoney(user.amountCny) }}</strong>
+                        </div>
+                    </section>
+                </template>
+                <div v-if="!selectedSessionSummary.historyId" class="mobile-stats-empty">选择一场直播后查看本场明细</div>
+            </section>
+        </template>
+    </section>
+
+    <el-dialog
+            title="XML 问题管理"
+            :visible.sync="xmlIssueDialogVisible"
+            top="3vh"
+            append-to-body
+            custom-class="mobile-stats-xml-issue-dialog">
+        <section class="mobile-stats-xml-issue-toolbar">
+            <div class="mobile-stats-xml-issue-tabs" role="tablist" aria-label="XML 问题筛选">
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'PENDING' }" @click="changeXmlIssueStatus('PENDING')">待处理 {{ number(xmlIssueSummary.attentionCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'MISSING_UNEXPECTED' }" @click="changeXmlIssueStatus('MISSING_UNEXPECTED')">文件缺失 {{ number(xmlIssueSummary.missingCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'PARSE_FAILED' }" @click="changeXmlIssueStatus('PARSE_FAILED')">解析失败 {{ number(xmlIssueSummary.parseFailedCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'ROOT_OFFLINE' }" @click="changeXmlIssueStatus('ROOT_OFFLINE')">存储离线 {{ number(xmlIssueSummary.storageOfflineCount || 0) }}</button>
+                <button type="button" :class="{ 'is-active': xmlIssueStatus === 'IGNORED' }" @click="changeXmlIssueStatus('IGNORED')">已停止 {{ number(xmlIssueSummary.ignoredCount || 0) }}</button>
+            </div>
+            <div class="mobile-stats-xml-issue-search">
+                <el-input v-model="xmlIssueKeyword" clearable placeholder="稿件、分P、路径或错误" @keyup.enter.native="loadXmlIssues(1)">
+                    <i slot="prefix" class="el-input__icon el-icon-search"></i>
+                </el-input>
+                <button type="button" @click="loadXmlIssues(1)">筛选</button>
+                <button v-if="xmlIssueHistoryId" type="button" @click="xmlIssueHistoryId = null; loadXmlIssues(1)">清除场次</button>
+            </div>
+        </section>
+
+        <section class="mobile-stats-xml-issue-actions">
+            <span>已选 {{ selectedXmlIssueIds.length }} 条</span>
+            <div>
+                <button type="button" :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="recheckXmlIssues()">重新检查</button>
+                <button v-if="xmlIssueStatus !== 'IGNORED'" type="button" :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="ignoreXmlIssues(false)">停止检查</button>
+                <button v-else type="button" :disabled="!selectedXmlIssueIds.length || xmlIssueActionLoading" @click="resumeXmlIssues(false)">恢复检查</button>
+                <button v-if="xmlIssueStatus !== 'IGNORED'" type="button" class="is-quiet" :disabled="xmlIssueActionLoading" @click="ignoreXmlIssues(true)">停止当前筛选</button>
+                <button v-else type="button" class="is-quiet" :disabled="xmlIssueActionLoading" @click="resumeXmlIssues(true)">恢复当前筛选</button>
+            </div>
+        </section>
+
+        <section v-loading="xmlIssuesLoading" class="mobile-stats-xml-issue-list">
+            <article v-for="item in xmlIssueItems" :key="item.partId" class="mobile-stats-xml-issue-card">
+                <label class="mobile-stats-xml-issue-check" :aria-label="'选择 XML 问题分P ' + maskedOr(item.partId, '')">
+                    <input v-model="xmlIssueSelection" type="checkbox" :value="item">
+                    <span></span>
+                </label>
+                <div class="mobile-stats-xml-issue-card-main">
+                    <header>
+                        <span class="mobile-stats-xml-issue-tag" :class="'is-' + (item.ignoredAt ? 'ignored' : xmlIssueTagType(item.issueType))">{{ item.ignoredAt ? '已停止' : xmlIssueLabel(item.issueType) }}</span>
+                        <span v-if="item.cachedStatsAvailable" class="mobile-stats-xml-issue-cache">已有统计缓存</span>
+                    </header>
+                    <strong>{{ maskedOr(item.historyTitle || item.roomId, '未命名稿件') }}</strong>
+                    <p>稿件 {{ maskedOr(item.historyId, '--') }} · 分P {{ item.partOrder || item.page || maskedOr(item.partId, '--') }}{{ item.partTitle ? ' · ' + maskedOr(item.partTitle, '') : '' }}</p>
+                    <p class="mobile-stats-xml-issue-file">{{ maskedOr(item.xmlFileName, '--') }}</p>
+                    <p>最后检查 {{ dateTime(item.lastCheckedAt) }}{{ item.rootStatus ? ' · 存储根 ' + item.rootStatus : '' }}</p>
+                    <div class="mobile-stats-xml-issue-card-actions">
+                        <button type="button" :disabled="xmlIssueActionLoading" @click="recheckXmlIssues([item.partId])">重新检查</button>
+                        <button v-if="xmlIssueCanRepair(item)" type="button" :disabled="xmlIssueActionLoading" @click="chooseXmlRepairFile">修复 XML</button>
+                        <button v-if="item.ignoredAt" type="button" :disabled="xmlIssueActionLoading" @click="resumeOneXmlIssue(item)">恢复检查</button>
+                        <button v-else-if="item.issueType !== 'ROOT_OFFLINE'" type="button" :disabled="xmlIssueActionLoading" @click="ignoreOneXmlIssue(item)">停止检查</button>
+                    </div>
+                    <details class="mobile-stats-xml-issue-detail">
+                        <summary>查看路径、错误和建议</summary>
+                        <div><span>完整路径</span><code>{{ maskedOr(item.xmlPath, '--') }}</code></div>
+                        <div><span>原始错误</span><strong>{{ maskLogLine(item.errorMessage || '--') }}</strong></div>
+                        <div><span>处理建议</span><strong>{{ maskLogLine(item.suggestion || '--') }}</strong></div>
+                    </details>
+                </div>
+            </article>
+            <div v-if="!xmlIssuesLoading && !xmlIssueItems.length" class="mobile-stats-xml-issue-empty">当前筛选没有 XML 问题</div>
+        </section>
+
+        <footer class="mobile-stats-xml-issue-pagination">
+            <button type="button" :disabled="Number(xmlIssuePageData.page || 0) <= 0 || xmlIssuesLoading" @click="loadXmlIssues(Number(xmlIssuePageData.page || 0))">上一页</button>
+            <span>第 {{ Number(xmlIssuePageData.page || 0) + 1 }} / {{ xmlIssuePageCount }} 页 · 共 {{ number(xmlIssueTotal) }} 条</span>
+            <button type="button" :disabled="Number(xmlIssuePageData.page || 0) + 1 >= xmlIssuePageCount || xmlIssuesLoading" @click="loadXmlIssues(Number(xmlIssuePageData.page || 0) + 2)">下一页</button>
+        </footer>
+    </el-dialog>
+
+    <el-dialog
+            title="XML 文件简单修复工具"
+            :visible.sync="xmlRepairDialogVisible"
+            width="520px"
+            append-to-body
+            custom-class="mobile-stats-xml-dialog">
+        <div v-if="xmlRepairResult" class="mobile-stats-xml-result" :class="{ 'is-error': !xmlRepairResult.success }">
+            <div class="mobile-stats-xml-title">
+                <i :class="xmlRepairResult.success ? 'el-icon-success' : 'el-icon-warning-outline'"></i>
+                <strong>{{ maskLogLine(xmlRepairResult.message) }}</strong>
+            </div>
+            <p v-if="xmlRepairResult.fileName">文件：{{ maskedOr(xmlRepairResult.fileName, '') }}</p>
+            <div class="mobile-stats-xml-grid">
+                <span :class="xmlRepairResult.beforeValid ? 'is-success' : 'is-danger'">修复前：{{ xmlRepairResult.beforeValid ? '可解析' : '不可解析' }}</span>
+                <span :class="xmlRepairResult.afterValid ? 'is-success' : 'is-danger'">修复后：{{ xmlRepairResult.afterValid ? '可解析' : '不可解析' }}</span>
+                <span :class="xmlRepairResult.changed ? 'is-success' : 'is-muted'">改动：{{ xmlRepairResult.changed ? '已修复' : '未改动' }}</span>
+            </div>
+            <div class="mobile-stats-xml-counts">
+                <span>弹幕 {{ number(xmlRepairResult.danmu) }}</span>
+                <span>礼物 {{ number(xmlRepairResult.gift) }}</span>
+                <span>SC {{ number(xmlRepairResult.sc) }}</span>
+                <span>舰长 {{ number(xmlRepairResult.guard) }}</span>
+            </div>
+            <p v-if="xmlRepairResult.actions && xmlRepairResult.actions.length">动作：{{ xmlRepairResult.actions.join('、') }}</p>
+            <p v-if="xmlRepairResult.error" class="mobile-stats-xml-error">失败原因：{{ maskLogLine(xmlRepairResult.error) }}</p>
+            <p class="mobile-stats-xml-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再回到 XML 问题管理里重新检查。</p>
+        </div>
+        <div v-else class="mobile-stats-xml-empty">
+            请选择一个录播姬 XML 文件，系统会尝试做简单语法修复并返回可下载文件。
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button size="small" @click="xmlRepairDialogVisible = false">关闭</el-button>
+            <el-button size="small" type="primary" :loading="xmlRepairing" @click="chooseXmlRepairFile">选择 XML 文件</el-button>
+        </span>
+    </el-dialog>
+</div>

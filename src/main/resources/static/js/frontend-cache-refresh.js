@@ -34,7 +34,15 @@
         return window.BILIUPFORJAVA_FRONTEND_BUILD_ID || '';
     }
 
+    function resolveAppUrl(url) {
+        if (window.BiliupUrlResolver && typeof window.BiliupUrlResolver.resolve === 'function') {
+            return window.BiliupUrlResolver.resolve(url);
+        }
+        return url;
+    }
+
     function withBuildId(url, buildId) {
+        url = resolveAppUrl(url);
         var id = buildId || getPageBuildId() || getStoredValue(STORED_BUILD_KEY) || '';
         if (!id || !url || /^(https?:)?\/\//i.test(url) || /^data:/i.test(url) || /^blob:/i.test(url)) {
             return url;
@@ -58,34 +66,12 @@
         return withBuildId(currentLocation.pathname + currentLocation.search + currentLocation.hash, buildId);
     }
 
-    function canDelegateToParent() {
-        if (window.parent === window) {
-            return false;
-        }
-        try {
-            return !!(window.parent
-                    && window.parent.FrontendCacheRefresh
-                    && typeof window.parent.FrontendCacheRefresh.reload === 'function'
-                    && window.parent.location
-                    && window.parent.location.origin === window.location.origin);
-        } catch (e) {
-            return false;
-        }
-    }
-
-    function reload(buildId, options) {
-        var opts = options || {};
-        if (opts.delegateToParent !== false && canDelegateToParent()) {
-            window.parent.FrontendCacheRefresh.reload(buildId, {
-                delegateToParent: false
-            });
-            return;
-        }
+    function reload(buildId) {
         window.location.replace(getReloadTarget(buildId));
     }
 
     function fetchVersion() {
-        return window.fetch('/api/version', {
+        return window.fetch(resolveAppUrl('/api/version'), {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'

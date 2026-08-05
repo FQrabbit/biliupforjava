@@ -314,7 +314,8 @@ new Vue({
             if (redirectTarget) {
                 return redirectTarget;
             }
-            return this.shouldUseMobileAfterLogin() ? '/mobile/index.html' : '/index.html';
+            var target = this.shouldUseMobileAfterLogin() ? '/mobile/index.html' : '/index.html';
+            return window.BiliupUrlResolver ? window.BiliupUrlResolver.resolve(target) : target;
         },
         async handleLogin() {
             if (!this.form.username || !this.form.password) {

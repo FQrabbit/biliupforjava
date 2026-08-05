@@ -1,0 +1,130 @@
+.system-settings-module {
+    min-width: 0;
+    width: 100%;
+}
+
+.upload-speed-tip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    color: var(--text-disabled);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: help;
+    border: 1px solid var(--text-disabled);
+    border-radius: 50%;
+}
+
+[data-theme="dark"] .upload-speed-tip-icon {
+    color: var(--text-secondary);
+    border-color: var(--text-secondary);
+}
+
+.config-tabs .el-tabs__header {
+    margin: 0 0 16px;
+}
+
+.config-tabs,
+.config-tabs .el-tabs__content,
+.config-tabs .el-tab-pane {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.config-tabs .el-tabs__nav-wrap::after {
+    background-color: var(--border-light);
+}
+
+.storage-root-panel {
+    display: grid;
+    gap: 16px;
+}
+
+.storage-change-warning {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 14px 16px;
+    background: rgba(230, 162, 60, 0.08);
+    border-left: 3px solid var(--warning-color);
+}
+
+.storage-change-warning strong {
+    color: var(--warning-color);
+}
+
+.storage-change-warning p {
+    margin: 5px 0 0;
+    overflow-wrap: anywhere;
+    color: var(--text-secondary);
+}
+
+.storage-change-actions {
+    display: flex;
+    flex: 0 0 auto;
+}
+
+.storage-root-list {
+    display: grid;
+    border-top: 1px solid var(--border-color);
+}
+
+.storage-root-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 58px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.storage-root-main {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.storage-root-main strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+}
+
+.storage-root-type,
+.storage-root-status {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.storage-root-status.is-online {
+    color: var(--success-color);
+    border-color: rgba(103, 194, 58, 0.4);
+}
+
+.storage-root-status.is-warning {
+    color: var(--warning-color);
+    border-color: rgba(230, 162, 60, 0.45);
+}
+
+@media (max-width: 760px) {
+    .storage-change-warning,
+    .storage-root-main {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .storage-change-actions {
+        flex-wrap: wrap;
+    }
+}
