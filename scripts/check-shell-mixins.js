@@ -51,6 +51,79 @@ global.location.search = '';
 
 global.BiliupShellMixinGuard.assertUnique(mixins);
 
+const viewportMixin = global.BiliupShellMixins.viewportScroll;
+const originalViewportSetTimeout = global.setTimeout;
+const originalViewportClearTimeout = global.clearTimeout;
+const originalRequestAnimationFrame = global.requestAnimationFrame;
+const originalCancelAnimationFrame = global.cancelAnimationFrame;
+try {
+    let nextAsyncId = 1;
+    const timers = new Map();
+    const frames = new Map();
+    global.setTimeout = (callback, delay) => {
+        const id = nextAsyncId++;
+        timers.set(id, { callback, delay });
+        return id;
+    };
+    global.clearTimeout = (id) => timers.delete(id);
+    global.requestAnimationFrame = (callback) => {
+        const id = nextAsyncId++;
+        frames.set(id, callback);
+        return id;
+    };
+    global.cancelAnimationFrame = (id) => frames.delete(id);
+
+    const scrollContext = Object.assign(viewportMixin.data(), viewportMixin.methods, {
+        activeName: 'home',
+        currentScrollTop: 130,
+        isMobileViewportStateActive() { return false; },
+        getCurrentScrollTop() { return this.currentScrollTop; },
+        getCurrentScrollMaxTop() { return 1000; }
+    });
+    scrollContext.lastScrollTop = 100;
+
+    scrollContext.handleContentScroll(130);
+    assert.strictEqual(scrollContext.headerCompact, true, '向下滚动达到阈值后应隐藏导航栏');
+    assert.strictEqual(scrollContext.headerTransitionLocked, true, '导航栏切换后应锁定滚动判断');
+    assert.strictEqual(timers.get(scrollContext.headerTransitionTimer).delay, 520,
+        '动画锁应覆盖最长的 440ms 导航栏动画');
+
+    scrollContext.handleContentScroll(70);
+    assert.strictEqual(scrollContext.headerCompact, true, '动画期间的反向伪滚动不应展开导航栏');
+    assert.strictEqual(scrollContext.upScrollDistance, 0, '动画期间不应累积向上滚动距离');
+    assert.strictEqual(scrollContext.lastScrollTop, 70, '动画期间仍应同步滚动基准');
+
+    const headerTarget = {};
+    const headerTopTarget = { classList: { contains: (name) => name === 'header-top' } };
+    scrollContext.headerTransitionElement = headerTarget;
+    assert.strictEqual(scrollContext.isHeaderLayoutTransitionEnd({ target: headerTarget, propertyName: 'min-height' }), true,
+        '导航栏高度动画结束时应开始解锁');
+    assert.strictEqual(scrollContext.isHeaderLayoutTransitionEnd({ target: headerTopTarget, propertyName: 'max-height' }), true,
+        '导航内容高度动画结束时应开始解锁');
+    assert.strictEqual(scrollContext.isHeaderLayoutTransitionEnd({ target: headerTopTarget, propertyName: 'opacity' }), false,
+        '较早结束的透明度动画不应提前解锁');
+
+    scrollContext.currentScrollTop = 70;
+    const transitionSequence = scrollContext.headerTransitionSequence;
+    scrollContext.finishHeaderTransitionLock(transitionSequence);
+    while (frames.size > 0) {
+        const first = frames.entries().next().value;
+        frames.delete(first[0]);
+        first[1]();
+    }
+    assert.strictEqual(scrollContext.headerTransitionLocked, false, '动画结束两帧后应解除滚动判断锁');
+    assert.strictEqual(scrollContext.lastScrollTop, 70, '解锁时应重新采样最终滚动位置');
+
+    scrollContext.handleContentScroll(10);
+    assert.strictEqual(scrollContext.headerCompact, false, '动画结束后真实向上滚动仍应展开导航栏');
+    assert.strictEqual(scrollContext.headerTransitionLocked, true, '展开动画也应进入同样的隔离锁');
+} finally {
+    global.setTimeout = originalViewportSetTimeout;
+    global.clearTimeout = originalViewportClearTimeout;
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+}
+
 const rootDeclared = new Set();
 for (const mixin of mixins) {
     Object.keys(typeof mixin.data === 'function' ? mixin.data() : {}).forEach((key) => rootDeclared.add(key));
@@ -238,4 +311,4 @@ try {
     global.setTimeout = originalSetTimeout;
 }
 
-console.log(`shell mixin check passed (${mixins.length} root mixins, 3 settings mixins, disconnect behavior)`);
+console.log(`shell mixin check passed (${mixins.length} root mixins, header transition guard, 3 settings mixins, disconnect behavior)`);

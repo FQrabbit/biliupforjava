@@ -69,13 +69,12 @@
             this.showMobileLogPanel = false;
             this.configExpanded = false;
             this.syncActivePageQuery();
-            this.headerCompact = false;
+            this.setHeaderCompactState(false, { top: 0, interrupt: true });
             this.showBackToTop = false;
             this.lastScrollTop = 0;
             this.upScrollDistance = 0;
             this.downScrollDistance = 0;
             this.lastHeaderRevealTop = 0;
-            this.lastHeaderToggleAt = 0;
             this.$nextTick(function() {
                 self.bindScrollObserver();
                 self.startScrollStateMonitor();
@@ -93,7 +92,7 @@
                     self.pageModalOpen = !!state.modalOpen;
                     self.mobileInputFocused = !!state.inputFocused;
                     if (self.isMobileViewportStateActive()) {
-                        self.headerCompact = true;
+                        self.setHeaderCompactState(true, { top: self.getCurrentScrollTop(), interrupt: true });
                         self.showBackToTop = false;
                     }
                     self.refreshMobileViewportState();

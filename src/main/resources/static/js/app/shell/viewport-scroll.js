@@ -11,18 +11,22 @@
             upScrollDistance: 0,
             downScrollDistance: 0,
             lastHeaderRevealTop: 0,
-            lastHeaderToggleAt: 0,
-            headerToggleCooldownMs: 260,
             headerHideResumeDistance: 72,
             headerBottomRevealGuardDistance: 96,
+            headerTransitionLocked: false,
+            headerTransitionFallbackMs: 520,
+            headerTransitionSequence: 0,
+            headerTransitionTimer: null,
+            headerTransitionElement: null,
+            headerTransitionEndHandler: null,
+            headerTransitionFrameOne: null,
+            headerTransitionFrameTwo: null,
             scrollObserver: [],
             scrollBindRetryTimer: null,
             scrollBindRetryCount: 0,
             scrollStateTimer: null,
             resizeHandler: null,
             mobileInputFocused: false,
-            isScrollingToTop: false,  // 标记正在回顶的状态，此期间禁用冷却时间
-            scrollToTopTimer: null,   // 回顶动画完成后清除标志
             pageWorkspaceMode: false,
             pageModalOpen: false,
             viewportWidth: window.innerWidth || 0,
@@ -31,6 +35,7 @@
         mounted: function () {
             var self = this;
             this.$nextTick(function () {
+                self.installHeaderTransitionGuard();
                 self.updateNavIndicator();
                 self.bindScrollObserver();
                 self.startScrollStateMonitor();
@@ -45,8 +50,7 @@
         },
         beforeDestroy: function () {
             this.removeScrollObserver();
-            if (this.scrollToTopTimer) clearTimeout(this.scrollToTopTimer);
-            this.scrollToTopTimer = null;
+            this.removeHeaderTransitionGuard();
             if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);
             this.resizeHandler = null;
             if (window.__biliScrollDebug) delete window.__biliScrollDebug;
@@ -91,6 +95,133 @@
                 self.updateNavIndicator();
             });
         },
+        resetHeaderScrollIntent: function(top) {
+            this.lastScrollTop = typeof top === 'number' ? top : 0;
+            this.upScrollDistance = 0;
+            this.downScrollDistance = 0;
+        },
+        clearHeaderTransitionSchedule: function() {
+            if (this.headerTransitionTimer !== null) {
+                clearTimeout(this.headerTransitionTimer);
+                this.headerTransitionTimer = null;
+            }
+            var cancelFrame = window.cancelAnimationFrame || window.clearTimeout;
+            if (this.headerTransitionFrameOne !== null) {
+                cancelFrame(this.headerTransitionFrameOne);
+                this.headerTransitionFrameOne = null;
+            }
+            if (this.headerTransitionFrameTwo !== null) {
+                cancelFrame(this.headerTransitionFrameTwo);
+                this.headerTransitionFrameTwo = null;
+            }
+        },
+        cancelHeaderTransitionLock: function(top) {
+            this.headerTransitionSequence = this.headerTransitionSequence + 1;
+            this.clearHeaderTransitionSchedule();
+            this.headerTransitionLocked = false;
+            this.resetHeaderScrollIntent(top);
+        },
+        startHeaderTransitionLock: function(top) {
+            var self = this;
+            this.headerTransitionSequence = this.headerTransitionSequence + 1;
+            var sequence = this.headerTransitionSequence;
+            this.clearHeaderTransitionSchedule();
+            this.headerTransitionLocked = true;
+            this.resetHeaderScrollIntent(top);
+            this.headerTransitionTimer = setTimeout(function() {
+                self.finishHeaderTransitionLock(sequence);
+            }, this.headerTransitionFallbackMs);
+        },
+        finishHeaderTransitionLock: function(sequence) {
+            if (!this.headerTransitionLocked || sequence !== this.headerTransitionSequence) {
+                return;
+            }
+            if (this.headerTransitionTimer !== null) {
+                clearTimeout(this.headerTransitionTimer);
+                this.headerTransitionTimer = null;
+            }
+            if (this.headerTransitionFrameOne !== null || this.headerTransitionFrameTwo !== null) {
+                return;
+            }
+
+            var self = this;
+            var nextFrame = window.requestAnimationFrame || function(callback) {
+                return window.setTimeout(callback, 16);
+            };
+            // 动画结束后再等两帧，让浏览器把最终尺寸和滚动位置安稳下来
+            this.headerTransitionFrameOne = nextFrame(function() {
+                self.headerTransitionFrameOne = null;
+                if (sequence !== self.headerTransitionSequence) {
+                    return;
+                }
+                self.headerTransitionFrameTwo = nextFrame(function() {
+                    self.headerTransitionFrameTwo = null;
+                    if (sequence !== self.headerTransitionSequence) {
+                        return;
+                    }
+                    self.resetHeaderScrollIntent(self.getCurrentScrollTop());
+                    self.headerTransitionLocked = false;
+                });
+            });
+        },
+        isHeaderLayoutTransitionEnd: function(event) {
+            if (!event || !event.target) {
+                return false;
+            }
+            if (event.target === this.headerTransitionElement && event.propertyName === 'min-height') {
+                return true;
+            }
+            var classList = event.target.classList;
+            if (!classList || event.propertyName !== 'max-height') {
+                return false;
+            }
+            return classList.contains('header-top') || classList.contains('header-subnav');
+        },
+        installHeaderTransitionGuard: function() {
+            if (this.headerTransitionEndHandler) {
+                return;
+            }
+            var header = this.$el && this.$el.querySelector
+                ? this.$el.querySelector('.app-header')
+                : null;
+            if (!header) {
+                return;
+            }
+            var self = this;
+            this.headerTransitionElement = header;
+            this.headerTransitionEndHandler = function(event) {
+                if (!self.headerTransitionLocked || !self.isHeaderLayoutTransitionEnd(event)) {
+                    return;
+                }
+                self.finishHeaderTransitionLock(self.headerTransitionSequence);
+            };
+            header.addEventListener('transitionend', this.headerTransitionEndHandler);
+        },
+        removeHeaderTransitionGuard: function() {
+            if (this.headerTransitionElement && this.headerTransitionEndHandler) {
+                this.headerTransitionElement.removeEventListener('transitionend', this.headerTransitionEndHandler);
+            }
+            this.headerTransitionElement = null;
+            this.headerTransitionEndHandler = null;
+            this.cancelHeaderTransitionLock(this.lastScrollTop || 0);
+        },
+        setHeaderCompactState: function(compact, options) {
+            var nextCompact = !!compact;
+            var settings = options || {};
+            var top = typeof settings.top === 'number' ? settings.top : this.getCurrentScrollTop();
+            if (this.headerCompact === nextCompact) {
+                if (!this.headerTransitionLocked) {
+                    this.resetHeaderScrollIntent(top);
+                }
+                return false;
+            }
+            if (this.headerTransitionLocked && !settings.interrupt) {
+                return false;
+            }
+            this.startHeaderTransitionLock(top);
+            this.headerCompact = nextCompact;
+            return true;
+        },
         getActivePageScrollTarget: function() {
             var host = this.$refs.activePageHost;
             if (host && typeof host.getScrollTarget === 'function') {
@@ -128,19 +259,17 @@
 
             this.scrollStateTimer = setInterval(function() {
                 if (self.isMobileViewportStateActive()) {
-                    self.headerCompact = true;
+                    self.setHeaderCompactState(true, { top: self.getCurrentScrollTop(), interrupt: true });
                     self.showBackToTop = false;
                     return;
                 }
                 var top = self.getCurrentScrollTop();
                 // 当滚动位置接近顶部时，强制恢复导航栏显示
                 if (top <= 4) {
-                    self.headerCompact = false;
+                    self.setHeaderCompactState(false, { top: 0, interrupt: true });
                     self.showBackToTop = false;
-                    self.upScrollDistance = 0;
-                    self.downScrollDistance = 0;
+                    self.resetHeaderScrollIntent(0);
                     self.lastHeaderRevealTop = 0;
-                    self.lastHeaderToggleAt = 0;
                 } else {
                     // 异步模板渲染后的滚动位置有时慢半拍，这里补一次状态
                     if (Math.abs(top - self.lastScrollTop) >= 1.5) {
@@ -220,6 +349,7 @@
             var snapshot = {
                 activeName: this.activeName,
                 headerCompact: this.headerCompact,
+                headerTransitionLocked: this.headerTransitionLocked,
                 showBackToTop: this.showBackToTop,
                 lastScrollTop: this.lastScrollTop,
                 currentTop: this.getCurrentScrollTop(),
@@ -262,7 +392,7 @@
             this.removeScrollObserver();
 
             if (this.activeName === 'log') {
-                this.headerCompact = false;
+                this.setHeaderCompactState(false, { top: 0, interrupt: true });
                 this.showBackToTop = false;
                 this.scrollBindRetryCount = 0;
                 return;
@@ -298,52 +428,38 @@
         },
         handleContentScroll: function(top) {
             if (this.isMobileViewportStateActive()) {
-                this.headerCompact = true;
+                this.setHeaderCompactState(true, { top: top || 0, interrupt: true });
                 this.showBackToTop = false;
-                this.lastScrollTop = top || 0;
-                this.upScrollDistance = 0;
-                this.downScrollDistance = 0;
+                this.resetHeaderScrollIntent(top || 0);
                 this.lastHeaderRevealTop = top || 0;
                 return;
             }
             if (this.activeName === 'log') {
-                this.headerCompact = false;
+                this.setHeaderCompactState(false, { top: 0, interrupt: true });
                 this.showBackToTop = false;
-                this.lastScrollTop = 0;
-                this.upScrollDistance = 0;
-                this.downScrollDistance = 0;
+                this.resetHeaderScrollIntent(0);
                 this.lastHeaderRevealTop = 0;
-                this.lastHeaderToggleAt = 0;
                 return;
             }
 
             if (top <= 4) {
-                this.headerCompact = false;
+                this.setHeaderCompactState(false, { top: 0, interrupt: true });
                 this.showBackToTop = false;
-                this.lastScrollTop = 0;
-                this.upScrollDistance = 0;
-                this.downScrollDistance = 0;
+                this.resetHeaderScrollIntent(0);
                 this.lastHeaderRevealTop = 0;
-                this.lastHeaderToggleAt = 0;
                 return;
             }
 
             this.showBackToTop = top > 120;
 
-            var delta = top - this.lastScrollTop;
-            if (Math.abs(delta) < 1.5) {
-                this.lastScrollTop = top;
+            // 动画期间只同步基准位置，别把导航栏自己的尺寸变化算成用户滚动啦
+            if (this.headerTransitionLocked) {
+                this.resetHeaderScrollIntent(top);
                 return;
             }
-            var now = Date.now();
-            // 正在回顶中时禁用冷却时间，确保状态能及时更新
-            var inCooldown = !this.isScrollingToTop && (now - this.lastHeaderToggleAt) < this.headerToggleCooldownMs;
-            // 冷却期内丢弃事件并清零累积量：导航栏切换会触发 440ms CSS 动画，动画过程中
-            // clientHeight 持续变化，浏览器会产生伪滚动事件把距离桶预填满，冷却一结束就
-            // 立即反向触发，造成反复隐藏/展开的振荡。隔离型冷却确保动画噪声不会预积累。
-            if (inCooldown) {
-                this.upScrollDistance = 0;
-                this.downScrollDistance = 0;
+
+            var delta = top - this.lastScrollTop;
+            if (Math.abs(delta) < 1.5) {
                 this.lastScrollTop = top;
                 return;
             }
@@ -352,9 +468,7 @@
                 this.upScrollDistance = 0;
                 var canCompactAfterReveal = !this.lastHeaderRevealTop || top >= (this.lastHeaderRevealTop + this.headerHideResumeDistance);
                 if (!this.headerCompact && top > 60 && this.downScrollDistance >= 18 && canCompactAfterReveal) {
-                    this.headerCompact = true;
-                    this.downScrollDistance = 0;
-                    this.lastHeaderToggleAt = now;
+                    this.setHeaderCompactState(true, { top: top });
                 }
             } else if (delta < 0) {
                 var maxTop = this.getCurrentScrollMaxTop();
@@ -368,20 +482,14 @@
                 this.upScrollDistance = this.upScrollDistance + Math.abs(delta);
                 this.downScrollDistance = 0;
                 if (this.headerCompact && this.upScrollDistance >= 54) {
-                    this.headerCompact = false;
-                    this.upScrollDistance = 0;
                     this.lastHeaderRevealTop = top;
-                    this.lastHeaderToggleAt = now;
+                    this.setHeaderCompactState(false, { top: top });
                 }
             }
 
             this.lastScrollTop = top;
         },
         scrollToTopCurrent: function() {
-            var self = this;
-            // 标记正在回顶，禁用冷却时间
-            this.isScrollingToTop = true;
-
             if (this.activeName === 'home') {
                 var homeContainer = this.$el.querySelector('.changelog-container');
                 if (homeContainer && typeof homeContainer.scrollTo === 'function') {
@@ -398,18 +506,8 @@
             this.upScrollDistance = 0;
             this.downScrollDistance = 0;
             this.lastHeaderRevealTop = 0;
-            this.lastHeaderToggleAt = 0;
             this.bindScrollObserver();
             this.startScrollStateMonitor();
-
-            // 600ms后清除回顶标志，允许冷却时间恢复
-            if (this.scrollToTopTimer) {
-                clearTimeout(this.scrollToTopTimer);
-            }
-            this.scrollToTopTimer = setTimeout(function() {
-                self.isScrollingToTop = false;
-                self.scrollToTopTimer = null;
-            }, 600);
         },
         }
     };
