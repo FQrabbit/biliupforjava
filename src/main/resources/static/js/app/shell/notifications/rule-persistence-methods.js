@@ -91,9 +91,8 @@
                     editor.visible = false;
                     self.notificationConfig.workspaceUsageAlertThresholdPercent = thresholdPercent;
                     self.$message.success('系统级推送规则已保存');
-                    self.loadSystemConfig();
                     self.loadNotificationConfig();
-                }).catch(function() {
+                }, function() {
                     editor.saving = false;
                     self.$message.error('系统级推送规则保存失败');
                 });
