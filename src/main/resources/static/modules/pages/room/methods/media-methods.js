@@ -14,6 +14,10 @@
             let _this = this;
             RoomApi.seasons(roomId, function (data) {
                     _this.seasonsList = data.data.seasons;
+                    if (_this.privacyMode) {
+                        _this.ensureSectionBelongsSeason(true);
+                        return;
+                    }
                     var list = _this.seasonsList || [];
                     var max = Math.min(list.length, 8);
                     for (var i = 0; i < max; i++) {
@@ -171,11 +175,12 @@
             });
         },
         preloadSeasonCover: function(item) {
+            if (this.privacyMode) return;
             this.enqueueSeasonCoverPreload(item, true);
         },
         onSeasonDropdownVisibleChange: function(visible) {
             this.onMobileConfigDropdownVisibleChange(visible);
-            if (!visible) return;
+            if (!visible || this.privacyMode) return;
             var list = this.seasonsList || [];
             var max = Math.min(list.length, 8);
             for (var i = 0; i < max; i++) {

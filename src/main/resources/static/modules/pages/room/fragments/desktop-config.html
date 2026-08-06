@@ -65,9 +65,9 @@
                             </el-form-item>
                             <el-form-item label="加入合集">
                             <el-select v-model="room.seasonId" placeholder="选择合集" style="width: 100%" clearable filterable @change="changeSeason" @visible-change="onSeasonDropdownVisibleChange" popper-class="room-page-select-popper">
-                                    <el-option :key="item.season.id" :label="item.season.title" :value="item.season.id" v-for="item in seasonsList">
+                                    <el-option :key="item.season.id" :label="maskText(item.season.title)" :value="item.season.id" v-for="item in seasonsList">
                                         <el-tooltip popper-class="room-page-popper"
-                                                :disabled="!getSeasonCoverUrl(item)"
+                                                :disabled="privacyMode || !getSeasonCoverUrl(item)"
                                                 popper-class="season-cover-tooltip"
                                                 placement="right"
                                                 :open-delay="150"
@@ -80,7 +80,7 @@
                                                     <div v-else class="season-cover-tooltip-loading">加载中...</div>
                                                 </div>
                                             </div>
-                                            <div class="season-option-label" @mouseenter="preloadSeasonCover(item)">{{ item.season.title }}</div>
+                                            <div class="season-option-label" @mouseenter="preloadSeasonCover(item)">{{ maskText(item.season.title) }}</div>
                                         </el-tooltip>
                                     </el-option>
                                 </el-select>
@@ -90,8 +90,8 @@
                             </el-form-item>
                             <el-form-item label="小节">
                             <el-select v-model="room.sectionId" placeholder="选择小节" style="width: 100%" clearable filterable popper-class="room-page-select-popper">
-                                    <el-option :key="item.id" :label="item.title" :value="item.id" v-for="item in sectionsList">
-                                        <span style="float: left">{{ item.title }}</span>
+                                    <el-option :key="item.id" :label="maskText(item.title)" :value="item.id" v-for="item in sectionsList">
+                                        <span style="float: left">{{ maskText(item.title) }}</span>
                                     </el-option>
                                 </el-select>
                             </el-form-item>
