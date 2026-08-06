@@ -463,42 +463,23 @@
                     </div>
 
                     <!-- 推送设置 -->
-                    <div class="config-card">
+                    <div class="config-card notification-migration-card">
                         <div class="card-header">
                             <i class="el-icon-bell"></i>
                             <span>推送设置</span>
+                            <span class="notification-migration-state"><i class="el-icon-lock"></i> 只读</span>
                         </div>
                         <div class="card-body">
-                            <el-form-item label="微信通知UID">
-                                <el-input v-model="room.wxuid" placeholder="UID">
-                                    <el-button slot="append" icon="el-icon-full-screen" @click="wxDialogVisible = true"></el-button>
-                                </el-input>
-                            </el-form-item>
-                            <el-form-item label="Server酱3 SendKey">
-                                <el-input v-model="room.serverChanSendKey" :type="privacySecretInputType()" placeholder="SCTxxxxxxxxxxxxxxxx">
-                                    <el-button slot="append" icon="el-icon-link" @click="window.open('https://sc3.ft07.com/sendkey', '_blank')"></el-button>
-                                </el-input>
-                                <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 6px;">
-                                    未填写则不发送 Server酱3 通知；点击右侧按钮可前往官网创建并复制 SendKey。
+                            <div class="notification-migration-notice">
+                                <span class="notification-migration-icon"><i class="el-icon-s-promotion"></i></span>
+                                <div class="notification-migration-copy">
+                                    <h4>推送设置已迁移</h4>
+                                    <p>通知渠道和触发规则已统一迁移至“系统配置 → 推送配置”。此处不再支持修改，请前往新的配置页面管理。</p>
                                 </div>
-                            </el-form-item>
-                            <el-form-item label="Server酱3 Tags(可选)">
-                                <el-input v-model="room.serverChanChannel" placeholder="例如：服务器报警|录播通知"></el-input>
-                                <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 6px;">
-                                    标签将作为 tags 参数发送，多个标签请使用 | 分隔；不填则不传 tags。
-                                </div>
-                            </el-form-item>
-                            <el-divider style="margin: 12px 0;"></el-divider>
-                            <el-form-item label="推送触发条件">
-                                <el-checkbox-group v-model="pushMsgTagsArray" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; margin-top: 8px;">
-                                    <el-checkbox v-for="tag in pushMsgTagsOptions" :key="tag.value" :label="tag.value" style="margin: 0;">
-                                        {{ tag.label }}
-                                    </el-checkbox>
-                                </el-checkbox-group>
-                                <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 10px;">
-                                    💡 选择启用的推送类型，系统将在对应事件发生时向已配置的渠道发送通知。未选择任何选项时不会发送推送。
-                                </div>
-                            </el-form-item>
+                                <el-button class="notification-migration-action" type="primary" plain icon="el-icon-right" @click="goToNotificationSettings">
+                                    前往推送配置
+                                </el-button>
+                            </div>
                         </div>
                     </div>
                 </div>

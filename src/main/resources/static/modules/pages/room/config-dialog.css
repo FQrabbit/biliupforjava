@@ -338,6 +338,171 @@
 
 }
 
+.notification-migration-card {
+
+    background: color-mix(in srgb, var(--bg-secondary) 82%, var(--border-color));
+
+    border-color: color-mix(in srgb, var(--border-color) 76%, var(--bg-tertiary));
+
+    box-shadow: none;
+
+}
+
+.notification-migration-card:hover {
+
+    border-color: color-mix(in srgb, var(--border-color) 76%, var(--bg-tertiary));
+
+    box-shadow: none;
+
+}
+
+.notification-migration-card .card-header,
+.notification-migration-card .card-body {
+
+    background: transparent;
+
+}
+
+.notification-migration-card .card-header {
+
+    color: var(--text-secondary);
+
+    border-bottom-color: color-mix(in srgb, var(--border-color) 72%, transparent);
+
+}
+
+.notification-migration-card .card-header > i {
+
+    color: var(--text-disabled);
+
+}
+
+.notification-migration-state {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    margin-left: auto;
+
+    padding: 3px 8px;
+
+    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--text-secondary);
+
+    background: color-mix(in srgb, var(--bg-tertiary) 76%, transparent);
+
+    font-size: 12px;
+
+    font-weight: 500;
+
+}
+
+.notification-migration-card .notification-migration-state i {
+
+    color: inherit;
+
+}
+
+.notification-migration-notice {
+
+    display: grid;
+
+    grid-template-columns: 44px minmax(0, 1fr);
+
+    gap: 12px 14px;
+
+    align-items: start;
+
+    min-height: 160px;
+
+    padding: 18px;
+
+    border: 1px dashed color-mix(in srgb, var(--border-color) 80%, transparent);
+
+    border-radius: var(--radius-md);
+
+    background: color-mix(in srgb, var(--bg-primary) 48%, transparent);
+
+}
+
+.notification-migration-icon {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    width: 44px;
+
+    height: 44px;
+
+    border-radius: var(--radius-md);
+
+    background: color-mix(in srgb, var(--text-disabled) 12%, transparent);
+
+    color: var(--text-secondary);
+
+    font-size: 20px;
+
+}
+
+.notification-migration-copy {
+
+    min-width: 0;
+
+}
+
+.notification-migration-copy h4 {
+
+    margin: 1px 0 6px;
+
+    color: var(--text-primary);
+
+    font-size: 15px;
+
+    font-weight: 600;
+
+}
+
+.notification-migration-copy p {
+
+    margin: 0;
+
+    color: var(--text-secondary);
+
+    font-size: 13px;
+
+    line-height: 1.65;
+
+}
+
+.notification-migration-action {
+
+    grid-column: 2;
+
+    justify-self: start;
+
+    min-height: 44px;
+
+    margin-top: 4px;
+
+}
+
+.notification-migration-action:focus-visible {
+
+    outline: 2px solid var(--primary-color);
+
+    outline-offset: 2px;
+
+}
+
 /* 配置表单容器*/
 
 .room-config-form .el-form-item {
@@ -469,6 +634,34 @@
 /* 响应式布局 */
 
 @media (max-width: 768px) {
+
+    .notification-migration-notice {
+
+        grid-template-columns: 40px minmax(0, 1fr);
+
+        min-height: 0;
+
+        padding: 16px;
+
+    }
+
+    .notification-migration-icon {
+
+        width: 40px;
+
+        height: 40px;
+
+    }
+
+    .notification-migration-action {
+
+        grid-column: 1 / -1;
+
+        justify-self: stretch;
+
+        width: 100%;
+
+    }
 
     .config-layout {
 
@@ -1058,6 +1251,56 @@
 .delete-policy-hint {
 
     margin-top: 8px;
+
+}
+
+[data-theme="dark"] .room-page-dialog .delete-policy-hint.el-alert--warning {
+
+    background: color-mix(in srgb, var(--bg-tertiary) 90%, var(--warning-color));
+
+    border: 1px solid color-mix(in srgb, var(--border-color) 58%, var(--warning-color));
+
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--warning-color) 12%, transparent);
+
+}
+
+[data-theme="dark"] .room-page-dialog .delete-policy-hint.el-alert--warning .el-alert__title,
+[data-theme="dark"] .room-page-dialog .delete-policy-hint.el-alert--warning .el-alert__icon {
+
+    color: color-mix(in srgb, var(--warning-accent) 55%, var(--text-primary));
+
+}
+
+[data-theme="dark"] .room-page-dialog .delete-policy-hint.el-alert--warning .el-alert__description {
+
+    color: color-mix(in srgb, var(--text-secondary) 68%, var(--text-primary));
+
+}
+
+@media (prefers-color-scheme: dark) {
+
+    :root:not([data-theme="light"]) .room-page-dialog .delete-policy-hint.el-alert--warning {
+
+        background: color-mix(in srgb, var(--bg-tertiary) 90%, var(--warning-color));
+
+        border: 1px solid color-mix(in srgb, var(--border-color) 58%, var(--warning-color));
+
+        box-shadow: inset 0 1px 0 color-mix(in srgb, var(--warning-color) 12%, transparent);
+
+    }
+
+    :root:not([data-theme="light"]) .room-page-dialog .delete-policy-hint.el-alert--warning .el-alert__title,
+    :root:not([data-theme="light"]) .room-page-dialog .delete-policy-hint.el-alert--warning .el-alert__icon {
+
+        color: color-mix(in srgb, var(--warning-accent) 55%, var(--text-primary));
+
+    }
+
+    :root:not([data-theme="light"]) .room-page-dialog .delete-policy-hint.el-alert--warning .el-alert__description {
+
+        color: color-mix(in srgb, var(--text-secondary) 68%, var(--text-primary));
+
+    }
 
 }
 

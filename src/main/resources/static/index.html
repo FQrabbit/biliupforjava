@@ -234,7 +234,7 @@
                     module-name="system-settings"
                     surface="desktop"
                     :active="activeName === 'home'"
-                    :component-props="{ expanded: configExpanded, surface: 'desktop' }"
+                    :component-props="{ expanded: configExpanded, surface: 'desktop', notificationRequestId: notificationSettingsRequestId }"
                     @update:expanded="configExpanded = $event"
                     @dirty-change="handleSettingsDirtyChange">
                 </biliup-shell-module-host>
@@ -284,7 +284,8 @@
                               surface="desktop"
                               @connection-status="setConnectionStatus"
                               @page-ready="setPageReady"
-                              @diagnostic-export="handleModuleDiagnosticExport">
+                              @diagnostic-export="handleModuleDiagnosticExport"
+                              @open-notification-settings="handleOpenNotificationSettings">
             </biliup-page-host>
         </transition>
 

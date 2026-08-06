@@ -282,6 +282,26 @@
             });
             this.dialogFormVisible = false;
         },
+        goToNotificationSettings: function () {
+            var self = this;
+            this.$pageConfirm(
+                '前往系统推送配置后，当前房间中尚未保存的修改将不会保留。',
+                '前往推送配置',
+                {
+                    confirmButtonText: '继续前往',
+                    cancelButtonText: '留在这里',
+                    type: 'info',
+                    customClass: 'room-page-message-box'
+                }
+            ).then(function () {
+                self.closeMobileConfigHelp();
+                self.abortCoverUpload(false);
+                self.dialogFormVisible = false;
+                self.$nextTick(function () {
+                    self.$emit('open-notification-settings');
+                });
+            }).catch(function () {});
+        },
         showMobileConfigHelp: function (title, content) {
             this.mobileConfigHelpTitle = title || '说明';
             if (Array.isArray(content)) {

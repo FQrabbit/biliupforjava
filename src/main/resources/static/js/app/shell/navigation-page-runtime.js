@@ -49,6 +49,7 @@
             showMobileLogPanel: false,
             configExpanded: false,
             settingsHasChanges: false,
+            notificationSettingsRequestId: 0,
             };
         },
         computed: {
@@ -199,6 +200,24 @@
             window.dispatchEvent(new CustomEvent('open-diagnostic-export', {
                 detail: { history: payload && payload.history ? payload.history : {} }
             }));
+        },
+        handleOpenNotificationSettings: function() {
+            var self = this;
+            if (this.pageOperating) {
+                this.$message.warning('当前正在进行 ' + (this.pageOperationMessage || '后台操作') + '，请稍候完成后再打开推送配置');
+                return;
+            }
+            if (this.activeName !== 'home') {
+                this.switchTab('home');
+                if (this.activeName !== 'home') return;
+                this.$nextTick(function() {
+                    self.configExpanded = true;
+                    self.notificationSettingsRequestId++;
+                });
+                return;
+            }
+            this.configExpanded = true;
+            this.notificationSettingsRequestId++;
         },
         switchTab: function(tab) {
             this.showThemePanel = false;

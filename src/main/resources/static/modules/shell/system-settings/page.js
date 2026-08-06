@@ -12,7 +12,8 @@
             mixins: [mixins.systemSettings, mixins.storageSettings],
             props: {
                 expanded: { type: Boolean, default: false },
-                surface: { type: String, default: context.surface }
+                surface: { type: String, default: context.surface },
+                notificationRequestId: { type: Number, default: 0 }
             },
             computed: {
                 configExpanded: {
@@ -30,9 +31,33 @@
                     handler: function (value) {
                         this.$emit('dirty-change', !!value);
                     }
+                },
+                notificationRequestId: {
+                    immediate: true,
+                    handler: function (value) {
+                        if (value > 0) this.openNotificationSettings();
+                    }
                 }
             },
             methods: {
+                openNotificationSettings: function () {
+                    var self = this;
+                    this.configExpanded = true;
+                    this.configActiveTab = 'notification';
+                    this.$nextTick(function () {
+                        var host = self.$refs.notificationSettingsHost;
+                        var target = self.surface === 'mobile' && host ? host.$el : self.$el;
+                        if (!target) return;
+                        var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+                        if (typeof target.scrollIntoView === 'function') {
+                            target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+                        }
+                        if (typeof target.focus === 'function') {
+                            if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+                            try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
+                        }
+                    });
+                },
                 refreshNotificationTableLayout: function () {
                     var host = this.$refs.notificationSettingsHost;
                     if (!host || typeof host.invoke !== 'function') return;

@@ -368,7 +368,7 @@
                     module-name="system-settings"
                     surface="mobile"
                     :active="activeName === 'home'"
-                    :component-props="{ expanded: configExpanded, surface: 'mobile' }"
+                    :component-props="{ expanded: configExpanded, surface: 'mobile', notificationRequestId: notificationSettingsRequestId }"
                     @update:expanded="configExpanded = $event"
                     @dirty-change="handleSettingsDirtyChange">
                 </biliup-shell-module-host>
@@ -383,7 +383,8 @@
                               surface="mobile"
                               @connection-status="setConnectionStatus"
                               @page-ready="setPageReady"
-                              @diagnostic-export="handleModuleDiagnosticExport">
+                              @diagnostic-export="handleModuleDiagnosticExport"
+                              @open-notification-settings="handleOpenNotificationSettings">
             </biliup-page-host>
         </transition>
 

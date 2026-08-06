@@ -81,7 +81,7 @@
                                     </el-option>
                                 </el-select>
                                 <div class="config-field-hint">
-                                    保存时会校验小节是否属于所选合集；不匹配时会自动改为该合集的第一个小节，无法校验时会清空合集设置。
+                                    保存时会校验小节是否属于所选合集；不匹配时会自动改为该合集的第一个小节，无法校验时会清空合集设置
                                 </div>
                             </el-form-item>
                             <el-form-item label="小节">
@@ -429,42 +429,23 @@
                     </div>
 
                     <!-- 推送设置 -->
-                    <div id="mobile-room-config-notify" class="config-card mobile-config-section-card">
+                    <div id="mobile-room-config-notify" class="config-card mobile-config-section-card notification-migration-card">
                         <div class="card-header">
                             <i class="el-icon-bell"></i>
                             <span>推送设置</span>
+                            <span class="notification-migration-state"><i class="el-icon-lock"></i> 只读</span>
                         </div>
                         <div class="card-body">
-                            <el-form-item label="微信通知UID">
-                                <el-input v-model="room.wxuid" placeholder="UID">
-                                    <el-button slot="append" icon="el-icon-full-screen" @click="wxDialogVisible = true"></el-button>
-                                </el-input>
-                            </el-form-item>
-                            <el-form-item label="Server酱3 SendKey">
-                                <el-input v-model="room.serverChanSendKey" :type="privacySecretInputType()" placeholder="SCTxxxxxxxxxxxxxxxx">
-                                    <el-button slot="append" icon="el-icon-link" @click="window.open('https://sc3.ft07.com/sendkey', '_blank')"></el-button>
-                                </el-input>
-                                <div class="config-field-hint">
-                                    未填写则不发送 Server酱3 通知；点击右侧按钮可前往官网创建并复制 SendKey。
+                            <div class="notification-migration-notice">
+                                <span class="notification-migration-icon"><i class="el-icon-s-promotion"></i></span>
+                                <div class="notification-migration-copy">
+                                    <h4>推送设置已迁移</h4>
+                                    <p>通知渠道和触发规则已统一迁移至“系统配置 → 推送配置”。此处不再支持修改，请前往新的配置页面管理。</p>
                                 </div>
-                            </el-form-item>
-                            <el-form-item label="Server酱3 Tags(可选)">
-                                <el-input v-model="room.serverChanChannel" placeholder="例如：服务器报警|录播通知"></el-input>
-                                <div class="config-field-hint">
-                                    标签将作为 tags 参数发送，多个标签请使用 | 分隔；不填则不传 tags。
-                                </div>
-                            </el-form-item>
-                            <el-divider class="mobile-room-divider"></el-divider>
-                            <el-form-item label="推送触发条件">
-                                <el-checkbox-group v-model="pushMsgTagsArray" class="mobile-room-push-tags">
-                                    <el-checkbox v-for="tag in pushMsgTagsOptions" :key="tag.value" :label="tag.value" class="mobile-room-push-tag">
-                                        {{ tag.label }}
-                                    </el-checkbox>
-                                </el-checkbox-group>
-                                <div class="config-field-hint">
-                                    选择启用的推送类型，系统将在对应事件发生时向已配置的渠道发送通知。未选择任何选项时不会发送推送。
-                                </div>
-                            </el-form-item>
+                                <el-button class="notification-migration-action" type="primary" plain icon="el-icon-right" @click="goToNotificationSettings">
+                                    前往推送配置
+                                </el-button>
+                            </div>
                         </div>
                     </div>
                 </div>

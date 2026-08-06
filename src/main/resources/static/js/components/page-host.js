@@ -148,7 +148,8 @@
                         'page-ready': function () { self.$emit('page-ready'); },
                         'connection-status': function (value) { self.$emit('connection-status', value); },
                         'page-state': this.handlePageState,
-                        'diagnostic-export': function (payload) { self.$emit('diagnostic-export', payload || {}); }
+                        'diagnostic-export': function (payload) { self.$emit('diagnostic-export', payload || {}); },
+                        'open-notification-settings': function () { self.$emit('open-notification-settings'); }
                     }
                 }));
             }
