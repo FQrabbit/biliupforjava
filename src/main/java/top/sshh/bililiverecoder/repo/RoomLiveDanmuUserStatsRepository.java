@@ -44,6 +44,8 @@ public interface RoomLiveDanmuUserStatsRepository extends CrudRepository<RoomLiv
     @Query("select sum(s.danmuCount) from RoomLiveDanmuUserStats s where s.historyId = ?1")
     Long sumDanmuCountByHistoryId(Long historyId);
 
+    List<RoomLiveDanmuUserStats> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
+
     @Query("""
             select s.uid, s.uname, sum(s.danmuCount)
             from RoomLiveDanmuUserStats s

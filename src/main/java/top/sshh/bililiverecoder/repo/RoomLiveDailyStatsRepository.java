@@ -1,5 +1,6 @@
 package top.sshh.bililiverecoder.repo;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +19,8 @@ public interface RoomLiveDailyStatsRepository extends CrudRepository<RoomLiveDai
     List<RoomLiveDailyStats> findByRoomId(String roomId);
 
     List<RoomLiveDailyStats> findTop30ByRoomIdOrderByLiveDateDesc(String roomId);
+
+    List<RoomLiveDailyStats> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional

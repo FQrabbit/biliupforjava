@@ -1236,7 +1236,7 @@ public class HighEnergyCutPublishService {
     }
 
     private String resolveMultipartProfile(PreUploadBean preUploadBean, String fallbackProfile, String multipartUri) {
-        // 优先锁定 multipart/new 返回的 profile，保证同一会话 init/part/complete 一致。
+        // 优先锁定 multipart/new 返回的 profile，保证同一会话 init/part/complete 一致
         String candidateProfile = StringUtils.trimToNull(fallbackProfile);
         if (StringUtils.isBlank(candidateProfile) && preUploadBean != null && StringUtils.isNotBlank(preUploadBean.getPut_query())) {
             String putQuery = preUploadBean.getPut_query();

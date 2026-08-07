@@ -4,23 +4,15 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Stream;
 
 @Repository
 public interface RecordHistoryRepository extends CrudRepository<RecordHistory, Long> {
 
-    /**
-     * 流式读取全部录制历史，用于导出配置时逐条写入 JSON，避免一次性加载全部到内存
-     * 调用方必须在 try-with-resources 中使用，并确保在事务内调用
-     */
-    @Query("select h from RecordHistory h order by h.id")
-    @Transactional(readOnly = true)
-    Stream<RecordHistory> streamAll();
+    List<RecordHistory> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 
     RecordHistory findBySessionId(String sessionId);
 

@@ -1,5 +1,6 @@
 package top.sshh.bililiverecoder.repo;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,4 +27,6 @@ public interface RoomLiveMsgBucketStatsRepository extends CrudRepository<RoomLiv
     @Transactional
     @org.springframework.data.jpa.repository.Query("delete from RoomLiveMsgBucketStats b")
     int deleteAllRows();
+
+    List<RoomLiveMsgBucketStats> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 }

@@ -133,6 +133,8 @@ public interface RoomLiveEventRepository extends CrudRepository<RoomLiveEvent, L
     @Transactional
     void deleteByHistoryId(Long historyId);
 
+    List<RoomLiveEvent> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
+
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("delete from RoomLiveEvent e where e.roomId = ?1")

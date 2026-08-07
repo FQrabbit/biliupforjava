@@ -1,5 +1,5 @@
 /**
- * 主页面壳层：仅负责组合领域 mixin 与创建根 Vue 实例。
+ * 主页面壳层：仅负责组合领域 mixin 与创建根 Vue 实例
  */
 (function (window) {
     'use strict';

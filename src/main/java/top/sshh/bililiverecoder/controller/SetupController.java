@@ -241,7 +241,7 @@ public class SetupController {
     }
 
     /**
-     * JSON 字符串反转义：将 JSON 文本中的转义序列还原为实际字符。
+     * JSON 字符串反转义：将 JSON 文本中的转义序列还原为实际字符
      * 例如 {@code D:\\录播姬} → {@code D:\录播姬}
      */
     private static String unescapeJsonString(String s) {
@@ -285,8 +285,8 @@ public class SetupController {
     }
 
     /**
-     * 路径规范化：将反斜杠统一转为正斜杠。
-     * Java File 类在 Windows/Linux 上均能正确处理正斜杠。
+     * 路径规范化：将反斜杠统一转为正斜杠
+     * Java File 类在 Windows/Linux 上均能正确处理正斜杠
      */
     private static String normalizePath(String path) {
         if (path == null || path.isEmpty()) return path;
@@ -294,8 +294,8 @@ public class SetupController {
     }
 
     /**
-     * 路径安全校验：检查路径遍历和 Windows 保留字符。
-     * 返回错误消息表示不合法，返回 null 表示通过。
+     * 路径安全校验：检查路径遍历和 Windows 保留字符
+     * 返回错误消息表示不合法，返回 null 表示通过
      */
     private static String validatePath(String path) {
         if (path == null || path.isEmpty()) return null;
@@ -316,7 +316,7 @@ public class SetupController {
     }
 
     /**
-     * 注释文本净化：移除换行符，防止 YAML 注释行断裂导致注入。
+     * 注释文本净化：移除换行符，防止 YAML 注释行断裂导致注入
      */
     private static String sanitizeForComment(String value) {
         if (value == null || value.isEmpty()) return value;
@@ -324,8 +324,8 @@ public class SetupController {
     }
 
     /**
-     * YAML 双引号字符串转义：确保写入 application.yml 的值不会破坏 YAML 语法。
-     * 对反斜杠、双引号及控制字符进行转义。
+     * YAML 双引号字符串转义：确保写入 application.yml 的值不会破坏 YAML 语法
+     * 对反斜杠、双引号及控制字符进行转义
      */
     private static String escapeYamlValue(String value) {
         if (value == null || value.isEmpty()) return value;
@@ -357,9 +357,7 @@ public class SetupController {
     }
 
     /**
-     * Verify that a path either exists as a writable directory, or that
-     * its parent directory exists and is writable (so the path can be
-     * created on first use).
+     * 检查路径是否为可写目录，或者它的上级目录存在且可写，方便首次使用时创建
      */
     private static String validatePathAccess(String path) {
         File dir = new File(path);
@@ -372,7 +370,7 @@ public class SetupController {
             }
             return null;
         }
-        // Directory doesn't exist — check if parent can be created
+        // 目录不存在时，检查上级目录能不能创建它
         File parent = dir.getAbsoluteFile().getParentFile();
         if (parent == null || !parent.exists()) {
             return "上级目录不存在，无法创建";

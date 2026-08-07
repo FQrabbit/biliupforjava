@@ -131,7 +131,7 @@ public class RecordWebHook {
         if (lockKey == null) {
             return null;
         }
-        // lockKey 可能包含 relativePath，不要原样打印，避免泄露本地路径/文件名。
+        // lockKey 可能包含 relativePath，不要原样打印，避免泄露本地路径/文件名
         return Integer.toHexString(lockKey.hashCode());
     }
 

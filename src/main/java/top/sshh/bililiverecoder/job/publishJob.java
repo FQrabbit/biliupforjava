@@ -81,7 +81,7 @@ public class publishJob {
     @Qualifier("myAsyncPool")
     ThreadPoolTaskExecutor asyncThreadPool;
 
-    // value: [nextRetryTimestamp, compensateFailCount]
+// 值：[下次重试时间戳，补偿失败次数]
     private static final java.util.concurrent.ConcurrentHashMap<Long, long[]> uploadFailureMap = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.concurrent.ConcurrentHashMap<String, FileProbe> fileProbeMap = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -248,8 +248,8 @@ public class publishJob {
                         .addIfNotBlank("title", history.getTitle()));
                 continue;
             }
-            // 二次校验：不信任 history.recording 单字段，避免被历史数据/列表纠偏误改后误触发投稿。
-            // 只要存在未结束(endTime=null)或仍标记录制中的分P，就视为仍在录制，直接跳过。
+            // 二次校验：不信任 history.recording 单字段，避免被历史数据/列表纠偏误改后误触发投稿
+            // 只要存在未结束(endTime=null)或仍标记录制中的分P，就视为仍在录制，直接跳过
             int actuallyRecordingParts = 0;
             try {
                 actuallyRecordingParts = partRepository.countActuallyRecordingPartsByHistoryId(history.getId());

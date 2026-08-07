@@ -1726,7 +1726,7 @@ public class RecordBiliPublishService {
                             .addStageField("webPublish", "costMs", webPublishCostMs)
                             .addStageField("postProcess", "costMs", postProcessCostMs));
 
-                        // 兜底：部分情况下创建投稿接口可能不稳定地忽略 is_only_self，这里在投稿成功后强制同步一次可见性。
+                        // 兜底：部分情况下创建投稿接口可能不稳定地忽略 is_only_self，这里在投稿成功后强制同步一次可见性
                         try {
                             int desiredVisibility = room.getIsOnlySelf();
                             if (desiredVisibility == 0 || desiredVisibility == 1) {
@@ -1787,7 +1787,7 @@ public class RecordBiliPublishService {
                                     .addIfNotBlank("aid", aid), e);
                         }
 
-                        // 投稿完成后的文件处理统一交给可恢复的生命周期服务。
+                        // 投稿完成后的文件处理统一交给可恢复的生命周期服务
                         try {
                             for (RecordHistoryPart part : uploadParts) {
                                 String filePath = part.getFilePath();
@@ -3009,7 +3009,7 @@ public class RecordBiliPublishService {
                     .map(match -> match.resolvedPath().toString().replace("\\", "/"))
                     .orElse(null);
         } catch (Exception e) {
-            // reject on any resolution failure
+            // 任意一个分辨率获取失败就拒绝
         }
         return null;
     }

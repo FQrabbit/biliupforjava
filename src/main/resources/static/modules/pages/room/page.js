@@ -38,15 +38,26 @@ return {
             exportUser: true,
             exportSystemConfig: true,
             exportHistory: false,
-            exportLiveMsg: false
+            exportLiveMsg: false,
+            exportStats: false
         },
+        coreRestartPoller: null,
         configTaskPoller: null,
         configProgressHideTimer: null,
+        configProgressAnimationFrame: null,
+        configProgressMetricsState: {
+            taskId: '',
+            displayedRecords: 0,
+            lastServerRecords: 0,
+            lastSampleAt: 0,
+            recordsPerSecond: 0
+        },
         configOperationProgress: {
             visible: false,
             title: '',
             message: '',
             detail: '',
+            metrics: '',
             percent: 0,
             status: 'active'
         },
@@ -307,11 +318,16 @@ return {
         'exportConfig.exportHistory': function (val) {
             if (!val) {
                 this.exportConfig.exportLiveMsg = false;
+                this.exportConfig.exportStats = false;
             }
         }
     },
     beforeDestroy: function () {
         this.componentDestroyed = true;
+        if (this.coreRestartPoller) {
+            clearInterval(this.coreRestartPoller);
+            this.coreRestartPoller = null;
+        }
         this.abortCoverUpload(false);
         this.stopPolling();
         this.stopDeleteRoomTaskPolling();
@@ -322,6 +338,14 @@ return {
         if (this.configProgressHideTimer) {
             clearTimeout(this.configProgressHideTimer);
             this.configProgressHideTimer = null;
+        }
+        if (this.configProgressAnimationFrame) {
+            if (window.cancelAnimationFrame) {
+                window.cancelAnimationFrame(this.configProgressAnimationFrame);
+            } else {
+                clearTimeout(this.configProgressAnimationFrame);
+            }
+            this.configProgressAnimationFrame = null;
         }
         if (this.partitionBackTimer) {
             clearTimeout(this.partitionBackTimer);

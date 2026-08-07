@@ -120,7 +120,8 @@
 
 }
 
-.export-live-msg-warning {
+.export-live-msg-warning,
+.export-config-warning {
 
     margin: 0 0 12px 160px;
 

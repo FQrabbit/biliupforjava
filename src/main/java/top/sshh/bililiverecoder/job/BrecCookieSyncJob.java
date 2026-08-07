@@ -25,18 +25,18 @@ import java.util.Base64;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 录播姬 Cookie 自动同步任务。
+ * 录播姬 Cookie 自动同步任务
  *
  * 定期把指定 B站账号的最新 Cookie 通过录播姬 WebApi 推送到录播姬实例，
- * 使录播姬在请求 B站接口时始终持有有效登录态，避免 Cookie 过期导致的录制异常。
+ * 使录播姬在请求 B站接口时始终持有有效登录态，避免 Cookie 过期导致的录制异常
  *
  * 录播姬接口契约（来自 BililiveRecorder dev 分支源码）：
  *   POST {scheme}://{host}:{port}/api/config/global
  *   body: {"optionalCookie":{"hasValue":true,"value":"SESSDATA=xxx; bili_jct=yyy"}}
- * 录播姬开启 Basic Authentication 时需附带 Authorization: Basic base64(user:pass)。
+ * 录播姬开启 Basic Authentication 时需附带 Authorization: Basic base64(user:pass)
  *
  * 定时任务与前端“保存并立即同步”共用核心逻辑 {@link #performSync()}，
- * 后者会把结构化结果返回前端，用于展示成功/失败原因。
+ * 后者会把结构化结果返回前端，用于展示成功/失败原因
  */
 @Slf4j
 @Component
@@ -57,7 +57,7 @@ public class BrecCookieSyncJob {
 
     public BrecCookieSyncJob() {
         // 录播姬通常部署在内网，自签证书常见，这里复用项目的全信任 SSL 工厂；
-        // 独立 client 不经过 B站 API 限速器，超时也设得更短。
+        // 独立 client 不经过 B站 API 限速器，超时也设得更短
         HttpsTrustManager manager = new HttpsTrustManager();
         this.brecClient = new OkHttpClient().newBuilder()
                 .sslSocketFactory(HttpsTrustManager.createSSLSocketFactory(), manager)
@@ -116,8 +116,8 @@ public class BrecCookieSyncJob {
     }
 
     /**
-     * 执行一次 Cookie 同步（读取配置、取账号 Cookie、推送到录播姬）。
-     * 不检查总开关，调用方自行决定是否在关闭时跳过；前端手动触发时无视开关也可测试连通性。
+     * 执行一次 Cookie 同步（读取配置、取账号 Cookie、推送到录播姬）
+     * 不检查总开关，调用方自行决定是否在关闭时跳过；前端手动触发时无视开关也可测试连通性
      *
      * @return 结构化结果，包含成功/失败分类与中文消息
      */
@@ -168,11 +168,11 @@ public class BrecCookieSyncJob {
     }
 
     /**
-     * 把数据库中保存的 Cookie 串转换为浏览器/录播姬所需的标准 HTTP Cookie 格式。
+     * 把数据库中保存的 Cookie 串转换为浏览器/录播姬所需的标准 HTTP Cookie 格式
      *
      * 数据库里的 Cookie 以 "name:value; " 形式保存（见 BiliBiliUserService.refreshToken），
      * 但浏览器与录播姬需要标准的 "name=value; " 形式。需要把每个键值对的第一个分隔符
-     * 由冒号改为等号，同时兼容本身已是等号格式的历史数据，并去掉空片段。
+     * 由冒号改为等号，同时兼容本身已是等号格式的历史数据，并去掉空片段
      *
      * @param rawCookie 数据库中的原始 Cookie 串，可能是 "SESSDATA:xxx; bili_jct:yyy; " 或已是等号格式
      * @return 形如 "SESSDATA=xxx; bili_jct=yyy" 的标准 Cookie 串

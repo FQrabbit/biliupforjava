@@ -39,7 +39,7 @@ public class RecordHistoryPart {
 
     private String filePath;
 
-    /** Webhook 明确提供的本地弹幕文件路径。 */
+    /** Webhook 明确提供的本地弹幕文件路径 */
     @Column(name = "danmaku_file_path", length = 2048)
     private String danmakuFilePath;
 

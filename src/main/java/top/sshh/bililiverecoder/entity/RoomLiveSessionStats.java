@@ -65,4 +65,8 @@ public class RoomLiveSessionStats {
 
     private LocalDateTime statsUpdatedAt;
     private int statsVersion;
+
+    /** 导入的统计快照在源 XML 不存在时不能被后台重建任务覆盖 */
+    @Column(columnDefinition = "boolean default false")
+    private boolean importedSnapshot;
 }

@@ -108,6 +108,7 @@
                     :stroke-width="8">
             </el-progress>
             <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>
+            <div v-if="configOperationProgress.metrics" class="config-progress-metrics">{{ configOperationProgress.metrics }}</div>
         </section>
     </transition>
 

@@ -1,6 +1,34 @@
 (function(window) {
     'use strict';
 
+    function exportFailureFromTaskStatus(fallbackMessage) {
+        return new Promise(function(resolve, reject) {
+            ApiUtil.get('/room/configTask/status', function(status) {
+                var message = fallbackMessage;
+                if (status && status.phase === 'FAILED' && status.message) {
+                    message = status.message;
+                }
+                reject(new Error(message));
+            }, function() {
+                reject(new Error(fallbackMessage));
+            });
+        });
+    }
+
+    function verifyCompletedConfigExport(result) {
+        var blob = result && result.blob;
+        if (!blob || typeof blob.slice !== 'function') {
+            return Promise.reject(new Error('导出响应无效，未收到配置文件'));
+        }
+        var tailStart = Math.max(0, blob.size - 1024);
+        return blob.slice(tailStart).text().then(function(tail) {
+            if (/"exportCompleted"\s*:\s*true\s*}\s*$/.test(tail)) {
+                return result;
+            }
+            return exportFailureFromTaskStatus('导出内容不完整，后端在生成配置文件时中断');
+        });
+    }
+
     window.RoomApi = {
         list: function(callback, errorCallback) {
             $.ajax({ url: '/room', type: 'POST', dataType: 'json', success: callback, error: errorCallback });
@@ -27,7 +55,23 @@
             ApiUtil.post('/room/sort', data, callback, errorCallback);
         },
         exportConfig: function(data, callback, errorCallback) {
-            ApiUtil.post('/room/exportConfig', data, callback, errorCallback);
+            ApiUtil.fetchBlob('/room/exportConfig', {
+                method: 'POST',
+                acceptAnyBlob: true,
+                headers: { 'Content-Type': 'application/json;charset=utf-8' },
+                body: JSON.stringify(data),
+                handleError: function(response) {
+                    return response.text().then(function(text) {
+                        var message = '导出配置失败';
+                        try { message = JSON.parse(text).message || message; } catch (e) {}
+                        return Promise.reject(new Error(message));
+                    });
+                }
+            }).then(verifyCompletedConfigExport).then(function(result) {
+                callback(result.blob, result.headers);
+            }).catch(function(error) {
+                if (errorCallback) errorCallback(error);
+            });
         },
         editLiveMsgSetting: function(data, callback, errorCallback) {
             ApiUtil.post('/room/editLiveMsgSetting', data, callback, errorCallback);

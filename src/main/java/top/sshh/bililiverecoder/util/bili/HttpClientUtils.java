@@ -38,13 +38,13 @@ import java.util.Map.Entry;
 public class HttpClientUtils {
     //    static final Logger logger = LoggerFactory.getLogger(HttpClientUtils.class);
     static final org.apache.logging.log4j.Logger logger = LogManager.getLogger(HttpClientUtils.class);
-    // 编码格式。发送编码格式统一用UTF-8
+    // 编码格式发送编码格式统一用UTF-8
     private static final String ENCODING = "UTF-8";
 
-    // 设置连接超时时间，单位毫秒。
+    // 设置连接超时时间，单位毫秒
     private static final int CONNECT_TIMEOUT = 6 * 1000;
 
-    // 请求获取数据的超时时间(即响应时间)，单位毫秒。
+    // 请求获取数据的超时时间(即响应时间)，单位毫秒
     private static final int SOCKET_TIMEOUT = 12 * 1000;
     /**
      * 在没有Cookie的情况下，是否携带全局Cookie，与防盗链
@@ -106,10 +106,10 @@ public class HttpClientUtils {
         // 创建http对象
         HttpGet httpGet = new HttpGet(uri);
         /**
-         * setConnectTimeout：设置连接超时时间，单位毫秒。
+         * setConnectTimeout：设置连接超时时间，单位毫秒
          * setConnectionRequestTimeout：设置从connect Manager(连接池)获取Connection
-         * 超时时间，单位毫秒。这个属性是新加的属性，因为目前版本是可以共享连接池的。
-         * setSocketTimeout：请求获取数据的超时时间(即响应时间)，单位毫秒。 如果访问一个接口，多少时间内无法返回数据，就直接放弃此次调用。
+         * 超时时间，单位毫秒。这个属性是新加的属性，因为目前版本是可以共享连接池的
+         * setSocketTimeout：请求获取数据的超时时间(即响应时间)，单位毫秒。 如果访问一个接口，多少时间内无法返回数据，就直接放弃此次调用
          */
         RequestConfig requestConfig = RequestConfig.custom()
                 .setProxy(setProxy())
@@ -159,7 +159,7 @@ public class HttpClientUtils {
                 }
             }).build();
             //NoopHostnameVerifier类:  作为主机名验证工具，实质上关闭了主机名验证，它接受任何
-            //有效的SSL会话并匹配到目标主机。
+            //有效的SSL会话并匹配到目标主机
             HostnameVerifier hostnameVerifier = NoopHostnameVerifier.INSTANCE;
             SSLConnectionSocketFactory sslsf = new SSLConnectionSocketFactory(sslContext, hostnameVerifier);
             return sslsf;
@@ -258,10 +258,10 @@ public class HttpClientUtils {
             packageParam(params, httpPost);
         }
         /**
-         * setConnectTimeout：设置连接超时时间，单位毫秒。
+         * setConnectTimeout：设置连接超时时间，单位毫秒
          * setConnectionRequestTimeout：设置从connect Manager(连接池)获取Connection
-         * 超时时间，单位毫秒。这个属性是新加的属性，因为目前版本是可以共享连接池的。
-         * setSocketTimeout：请求获取数据的超时时间(即响应时间)，单位毫秒。 如果访问一个接口，多少时间内无法返回数据，就直接放弃此次调用。
+         * 超时时间，单位毫秒。这个属性是新加的属性，因为目前版本是可以共享连接池的
+         * setSocketTimeout：请求获取数据的超时时间(即响应时间)，单位毫秒。 如果访问一个接口，多少时间内无法返回数据，就直接放弃此次调用
          */
         if (timeout == 0) {
             timeout = SOCKET_TIMEOUT;
@@ -398,7 +398,7 @@ public class HttpClientUtils {
     }
 
     /**
-     * Description: 封装请求头
+ * 说明：封装请求头
      *
      * @param params
      * @param httpMethod
@@ -415,7 +415,7 @@ public class HttpClientUtils {
     }
 
     /**
-     * Description: 封装请求参数
+ * 说明：封装请求参数
      *
      * @param params
      * @param httpMethod
@@ -451,7 +451,7 @@ public class HttpClientUtils {
     }
 
     /**
-     * Description: 获得响应结果
+ * 说明：获得响应结果
      *
      * @param httpResponse
      * @param httpClient
@@ -489,7 +489,7 @@ public class HttpClientUtils {
     }
 
     /**
-     * Description: 释放资源
+ * 说明：释放资源
      *
      * @param httpResponse
      * @param httpClient
@@ -506,7 +506,7 @@ public class HttpClientUtils {
     }
 
     /**
-     * get调用接口
+ * 调用 get 接口
      *
      * @param url
      * @return 字符串
@@ -517,7 +517,7 @@ public class HttpClientUtils {
     }
 
     /**
-     * get调用接口
+ * 调用 get 接口
      *
      * @param url
      * @param charsetName

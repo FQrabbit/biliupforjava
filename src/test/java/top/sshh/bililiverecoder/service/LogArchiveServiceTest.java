@@ -49,7 +49,7 @@ class LogArchiveServiceTest {
                 counted::addAndGet)) {
             while (reader.readLine() != null) { }
         } catch (Exception ignored) {
-            // 截断 GZIP 可能在读到快照末尾时报告 EOF，但计数仍应遵守快照长度。
+            // 截断 GZIP 可能在读到快照末尾时报告 EOF，但计数仍应遵守快照长度
         }
 
         assertEquals(snapshot, counted.get());

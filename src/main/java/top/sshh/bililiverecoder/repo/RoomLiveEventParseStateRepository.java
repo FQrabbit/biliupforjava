@@ -1,5 +1,6 @@
 package top.sshh.bililiverecoder.repo;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -38,4 +39,6 @@ public interface RoomLiveEventParseStateRepository extends CrudRepository<RoomLi
 
     @org.springframework.data.jpa.repository.Query("select sum(s.danmuCount) from RoomLiveEventParseState s where s.historyId = ?1 and s.success = true")
     Long sumDanmuCountByHistoryId(Long historyId);
+
+    List<RoomLiveEventParseState> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 }

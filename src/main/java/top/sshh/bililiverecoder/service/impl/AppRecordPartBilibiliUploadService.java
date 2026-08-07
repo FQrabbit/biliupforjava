@@ -431,10 +431,10 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                 part.setUpload(true);
                                 part.setUpdateTime(LocalDateTime.now());
                                 part = partRepository.save(part);
-                                // 上传完成后的文件处理统一交给可恢复的生命周期服务。
+                                // 上传完成后的文件处理统一交给可恢复的生命周期服务
                                 if (partFileCleanupPolicy.isPostUploadCleanupType(room.getDeleteType())
                                         && partFileCleanupPolicy.shouldSkipProtectedArchive(room, part, filePath, "Upload", "postUploadCleanup")) {
-                                    // 保留退回/锁定稿件的本地分P文件，方便后续检查和编辑。
+                                    // 保留退回/锁定稿件的本地分P文件，方便后续检查和编辑
                                 } else if (room.getDeleteType() == 1) {
                                     partFileOperationService.delete(part.getId());
                                 } else if (StringUtils.isNotBlank(room.getMoveDir()) && room.getDeleteType() == 4) {

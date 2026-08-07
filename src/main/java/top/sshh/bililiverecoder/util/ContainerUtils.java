@@ -13,8 +13,8 @@ public final class ContainerUtils {
     }
 
     /**
-     * 检测是否运行在容器环境（Docker / containerd / k8s / Podman）。
-     * 结果会缓存，避免重复 I/O。
+     * 检测是否运行在容器环境（Docker / containerd / k8s / Podman）
+     * 结果会缓存，避免重复 I/O
      */
     public static boolean isRunningInContainer() {
         if (cached != null) {

@@ -100,11 +100,11 @@ public class WebhookEventDispatcher {
                 if (executor == null) {
                     continue;
                 }
-                // First do a quick time check to avoid unnecessary locking for recent executors.
+                // 先快速检查时间，最近用过的执行器就不用重复加锁
                 if ((now - executor.lastUsedAtMillis) <= idleTtlMillis) {
                     continue;
                 }
-                // Re-check both the idle state and lastUsedAtMillis atomically.
+                // 原子地再次检查空闲状态和 lastUsedAtMillis
                 synchronized (executor) {
                     if (executor.isIdle() && (now - executor.lastUsedAtMillis) > idleTtlMillis) {
                         executors.remove(entry.getKey(), executor);
@@ -175,7 +175,7 @@ public class WebhookEventDispatcher {
         }
 
         /**
-         * 给延迟任务预留一个 pending 名额。
+         * 给延迟任务预留一个 pending 名额
          */
         private synchronized boolean tryReserve() {
             if (pending >= maxPending) {

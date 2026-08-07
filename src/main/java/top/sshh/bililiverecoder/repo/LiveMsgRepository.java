@@ -9,18 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.LiveMsg;
 
 import java.util.List;
-import java.util.stream.Stream;
 
 @Repository
 public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
-    /**
-     * 流式读取全部弹幕数据，用于导出配置时逐条写入 JSON，避免一次性加载全部到内存。
-     * 调用方必须在 try-with-resources 中使用，并确保在事务内调用。
-     */
-    @Query("select m from LiveMsg m order by m.id")
-    @Transactional(readOnly = true)
-    Stream<LiveMsg> streamAll();
+    List<LiveMsg> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 
     List<LiveMsg> findByPartIdAndCode(Long partId, int code);
 

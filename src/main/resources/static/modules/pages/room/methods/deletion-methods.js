@@ -415,7 +415,7 @@
                             '服务端没有返回删除任务标识，请检查版本是否已更新完整');
                         return;
                     }
-                    // 兼容旧服务端的同步响应，避免升级过程中前端一直处于锁定状态。
+                    // 兼容旧服务端的同步响应，避免升级过程中前端一直处于锁定状态
                     _this.deleteRoomSubmitting = false;
                     _this.clearPersistedDeleteRoomTask();
                     _this.notifyParentOperationStatus(false);

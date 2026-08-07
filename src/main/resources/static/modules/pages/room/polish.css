@@ -310,7 +310,8 @@
 }
 
 .config-progress-head span,
-.config-progress-detail {
+.config-progress-detail,
+.config-progress-metrics {
     color: var(--text-secondary);
     font-size: 13px;
 }
@@ -323,6 +324,37 @@
 
 .config-progress-detail {
     margin-top: 8px;
+}
+
+.config-progress-metrics {
+    margin-top: 5px;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.config-progress-panel.is-active .el-progress-bar__inner {
+    background-image: linear-gradient(
+            45deg,
+            rgba(255, 255, 255, 0.18) 25%,
+            transparent 25%,
+            transparent 50%,
+            rgba(255, 255, 255, 0.18) 50%,
+            rgba(255, 255, 255, 0.18) 75%,
+            transparent 75%,
+            transparent);
+    background-size: 24px 24px;
+    animation: config-progress-stripes 0.8s linear infinite;
+}
+
+@keyframes config-progress-stripes {
+    from { background-position: 0 0; }
+    to { background-position: 24px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .config-progress-panel.is-active .el-progress-bar__inner {
+        animation: none;
+    }
 }
 
 .room-delete-dialog {
@@ -676,7 +708,7 @@
     display: block;
     width: 100%;
 }
-/* Keyboard focus for custom room controls. */
+/* 房间自定义控件的键盘焦点样式 */
 .room-stat-item[role="button"]:focus-visible,
 .partition-input-group[role="button"]:focus-visible,
 .partition-item[role="button"]:focus-visible,

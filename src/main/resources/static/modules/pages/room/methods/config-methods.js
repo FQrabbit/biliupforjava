@@ -447,36 +447,62 @@
                 });
             }
         },
+        handleExportStatsChange: function (checked) {
+            if (checked) {
+                this.exportConfig.exportHistory = true;
+                this.$pageConfirm('统计数据包含统计事件和诊断状态，导出文件可能较大。确认要导出统计数据吗？', '导出统计数据', {
+                    confirmButtonText: '确认导出',
+                    cancelButtonText: '取消',
+                    type: 'warning',
+                    customClass: 'room-page-message-box'
+                }).catch(() => {
+                    this.exportConfig.exportStats = false;
+                });
+            }
+        },
         exportConfigF: function () {
             let _this = this;
-            if (_this.exportConfig.exportLiveMsg && !_this.exportConfig.exportHistory) {
+            if ((_this.exportConfig.exportLiveMsg || _this.exportConfig.exportStats) && !_this.exportConfig.exportHistory) {
                 _this.exportConfig.exportHistory = true;
             }
             _this.startConfigProgress('导出配置', '正在启动导出任务', '后端读取中...');
             _this.pollConfigTaskStatus('export');
-            RoomApi.exportConfig(_this.exportConfig, function (data) {
-                    // 获取当前日期和时间
-                    var now = new Date();
+            // 大备份在浏览器接收完整 Blob 前会持续很久；请求发出后立即收起选项弹窗，
+            // 进度卡片继续反馈状态，失败时通过错误状态和消息提示用户
+            _this.exportConfigDialog = false;
+            RoomApi.exportConfig(_this.exportConfig, function (blob, headers) {
+                    _this.updateConfigProgress(100, '正在交给浏览器下载',
+                        '配置文件已生成，正在唤起浏览器下载…');
+                    var disposition = headers && headers.get ? headers.get('Content-Disposition') : null;
+                    var fileName = 'biliupForJavaConfig.json';
+                    var match = disposition && disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+                    if (match && match[1]) {
+                        try { fileName = decodeURIComponent(match[1].trim().replace(/^\"|\"$/g, '')); } catch (e) { fileName = match[1].trim(); }
+                    }
 
-                    // 使用 Intl.DateTimeFormat API 格式化日期和时间
-                    var dateString = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-                    var timeString = new Intl.DateTimeFormat('zh-CN', { hour: 'numeric', minute: 'numeric' }).format(now);
-
-                    // 使用格式化的日期和时间构造文件名
-                    var fileName = 'biliupForJavaConfig_' + dateString.replace(/\//g, '年') + timeString.replace(':', '点') + '分.json';
-
-                    var blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-
-                    // 创建隐藏的链接
-                    var link = document.createElement('a');
-                    link.href = window.URL.createObjectURL(blob);
-                    link.download = fileName;
-                    link.click();
-                    window.URL.revokeObjectURL(link.href);
-                    _this.exportConfigDialog = false;
-                    _this.finishConfigProgress('导出完成', '配置文件已生成');
-                }, function () {
-                    _this.failConfigProgress('导出失败');
+                    // 让“交给浏览器下载”状态先完成一次渲染，再触发隐藏链接下载
+                    _this.$nextTick(function () {
+                        window.setTimeout(function () {
+                            var link = document.createElement('a');
+                            link.href = window.URL.createObjectURL(blob);
+                            link.download = fileName;
+                            link.click();
+                            window.setTimeout(function () { window.URL.revokeObjectURL(link.href); }, 1000);
+                            _this.finishConfigProgress('已交给浏览器下载',
+                                '浏览器已收到配置文件，请在下载栏或下载目录中查看。', 8000);
+                        }, 200);
+                    });
+                }, function (error) {
+                    var detail = error && error.message
+                        ? error.message
+                        : '导出过程异常中断，未生成完整配置文件';
+                    _this.failConfigProgress('导出失败', detail);
+                    _this.$message({
+                        message: detail,
+                        type: 'error',
+                        showClose: true,
+                        duration: 8000
+                    });
                 });
         },
         editLiveMsgSetting: function () {

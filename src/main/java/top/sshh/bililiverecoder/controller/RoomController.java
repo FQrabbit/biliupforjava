@@ -6,12 +6,15 @@ import com.alibaba.fastjson.TypeReference;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.jayway.jsonpath.JsonPath;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +31,15 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.repo.SystemConfigRepository;
 import top.sshh.bililiverecoder.repo.StorageRootRepository;
 import top.sshh.bililiverecoder.repo.PartFileLocationRepository;
+import top.sshh.bililiverecoder.repo.NotificationChannelRepository;
+import top.sshh.bililiverecoder.repo.NotificationRuleRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveDailyStatsRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveDanmuUserStatsRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveEventParseStateRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveEventRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveEventXmlIssueRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveMsgBucketStatsRepository;
+import top.sshh.bililiverecoder.repo.RoomLiveSessionStatsRepository;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.StorageLifecycleMigrationService;
@@ -41,12 +53,12 @@ import top.sshh.bililiverecoder.util.UploadEnums;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -64,12 +76,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Stream;
+import java.util.function.Function;
 
 @RestController
 @RequestMapping("/room")
 @Slf4j
 public class RoomController {
+    private static final int EXPORT_PAGE_SIZE = 1000;
+    private static final long CONFIG_TASK_REPORT_INTERVAL_NS = TimeUnit.MILLISECONDS.toNanos(250);
+
     @Autowired
     private RecordRoomRepository roomRepository;
 
@@ -101,6 +116,36 @@ public class RoomController {
     private PartFileLocationRepository partFileLocationRepository;
 
     @Autowired
+    private NotificationChannelRepository notificationChannelRepository;
+
+    @Autowired
+    private NotificationRuleRepository notificationRuleRepository;
+
+    @Autowired
+    private RoomLiveSessionStatsRepository sessionStatsRepository;
+
+    @Autowired
+    private RoomLiveDailyStatsRepository dailyStatsRepository;
+
+    @Autowired
+    private RoomLiveMsgBucketStatsRepository bucketStatsRepository;
+
+    @Autowired
+    private RoomLiveDanmuUserStatsRepository danmuUserStatsRepository;
+
+    @Autowired
+    private RoomLiveEventRepository eventRepository;
+
+    @Autowired
+    private RoomLiveEventParseStateRepository eventParseStateRepository;
+
+    @Autowired
+    private RoomLiveEventXmlIssueRepository xmlIssueRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Autowired
     private StorageLifecycleMigrationService storageLifecycleMigrationService;
 
     @Autowired
@@ -119,6 +164,8 @@ public class RoomController {
     private final Semaphore avatarProxySemaphore = new Semaphore(8, true);
     // 记录上一次请求B站的时间戳
     private final AtomicLong lastRequestTime = new AtomicLong(0);
+    private final AtomicLong configImportBytesRead = new AtomicLong(0);
+    private final AtomicLong lastConfigTaskReportNs = new AtomicLong(0);
     private volatile ConfigTaskStatus configTaskStatus = ConfigTaskStatus.idle();
 
     @Data
@@ -141,33 +188,77 @@ public class RoomController {
                                     long processed,
                                     long total,
                                     int percent,
+                                    String unit,
+                                    long recordsProcessed,
+                                    long recordsTotal,
+                                    long bytesProcessed,
+                                    long bytesTotal,
+                                    long startedAtEpochMs,
+                                    long updatedAtEpochMs,
                                     LocalDateTime updatedAt) {
         private static ConfigTaskStatus idle() {
+            long now = System.currentTimeMillis();
             return new ConfigTaskStatus(null, "idle", "空闲", false, true, "IDLE",
-                    "当前没有导入导出任务", "", 0, 0, 0, LocalDateTime.now());
+                    "当前没有导入导出任务", "", 0, 0, 0,
+                    "records", 0, 0, 0, 0, now, now, LocalDateTime.now());
         }
 
-        private static ConfigTaskStatus start(String task, String title, long total) {
-            return new ConfigTaskStatus(UUID.randomUUID().toString(), task, title, true, true, "STARTING",
-                    "正在启动任务", "", 0, Math.max(0, total), 1, LocalDateTime.now());
-        }
-
-        private ConfigTaskStatus progress(String phase, String detail, long processed) {
+        private static ConfigTaskStatus start(String task, String title, long total,
+                                              String unit, long bytesTotal) {
+            long now = System.currentTimeMillis();
             long safeTotal = Math.max(0, total);
-            long safeProcessed = Math.max(0, safeTotal > 0 ? Math.min(processed, safeTotal) : processed);
-            int nextPercent = safeTotal <= 0 ? 5 : Math.max(1, Math.min(99, (int) Math.floor(safeProcessed * 100.0d / safeTotal)));
+            long safeBytesTotal = Math.max(0, bytesTotal);
+            return new ConfigTaskStatus(UUID.randomUUID().toString(), task, title, true, true, "STARTING",
+                    "正在启动任务", "", 0, safeTotal, 1,
+                    unit, 0, "records".equals(unit) ? safeTotal : 0,
+                    0, safeBytesTotal, now, now, LocalDateTime.now());
+        }
+
+        private ConfigTaskStatus withRecordTotal(long recordTotal) {
+            long safeRecordTotal = Math.max(0, recordTotal);
+            return new ConfigTaskStatus(taskId, task, title, running, success, phase, message, detail,
+                    Math.min(recordsProcessed, safeRecordTotal), safeRecordTotal,
+                    calculatePercent(recordsProcessed, safeRecordTotal), "records",
+                    recordsProcessed, safeRecordTotal, bytesProcessed, bytesTotal,
+                    startedAtEpochMs, System.currentTimeMillis(), LocalDateTime.now());
+        }
+
+        private ConfigTaskStatus progress(String phase, String detail, long recordProcessed, long byteProcessed) {
+            long safeRecordProcessed = Math.max(0, recordsTotal > 0
+                    ? Math.min(recordProcessed, recordsTotal) : recordProcessed);
+            long safeByteProcessed = Math.max(0, bytesTotal > 0
+                    ? Math.min(byteProcessed, bytesTotal) : byteProcessed);
+            boolean recordProgress = "records".equals(unit);
+            long safeTotal = recordProgress ? recordsTotal : bytesTotal;
+            long safeProcessed = recordProgress ? safeRecordProcessed : safeByteProcessed;
+            int nextPercent = calculatePercent(safeProcessed, safeTotal);
+            long now = System.currentTimeMillis();
             return new ConfigTaskStatus(taskId, task, title, true, true, phase, phase,
-                    detail == null ? "" : detail, safeProcessed, safeTotal, nextPercent, LocalDateTime.now());
+                    detail == null ? "" : detail, safeProcessed, safeTotal, nextPercent, unit,
+                    safeRecordProcessed, recordsTotal, safeByteProcessed, bytesTotal,
+                    startedAtEpochMs, now, LocalDateTime.now());
         }
 
         private ConfigTaskStatus done(String message) {
+            long now = System.currentTimeMillis();
             return new ConfigTaskStatus(taskId, task, title, false, true, "DONE", message,
-                    detail, total, total, 100, LocalDateTime.now());
+                    detail, total, total, 100, unit,
+                    recordsTotal > 0 ? recordsTotal : recordsProcessed, recordsTotal,
+                    bytesTotal > 0 ? bytesTotal : bytesProcessed, bytesTotal,
+                    startedAtEpochMs, now, LocalDateTime.now());
         }
 
         private ConfigTaskStatus failed(String message) {
+            long now = System.currentTimeMillis();
             return new ConfigTaskStatus(taskId, task, title, false, false, "FAILED", message,
-                    detail, processed, total, 100, LocalDateTime.now());
+                    detail, processed, total, 100, unit,
+                    recordsProcessed, recordsTotal, bytesProcessed, bytesTotal,
+                    startedAtEpochMs, now, LocalDateTime.now());
+        }
+
+        private static int calculatePercent(long processed, long total) {
+            return total <= 0 ? 5
+                    : Math.max(1, Math.min(99, (int) Math.floor(processed * 100.0d / total)));
         }
 
         private Map<String, Object> toMap() {
@@ -183,8 +274,46 @@ public class RoomController {
             map.put("processed", processed);
             map.put("total", total);
             map.put("percent", percent);
+            map.put("unit", unit);
+            map.put("recordsProcessed", recordsProcessed);
+            map.put("recordsTotal", recordsTotal);
+            map.put("bytesProcessed", bytesProcessed);
+            map.put("bytesTotal", bytesTotal);
+            map.put("startedAtEpochMs", startedAtEpochMs);
+            map.put("updatedAtEpochMs", updatedAtEpochMs);
             map.put("updatedAt", updatedAt);
             return map;
+        }
+    }
+
+    /** 记录流式 JSON 解析器读过的字节数，不把整份备份文件放进内存 */
+    private static final class ImportCountingInputStream extends FilterInputStream {
+        private final AtomicLong counter;
+
+        private ImportCountingInputStream(InputStream input, AtomicLong counter) {
+            super(input);
+            this.counter = counter;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int value = in.read();
+            if (value >= 0) counter.incrementAndGet();
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            int read = in.read(buffer, offset, length);
+            if (read > 0) counter.addAndGet(read);
+            return read;
+        }
+
+        @Override
+        public long skip(long count) throws IOException {
+            long skipped = in.skip(count);
+            if (skipped > 0) counter.addAndGet(skipped);
+            return skipped;
         }
     }
 
@@ -194,11 +323,32 @@ public class RoomController {
     }
 
     private void startConfigTask(String task, String title, long total) {
-        configTaskStatus = ConfigTaskStatus.start(task, title, total);
+        configTaskStatus = ConfigTaskStatus.start(task, title, total, "records", 0);
+        lastConfigTaskReportNs.set(0);
+    }
+
+    private void startConfigImportTask(String title, long fileSize) {
+        configImportBytesRead.set(0);
+        configTaskStatus = ConfigTaskStatus.start("import", title, fileSize, "bytes", fileSize);
+        lastConfigTaskReportNs.set(0);
+    }
+
+    private void setConfigTaskRecordTotal(long total) {
+        configTaskStatus = configTaskStatus.withRecordTotal(total);
     }
 
     private void updateConfigTask(String phase, String detail, long processed) {
-        configTaskStatus = configTaskStatus.progress(phase, detail, processed);
+        configTaskStatus = configTaskStatus.progress(
+                phase, detail, processed, configImportBytesRead.get());
+        lastConfigTaskReportNs.set(System.nanoTime());
+    }
+
+    private void updateConfigTaskThrottled(String phase, String detail, long processed) {
+        long now = System.nanoTime();
+        long previous = lastConfigTaskReportNs.get();
+        if (previous == 0 || now - previous >= CONFIG_TASK_REPORT_INTERVAL_NS) {
+            updateConfigTask(phase, detail, processed);
+        }
     }
 
     private void finishConfigTask(String message) {
@@ -279,18 +429,38 @@ public class RoomController {
 
     /**
      * 流式导出配置：直接从数据库逐条读取实体并写入 HTTP 响应输出流，
-     * 不在内存中构建完整的 Map 或 JSON String，避免大文件（如百万级弹幕）导致 OOM。
+     * 不在内存中构建完整的 Map 或 JSON String，避免大文件（如百万级弹幕）导致 OOM
      */
     @Transactional(readOnly = true)
     @PostMapping("/exportConfig")
     public void exportConfig(@RequestBody ExportConfigParams params, HttpServletResponse response) throws IOException {
-        long total = 1;
-        if (params.isExportRoom()) total += roomRepository.count();
-        if (params.isExportUser()) total += userRepository.count();
-        if (params.isExportHistory()) total += historyRepository.count() + partRepository.count()
-                + storageRootRepository.count() + partFileLocationRepository.count();
-        if (params.isExportSystemConfig()) total += systemConfigRepository.count();
-        if (params.isExportLiveMsg()) total += liveMsgRepository.count();
+        boolean exportHistory = params.isExportHistory() || params.isExportStats();
+        Map<String, Long> sectionCounts = new LinkedHashMap<>();
+        if (params.isExportUser()) sectionCounts.put("userList", userRepository.count());
+        if (params.isExportRoom()) sectionCounts.put("roomList", roomRepository.count());
+        if (exportHistory) {
+            sectionCounts.put("storageRootList", storageRootRepository.count());
+            sectionCounts.put("historyList", historyRepository.count());
+            sectionCounts.put("partList", partRepository.count());
+            sectionCounts.put("partFileLocationList", partFileLocationRepository.countByStateNot(
+                    PartFileLocation.LocationState.PROCESSING));
+        }
+        if (params.isExportSystemConfig()) {
+            sectionCounts.put("systemConfigList", systemConfigRepository.count());
+            sectionCounts.put("notificationChannelList", notificationChannelRepository.count());
+            sectionCounts.put("notificationRuleList", notificationRuleRepository.count());
+        }
+        if (params.isExportLiveMsg()) sectionCounts.put("liveMsgList", liveMsgRepository.count());
+        if (params.isExportStats()) {
+            sectionCounts.put("roomLiveSessionStatsList", sessionStatsRepository.count());
+            sectionCounts.put("roomLiveDailyStatsList", dailyStatsRepository.count());
+            sectionCounts.put("roomLiveMsgBucketStatsList", bucketStatsRepository.count());
+            sectionCounts.put("roomLiveDanmuUserStatsList", danmuUserStatsRepository.count());
+            sectionCounts.put("roomLiveEventList", eventRepository.count());
+            sectionCounts.put("roomLiveEventParseStateList", eventParseStateRepository.count());
+            sectionCounts.put("roomLiveEventXmlIssueList", xmlIssueRepository.count());
+        }
+        long total = sectionCounts.values().stream().mapToLong(Long::longValue).sum();
         long processed = 0;
         startConfigTask("export", "导出配置", total);
 
@@ -303,8 +473,13 @@ public class RoomController {
 
         try (OutputStream out = response.getOutputStream();
              BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), 65536)) {
-            writer.write("{");
-            boolean[] firstSection = {true};
+            writer.write("{\"configFormatVersion\":2,\"exportedAt\":");
+            writer.write(JSON.toJSONString(LocalDateTime.now().toString()));
+            writer.write(",\"recordCount\":");
+            writer.write(Long.toString(total));
+            writer.write(",\"sectionCounts\":");
+            writer.write(JSON.toJSONString(sectionCounts));
+            boolean[] firstSection = {false};
 
             // userList 必须在 roomList 之前导出，确保流式导入时 ID 映射可用
             if(params.isExportUser()){
@@ -326,17 +501,21 @@ public class RoomController {
                 writer.write("]");
                 updateConfigTask("导出房间", "房间 " + count + " 条", processed);
             }
-            if(params.isExportHistory()){
+            if(exportHistory){
                 updateConfigTask("导出存储根", "正在读取存储根", processed);
                 firstSection[0] = writeSectionKey(writer, firstSection[0], "storageRootList");
-                int count = writeEntityStream(writer, storageRootRepository.streamAll(), null);
+                int count = writeEntityList(writer,
+                        storageRootRepository.findAllByOrderByIdAsc().iterator(), null);
                 processed += count;
                 writer.write("]");
 
                 updateConfigTask("导出历史", "正在读取录制历史", processed);
                 firstSection[0] = writeSectionKey(writer, firstSection[0], "historyList");
                 long[] localProcessed = {processed};
-                count = writeEntityStream(writer, historyRepository.streamAll(),
+                count = writeEntityPages(writer,
+                        afterId -> historyRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RecordHistory::getId, Function.identity(),
                         idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
                             updateConfigTask("导出历史", "已读取 " + idx + " 场历史", localProcessed[0]); });
                 processed = localProcessed[0];
@@ -346,7 +525,10 @@ public class RoomController {
                 updateConfigTask("导出分P", "正在读取分P记录", processed);
                 firstSection[0] = writeSectionKey(writer, firstSection[0], "partList");
                 localProcessed[0] = processed;
-                count = writeEntityStream(writer, partRepository.streamAll(),
+                count = writeEntityPages(writer,
+                        afterId -> partRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RecordHistoryPart::getId, Function.identity(),
                         idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
                             updateConfigTask("导出分P", "已读取 " + idx + " 个分P", localProcessed[0]); });
                 processed = localProcessed[0];
@@ -356,8 +538,11 @@ public class RoomController {
                 updateConfigTask("导出文件位置", "正在读取分P文件位置", processed);
                 firstSection[0] = writeSectionKey(writer, firstSection[0], "partFileLocationList");
                 localProcessed[0] = processed;
-                count = writeEntityStream(writer, partFileLocationRepository.streamCompleted(
-                                PartFileLocation.LocationState.PROCESSING),
+                count = writeEntityPages(writer,
+                        afterId -> partFileLocationRepository.findByStateNotAndIdGreaterThanOrderByIdAsc(
+                                PartFileLocation.LocationState.PROCESSING, afterId,
+                                PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        PartFileLocation::getId, Function.identity(),
                         idx -> { localProcessed[0]++; if (localProcessed[0] % 1000 == 0)
                             updateConfigTask("导出文件位置", "已读取 " + idx + " 个位置", localProcessed[0]); });
                 processed = localProcessed[0];
@@ -370,12 +555,33 @@ public class RoomController {
                 processed += count;
                 writer.write("]");
                 updateConfigTask("导出系统配置", "系统配置 " + count + " 条", processed);
+
+                updateConfigTask("导出推送渠道", "正在读取推送渠道", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "notificationChannelList");
+                count = writeEntityPages(writer,
+                        afterId -> notificationChannelRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        NotificationChannel::getId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
+
+                updateConfigTask("导出推送规则", "正在读取推送规则", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "notificationRuleList");
+                count = writeEntityPages(writer,
+                        afterId -> notificationRuleRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        NotificationRule::getId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
             }
             if(params.isExportLiveMsg()){
                 updateConfigTask("导出弹幕", "正在读取弹幕数据", processed);
                 firstSection[0] = writeSectionKey(writer, firstSection[0], "liveMsgList");
                 long[] localProcessed = {processed};
-                int count = writeEntityStream(writer, liveMsgRepository.streamAll(),
+                int count = writeEntityPages(writer,
+                        afterId -> liveMsgRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        LiveMsg::getId, Function.identity(),
                         idx -> { localProcessed[0]++; if (localProcessed[0] % 5000 == 0)
                             updateConfigTask("导出弹幕", "已读取 " + idx + " 条弹幕", localProcessed[0]); });
                 processed = localProcessed[0];
@@ -383,9 +589,76 @@ public class RoomController {
                 updateConfigTask("导出弹幕", "弹幕 " + count + " 条", processed);
             }
 
-            writer.write("}");
+            if (params.isExportStats()) {
+                int count;
+                updateConfigTask("导出统计", "正在读取场次统计", processed);
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomLiveSessionStatsList");
+                count = writeEntityPages(writer,
+                        afterId -> sessionStatsRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RoomLiveSessionStats::getId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
+
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomLiveDailyStatsList");
+                count = writeEntityPages(writer,
+                        afterId -> dailyStatsRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RoomLiveDailyStats::getId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
+
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomLiveMsgBucketStatsList");
+                count = writeEntityPages(writer,
+                        afterId -> bucketStatsRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RoomLiveMsgBucketStats::getId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
+
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomLiveDanmuUserStatsList");
+                count = writeEntityPages(writer,
+                        afterId -> danmuUserStatsRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RoomLiveDanmuUserStats::getId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
+
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomLiveEventList");
+                count = writeEntityPages(writer,
+                        afterId -> eventRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RoomLiveEvent::getId, entity -> {
+                    Map<String, Object> copy = JSON.parseObject(JSON.toJSONString(entity), new TypeReference<Map<String, Object>>() {});
+                    copy.remove("rawJson");
+                    return copy;
+                }, null);
+                processed += count;
+                writer.write("]");
+
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomLiveEventParseStateList");
+                count = writeEntityPages(writer,
+                        afterId -> eventParseStateRepository.findByIdGreaterThanOrderByIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RoomLiveEventParseState::getId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
+
+                firstSection[0] = writeSectionKey(writer, firstSection[0], "roomLiveEventXmlIssueList");
+                count = writeEntityPages(writer,
+                        afterId -> xmlIssueRepository.findByPartIdGreaterThanOrderByPartIdAsc(
+                                afterId, PageRequest.of(0, EXPORT_PAGE_SIZE)),
+                        RoomLiveEventXmlIssue::getPartId, Function.identity(), null);
+                processed += count;
+                writer.write("]");
+                updateConfigTask("导出统计", "统计数据 " + processed + " 条", processed);
+            }
+
+            // 前端只读取 Blob 尾部校验该标记，无需重新解析可能很大的整份 JSON
+            // 若导出中途异常，响应虽然可能已经提交，但不会包含此标记，因此不会被误报为成功
+            writer.write(",\"exportCompleted\":true}");
             writer.flush();
-            if (params.isExportLiveMsg()) {
+            if (params.isExportLiveMsg() || params.isExportStats()) {
                 finishConfigTask("导出完成。注意：含弹幕数据的配置文件可能超过导入上限（"
                         + (MAX_CONFIG_IMPORT_SIZE / 1024 / 1024) + "MB），届时将无法导回。"
                         + "如文件过大，请重新导出时不勾选弹幕数据。");
@@ -420,41 +693,58 @@ public class RoomController {
         return count;
     }
 
-    /** 从 Stream 逐条序列化实体写入（用于大表流式读取），返回写入数量 */
-    private <T> int writeEntityStream(BufferedWriter writer, Stream<T> stream,
-                                      java.util.function.IntConsumer progressCallback) throws IOException {
-        int[] count = {0};
-        boolean[] first = {true};
-        try (stream) {
-            stream.forEach(entity -> {
-                try {
-                    if (!first[0]) writer.write(",");
-                    writer.write(JSON.toJSONString(entity));
-                    first[0] = false;
-                    count[0]++;
-                    if (progressCallback != null) progressCallback.accept(count[0]);
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
+    /**
+     * 按主键游标分批读取并逐条写入，避免 Native Image 下 Hibernate Stream 实体被误当成 Object[]，
+     * 同时避免 offset 分页在大表上的性能退化
+     */
+    private <T> int writeEntityPages(BufferedWriter writer,
+                                     Function<Long, List<T>> pageLoader,
+                                     Function<T, Long> idExtractor,
+                                     Function<T, ?> mapper,
+                                     java.util.function.IntConsumer progressCallback) throws IOException {
+        int count = 0;
+        boolean first = true;
+        long lastId = Long.MIN_VALUE;
+        while (true) {
+            List<T> page = pageLoader.apply(lastId);
+            if (page == null || page.isEmpty()) {
+                break;
+            }
+            long nextLastId = lastId;
+            for (T entity : page) {
+                Long entityId = idExtractor.apply(entity);
+                if (entityId == null || entityId <= nextLastId) {
+                    throw new IllegalStateException("导出分页数据主键无效或未按升序排列");
                 }
-            });
-        } catch (UncheckedIOException e) {
-            throw e.getCause();
+                if (!first) writer.write(",");
+                writer.write(JSON.toJSONString(mapper.apply(entity)));
+                first = false;
+                nextLastId = entityId;
+                count++;
+                if (progressCallback != null) progressCallback.accept(count);
+            }
+            // 分页只限制单次查询大小；清理一级缓存才能确保百万级数据导出时内存保持稳定
+            entityManager.clear();
+            lastId = nextLastId;
+            if (page.size() < EXPORT_PAGE_SIZE) {
+                break;
+            }
         }
-        return count[0];
+        return count;
     }
 
     /**
-     * 配置导入最大尺寸：128MB。
+     * 配置导入最大尺寸：与 application multipart 配置保持一致
      * 使用 JSONReader 流式解析：只保持当前 section 在内存中，逐条反序列化并分批 saveAll，
-     * 不再一次性加载整个文件 byte[] / Map / List。
+     * 不再一次性加载整个文件 byte[] / Map / List
      */
-    private static final long MAX_CONFIG_IMPORT_SIZE = 128L * 1024 * 1024;
+    private static final long MAX_CONFIG_IMPORT_SIZE = 512L * 1024 * 1024;
 
     /** 流式导入时每批保存的实体数量，与 JPA batch_size 对齐 */
     private static final int IMPORT_BATCH_SIZE = 1000;
 
     @PostMapping("/uploadConfig")
-    public void uploadConfig(@RequestParam("file") MultipartFile file) throws IOException {
+    public Map<String, Object> uploadConfig(@RequestParam("file") MultipartFile file) throws IOException {
         long fileSize = file.getSize();
         if (fileSize > MAX_CONFIG_IMPORT_SIZE) {
             throw new IOException("配置文件过大（" + (fileSize / 1024 / 1024) + "MB），"
@@ -476,20 +766,27 @@ public class RoomController {
         int importedFileLocationCount = 0;
         int importedSystemConfigCount = 0;
         int importedLiveMsgCount = 0;
+        int importedNotificationChannelCount = 0;
+        int importedNotificationRuleCount = 0;
+        int importedStatsCount = 0;
         int skippedPartCount = 0;
         int skippedLiveMsgCount = 0;
 
         // 流式解析：使用 JSONReader 逐 section 读取，避免将整个文件加载到内存
-        startConfigTask("import", "导入配置", Math.max(1L, fileSize));
-        try (InputStream is = new BufferedInputStream(file.getInputStream(), 65536);
+        startConfigImportTask("导入配置", Math.max(1L, fileSize));
+        try (InputStream is = new ImportCountingInputStream(
+                     new BufferedInputStream(file.getInputStream(), 65536), configImportBytesRead);
              JSONReader reader = new JSONReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
 
             reader.startObject();
+            int[] importedFormatVersion = {1};
+            Map<String, Long> importedSectionCounts = new LinkedHashMap<>();
 
             Map<Long, Long> userIdConverMap = new HashMap<>();
             Map<Long, Long> historyIdConverMap = new HashMap<>();
             Map<Long, Long> partIdConverMap = new HashMap<>();
             Map<Long, Long> storageRootIdConverMap = new HashMap<>();
+            Map<Long, Long> notificationChannelIdConverMap = new HashMap<>();
 
             // 兼容旧导出文件：roomList 可能在 userList 之前（新导出已修复为 userList 优先）
             List<RecordRoom> pendingRooms = null;
@@ -500,15 +797,62 @@ public class RoomController {
             while (reader.hasNext()) {
                 String key = reader.readString();
                 switch (key) {
+                    case "configFormatVersion" -> {
+                        Object value = reader.readObject();
+                        try {
+                            importedFormatVersion[0] = Integer.parseInt(String.valueOf(value));
+                        } catch (NumberFormatException e) {
+                            throw new IllegalArgumentException("配置文件版本无效");
+                        }
+                        if (importedFormatVersion[0] > 2 || importedFormatVersion[0] < 1) {
+                            throw new IllegalArgumentException("不支持的配置文件版本：" + importedFormatVersion[0]);
+                        }
+                    }
+                    case "exportedAt" -> reader.readObject();
+                    case "recordCount" -> {
+                        Object value = reader.readObject();
+                        try {
+                            setConfigTaskRecordTotal(Math.max(0L, Long.parseLong(String.valueOf(value))));
+                        } catch (NumberFormatException e) {
+                            throw new IllegalArgumentException("配置文件记录总数无效");
+                        }
+                    }
+                    case "sectionCounts" -> {
+                        Map<?, ?> values = reader.readObject(Map.class);
+                        importedSectionCounts.clear();
+                        if (values != null) {
+                            for (Map.Entry<?, ?> entry : values.entrySet()) {
+                                try {
+                                    long count = Math.max(0L, Long.parseLong(String.valueOf(entry.getValue())));
+                                    importedSectionCounts.put(String.valueOf(entry.getKey()), count);
+                                } catch (NumberFormatException e) {
+                                    throw new IllegalArgumentException("配置文件数据段记录数无效：" + entry.getKey());
+                                }
+                            }
+                        }
+                        if (!importedSectionCounts.isEmpty()) {
+                            long sectionTotal = importedSectionCounts.values().stream()
+                                    .mapToLong(Long::longValue).sum();
+                            if (configTaskStatus.recordsTotal() > 0
+                                    && configTaskStatus.recordsTotal() != sectionTotal) {
+                                throw new IllegalArgumentException("配置文件记录总数与数据段统计不一致");
+                            }
+                            setConfigTaskRecordTotal(sectionTotal);
+                        }
+                    }
                     case "storageRootList" -> {
+                        updateConfigTask("导入存储根", "正在恢复存储根映射", importProcessed);
                         importedStorageRootCount = importStorageRootSection(reader, storageRootIdConverMap);
-                        importProcessed += importedStorageRootCount;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "storageRootList", importedStorageRootCount);
+                        updateConfigTask("导入存储根", "存储根 " + importedStorageRootCount + " 条", importProcessed);
                     }
                     case "userList" -> {
                         importUsersStartNs = System.nanoTime();
                         updateConfigTask("导入用户", "正在导入用户配置", importProcessed);
                         importedUserCount = importUserSection(reader, userIdConverMap);
-                        importProcessed += importedUserCount;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "userList", importedUserCount);
                         updateConfigTask("导入用户", "用户 " + importedUserCount + " 条", importProcessed);
                         log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Users.Success")
                                 .add("count", importedUserCount));
@@ -516,7 +860,6 @@ public class RoomController {
                             importRoomsStartNs = System.nanoTime();
                             updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
                             importedRoomCount = importRoomBatch(pendingRooms, userIdConverMap);
-                            importProcessed += importedRoomCount;
                             pendingRooms = null;
                             updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
                             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
@@ -528,9 +871,13 @@ public class RoomController {
                         updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
                         if (userIdConverMap.isEmpty()) {
                             pendingRooms = readRoomSection(reader);
+                            importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                    "roomList", pendingRooms.size());
+                            updateConfigTask("导入房间", "房间数据已读取，正在等待用户映射", importProcessed);
                         } else {
                             importedRoomCount = importRoomSection(reader, userIdConverMap);
-                            importProcessed += importedRoomCount;
+                            importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                    "roomList", importedRoomCount);
                             updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
                             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
                                     .add("count", importedRoomCount));
@@ -540,7 +887,8 @@ public class RoomController {
                         importHistoriesStartNs = System.nanoTime();
                         updateConfigTask("导入历史", "正在导入录制历史", importProcessed);
                         importedHistoryCount = importHistorySection(reader, historyIdConverMap);
-                        importProcessed += importedHistoryCount;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "historyList", importedHistoryCount);
                         updateConfigTask("导入历史", "历史 " + importedHistoryCount + " 条", importProcessed);
                         log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Histories.Success")
                                 .add("count", importedHistoryCount));
@@ -550,7 +898,6 @@ public class RoomController {
                             int[] pr = importPartBatch(pendingParts, historyIdConverMap, partIdConverMap);
                             importedPartCount = pr[0];
                             skippedPartCount = pr[1];
-                            importProcessed += pr[2];
                             pendingParts = null;
                             updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
                             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
@@ -562,11 +909,15 @@ public class RoomController {
                         updateConfigTask("导入分P", "正在导入分P记录", importProcessed);
                         if (historyIdConverMap.isEmpty()) {
                             pendingParts = readPartSection(reader);
+                            importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                    "partList", pendingParts.size());
+                            updateConfigTask("导入分P", "分P数据已读取，正在等待历史映射", importProcessed);
                         } else {
                             int[] pr = importPartSection(reader, historyIdConverMap, partIdConverMap);
                             importedPartCount = pr[0];
                             skippedPartCount = pr[1];
-                            importProcessed += pr[2];
+                            importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                    "partList", pr[2]);
                             updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
                             log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
                                     .add("count", importedPartCount));
@@ -576,18 +927,38 @@ public class RoomController {
                         if (partIdConverMap.isEmpty()) {
                             throw new IllegalArgumentException("partFileLocationList 必须位于 partList 之后");
                         }
+                        updateConfigTask("导入文件位置", "正在恢复分P文件位置", importProcessed);
                         importedFileLocationCount = importPartFileLocationSection(
                                 reader, partIdConverMap, storageRootIdConverMap);
-                        importProcessed += importedFileLocationCount;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "partFileLocationList", importedFileLocationCount);
+                        updateConfigTask("导入文件位置", "文件位置 " + importedFileLocationCount + " 条", importProcessed);
                     }
                     case "systemConfigList" -> {
                         importSystemConfigsStartNs = System.nanoTime();
                         updateConfigTask("导入系统配置", "正在导入系统配置", importProcessed);
                         importedSystemConfigCount = importSystemConfigSection(reader);
-                        importProcessed += importedSystemConfigCount;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "systemConfigList", importedSystemConfigCount);
                         updateConfigTask("导入系统配置", "系统配置 " + importedSystemConfigCount + " 条", importProcessed);
                         log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.SystemConfigs.Success")
                                 .add("count", importedSystemConfigCount));
+                    }
+                    case "notificationChannelList" -> {
+                        updateConfigTask("导入推送渠道", "正在恢复推送渠道与密钥", importProcessed);
+                        importedNotificationChannelCount = importNotificationChannelSection(
+                                reader, notificationChannelIdConverMap);
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "notificationChannelList", importedNotificationChannelCount);
+                        updateConfigTask("导入推送渠道", "推送渠道 " + importedNotificationChannelCount + " 条", importProcessed);
+                    }
+                    case "notificationRuleList" -> {
+                        updateConfigTask("导入推送规则", "正在恢复推送规则", importProcessed);
+                        importedNotificationRuleCount = importNotificationRuleSection(
+                                reader, notificationChannelIdConverMap);
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "notificationRuleList", importedNotificationRuleCount);
+                        updateConfigTask("导入推送规则", "推送规则 " + importedNotificationRuleCount + " 条", importProcessed);
                     }
                     case "liveMsgList" -> {
                         importLiveMsgsStartNs = System.nanoTime();
@@ -595,11 +966,72 @@ public class RoomController {
                         int[] mr = importLiveMsgSection(reader, partIdConverMap, importProcessed);
                         importedLiveMsgCount = mr[0];
                         skippedLiveMsgCount = mr[1];
-                        importProcessed += mr[2];
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "liveMsgList", mr[2]);
                         updateConfigTask("导入弹幕", "弹幕 " + importedLiveMsgCount + " 条，跳过 " + skippedLiveMsgCount + " 条", importProcessed);
                         log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.LiveMsgs.Success")
                                 .add("count", importedLiveMsgCount)
                                 .add("skipped", skippedLiveMsgCount));
+                    }
+                    case "roomLiveSessionStatsList" -> {
+                        updateConfigTask("导入统计", "正在恢复场次统计", importProcessed);
+                        int count = importSessionStatsSection(reader, historyIdConverMap, importProcessed);
+                        importedStatsCount += count;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "roomLiveSessionStatsList", count);
+                        updateConfigTask("导入统计", "场次统计已恢复", importProcessed);
+                    }
+                    case "roomLiveDailyStatsList" -> {
+                        updateConfigTask("导入统计", "正在恢复每日统计", importProcessed);
+                        int count = importDailyStatsSection(reader, importProcessed);
+                        importedStatsCount += count;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "roomLiveDailyStatsList", count);
+                        updateConfigTask("导入统计", "每日统计已恢复", importProcessed);
+                    }
+                    case "roomLiveMsgBucketStatsList" -> {
+                        updateConfigTask("导入统计", "正在恢复分钟趋势", importProcessed);
+                        int count = importBucketStatsSection(reader, historyIdConverMap, importProcessed);
+                        importedStatsCount += count;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "roomLiveMsgBucketStatsList", count);
+                        updateConfigTask("导入统计", "分钟趋势已恢复", importProcessed);
+                    }
+                    case "roomLiveDanmuUserStatsList" -> {
+                        updateConfigTask("导入统计", "正在恢复弹幕用户统计", importProcessed);
+                        int count = importDanmuUserStatsSection(reader, historyIdConverMap, partIdConverMap,
+                                importProcessed);
+                        importedStatsCount += count;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "roomLiveDanmuUserStatsList", count);
+                        updateConfigTask("导入统计", "弹幕用户统计已恢复", importProcessed);
+                    }
+                    case "roomLiveEventList" -> {
+                        updateConfigTask("导入统计", "正在恢复礼物、SC与舰长事件", importProcessed);
+                        int count = importEventSection(reader, historyIdConverMap, partIdConverMap,
+                                importProcessed);
+                        importedStatsCount += count;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "roomLiveEventList", count);
+                        updateConfigTask("导入统计", "直播事件已恢复", importProcessed);
+                    }
+                    case "roomLiveEventParseStateList" -> {
+                        updateConfigTask("导入统计", "正在恢复统计诊断状态", importProcessed);
+                        int count = importEventParseStateSection(reader, historyIdConverMap, partIdConverMap,
+                                importProcessed);
+                        importedStatsCount += count;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "roomLiveEventParseStateList", count);
+                        updateConfigTask("导入统计", "统计诊断状态已恢复", importProcessed);
+                    }
+                    case "roomLiveEventXmlIssueList" -> {
+                        updateConfigTask("导入统计", "正在恢复 XML 诊断信息", importProcessed);
+                        int count = importXmlIssueSection(reader, historyIdConverMap, partIdConverMap,
+                                storageRootIdConverMap, importProcessed);
+                        importedStatsCount += count;
+                        importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
+                                "roomLiveEventXmlIssueList", count);
+                        updateConfigTask("导入统计", "XML 诊断信息已恢复", importProcessed);
                     }
                     default -> reader.readObject();
                 }
@@ -610,7 +1042,6 @@ public class RoomController {
                 importRoomsStartNs = System.nanoTime();
                 updateConfigTask("导入房间", "正在导入房间配置", importProcessed);
                 importedRoomCount = importRoomBatch(pendingRooms, userIdConverMap);
-                importProcessed += importedRoomCount;
                 pendingRooms = null;
                 updateConfigTask("导入房间", "房间 " + importedRoomCount + " 条", importProcessed);
                 log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Rooms.Success")
@@ -622,7 +1053,6 @@ public class RoomController {
                 int[] pr = importPartBatch(pendingParts, historyIdConverMap, partIdConverMap);
                 importedPartCount = pr[0];
                 skippedPartCount = pr[1];
-                importProcessed += pr[2];
                 pendingParts = null;
                 updateConfigTask("导入分P", "分P " + importedPartCount + " 条，跳过 " + skippedPartCount + " 条", importProcessed);
                 log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
@@ -642,6 +1072,9 @@ public class RoomController {
                     .addRoundCount("importedFileLocation", importedFileLocationCount)
                     .addRoundCount("importedSystemConfig", importedSystemConfigCount)
                     .addRoundCount("importedLiveMsg", importedLiveMsgCount)
+                    .addRoundCount("importedNotificationChannels", importedNotificationChannelCount)
+                    .addRoundCount("importedNotificationRules", importedNotificationRuleCount)
+                    .addRoundCount("importedStats", importedStatsCount)
                     .addRoundCount("skippedPart", skippedPartCount)
                     .addRoundCount("skippedLiveMsg", skippedLiveMsgCount)
                     .addStageCostMs("importUsers", importUsersStartNs)
@@ -652,13 +1085,36 @@ public class RoomController {
                     .addStageCostMs("importLiveMsgs", importLiveMsgsStartNs)
                     .addStageCostMs("total", totalStartNs));
             finishConfigTask("导入完成");
-        } catch (RuntimeException e) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("configFormatVersion", importedFormatVersion[0]);
+            result.put("restartRecommended", true);
+            result.put("importedUsers", importedUserCount);
+            result.put("importedRooms", importedRoomCount);
+            result.put("importedHistories", importedHistoryCount);
+            result.put("importedParts", importedPartCount);
+            result.put("importedLiveMsgs", importedLiveMsgCount);
+            result.put("importedNotificationChannels", importedNotificationChannelCount);
+            result.put("importedNotificationRules", importedNotificationRuleCount);
+            result.put("importedStats", importedStatsCount);
+            result.put("skippedParts", skippedPartCount);
+            result.put("skippedLiveMsgs", skippedLiveMsgCount);
+            return result;
+        } catch (IOException | RuntimeException e) {
             failConfigTask("导入失败：" + e.getMessage());
             throw e;
         }
     }
 
     // ========== 流式导入 section 处理方法 ==========
+
+    private static long advanceImportProcessed(long current,
+                                               Map<String, Long> sectionCounts,
+                                               String section,
+                                               long fallbackCount) {
+        long sectionCount = sectionCounts.getOrDefault(section, Math.max(0L, fallbackCount));
+        return current + Math.max(0L, sectionCount);
+    }
 
     /** 流式导入用户：逐条读取、去重、分批 saveAll，构建旧ID→新ID映射 */
     private int importUserSection(JSONReader reader, Map<Long, Long> userIdConverMap) {
@@ -810,7 +1266,7 @@ public class RoomController {
         return count;
     }
 
-    /** 流式导入分P记录：逐条读取、去重、historyId 映射、分批 saveAll，构建旧ID→新ID映射。
+    /** 流式导入分P记录：逐条读取、去重、historyId 映射、分批 saveAll，构建旧ID→新ID映射
      *  @return [importedCount, skippedCount, totalCount] */
     private int[] importPartSection(JSONReader reader, Map<Long, Long> historyIdConverMap,
                                      Map<Long, Long> partIdConverMap) {
@@ -915,41 +1371,266 @@ public class RoomController {
         return count;
     }
 
-    /** 流式导入弹幕：先清除已映射分P的历史弹幕，再逐条读取、partId 映射、分批 saveAll。
+    private int importNotificationChannelSection(JSONReader reader, Map<Long, Long> channelIdMap) {
+        reader.startArray();
+        int count = 0;
+        while (reader.hasNext()) {
+            NotificationChannel incoming = reader.readObject(NotificationChannel.class);
+            if (StringUtils.isBlank(incoming.getType()) || StringUtils.isBlank(incoming.getName())) {
+                continue;
+            }
+            NotificationChannel target = notificationChannelRepository.findAll().stream()
+                    .filter(item -> Objects.equals(item.getType(), incoming.getType())
+                            && Objects.equals(item.getName(), incoming.getName()))
+                    .findFirst().orElseGet(NotificationChannel::new);
+            Long oldId = incoming.getId();
+            incoming.setId(target.getId());
+            notificationChannelRepository.save(incoming);
+            if (oldId != null && incoming.getId() != null) channelIdMap.put(oldId, incoming.getId());
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private int importNotificationRuleSection(JSONReader reader, Map<Long, Long> channelIdMap) {
+        reader.startArray();
+        int count = 0;
+        while (reader.hasNext()) {
+            NotificationRule incoming = reader.readObject(NotificationRule.class);
+            if (StringUtils.isBlank(incoming.getEventType())) continue;
+            String roomId = StringUtils.defaultIfBlank(incoming.getRoomId(), "*");
+            NotificationRule target = notificationRuleRepository.findByEventType(incoming.getEventType()).stream()
+                    .filter(item -> roomId.equals(StringUtils.defaultIfBlank(item.getRoomId(), "*")))
+                    .findFirst().orElseGet(NotificationRule::new);
+            Long oldId = incoming.getId();
+            incoming.setId(target.getId());
+            incoming.setChannelIds(remapChannelIds(incoming.getChannelIds(), channelIdMap));
+            notificationRuleRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private String remapChannelIds(String raw, Map<Long, Long> channelIdMap) {
+        if (StringUtils.isBlank(raw)) return "";
+        List<String> ids = new ArrayList<>();
+        for (String token : raw.split(",")) {
+            try {
+                Long mapped = channelIdMap.get(Long.parseLong(token.trim()));
+                if (mapped != null && !ids.contains(String.valueOf(mapped))) ids.add(String.valueOf(mapped));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return String.join(",", ids);
+    }
+
+    private int importSessionStatsSection(JSONReader reader, Map<Long, Long> historyIdMap,
+                                          long baseProcessed) {
+        reader.startArray();
+        int count = 0, scanned = 0;
+        while (reader.hasNext()) {
+            RoomLiveSessionStats incoming = reader.readObject(RoomLiveSessionStats.class);
+            scanned++;
+            reportImportSectionProgress("导入统计", "正在恢复场次统计", baseProcessed, scanned);
+            Long mappedHistoryId = historyIdMap.get(incoming.getHistoryId());
+            if (mappedHistoryId == null) continue;
+            RoomLiveSessionStats existing = sessionStatsRepository.findByHistoryId(mappedHistoryId);
+            incoming.setId(existing == null ? null : existing.getId());
+            incoming.setHistoryId(mappedHistoryId);
+            incoming.setImportedSnapshot(true);
+            sessionStatsRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private int importDailyStatsSection(JSONReader reader, long baseProcessed) {
+        reader.startArray();
+        int count = 0, scanned = 0;
+        while (reader.hasNext()) {
+            RoomLiveDailyStats incoming = reader.readObject(RoomLiveDailyStats.class);
+            scanned++;
+            reportImportSectionProgress("导入统计", "正在恢复每日统计", baseProcessed, scanned);
+            if (StringUtils.isBlank(incoming.getRoomId()) || incoming.getLiveDate() == null) continue;
+            RoomLiveDailyStats existing = dailyStatsRepository.findByRoomIdAndLiveDate(
+                    incoming.getRoomId(), incoming.getLiveDate());
+            incoming.setId(existing == null ? null : existing.getId());
+            dailyStatsRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private int importBucketStatsSection(JSONReader reader, Map<Long, Long> historyIdMap,
+                                         long baseProcessed) {
+        reader.startArray();
+        int count = 0, scanned = 0;
+        while (reader.hasNext()) {
+            RoomLiveMsgBucketStats incoming = reader.readObject(RoomLiveMsgBucketStats.class);
+            scanned++;
+            reportImportSectionProgress("导入统计", "正在恢复分钟趋势", baseProcessed, scanned);
+            Long mappedHistoryId = historyIdMap.get(incoming.getHistoryId());
+            if (mappedHistoryId == null) continue;
+            RoomLiveMsgBucketStats existing = bucketStatsRepository.findByHistoryIdOrderByBucketIndexAsc(mappedHistoryId)
+                    .stream().filter(item -> item.getBucketIndex() == incoming.getBucketIndex()).findFirst().orElse(null);
+            incoming.setId(existing == null ? null : existing.getId());
+            incoming.setHistoryId(mappedHistoryId);
+            bucketStatsRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private int importDanmuUserStatsSection(JSONReader reader, Map<Long, Long> historyIdMap,
+                                            Map<Long, Long> partIdMap, long baseProcessed) {
+        reader.startArray();
+        int count = 0, scanned = 0;
+        Set<Long> clearedParts = new HashSet<>();
+        while (reader.hasNext()) {
+            RoomLiveDanmuUserStats incoming = reader.readObject(RoomLiveDanmuUserStats.class);
+            scanned++;
+            reportImportSectionProgress("导入统计", "正在恢复弹幕用户统计", baseProcessed, scanned);
+            Long mappedHistoryId = historyIdMap.get(incoming.getHistoryId());
+            Long mappedPartId = partIdMap.get(incoming.getPartId());
+            if (mappedHistoryId == null || mappedPartId == null) continue;
+            if (clearedParts.add(mappedPartId)) danmuUserStatsRepository.deleteByPartId(mappedPartId);
+            incoming.setId(null);
+            incoming.setHistoryId(mappedHistoryId);
+            incoming.setPartId(mappedPartId);
+            danmuUserStatsRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private int importEventSection(JSONReader reader, Map<Long, Long> historyIdMap,
+                                   Map<Long, Long> partIdMap, long baseProcessed) {
+        reader.startArray();
+        int count = 0, scanned = 0;
+        Set<Long> clearedParts = new HashSet<>();
+        while (reader.hasNext()) {
+            RoomLiveEvent incoming = reader.readObject(RoomLiveEvent.class);
+            scanned++;
+            reportImportSectionProgress("导入统计", "正在恢复礼物、SC与舰长事件",
+                    baseProcessed, scanned);
+            Long mappedHistoryId = historyIdMap.get(incoming.getHistoryId());
+            Long mappedPartId = partIdMap.get(incoming.getPartId());
+            if (mappedHistoryId == null || mappedPartId == null) continue;
+            if (clearedParts.add(mappedPartId)) eventRepository.deleteByPartId(mappedPartId);
+            incoming.setId(null);
+            incoming.setHistoryId(mappedHistoryId);
+            incoming.setPartId(mappedPartId);
+            incoming.setRawJson(null);
+            eventRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private int importEventParseStateSection(JSONReader reader, Map<Long, Long> historyIdMap,
+                                             Map<Long, Long> partIdMap, long baseProcessed) {
+        reader.startArray();
+        int count = 0, scanned = 0;
+        while (reader.hasNext()) {
+            RoomLiveEventParseState incoming = reader.readObject(RoomLiveEventParseState.class);
+            scanned++;
+            reportImportSectionProgress("导入统计", "正在恢复统计诊断状态", baseProcessed, scanned);
+            Long mappedHistoryId = historyIdMap.get(incoming.getHistoryId());
+            Long mappedPartId = partIdMap.get(incoming.getPartId());
+            if (mappedHistoryId == null || mappedPartId == null) continue;
+            RoomLiveEventParseState existing = eventParseStateRepository.findByPartId(mappedPartId);
+            incoming.setId(existing == null ? null : existing.getId());
+            incoming.setHistoryId(mappedHistoryId);
+            incoming.setPartId(mappedPartId);
+            eventParseStateRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private int importXmlIssueSection(JSONReader reader, Map<Long, Long> historyIdMap,
+                                      Map<Long, Long> partIdMap, Map<Long, Long> rootIdMap,
+                                      long baseProcessed) {
+        reader.startArray();
+        int count = 0, scanned = 0;
+        while (reader.hasNext()) {
+            RoomLiveEventXmlIssue incoming = reader.readObject(RoomLiveEventXmlIssue.class);
+            scanned++;
+            reportImportSectionProgress("导入统计", "正在恢复 XML 诊断信息", baseProcessed, scanned);
+            Long mappedHistoryId = historyIdMap.get(incoming.getHistoryId());
+            Long mappedPartId = partIdMap.get(incoming.getPartId());
+            if (mappedHistoryId == null || mappedPartId == null) continue;
+            incoming.setPartId(mappedPartId);
+            incoming.setHistoryId(mappedHistoryId);
+            if (incoming.getStorageRootId() != null) {
+                incoming.setStorageRootId(rootIdMap.get(incoming.getStorageRootId()));
+            }
+            xmlIssueRepository.save(incoming);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    /** 流式导入弹幕：先清除已映射分P的历史弹幕，再逐条读取、partId 映射、分批 saveAll
      *  @return [importedCount, skippedCount, totalCount] */
     private int[] importLiveMsgSection(JSONReader reader, Map<Long, Long> partIdConverMap, long baseProcessed) {
         // 先清除已映射分P的历史弹幕
         Set<Long> mappedPartIds = new HashSet<>(partIdConverMap.values());
+        int clearedParts = 0;
         for (Long partId : mappedPartIds) {
             liveMsgRepository.deleteByPartId(partId);
+            clearedParts++;
+            updateConfigTaskThrottled("导入弹幕",
+                    "正在清理目标环境旧弹幕 " + clearedParts + " / " + mappedPartIds.size() + " 个分P",
+                    baseProcessed);
         }
         reader.startArray();
         List<LiveMsg> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
-        int imported = 0, skipped = 0;
-        long processed = baseProcessed;
+        int imported = 0, skipped = 0, scanned = 0;
         while (reader.hasNext()) {
             LiveMsg liveMsg = reader.readObject(LiveMsg.class);
+            scanned++;
             Long newPartId = partIdConverMap.get(liveMsg.getPartId());
             if (newPartId == null) {
                 skipped++;
+                if (scanned % IMPORT_BATCH_SIZE == 0) {
+                    updateConfigTaskThrottled("导入弹幕",
+                            "正在分批处理，已导入 " + imported + " 条，跳过 " + skipped + " 条",
+                            baseProcessed + scanned);
+                }
                 continue;
             }
             liveMsg.setId(null);
             liveMsg.setPartId(newPartId);
             batch.add(liveMsg);
             imported++;
-            processed++;
             if (batch.size() >= IMPORT_BATCH_SIZE) {
                 liveMsgRepository.saveAll(batch);
                 batch.clear();
-            }
-            if (processed % 5000 == 0) {
-                updateConfigTask("导入弹幕", "已导入 " + imported + " 条弹幕", processed);
+                updateConfigTaskThrottled("导入弹幕",
+                        "正在分批写入，已导入 " + imported + " 条，跳过 " + skipped + " 条",
+                        baseProcessed + scanned);
             }
         }
         if (!batch.isEmpty()) liveMsgRepository.saveAll(batch);
         reader.endArray();
         return new int[]{imported, skipped, imported + skipped};
+    }
+
+    private void reportImportSectionProgress(String phase, String detail,
+                                             long baseProcessed, int scanned) {
+        if (scanned % 250 == 0) {
+            updateConfigTaskThrottled(phase, detail, baseProcessed + scanned);
+        }
     }
 
     private int importStorageRootSection(JSONReader reader, Map<Long, Long> rootIdMap) {

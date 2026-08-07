@@ -1,6 +1,6 @@
 /* ========== Home Page (首页布局 + 导航 + 更新日志 + 系统配置) ========== */
 
-/* ========== App Container ========== */
+/* ========== 应用容器 ========== */
 .app-container {
     height: 100%;
     display: flex;
@@ -10,7 +10,7 @@
     transition: background var(--duration-slow) var(--ease-apple);
 }
 
-/* ========== App Header / Navigation ========== */
+/* ========== 应用头部和导航 ========== */
 .app-header {
     display: flex;
     flex-direction: column;
@@ -362,7 +362,7 @@
     pointer-events: none;
 }
 
-/* 删除/批量任务期间，保留当前页面和进度区域，锁住壳层控制。 */
+/* 删除/批量任务期间，保留当前页面和进度区域，锁住壳层控制 */
 .app-container.is-operation-locked .header-actions,
 .app-container.is-operation-locked .workspace-logo-trigger,
 .app-container.is-operation-locked .brand-version.link-type,
@@ -589,7 +589,7 @@
     box-shadow: var(--indicator-glow);
 }
 
-/* ========== Global Overlay & Loading Styles ========== */
+/* ========== 全局遮罩和加载样式 ========== */
 .global-overlay {
     position: fixed;
     top: 64px;
@@ -679,7 +679,7 @@
     width: 100%;
 }
 
-/* ========== Main Content Area ========== */
+/* ========== 主内容区域 ========== */
 .app-main {
     flex: 1;
     overflow: hidden;
@@ -723,7 +723,7 @@
     box-shadow: var(--brand-shadow-md);
 }
 
-/* ========== Theme Toggle ========== */
+/* ========== 主题切换 ========== */
 .theme-toggle {
     appearance: none;
     padding: 0;
@@ -856,7 +856,7 @@
     transform: translateY(-6px) scale(0.98);
 }
 
-/* ========== Theme Mode Switch ========== */
+/* ========== 主题模式切换 ========== */
 .theme-switch-container {
     display: flex;
     align-items: center;
@@ -952,7 +952,7 @@
     color: rgba(255, 255, 255, 0.3);
 }
 
-/* ========== Changelog Container ========== */
+/* ========== 更新日志容器 ========== */
 .changelog-container {
     flex: 1;
     padding: 24px;
@@ -1053,7 +1053,7 @@
     font-weight: 500;
 }
 
-/* ========== Version Timeline ========== */
+/* ========== 版本时间线 ========== */
 .version-timeline {
     display: flex;
     flex-direction: column;
@@ -1196,7 +1196,7 @@
     white-space: pre-line;
 }
 
-/* ========== Dark Theme - Home Page ========== */
+/* ========== 首页深色主题 ========== */
 [data-theme="dark"] .app-container {
     background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 50%, var(--bg-tertiary) 100%);
 }
@@ -1374,7 +1374,7 @@
         0 0 0 1px var(--brand-soft-bg-faint) inset;
 }
 
-/* ========== Responsive Header ========== */
+/* ========== 自适应头部 ========== */
 @media (max-width: 1024px) {
     .app-header {
         padding: 0 16px;

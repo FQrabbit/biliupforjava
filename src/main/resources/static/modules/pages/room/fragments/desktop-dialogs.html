@@ -226,14 +226,24 @@
     <el-dialog :visible.sync="exportConfigDialog" :fullscreen="isMobile" title="导出配置" custom-class="room-page-dialog export-config-dialog">
         <el-form :model="exportConfig">
             <el-form-item :label-width="formLabelWidth" label="导出选项">
-                <el-checkbox v-model="exportConfig.exportRoom">导出房间信息</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportRoom">导出直播间配置</el-checkbox>
                 <el-checkbox v-model="exportConfig.exportUser">导出用户信息</el-checkbox>
                 <el-checkbox v-model="exportConfig.exportSystemConfig">导出系统配置</el-checkbox>
                 <el-checkbox v-model="exportConfig.exportHistory">导出录制历史信息</el-checkbox>
                 <el-checkbox v-model="exportConfig.exportLiveMsg" :disabled="!exportConfig.exportHistory" @change="handleExportLiveMsgChange">导出弹幕数据</el-checkbox>
+                <el-checkbox v-model="exportConfig.exportStats" :disabled="!exportConfig.exportHistory" @change="handleExportStatsChange">导出统计数据</el-checkbox>
             </el-form-item>
+            <div v-if="exportConfig.exportUser" class="export-config-warning">
+                导出的用户信息包含当前登录态。如果导出后原环境继续使用一段时间，登录凭据可能发生刷新或失效，之后导入这份旧备份时可能需要重新登录。用户信息包含 Cookie、Token 等敏感数据，请妥善保管备份文件
+            </div>
+            <div v-if="exportConfig.exportSystemConfig" class="export-config-warning">
+                系统配置包含推送渠道参数和密钥，请妥善保管备份文件
+            </div>
             <div v-if="exportConfig.exportLiveMsg" class="export-live-msg-warning">
                 弹幕数据可能非常庞大，导出时可能耗时、卡顿、失败或生成很大的文件，请确认确实需要完整备份弹幕。
+            </div>
+            <div v-if="exportConfig.exportStats" class="export-live-msg-warning">
+                统计数据包含统计事件和诊断状态，导出文件可能较大
             </div>
         </el-form>
         <div class="dialog-footer" slot="footer">

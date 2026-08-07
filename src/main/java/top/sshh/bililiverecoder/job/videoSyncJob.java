@@ -105,8 +105,8 @@ public class videoSyncJob {
     }
 
     /**
-     * 仅同步稿件状态/基础信息，不触发弹幕重解析与文件处理。
-     * 用于前端“刷新状态”按钮，避免误删已有弹幕数据。
+     * 仅同步稿件状态/基础信息，不触发弹幕重解析与文件处理
+     * 用于前端“刷新状态”按钮，避免误删已有弹幕数据
      */
     public SyncStatusResult syncStatusOnly(RecordHistory next) {
         return syncStatusOnlyForced(next);
@@ -847,8 +847,8 @@ public class videoSyncJob {
                                 .addIfNotBlank("title", next.getTitle())
                                 .add("code", code));
                     } else if (partInfo.getCode() == 0) {
-                        // Member API 返回 0：注意其 state 字段语义不稳定，不能直接当作“可见性/审核状态”。
-                        // 这里再用带 Cookie 的 view API 二次确认真实 state（0:公开, -50:仅自己可见）。
+                        // Member API 返回 0：注意其 state 字段语义不稳定，不能直接当作“可见性/审核状态”
+                        // 这里再用带 Cookie 的 view API 二次确认真实 state（0:公开, -50:仅自己可见）
                         if (partInfo.getData() != null && partInfo.getData().getVideos() != null && !partInfo.getData().getVideos().isEmpty()) {
                             next.setAvId(String.valueOf(partInfo.getData().getVideos().get(0).getAid()));
                         }
@@ -908,7 +908,7 @@ public class videoSyncJob {
 
                         int fallbackOldCode = next.getCode();
                         if (room.getIsOnlySelf() == 1) {
-                            // 保守策略：房间配置要求仅自己可见，但当前无法可靠读取状态时，避免误发普通弹幕。
+                            // 保守策略：房间配置要求仅自己可见，但当前无法可靠读取状态时，避免误发普通弹幕
                             next.setCode(-50);
                             historyRepository.save(next);
                             log.info("[BLR] {}", LogKvs.event("VideoSync.StateFallback.OnlySelfByRoomConfig")
@@ -1088,7 +1088,7 @@ public class videoSyncJob {
             for (BiliVideoInfoResponse.BiliVideoInfoPart page : pages) {
                 RecordHistoryPart part = partRepository.findByHistoryIdAndTitle(next.getId(), page.getPart());
                 if (part != null) {
-                    // 审核完成后的文件处理统一交给可恢复的生命周期服务。
+                    // 审核完成后的文件处理统一交给可恢复的生命周期服务
                     String filePath = part.getFilePath();
                     if (recordRoom != null
                             && partFileCleanupPolicy.isPostAuditCleanupType(recordRoom.getDeleteType())

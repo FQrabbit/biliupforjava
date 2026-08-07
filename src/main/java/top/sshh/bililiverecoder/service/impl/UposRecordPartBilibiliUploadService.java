@@ -1284,7 +1284,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     completeSuccess = true;
                                                     break;
                                                 }
-                                                // 403 是权限问题，继续重试通常只会消耗额度；409 先按对象存储合并延迟重试。
+                                                // 403 是权限问题，继续重试通常只会消耗额度；409 先按对象存储合并延迟重试
                                                 if (resp != null) {
                                                     int code = resp.getIntValue("code");
                                                     if (code == -403 || code == 403) {
@@ -1390,10 +1390,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         part.setUploadFlowFallbackReason(null);
                                     }
                                     part = partRepository.save(part);
-                                    // 上传完成后的文件处理统一交给可恢复的生命周期服务。
+                                    // 上传完成后的文件处理统一交给可恢复的生命周期服务
                                     if (partFileCleanupPolicy.isPostUploadCleanupType(room.getDeleteType())
                                             && partFileCleanupPolicy.shouldSkipProtectedArchive(room, part, filePath, "Upload", "postUploadCleanup")) {
-                                        // 保留退回/锁定稿件的本地分P文件，方便后续检查和编辑。
+                                        // 保留退回/锁定稿件的本地分P文件，方便后续检查和编辑
                                     } else if (room.getDeleteType() == 1) {
                                         partFileOperationService.delete(part.getId());
                                     } else if (StringUtils.isNotBlank(room.getMoveDir()) && room.getDeleteType() == 4) {
@@ -1738,7 +1738,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
     }
 
     private String resolveMultipartProfile(PreUploadBean preUploadBean, String fallbackProfile, String multipartUri) {
-        // 优先锁定 multipart/new 返回的 profile，保证同一会话 init/part/complete 一致。
+        // 优先锁定 multipart/new 返回的 profile，保证同一会话 init/part/complete 一致
         String candidateProfile = StringUtils.trimToNull(fallbackProfile);
         if (StringUtils.isBlank(candidateProfile) && preUploadBean != null && StringUtils.isNotBlank(preUploadBean.getPut_query())) {
             String putQuery = preUploadBean.getPut_query();

@@ -166,7 +166,7 @@ public class HistoryController {
         result.put("total",total);
 
         if (!Boolean.TRUE.equals(request.getSkipCategoryCounts())) {
-            // 统计“工作中”和“已归档”的稿件总数。翻页请求会跳过这里，避免每页额外全局扫描。
+            // 统计“工作中”和“已归档”的稿件总数。翻页请求会跳过这里，避免每页额外全局扫描
             try {
                 // 计算“工作中”的稿件数量
                 CriteriaQuery<Long> workingQuery = criteriaBuilder.createQuery(Long.class);
@@ -1559,8 +1559,8 @@ public class HistoryController {
         }
 
         if (request.getRecording() != null) {
-            // 录制状态筛选：以分P真实状态为准。
-            // 只要存在 recording=true 或 endTime=null 的分P，就视为“录制中”。
+            // 录制状态筛选：以分P真实状态为准
+            // 只要存在 recording=true 或 endTime=null 的分P，就视为“录制中”
             Subquery<Long> partExists = criteriaBuilder.createQuery().subquery(Long.class);
             Root<RecordHistoryPart> partRoot = partExists.from(RecordHistoryPart.class);
             partExists.select(criteriaBuilder.literal(1L));
@@ -1586,10 +1586,10 @@ public class HistoryController {
             predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), request.getPublish())));
         }
         if (request.getCode() != null) {
-            // 当筛选审核状态时，需要同时检查publish状态。
-            // 只有已发布的视频才有真正的审核状态，未发布的视频code默认值是-1但不应被当作"审核中"。
-            // 前端约定：code=-999 表示“未审核/未发布”（publish=false）。
-            // 前端值：code=1 表示“未通过/不通过”（即已发布但审核状态非 通过/仅自己可见）。
+            // 当筛选审核状态时，需要同时检查publish状态
+            // 只有已发布的视频才有真正的审核状态，未发布的视频code默认值是-1但不应被当作"审核中"
+            // 前端约定：code=-999 表示“未审核/未发布”（publish=false）
+            // 前端值：code=1 表示“未通过/不通过”（即已发布但审核状态非 通过/仅自己可见）
             if (Objects.equals(request.getCode(), -999)) {
                 predicatesList.add(criteriaBuilder.and(criteriaBuilder.equal(root.get("publish"), false)));
             } else if (Objects.equals(request.getCode(), 1)) {

@@ -64,7 +64,7 @@ public class RecordEventRecordEndService implements RecordEventService {
                 historyStateService.markSessionEnded(history, eventData);
                 historyStateService.markCurrentRoomStopped(room, eventData, history);
 
-                // 兜底：录播姬 webhook 不重传，若服务离线导致缺失 FileClosed，则分P可能长期残留 recording=true/endTime=null。
+                // 兜底：录播姬 webhook 不重传，若服务离线导致缺失 FileClosed，则分P可能长期残留 recording=true/endTime=null
                 // 在'录制结束'事件到达时，按磁盘文件是否稳定（10分钟未修改）来纠偏分P结束态
                 try {
                     long thresholdMs = 10L * 60L * 1000L;

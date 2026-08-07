@@ -851,21 +851,21 @@ public final class LogKvs {
     }
 
     /**
-     * 中文解释给用户看的简短说明。
+     * 中文解释给用户看的简短说明
      */
     public LogKvs msg(String zh) {
         return add("msg", zh);
     }
 
     /**
-     * 可选提示：给排查问题用的补充建议。
+     * 可选提示：给排查问题用的补充建议
      */
     public LogKvs hint(String zh) {
         return add("hint", zh);
     }
 
     /**
-     * URL 日志字段：默认去掉 query/fragment，避免泄露 token。
+     * URL 日志字段：默认去掉 query/fragment，避免泄露 token
      */
     public LogKvs addUrl(String key, Object url) {
         if (url == null) {
@@ -912,7 +912,7 @@ public final class LogKvs {
     }
 
     /**
-     * 统一耗时写入（毫秒），startNs 应来自 System.nanoTime()。
+     * 统一耗时写入（毫秒），startNs 应来自 System.nanoTime()
      */
     public LogKvs addCostMs(String key, long startNs) {
         if (startNs <= 0L) {
@@ -922,7 +922,7 @@ public final class LogKvs {
     }
 
     /**
-     * 统一阶段耗时前缀：stage.{name}.costMs。
+     * 统一阶段耗时前缀：stage.{name}.costMs
      */
     public LogKvs addStageCostMs(String stageName, long startNs) {
         if (stageName == null || stageName.isBlank()) {
@@ -932,7 +932,7 @@ public final class LogKvs {
     }
 
     /**
-     * 统一阶段字段前缀：stage.{name}.{metric}。
+     * 统一阶段字段前缀：stage.{name}.{metric}
      */
     public LogKvs addStageField(String stageName, String metric, Object value) {
         if (stageName == null || stageName.isBlank() || metric == null || metric.isBlank()) {
@@ -942,7 +942,7 @@ public final class LogKvs {
     }
 
     /**
-     * 统一轮次计数字段：round.{name}Count。
+     * 统一轮次计数字段：round.{name}Count
      */
     public LogKvs addRoundCount(String name, int value) {
         if (name == null || name.isBlank()) {
@@ -952,7 +952,7 @@ public final class LogKvs {
     }
 
     /**
-     * 统一轮次计数字段：round.{name}Count。
+     * 统一轮次计数字段：round.{name}Count
      */
     public LogKvs addRoundCount(String name, long value) {
         if (name == null || name.isBlank()) {

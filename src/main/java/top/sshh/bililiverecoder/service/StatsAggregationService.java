@@ -97,6 +97,9 @@ public class StatsAggregationService {
                 if (history == null || history.getId() == null) {
                     continue;
                 }
+                if (isImportedSnapshotProtected(history.getId())) {
+                    continue;
+                }
                 if (aggregateHistory(history, parseSummary)) {
                     updated++;
                 }
@@ -693,6 +696,9 @@ public class StatsAggregationService {
         if (historyId == null) {
             return;
         }
+        if (isImportedSnapshotProtected(historyId)) {
+            return;
+        }
         Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
         if (historyOptional.isEmpty()) {
             return;
@@ -875,6 +881,9 @@ public class StatsAggregationService {
     }
 
     private boolean aggregateHistory(RecordHistory history, EventParseSummary parseSummary) {
+        if (history != null && isImportedSnapshotProtected(history.getId())) {
+            return false;
+        }
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
         if (!isHistoryReadyForStats(history, parts)) {
             log.debug("[BLR] {}", LogKvs.event("Stats.Aggregate.SkipActive")
@@ -949,6 +958,7 @@ public class StatsAggregationService {
         stats.setActiveUserCount(eventStats.activeUserCount);
         stats.setStatsUpdatedAt(now);
         stats.setStatsVersion(STATS_VERSION);
+        stats.setImportedSnapshot(false);
 
         bucketStatsRepository.deleteByHistoryId(history.getId());
         BucketPeak peak = saveBucketStats(history.getId(), history.getRoomId(), startTime, parts, eventStats.fromRawEvents, now);
@@ -957,6 +967,14 @@ public class StatsAggregationService {
         sessionStatsRepository.save(stats);
         recomputeDailyStats(history.getRoomId(), liveDate, room, now);
         return true;
+    }
+
+    private boolean isImportedSnapshotProtected(Long historyId) {
+        if (historyId == null) {
+            return false;
+        }
+        RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(historyId);
+        return stats != null && stats.isImportedSnapshot();
     }
 
     private static class EventParseSummary {

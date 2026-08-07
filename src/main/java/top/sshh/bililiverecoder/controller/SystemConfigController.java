@@ -38,7 +38,7 @@ public class SystemConfigController {
 
     /**
      * 批量更新配置：在单个事务内执行，任意一条失败则整体回滚，
-     * 供前端一次性保存多项关联配置（如录播姬同步设置）使用，避免半保存。
+     * 供前端一次性保存多项关联配置（如录播姬同步设置）使用，避免半保存
      */
     @PostMapping("/update-batch")
     public boolean updateBatch(@RequestBody Map<String, String> params) {
@@ -50,9 +50,9 @@ public class SystemConfigController {
     }
 
     /**
-     * 保存录播姬同步配置并立即触发一次 Cookie 推送。
+     * 保存录播姬同步配置并立即触发一次 Cookie 推送
      * 先在事务内批量保存（避免半保存），再读取最新配置执行同步，
-     * 返回结构化结果供前端展示成功/失败原因。一次请求完成“保存+同步”，避免竞态。
+     * 返回结构化结果供前端展示成功/失败原因。一次请求完成“保存+同步”，避免竞态
      */
     @PostMapping("/brec/sync-now")
     public Map<String, Object> brecSyncNow(@RequestBody(required = false) Map<String, String> params) {

@@ -1,5 +1,6 @@
 package top.sshh.bililiverecoder.repo;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
@@ -32,4 +33,6 @@ public interface RoomLiveEventXmlIssueRepository extends CrudRepository<RoomLive
     @Modifying
     @Query("delete from RoomLiveEventXmlIssue issue where issue.partId = ?1")
     int deleteByPartIdIfPresent(Long partId);
+
+    List<RoomLiveEventXmlIssue> findByPartIdGreaterThanOrderByPartIdAsc(Long partId, Pageable pageable);
 }

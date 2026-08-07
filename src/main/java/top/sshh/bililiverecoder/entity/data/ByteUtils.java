@@ -61,8 +61,8 @@ public class ByteUtils {
 	}
 
 	/**
-	 * Convert byte[] to hex
-	 * string.这里我们可以将byte转换成int，然后利用Integer.toHexString(int)来转换成16进制字符串。
+	 * 把 byte[] 转成十六进制
+	 * string.这里我们可以将byte转换成int，然后利用Integer.toHexString(int)来转换成16进制字符串
 	 * 
 	 * @param src 待转byte数组
 	 * @return hex16进制字符串

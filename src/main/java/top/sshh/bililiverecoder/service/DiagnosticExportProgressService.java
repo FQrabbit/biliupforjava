@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongConsumer;
 
 /**
- * 诊断包导出进度。状态只保留在当前进程中，导出结束后短暂保留供前端完成最后一次轮询。
+ * 诊断包导出进度。状态只保留在当前进程中，导出结束后短暂保留供前端完成最后一次轮询
  */
 @Service
 public class DiagnosticExportProgressService {

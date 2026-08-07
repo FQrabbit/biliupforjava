@@ -8,7 +8,9 @@ import top.sshh.bililiverecoder.entity.NotificationChannel;
 import top.sshh.bililiverecoder.entity.DiagnosticExportRequest;
 import top.sshh.bililiverecoder.entity.NotificationDelivery;
 import top.sshh.bililiverecoder.entity.NotificationRule;
+import top.sshh.bililiverecoder.entity.PartFileLocation;
 import top.sshh.bililiverecoder.entity.RoomLiveSessionStats;
+import top.sshh.bililiverecoder.entity.StorageRoot;
 import top.sshh.bililiverecoder.controller.RoomController;
 import top.sshh.bililiverecoder.notification.NotificationEvent;
 import top.sshh.bililiverecoder.notification.NotificationEventDescriptor;
@@ -31,6 +33,8 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, NotificationRule.class);
         assertReflectionRegistered(hints, NotificationDelivery.class);
         assertReflectionRegistered(hints, RoomLiveSessionStats.class);
+        assertReflectionRegistered(hints, StorageRoot.class);
+        assertReflectionRegistered(hints, PartFileLocation.class);
         assertReflectionRegistered(hints, NotificationEvent.class);
         assertReflectionRegistered(hints, NotificationEventDescriptor.class);
         assertReflectionRegistered(hints, NotificationMessage.class);

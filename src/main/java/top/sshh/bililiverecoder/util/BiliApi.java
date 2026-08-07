@@ -1065,7 +1065,7 @@ public class BiliApi {
     }
 
     /**
-     * 从URL中获取指定名称的查询参数值。
+     * 从URL中获取指定名称的查询参数值
      *
      * @param url           URL字符串
      * @param parameterName 要获取的参数名称

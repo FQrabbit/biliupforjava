@@ -1,5 +1,6 @@
 package top.sshh.bililiverecoder.repo;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import top.sshh.bililiverecoder.entity.NotificationRule;
@@ -14,4 +15,6 @@ public interface NotificationRuleRepository extends JpaRepository<NotificationRu
     List<NotificationRule> findByEventTypeAndEnabledTrue(String eventType);
 
     void deleteByEventTypeAndRoomId(String eventType, String roomId);
+
+    List<NotificationRule> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 }

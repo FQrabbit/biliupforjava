@@ -957,7 +957,7 @@ html[data-theme="dark"] .stats-date-range,
         grid-template-columns: 1fr;
     }}
 
-/* ===== Stats command center redesign ===== */
+/* ===== 统计指挥台重新设计 ===== */
 
 .stats-container {
     --stats-radius-sm: 12px;
@@ -1690,7 +1690,7 @@ html[data-theme="dark"] .stats-scope-line em,
     .stats-sortable-table.is-sorting .el-table__body tr {
         animation: none !important;
     }}
-/* Keyboard focus for expandable statistics panels. */
+/* 统计面板展开控件的键盘焦点样式 */
 .coverage-pending-head:focus-visible {
     outline: 2px solid var(--primary-color);
     outline-offset: -2px;

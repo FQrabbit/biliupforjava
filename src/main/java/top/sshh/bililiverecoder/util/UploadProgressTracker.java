@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-// 录制分P上传实时进度（内存态）。
+// 录制分P上传实时进度（内存态）
 @Component
 public class UploadProgressTracker {
 

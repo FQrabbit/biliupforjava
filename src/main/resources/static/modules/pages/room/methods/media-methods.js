@@ -593,6 +593,7 @@
             });
             this.finishConfigProgress('导入完成', '配置已导入');
             this.initTable();
+            this.promptCoreRestart();
         }
     };
 })(window);

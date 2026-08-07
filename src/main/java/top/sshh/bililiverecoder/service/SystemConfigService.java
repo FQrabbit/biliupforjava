@@ -20,7 +20,7 @@ import java.util.Optional;
 public class SystemConfigService {
 
     public static final String KEY_API_RATE_LIMIT = "bili.limit.api-qps";
-    // Historical persisted key name. The value is an upload speed limit in MB/s.
+    // 历史上已经保存过的配置名，值表示上传速度上限，单位是 MB/s
     public static final String KEY_UPLOAD_SPEED_LIMIT = "bili.limit.upload-mb";
     public static final String KEY_MERGE_INTERVAL_MINUTES = "bili.publish.merge-interval-minutes";
     public static final String KEY_UPLOAD_MAX_CONNECTIONS = "upload.max-concurrent-connections";
@@ -131,10 +131,10 @@ public class SystemConfigService {
 
     /**
      * 在单个事务内批量更新配置：任意一条失败都会整体回滚，避免出现“半保存”
-     * 导致启用状态、目标 UID、主机、密码彼此不一致的脏配置。
+     * 导致启用状态、目标 UID、主机、密码彼此不一致的脏配置
      *
      * 敏感字段（密码）的空值会被跳过——前端读取时拿到的是空串，若用户未重新输入，
-     * 提交上来的空值视为“保持原值不变”，不会清掉数据库里已有的密码。
+     * 提交上来的空值视为“保持原值不变”，不会清掉数据库里已有的密码
      */
     @Transactional
     public void updateConfigs(Map<String, String> configs) {
@@ -331,7 +331,7 @@ public class SystemConfigService {
 
     /**
      * 供前端 /list 接口使用的配置列表：敏感字段（如录播姬 Basic 认证密码）的值会被抹除，
-     * 避免明文密码下发到浏览器。返回的是游离副本，不会影响数据库中的真实值。
+     * 避免明文密码下发到浏览器。返回的是游离副本，不会影响数据库中的真实值
      */
     public List<SystemConfig> getAllConfigsForApi() {
         List<SystemConfig> source = systemConfigRepository.findAll();

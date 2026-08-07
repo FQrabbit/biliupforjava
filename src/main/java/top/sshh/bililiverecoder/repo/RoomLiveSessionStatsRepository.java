@@ -26,6 +26,8 @@ public interface RoomLiveSessionStatsRepository extends CrudRepository<RoomLiveS
 
     List<RoomLiveSessionStats> findTop20ByRoomIdOrderByStartTimeDesc(String roomId);
 
+    List<RoomLiveSessionStats> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
+
     @Query("select s from RoomLiveSessionStats s order by s.startTime desc")
     List<RoomLiveSessionStats> findLatest(Pageable pageable);
 

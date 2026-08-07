@@ -1070,7 +1070,7 @@
     .all-details-dialog .el-table {
         font-size: 12px;
     }}
-/* Keyboard focus for custom filter controls. */
+/* 自定义筛选控件的键盘焦点样式 */
 .stat-card[role="button"]:focus-visible,
 .freq-range-pill:focus-visible,
 .level-pill:focus-visible {

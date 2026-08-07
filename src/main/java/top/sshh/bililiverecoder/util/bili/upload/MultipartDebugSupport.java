@@ -21,7 +21,7 @@ public final class MultipartDebugSupport {
             return CONFIG_ENABLED;
         }
         // Native-image 下静态常量可能在构建期被固化，这里每次运行时动态读取
-        // JVM 参数 / 环境变量，确保 -Dblr.multipart.debug=true 能即时生效。
+        // JVM 参数 / 环境变量，确保 -Dblr.multipart.debug=true 能即时生效
         return resolveEnabled();
     }
 
@@ -120,7 +120,7 @@ public final class MultipartDebugSupport {
             try {
                 return Integer.parseInt(byQuery);
             } catch (Exception ignore) {
-                // fallback to path pattern
+                // 前面的方式不行时，退回到路径匹配
             }
         }
         if (StringUtils.isBlank(url)) {
