@@ -67,6 +67,12 @@
 .diagnostic-export-advanced .el-collapse-item__header { color: var(--text-secondary); }
 .diagnostic-export-summary { padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 6px; background: var(--bg-secondary); color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 [data-theme="dark"] .diagnostic-export-summary { border-color: var(--border-color); background: var(--bg-tertiary); }
+.diagnostic-export-progress { padding: 28px 8px 18px; }
+.diagnostic-export-progress-title { margin-bottom: 16px; color: var(--text-primary); font-size: 16px; font-weight: 600; }
+.diagnostic-export-progress-detail { min-height: 22px; margin-top: 14px; color: var(--text-primary); font-size: 13px; }
+.diagnostic-export-progress-meta { margin-top: 7px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.diagnostic-export-progress .el-progress-bar__outer { background: var(--bg-secondary); }
+[data-theme="dark"] .diagnostic-export-progress .el-progress-bar__outer { background: var(--bg-tertiary); }
 .diagnostic-export-dialog .el-textarea__inner { padding-bottom: 28px; }
 .diagnostic-export-dialog .el-textarea .el-input__count {
     right: 10px;
@@ -78,6 +84,7 @@
 }
 @media (max-width: 767px) {
     .diagnostic-export-dialog .el-dialog__body { padding: 16px; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+    .diagnostic-export-progress { padding: 24px 0 16px; }
     .diagnostic-export-options { grid-template-columns: 1fr; gap: 12px; }
     .diagnostic-segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
     .diagnostic-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }

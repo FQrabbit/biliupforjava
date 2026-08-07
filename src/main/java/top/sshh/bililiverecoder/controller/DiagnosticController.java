@@ -10,14 +10,18 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import top.sshh.bililiverecoder.entity.DiagnosticExportRequest;
 import top.sshh.bililiverecoder.service.DiagnosticExportService;
+import top.sshh.bililiverecoder.service.DiagnosticExportProgressService;
 import top.sshh.bililiverecoder.service.LogArchiveService;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
@@ -27,10 +31,13 @@ public class DiagnosticController {
 
     private final DiagnosticExportService diagnosticExportService;
     private final LogArchiveService logArchiveService;
+    private final DiagnosticExportProgressService progressService;
 
-    public DiagnosticController(DiagnosticExportService diagnosticExportService, LogArchiveService logArchiveService) {
+    public DiagnosticController(DiagnosticExportService diagnosticExportService, LogArchiveService logArchiveService,
+                                DiagnosticExportProgressService progressService) {
         this.diagnosticExportService = diagnosticExportService;
         this.logArchiveService = logArchiveService;
+        this.progressService = progressService;
     }
 
     @GetMapping("/capabilities")
@@ -45,25 +52,64 @@ public class DiagnosticController {
     }
 
     @PostMapping("/export")
-    public ResponseEntity<StreamingResponseBody> export(@RequestBody DiagnosticExportRequest request) {
+    public ResponseEntity<StreamingResponseBody> export(
+            @RequestBody DiagnosticExportRequest request,
+            @RequestHeader(value = "X-Diagnostic-Export-Id", required = false) String requestedExportId) {
         DiagnosticExportService.ExportPlan plan = diagnosticExportService.prepare(request);
         if (!diagnosticExportService.tryAcquire()) {
             throw new ExportBusyException("已有诊断包正在生成，请稍后重试");
         }
+        String exportId = progressService.resolveExportId(requestedExportId);
+        try {
+            progressService.register(exportId, plan);
+        } catch (RuntimeException e) {
+            diagnosticExportService.release();
+            throw e;
+        }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType("application/zip"));
         headers.setCacheControl(CacheControl.noStore());
+        headers.set("X-Diagnostic-Export-Id", exportId);
         headers.setContentDisposition(ContentDisposition.attachment()
                 .filename(diagnosticExportService.filename(plan))
                 .build());
         StreamingResponseBody body = outputStream -> {
             try {
-                diagnosticExportService.write(plan, outputStream);
+                diagnosticExportService.write(plan, outputStream, progressService.reporter(exportId));
+                progressService.complete(exportId);
+            } catch (DiagnosticExportProgressService.ExportCancelledException e) {
+                progressService.cancel(exportId);
+                throw e;
+            } catch (IOException | RuntimeException e) {
+                progressService.fail(exportId, e);
+                throw e;
             } finally {
                 diagnosticExportService.release();
             }
         };
         return new ResponseEntity<>(body, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/exports/{exportId}/progress")
+    public ResponseEntity<Map<String, Object>> progress(@PathVariable("exportId") String exportId) {
+        Map<String, Object> status = progressService.status(exportId);
+        if (status == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .cacheControl(CacheControl.noStore())
+                    .body(Map.of("message", "诊断导出任务不存在或已过期"));
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(status);
+    }
+
+    @PostMapping("/exports/{exportId}/cancel")
+    public ResponseEntity<Map<String, Object>> cancel(@PathVariable("exportId") String exportId) {
+        Map<String, Object> status = progressService.cancel(exportId);
+        if (status == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .cacheControl(CacheControl.noStore())
+                    .body(Map.of("message", "诊断导出任务不存在或已过期"));
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(status);
     }
 
     @ExceptionHandler(NoSuchElementException.class)

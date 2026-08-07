@@ -142,7 +142,16 @@ public class DiagnosticExportService {
     }
 
     public void write(ExportPlan plan, OutputStream outputStream) throws IOException {
+        write(plan, outputStream, DiagnosticExportProgressService.ProgressReporter.NOOP);
+    }
+
+    public void write(ExportPlan plan, OutputStream outputStream,
+                      DiagnosticExportProgressService.ProgressReporter progress) throws IOException {
         List<String> warnings = new ArrayList<>();
+        DiagnosticExportProgressService.ProgressReporter reporter = progress == null
+                ? DiagnosticExportProgressService.ProgressReporter.NOOP : progress;
+        reporter.phase("PREPARING", "正在准备诊断包", 1);
+        reporter.checkCancelled();
         Set<String> secrets = knownSecrets();
         DiagnosticSecretSanitizer sanitizer = new DiagnosticSecretSanitizer(secrets);
         List<String> entries = new ArrayList<>();
@@ -151,6 +160,7 @@ public class DiagnosticExportService {
         try (ZipOutputStream zip = new ZipOutputStream(outputStream, StandardCharsets.UTF_8)) {
             writeJson(zip, entries, "system/runtime.json", runtimeInfo());
             writeJson(zip, entries, "system/log-storage.json", archiveService.inventory());
+            reporter.phase("COLLECTING_CONTEXT", "正在收集配置和稿件状态", 3);
             if (plan.request().isIncludeSystemConfig()) {
                 writeJson(zip, entries, "config/system.json", sanitize(systemConfigs(), sanitizer));
                 writeJson(zip, entries, "config/accounts.json", sanitize(accounts(plan), sanitizer));
@@ -167,11 +177,15 @@ public class DiagnosticExportService {
                 writeText(zip, entries, "user-note.txt", sanitizer.sanitizeText(plan.request().getNote()) + System.lineSeparator());
             }
 
-            writeRelevant(zip, entries, plan, sanitizer, warnings, stats);
+            reporter.phase("ANALYZING_RELEVANT", "正在分析相关日志", 5);
+            writeRelevant(zip, entries, plan, sanitizer, warnings, stats, reporter);
             if (plan.request().isIncludeFullLogs()) {
-                writeFullWindow(zip, entries, plan.fullWindow(), sanitizer, warnings);
+                reporter.phase("PACKING_FULL_LOGS", "正在整理完整时段日志", 5);
+                writeFullWindow(zip, entries, plan.fullWindow(), sanitizer, warnings, reporter);
             }
 
+            reporter.phase("FINALIZING", "正在写入诊断包清单", 98);
+            reporter.checkCancelled();
             Map<String, Object> summary = new LinkedHashMap<>();
             summary.put("mode", plan.request().getMode());
             summary.put("days", plan.request().getDays());
@@ -210,15 +224,16 @@ public class DiagnosticExportService {
     }
 
     private void writeRelevant(ZipOutputStream zip, List<String> entries, ExportPlan plan,
-                               DiagnosticSecretSanitizer sanitizer, List<String> warnings, ExportStats stats) throws IOException {
+                               DiagnosticSecretSanitizer sanitizer, List<String> warnings, ExportStats stats,
+                               DiagnosticExportProgressService.ProgressReporter progress) throws IOException {
         zip.putNextEntry(new ZipEntry("logs/relevant.log"));
         entries.add("logs/relevant.log");
         Set<String> identifiers = identifiers(plan.history(), plan.parts());
         RelevanceWriter writer = new RelevanceWriter(zip, sanitizer, plan.history() != null, identifiers,
                 plan.request().getOccurredAt(), stats);
         for (LogArchiveService.LogFile file : plan.relevantSource()) {
-            try {
-                streamRecords(file, writer::accept);
+            try (DiagnosticExportProgressService.FileProgress fileProgress = progress.file(file.size(), file.path().getFileName().toString())) {
+                streamRecords(file, writer::accept, fileProgress);
             } catch (IOException e) {
                 warnings.add("无法读取日志文件 " + file.path().getFileName() + ": " + e.getMessage());
             }
@@ -228,18 +243,19 @@ public class DiagnosticExportService {
     }
 
     private void writeFullWindow(ZipOutputStream zip, List<String> entries, List<LogArchiveService.LogFile> files,
-                                 DiagnosticSecretSanitizer sanitizer, List<String> warnings) throws IOException {
+                                 DiagnosticSecretSanitizer sanitizer, List<String> warnings,
+                                 DiagnosticExportProgressService.ProgressReporter progress) throws IOException {
         zip.putNextEntry(new ZipEntry("logs/full-window.log"));
         entries.add("logs/full-window.log");
         for (LogArchiveService.LogFile file : files) {
-            try {
+            try (DiagnosticExportProgressService.FileProgress fileProgress = progress.file(file.size(), file.path().getFileName().toString())) {
                 archiveService.streamLines(List.of(file), line -> {
                     try {
                         zip.write((sanitizer.sanitizeText(line) + "\n").getBytes(StandardCharsets.UTF_8));
                     } catch (IOException e) {
                         throw new ZipWriteException(e);
                     }
-                });
+                }, fileProgress);
             } catch (ZipWriteException e) {
                 throw e.getCause();
             } catch (IOException e) {
@@ -250,7 +266,12 @@ public class DiagnosticExportService {
     }
 
     private void streamRecords(LogArchiveService.LogFile file, Consumer<LogRecord> consumer) throws IOException {
-        try (var reader = archiveService.reader(file)) {
+        streamRecords(file, consumer, null);
+    }
+
+    private void streamRecords(LogArchiveService.LogFile file, Consumer<LogRecord> consumer,
+                               java.util.function.LongConsumer bytesConsumer) throws IOException {
+        try (var reader = archiveService.reader(file, bytesConsumer)) {
             StringBuilder current = null;
             LocalDateTime timestamp = null;
             String level = "INFO";

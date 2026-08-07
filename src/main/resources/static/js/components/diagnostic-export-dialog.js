@@ -21,6 +21,18 @@
                 capabilities: null,
                 loadingCapabilities: false,
                 exporting: false,
+                exportState: 'idle',
+                exportId: null,
+                exportProgress: {
+                    state: 'RUNNING', phase: 'PREPARING', message: '正在准备诊断包', detail: '',
+                    percent: 1, processedBytes: 0, totalBytes: 0,
+                    processedFiles: 0, totalFiles: 0, elapsedSeconds: 0
+                },
+                receivedBytes: 0,
+                progressPollTimer: null,
+                progressPollInFlight: false,
+                progressPollFailures: 0,
+                abortController: null,
                 isMobile: window.innerWidth < 768,
                 searchTimer: null
             };
@@ -53,11 +65,36 @@
             selectedHistoryLabel: function() {
                 if (!this.selectedHistory) return '';
                 return this.selectedHistory.title || ('稿件 #' + this.selectedHistory.id);
+            },
+            progressPhaseText: function() {
+                var labels = {
+                    PREPARING: '正在准备诊断包',
+                    COLLECTING_CONTEXT: '正在收集配置和稿件状态',
+                    ANALYZING_RELEVANT: '正在分析相关日志',
+                    PACKING_FULL_LOGS: '正在整理完整时段日志',
+                    FINALIZING: '正在写入诊断包清单',
+                    DONE: '诊断包生成完成',
+                    FAILED: '诊断包生成失败',
+                    CANCELLED: '诊断导出已取消'
+                };
+                return labels[this.exportProgress.phase] || this.exportProgress.message || '正在生成诊断包';
+            },
+            progressFileText: function() {
+                var p = this.exportProgress || {};
+                if (!p.totalFiles) return '正在读取日志文件';
+                return '已处理 ' + Number(p.processedFiles || 0) + ' / ' + Number(p.totalFiles || 0) + ' 个日志文件';
+            },
+            progressByteText: function() {
+                var p = this.exportProgress || {};
+                var source = this.formatSize(p.processedBytes || 0) + ' / ' + this.formatSize(p.totalBytes || 0);
+                var received = this.formatSize(this.receivedBytes || 0);
+                return '源日志：' + source + ' · 浏览器已接收：' + received;
             }
         },
         methods: {
             open: function(detail) {
                 detail = detail || {};
+                if (!this.exporting) this.resetExportProgress();
                 this.mode = detail.history && detail.history.id ? 'HISTORY' : 'GLOBAL';
                 this.historyId = detail.history && detail.history.id ? detail.history.id : null;
                 this.selectedHistory = detail.history || null;
@@ -125,6 +162,90 @@
                 return date.getFullYear() + '-' + p(date.getMonth() + 1) + '-' + p(date.getDate())
                     + 'T' + p(date.getHours()) + ':' + p(date.getMinutes()) + ':' + p(date.getSeconds());
             },
+            createExportId: function() {
+                if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+                var random = function() { return Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0'); };
+                return random() + random() + '-' + random() + '-4' + random().slice(1)
+                    + '-' + ((8 + Math.floor(Math.random() * 4)).toString(16)) + random().slice(1)
+                    + '-' + random() + random() + random();
+            },
+            resetExportProgress: function() {
+                this.stopProgressPolling();
+                this.exportState = 'idle';
+                this.exportId = null;
+                this.receivedBytes = 0;
+                this.progressPollFailures = 0;
+                this.progressPollInFlight = false;
+                this.abortController = null;
+                this.exportProgress = {
+                    state: 'RUNNING', phase: 'PREPARING', message: '正在准备诊断包', detail: '',
+                    percent: 1, processedBytes: 0, totalBytes: 0,
+                    processedFiles: 0, totalFiles: 0, elapsedSeconds: 0
+                };
+            },
+            stopProgressPolling: function() {
+                if (this.progressPollTimer) {
+                    clearTimeout(this.progressPollTimer);
+                    this.progressPollTimer = null;
+                }
+                this.progressPollInFlight = false;
+            },
+            scheduleProgressPoll: function(delay) {
+                var self = this;
+                if (!this.exporting || !this.exportId) return;
+                if (this.progressPollTimer) clearTimeout(this.progressPollTimer);
+                this.progressPollTimer = setTimeout(function() {
+                    self.progressPollTimer = null;
+                    self.pollExportProgress();
+                }, Math.max(0, Number(delay || 0)));
+            },
+            applyExportProgress: function(status) {
+                if (!status || !this.exporting) return;
+                var next = Object.assign({}, this.exportProgress, status);
+                var percent = Math.max(0, Math.min(100, Number(next.percent || 0)));
+                if (status.state === 'COMPLETED' && this.exportState === 'running') percent = Math.min(99, percent);
+                next.percent = percent;
+                this.exportProgress = next;
+                this.progressPollFailures = 0;
+            },
+            pollExportProgress: function() {
+                var self = this;
+                if (!this.exporting || !this.exportId || this.progressPollInFlight) return;
+                this.progressPollInFlight = true;
+                DiagnosticApi.progress(this.exportId, function(status) {
+                    self.progressPollInFlight = false;
+                    if (!self.exporting) return;
+                    self.applyExportProgress(status);
+                    if (status && status.state === 'RUNNING') self.scheduleProgressPoll(700);
+                    else if (status && status.state === 'COMPLETED') self.scheduleProgressPoll(300);
+                }, function() {
+                    self.progressPollInFlight = false;
+                    if (!self.exporting) return;
+                    self.progressPollFailures++;
+                    if (self.progressPollFailures >= 3) {
+                        self.exportProgress = Object.assign({}, self.exportProgress, {
+                            detail: '进度状态暂时无法读取，下载仍在继续'
+                        });
+                    }
+                    self.scheduleProgressPoll(Math.min(3000, 700 + self.progressPollFailures * 400));
+                });
+            },
+            cancelExport: function() {
+                if (!this.exporting) return;
+                var self = this;
+                var exportId = this.exportId;
+                this.exportState = 'cancelled';
+                this.stopProgressPolling();
+                if (exportId) DiagnosticApi.cancel(exportId, function() {}, function() {});
+                if (this.abortController) this.abortController.abort();
+                this.exporting = false;
+                this.$message.info('已取消诊断包导出');
+                setTimeout(function() {
+                    if (!self.visible) return;
+                    self.visible = false;
+                    self.resetExportProgress();
+                }, 250);
+            },
             exportPackage: function() {
                 var self = this;
                 if (this.mode === 'HISTORY' && !this.historyId) {
@@ -133,6 +254,17 @@
                 }
                 var run = function() {
                     self.exporting = true;
+                    self.exportState = 'running';
+                    self.exportId = self.createExportId();
+                    self.receivedBytes = 0;
+                    self.progressPollFailures = 0;
+                    self.abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                    self.exportProgress = {
+                        state: 'RUNNING', phase: 'PREPARING', message: '正在准备诊断包', detail: '',
+                        percent: 1, processedBytes: 0, totalBytes: 0,
+                        processedFiles: 0, totalFiles: 0, elapsedSeconds: 0
+                    };
+                    self.scheduleProgressPoll(300);
                     var payload = {
                         mode: self.mode,
                         historyId: self.mode === 'HISTORY' ? self.historyId : null,
@@ -143,7 +275,14 @@
                         occurredAt: self.toLocalDateTime(self.occurredAt),
                         note: self.note || null
                     };
-                    DiagnosticApi.exportPackage(payload).then(function(result) {
+                    DiagnosticApi.exportPackage(payload, {
+                        exportId: self.exportId,
+                        signal: self.abortController ? self.abortController.signal : undefined,
+                        onDownloadProgress: function(progress) {
+                            self.receivedBytes = Number(progress && progress.loaded || 0);
+                        }
+                    }).then(function(result) {
+                        self.stopProgressPolling();
                         var fileName = 'biliupforjava-diagnostics.zip';
                         var disposition = result.headers && result.headers.get ? result.headers.get('content-disposition') : '';
                         var matched = disposition && disposition.match(/filename="?([^";]+)"?/i);
@@ -156,11 +295,29 @@
                         link.click();
                         document.body.removeChild(link);
                         setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+                        self.exportState = 'success';
+                        self.exportProgress = Object.assign({}, self.exportProgress, {
+                            state: 'COMPLETED', phase: 'DONE', percent: 100, message: '诊断包生成完成',
+                            detail: '文件已交给浏览器下载',
+                            processedBytes: Number(self.exportProgress.totalBytes || self.exportProgress.processedBytes || 0),
+                            processedFiles: Number(self.exportProgress.totalFiles || self.exportProgress.processedFiles || 0)
+                        });
                         self.exporting = false;
-                        self.visible = false;
                         self.$message.success('诊断包已开始下载');
+                        setTimeout(function() {
+                            self.visible = false;
+                            self.resetExportProgress();
+                        }, 600);
                     }).catch(function(error) {
+                        self.stopProgressPolling();
+                        if (self.exportState === 'cancelled' || (error && error.name === 'AbortError')) return;
                         self.exporting = false;
+                        self.exportState = 'error';
+                        self.exportProgress = Object.assign({}, self.exportProgress, {
+                            state: 'FAILED', phase: 'FAILED',
+                            percent: Math.min(99, Number(self.exportProgress.percent || 1)),
+                            message: error && error.message ? error.message : '诊断包生成失败'
+                        });
                         self.$message.error(error && error.message ? error.message : '导出诊断包失败，请稍后重试');
                     });
                 };
@@ -186,6 +343,8 @@
             window.removeEventListener('open-diagnostic-export', this.__openHandler);
             window.removeEventListener('resize', this.onResize);
             if (this.searchTimer) clearTimeout(this.searchTimer);
+            this.stopProgressPolling();
+            if (this.abortController) this.abortController.abort();
         }
     });
 })(window);

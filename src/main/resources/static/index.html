@@ -329,8 +329,8 @@
 </div>
 
 <script type="text/x-template" id="diagnostic-export-template">
-<el-dialog :visible.sync="visible" :fullscreen="isMobile" append-to-body width="620px" title="导出诊断包" custom-class="diagnostic-export-dialog">
-    <el-form label-position="top" class="diagnostic-export-form">
+<el-dialog :visible.sync="visible" :fullscreen="isMobile" append-to-body width="620px" title="导出诊断包" custom-class="diagnostic-export-dialog" :close-on-click-modal="!exporting" :close-on-press-escape="!exporting" :show-close="!exporting">
+    <el-form v-if="!exporting && exportState !== 'success'" label-position="top" class="diagnostic-export-form">
         <el-form-item label="诊断范围">
             <div class="diagnostic-segmented" role="group" aria-label="诊断范围">
                 <el-button class="modern-btn diagnostic-segmented-button" :class="{ 'is-selected': mode === 'GLOBAL' }" :aria-pressed="mode === 'GLOBAL'" @click="setMode('GLOBAL')">全局诊断</el-button>
@@ -366,9 +366,17 @@
             </el-collapse-item>
         </el-collapse>
     </el-form>
+    <div v-if="exporting || exportState === 'success'" class="diagnostic-export-progress" aria-live="polite">
+        <div class="diagnostic-export-progress-title">{{ progressPhaseText }}</div>
+        <el-progress :percentage="Number(exportProgress.percent || 0)" :status="exportState === 'success' ? 'success' : null" :stroke-width="12"></el-progress>
+        <div class="diagnostic-export-progress-detail">{{ exportProgress.detail || progressFileText }}</div>
+        <div class="diagnostic-export-progress-meta">{{ progressFileText }}</div>
+        <div class="diagnostic-export-progress-meta">{{ progressByteText }} · 已用时 {{ Number(exportProgress.elapsedSeconds || 0) }} 秒</div>
+    </div>
     <span slot="footer" class="dialog-footer">
-        <el-button @click="visible = false" :disabled="exporting">取消</el-button>
-        <el-button type="primary" icon="el-icon-download" :loading="exporting" :disabled="exporting" @click="exportPackage">生成并下载</el-button>
+        <el-button v-if="exporting" type="danger" @click="cancelExport">取消导出</el-button>
+        <el-button v-else @click="visible = false">关闭</el-button>
+        <el-button v-if="!exporting && exportState !== 'success'" type="primary" icon="el-icon-download" @click="exportPackage">生成并下载</el-button>
     </span>
 </el-dialog>
 </script>

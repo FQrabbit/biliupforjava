@@ -110,12 +110,35 @@ const ApiUtil = {
             if (!(options && options.acceptAnyBlob) && ct && ct.indexOf('image/') !== 0) {
                 throw new Error('non_image');
             }
-            return res.blob().then(function (blob) {
+            var buildResult = function(blob) {
                 if (options && options.acceptAnyBlob) {
                     return { blob: blob, headers: res.headers };
                 }
                 return blob;
-            });
+            };
+            if (!options || typeof options.onDownloadProgress !== 'function'
+                    || !res.body || typeof res.body.getReader !== 'function') {
+                return res.blob().then(buildResult);
+            }
+            var reader = res.body.getReader();
+            var chunks = [];
+            var loaded = 0;
+            var totalHeader = res.headers && res.headers.get ? res.headers.get('content-length') : null;
+            var total = totalHeader ? Number(totalHeader) : 0;
+            var readNext = function() {
+                return reader.read().then(function(part) {
+                    if (part.done) {
+                        return buildResult(new Blob(chunks, { type: ct || 'application/octet-stream' }));
+                    }
+                    if (part.value) {
+                        chunks.push(part.value);
+                        loaded += part.value.byteLength || part.value.length || 0;
+                        try { options.onDownloadProgress({ loaded: loaded, total: total }); } catch (e) {}
+                    }
+                    return readNext();
+                });
+            };
+            return readNext();
         });
     },
     get: function(url, callback, errorCallback) {

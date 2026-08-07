@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -180,8 +181,12 @@ public class LogArchiveService {
     }
 
     public void streamLines(List<LogFile> files, Consumer<String> consumer) throws IOException {
+        streamLines(files, consumer, null);
+    }
+
+    public void streamLines(List<LogFile> files, Consumer<String> consumer, LongConsumer bytesConsumer) throws IOException {
         for (LogFile file : files) {
-            try (BufferedReader reader = reader(file)) {
+            try (BufferedReader reader = reader(file, bytesConsumer)) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     consumer.accept(line);
@@ -191,13 +196,24 @@ public class LogArchiveService {
     }
 
     public BufferedReader reader(LogFile file) throws IOException {
-        return new BufferedReader(new InputStreamReader(open(file), StandardCharsets.UTF_8), 65536);
+        return reader(file, null);
+    }
+
+    public BufferedReader reader(LogFile file, LongConsumer bytesConsumer) throws IOException {
+        return new BufferedReader(new InputStreamReader(open(file, bytesConsumer), StandardCharsets.UTF_8), 65536);
     }
 
     public InputStream open(LogFile file) throws IOException {
+        return open(file, null);
+    }
+
+    public InputStream open(LogFile file, LongConsumer bytesConsumer) throws IOException {
         InputStream source = new FileInputStream(file.path().toFile());
         if (file.snapshotLength() >= 0) {
             source = new LimitedInputStream(source, file.snapshotLength());
+        }
+        if (bytesConsumer != null) {
+            source = new CountingInputStream(source, bytesConsumer);
         }
         return file.path().getFileName().toString().endsWith(".gz") ? new GZIPInputStream(source, 65536) : source;
     }
@@ -239,6 +255,35 @@ public class LogArchiveService {
             if (remaining <= 0) return -1;
             int read = delegate.read(bytes, offset, (int) Math.min(length, remaining));
             if (read > 0) remaining -= read;
+            return read;
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
+    }
+
+    private static final class CountingInputStream extends InputStream {
+        private final InputStream delegate;
+        private final LongConsumer consumer;
+
+        private CountingInputStream(InputStream delegate, LongConsumer consumer) {
+            this.delegate = delegate;
+            this.consumer = consumer;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int value = delegate.read();
+            if (value >= 0) consumer.accept(1L);
+            return value;
+        }
+
+        @Override
+        public int read(byte[] bytes, int offset, int length) throws IOException {
+            int read = delegate.read(bytes, offset, length);
+            if (read > 0) consumer.accept(read);
             return read;
         }
 
