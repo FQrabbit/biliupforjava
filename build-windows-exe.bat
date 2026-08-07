@@ -8,8 +8,10 @@ set "BILIUP_BUILD_EXIT_CODE=0"
 echo.
 echo ========================================
 echo   BiliUpForJava Windows EXE Build
+echo   Dual-EXE script version: 1
 echo ========================================
 echo Project: %CD%
+echo Script: %~f0
 echo.
 
 if not exist "pom.xml" (
@@ -28,10 +30,8 @@ if not exist "icon.ico" (
 )
 
 if /i "%~1"=="--verify-only" (
-    call :verify_artifacts
-    if errorlevel 1 goto :failed
-    echo Build artifacts are complete.
-    goto :finished
+    set "VERIFY_ONLY=1"
+    goto :verify_normal_artifacts
 )
 
 echo [1/5] Locating Visual Studio C++ tools...
@@ -109,6 +109,26 @@ if /i "%~1"=="--env-check" (
     goto :finished
 )
 
+set "BUILD_COMPAT=0"
+echo.
+echo ========================================================
+echo   OPTIONAL CPU COMPATIBILITY EXE
+echo ========================================================
+echo   Build biliupforjava-compat.exe for older CPUs without AVX/AVX2.
+echo   It may be slightly slower than the normal EXE.
+echo.
+echo   ^>^>^> Choose within 8 seconds: [Y] Build  [N] Skip ^<^<^<
+echo   No response defaults to [N] Skip.
+echo.
+choice /C YN /N /T 8 /D N /M "Build compatibility EXE"
+if errorlevel 2 set "BUILD_COMPAT=0"
+if errorlevel 1 if not errorlevel 2 set "BUILD_COMPAT=1"
+if "%BUILD_COMPAT%"=="1" (
+    echo          Compatibility EXE will be built after the normal EXE.
+) else (
+    echo          Compatibility EXE was skipped.
+)
+
 echo.
 echo       Removing previous target directory...
 if exist "target" rmdir /s /q "target"
@@ -141,24 +161,10 @@ if not exist "app.res" (
 echo [4/5] Building EXE with GraalVM Native Image...
 echo       This usually takes a few minutes. High CPU and memory usage is normal.
 call mvn clean -Pnative native:compile -DskipTests -Dnative.maven.plugin.version=0.9.28
-if errorlevel 1 (
-    echo [WARN] Native Image returned a non-zero exit code.
-    echo        Checking whether all runtime artifacts were still generated...
-    call :verify_artifacts
-    if errorlevel 1 (
-        echo [ERROR] Native Image build failed and the output is incomplete.
-        goto :failed
-    )
-    set "BUILD_WARNING=1"
-)
+set "NORMAL_BUILD_EXIT_CODE=%ERRORLEVEL%"
+goto :verify_normal_artifacts
 
-echo [5/5] Checking build output...
-call :verify_artifacts
-if errorlevel 1 (
-    echo [ERROR] One or more required build artifacts are missing.
-    goto :failed
-)
-
+:build_complete
 echo.
 echo ========================================
 if defined BUILD_WARNING (
@@ -168,6 +174,13 @@ if defined BUILD_WARNING (
 )
 echo ========================================
 echo EXE: %CD%\target\biliupforjava.exe
+if "%BUILD_COMPAT%"=="1" (
+    if defined COMPAT_BUILD_FAILED (
+        echo COMPAT EXE: not generated. See warnings above.
+    ) else (
+        echo COMPAT EXE: %CD%\target\biliupforjava-compat.exe
+    )
+)
 echo DLL: %CD%\target\*.dll
 echo Keep the generated DLL files next to the EXE when publishing.
 goto :finished
@@ -185,7 +198,8 @@ echo.
 if /i not "%~1"=="--no-pause" if /i not "%~1"=="--verify-only" if /i not "%~1"=="--env-check" pause
 exit /b %BILIUP_BUILD_EXIT_CODE%
 
-:verify_artifacts
+:verify_normal_artifacts
+if not defined VERIFY_ONLY echo [5/5] Checking build output...
 set "MISSING_ARTIFACT="
 for %%F in (
     "target\biliupforjava.exe"
@@ -206,8 +220,61 @@ for %%F in (
     )
 )
 
-if defined MISSING_ARTIFACT exit /b 1
-exit /b 0
+if defined MISSING_ARTIFACT (
+    if defined VERIFY_ONLY (
+        echo [ERROR] One or more required build artifacts are missing.
+    ) else if not "%NORMAL_BUILD_EXIT_CODE%"=="0" (
+        echo [ERROR] Native Image build failed and the output is incomplete.
+    ) else (
+        echo [ERROR] One or more required build artifacts are missing.
+    )
+    goto :failed
+)
+
+if defined VERIFY_ONLY (
+    echo Build artifacts are complete.
+    goto :finished
+)
+
+if not "%NORMAL_BUILD_EXIT_CODE%"=="0" (
+    echo [WARN] Native Image returned a non-zero exit code, but all runtime artifacts were generated.
+    set "BUILD_WARNING=1"
+)
+
+if "%BUILD_COMPAT%"=="1" goto :build_compat
+goto :build_complete
+
+:build_compat
+echo.
+echo [OPTION] Building biliupforjava-compat.exe with CPU compatibility mode...
+echo          Native Image target: -march=compatibility
+call mvn -Pnative,native-compat native:compile -DskipTests -Dnative.maven.plugin.version=0.9.28 -Dnative.image.name=biliupforjava-compat
+set "COMPAT_BUILD_EXIT_CODE=%ERRORLEVEL%"
+
+if not exist "target\biliupforjava-compat.exe" goto :compat_build_missing
+for %%F in ("target\biliupforjava-compat.exe") do if %%~zF EQU 0 goto :compat_build_missing
+
+findstr /s /m /c:"-march=compatibility" "target\tmp\native-image-*.args" >nul 2>&1
+if errorlevel 1 goto :compat_build_option_missing
+
+if not "%COMPAT_BUILD_EXIT_CODE%"=="0" (
+    echo [WARN] Compatibility Native Image returned a non-zero exit code, but the EXE was generated.
+    set "BUILD_WARNING=1"
+)
+goto :build_complete
+
+:compat_build_missing
+echo [WARN] Compatibility EXE build failed. The normal EXE remains available.
+set "BUILD_WARNING=1"
+set "COMPAT_BUILD_FAILED=1"
+goto :build_complete
+
+:compat_build_option_missing
+echo [WARN] Compatibility EXE was generated, but -march=compatibility was not passed to Native Image.
+echo        Do not distribute this file as a CPU-compatible build.
+set "BUILD_WARNING=1"
+set "COMPAT_BUILD_FAILED=1"
+goto :build_complete
 
 :reload_user_path
 set "USER_PATH="

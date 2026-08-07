@@ -17,6 +17,7 @@
     <properties>
         <java.version>17</java.version>
         <native.maven.plugin.version>0.9.25</native.maven.plugin.version>
+        <native.image.name>biliupforjava</native.image.name>
     </properties>
     <dependencies>
         <dependency>
@@ -172,7 +173,7 @@
                 <artifactId>native-maven-plugin</artifactId>
                 <version>${native.maven.plugin.version}</version>
                 <configuration>
-                    <imageName>biliupforjava</imageName>
+                    <imageName>${native.image.name}</imageName>
                     <buildArgs>
                         <!-- 使用 ${project.basedir} 确保传给底层链接器的是绝对路径 -->
                         <buildArg>-H:NativeLinkerOption=${project.basedir}/app.res</buildArg>
@@ -181,5 +182,29 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        默认的Native Image目标为x86-64-v3，这需要AVX/AVX2支持。
+        保持普通发布版本不变，并让Windows构建脚本选择此配置，
+        以生成一个可在较旧x64 CPU上使用的独立可执行文件
+    -->
+    <profiles>
+        <profile>
+            <id>native-compat</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <configuration>
+                            <buildArgs combine.children="append">
+                                <buildArg>-march=compatibility</buildArg>
+                            </buildArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
