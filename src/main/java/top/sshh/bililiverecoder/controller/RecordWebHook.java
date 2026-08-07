@@ -104,15 +104,18 @@ public class RecordWebHook {
         }
         if (recordEvent.getEventData() != null) {
             try {
-                if ("SessionEnded".equals(recordEvent.getEventType())) {
-                    lock = "brec:" + recordEvent.getEventType();
-                } else if ("FileClosed".equals(recordEvent.getEventType()) || "FileOpening".equals(recordEvent.getEventType())) {
-                    String roomId = recordEvent.getEventData().getRoomId();
-                    lock = roomId == null || roomId.isBlank()
-                            ? "brec:" + recordEvent.getEventData().getRelativePath()
-                            : "brec:room:" + roomId;
-                } else {
-                    lock = "brec:" + recordEvent.getEventData().getSessionId();
+                // 同一直播间的生命周期事件必须进入同一串行队列。此前 File* 用 roomId、
+                // Session*/Stream* 用 sessionId（SessionEnded 甚至全局共用一个 key），会使
+                // 重连前后的事件并发交错，进而把已结束稿件重新写成 recording=true
+                String roomId = recordEvent.getEventData().getRoomId();
+                if (roomId != null && !roomId.isBlank()) {
+                    lock = "brec:room:" + roomId;
+                } else if (recordEvent.getEventData().getSessionId() != null
+                        && !recordEvent.getEventData().getSessionId().isBlank()) {
+                    lock = "brec:session:" + recordEvent.getEventData().getSessionId();
+                } else if (recordEvent.getEventData().getRelativePath() != null
+                        && !recordEvent.getEventData().getRelativePath().isBlank()) {
+                    lock = "brec:path:" + recordEvent.getEventData().getRelativePath();
                 }
             } catch (Exception e) {
                 log.debug("[BLR] {}", LogKvs.event("Webhook.LockKey.BuildFailed")

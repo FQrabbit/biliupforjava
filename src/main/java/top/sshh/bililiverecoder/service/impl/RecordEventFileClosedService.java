@@ -27,9 +27,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 @Slf4j
 @Component
@@ -73,6 +71,9 @@ public class RecordEventFileClosedService implements RecordEventService {
     @Autowired
     private top.sshh.bililiverecoder.service.RecordPartPathService partPathService;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistoryStateService historyStateService;
+
     @PostConstruct
     public void initWorkPath() {
         workPath = workPath.replaceAll("\\\\\\\\", "\\\\");
@@ -99,13 +100,6 @@ public class RecordEventFileClosedService implements RecordEventService {
                     .add("msg", "收到文件关闭事件但本地无房间配置记录，已忽略。"));
             return;
         }
-        if (room.getHistoryId() == null) {
-            log.info("[BLR] {}", LogKvs.event("FileClosed.NoRecording")
-                    .add("roomId", eventData.getRoomId())
-                    .add("filePath", relativePath)
-                    .add("msg", "收到文件关闭事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制。"));
-            return;
-        }
         String filePath = partPathService.resolveWebhookPath(relativePath);
         RecordHistoryPart partByPath = historyPartRepository.findByFilePath(filePath);
         boolean matchedByCanonicalPath = false;
@@ -113,53 +107,8 @@ public class RecordEventFileClosedService implements RecordEventService {
             partByPath = findByCanonicalPath(historyPartRepository.findOpenCandidatesByRoomId(eventData.getRoomId()), filePath);
             matchedByCanonicalPath = partByPath != null;
         }
-        if (partByPath != null && partByPath.getHistoryId() != null && !partByPath.getHistoryId().equals(room.getHistoryId())) {
-            log.info("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByPart")
-                    .add("roomId", eventData.getRoomId())
-                    .add("oldHistoryId", room.getHistoryId())
-                    .add("newHistoryId", partByPath.getHistoryId())
-                    .add("partId", partByPath.getId())
-                    .add("filePath", relativePath));
-            room.setHistoryId(partByPath.getHistoryId());
-            roomRepository.save(room);
-        }
-        Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
-        if (!historyOptional.isPresent()) {
-            if (partByPath != null && partByPath.getHistoryId() != null) {
-                Optional<RecordHistory> historyFromPart = historyRepository.findById(partByPath.getHistoryId());
-                if (historyFromPart.isPresent()) {
-                    if (!partByPath.getHistoryId().equals(room.getHistoryId())) {
-                        log.info("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByPart")
-                                .add("roomId", eventData.getRoomId())
-                                .add("oldHistoryId", room.getHistoryId())
-                                .add("newHistoryId", partByPath.getHistoryId())
-                                .add("partId", partByPath.getId())
-                                .add("filePath", relativePath));
-                        room.setHistoryId(partByPath.getHistoryId());
-                        roomRepository.save(room);
-                    }
-                    historyOptional = historyFromPart;
-                }
-            }
-        }
-        if (!historyOptional.isPresent()) {
-            List<RecordHistory> activeHistoryList = historyRepository.findByRoomIdAndRecordingTrueOrderByStartTimeDesc(eventData.getRoomId());
-            if (activeHistoryList != null && !activeHistoryList.isEmpty()) {
-                RecordHistory active = activeHistoryList.get(0);
-                if (active != null) {
-                    log.warn("[BLR] {}", LogKvs.event("FileClosed.HistoryRecovered.ByActiveHistory")
-                            .add("roomId", eventData.getRoomId())
-                            .add("oldHistoryId", room.getHistoryId())
-                            .add("newHistoryId", active.getId())
-                            .add("filePath", relativePath));
-                    room.setHistoryId(active.getId());
-                    roomRepository.save(room);
-                    historyOptional = Optional.of(active);
-                }
-            }
-        }
-        if (historyOptional.isPresent()) {
-            RecordHistory history = historyOptional.get();
+        RecordHistory history = historyStateService.resolveHistory(room, eventData, partByPath);
+        if (history != null) {
             // 正常逻辑
             if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isForceArchived()) {
                 if (history.isForceArchived() && Objects.equals(room.getHistoryId(), history.getId())) {
@@ -248,9 +197,11 @@ public class RecordEventFileClosedService implements RecordEventService {
 
             history.setFileSize(history.getFileSize() + part.getFileSize());
             history.setTitle(eventData.getTitle());
-            history.setSessionId(sessionId);
-            history.setRecording(eventData.isRecording());
-            history.setStreaming(eventData.isStreaming());
+            // FileClosed 只代表一个分P完成，不能以 payload 中可能已过期的
+            // recording/streaming 标志复活已由 SessionEnded 关闭的历史稿件
+            if (StringUtils.isNotBlank(sessionId)) {
+                history.setSessionId(sessionId);
+            }
             history.setUpdateTime(LocalDateTime.now());
             history.setEndTime(LocalDateTime.now());
             history = historyRepository.save(history);
@@ -282,25 +233,13 @@ public class RecordEventFileClosedService implements RecordEventService {
             }
             startUploadOrMarkSkipped(room, history, part, fileSize);
         } else {
-                log.error("[BLR] {}", LogKvs.event("FileClosed.MissingHistory")
+                log.warn("[BLR] {}", LogKvs.event("FileClosed.MissingHistory")
                     .add("roomId", eventData.getRoomId())
                     .add("title", eventData.getTitle())
                     .add("filePath", relativePath)
-                    .add("historyId", room.getHistoryId()));
-            RecordHistoryPart part = new RecordHistoryPart();
-            part.setStartTime(LocalDateTime.now().minusSeconds((long) eventData.getDuration()));
-            part.setEventId(event.getEventId());
-            part.setTitle(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM月dd日HH点mm分ss秒")));
-            part.setLiveTitle(eventData.getTitle());
-            part.setAreaName(eventData.getAreaNameChild());
-            part.setRoomId(eventData.getRoomId());
-            part.setFilePath(filePath);
-            part.setFileSize(0L);
-            part.setSessionId(sessionId);
-            part.setRecording(eventData.isRecording());
-            part.setEndTime(LocalDateTime.now());
-            part = historyPartRepository.save(part);
-            partFileLocationService.registerPrimary(part);
+                    .add("historyId", room.getHistoryId())
+                    .add("sessionId", sessionId)
+                    .add("msg", "未找到对应会话，避免把旧文件关闭事件写入当前稿件。"));
         }
 
     }

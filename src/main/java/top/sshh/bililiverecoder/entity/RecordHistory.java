@@ -281,7 +281,7 @@ public class RecordHistory {
             }
 
             // 先看评论（SC/上舰列表或礼物评论）是否需要发送
-            if (!sendReply && ((scEnabled && pendingHigh > 0) || giftReplyEnabled)) {
+            if (!sendReply && ((scEnabled && pendingHigh > 0) || (giftReplyEnabled && pendingHigh > 0))) {
                 return "发送评论中";
             }
 

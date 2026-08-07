@@ -535,12 +535,6 @@ public class RoomLiveEventParseService {
         giftCatalogRepository.save(catalog);
     }
 
-    private File resolveXmlFile(RecordHistoryPart part) {
-        return partFileLocationService.resolveCompanion(part.getId(), ".xml")
-                .map(java.nio.file.Path::toFile)
-                .orElse(null);
-    }
-
     private String attr(Element element, String name) {
         return element.attribute(name) == null ? null : element.attribute(name).getValue();
     }

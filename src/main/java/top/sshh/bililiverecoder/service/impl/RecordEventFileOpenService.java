@@ -89,6 +89,19 @@ public class RecordEventFileOpenService implements RecordEventService {
                 room.setWebhookLastSeenAt(LocalDateTime.now());
 
                 String currentSessionId = room.getSessionId();
+                RecordHistory knownSession = historyRepository.findBySessionId(incomingSessionId);
+                if (knownSession != null && !knownSession.isRecording()
+                        && incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
+                    // FileOpening 可在 SessionEnded 之后迟到。稿件已经结束时不再重新打开它，
+                    // 更不能把 room.historyId 回退到这个旧会话
+                    log.info("[BLR] {}", LogKvs.event("FileOpen.IgnoreCompletedStaleSession")
+                            .add("roomId", roomId)
+                            .add("incomingSessionId", incomingSessionId)
+                            .add("currentSessionId", currentSessionId)
+                            .add("historyId", knownSession.getId())
+                            .add("filePath", relativePath));
+                    return;
+                }
                 if (incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
                     log.debug("[BLR] {}", LogKvs.event("SessionMismatch.Detected")
                             .add("roomId", roomId)

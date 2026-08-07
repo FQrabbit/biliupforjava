@@ -75,6 +75,8 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     List<RecordHistoryPart> findByIdIn(List<Long> ids);
 
+    List<RecordHistoryPart> findByRoomIdAndSessionIdOrderByIdDesc(String roomId, String sessionId);
+
     List<RecordHistoryPart> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 
     @Query("""

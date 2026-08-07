@@ -34,6 +34,9 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByRoomIdAndRecordingTrueOrderByStartTimeDesc(String roomId);
 
+    @Query("select h from RecordHistory h where h.recording = true and h.upload = true and h.publish = false and h.forceArchived = false and h.endTime is not null and h.endTime >= ?1 order by h.endTime asc")
+    List<RecordHistory> findRecentUnpublishedRecordingHistories(LocalDateTime since, Pageable pageable);
+
     @org.springframework.data.jpa.repository.Query("""
             select h from RecordHistory h
             where h.roomId = ?1

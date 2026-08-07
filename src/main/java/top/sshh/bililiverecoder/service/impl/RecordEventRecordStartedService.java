@@ -55,6 +55,19 @@ public class RecordEventRecordStartedService implements RecordEventService {
                 room = roomRepository.save(room);
             }
 
+            String currentSessionId = room.getSessionId();
+            RecordHistory knownSession = historyRepository.findBySessionId(eventData.getSessionId());
+            if (knownSession != null && !knownSession.isRecording()
+                    && eventData.getSessionId() != null
+                    && !eventData.getSessionId().equals(currentSessionId)) {
+                // 同一房间重连后才迟到的旧 SessionStarted 不能把当前会话指针拨回去
+                log.info("[BLR] {}", LogKvs.event("RecordStarted.IgnoreCompletedStaleSession")
+                        .add("roomId", roomId)
+                        .add("incomingSessionId", eventData.getSessionId())
+                        .add("currentSessionId", currentSessionId)
+                        .add("historyId", knownSession.getId()));
+                return;
+            }
             room.setUname(eventData.getName());
             room.setTitle(eventData.getTitle());
             room.setSessionId(eventData.getSessionId());
