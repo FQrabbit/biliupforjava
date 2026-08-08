@@ -462,6 +462,8 @@
         },
         exportConfigF: function () {
             let _this = this;
+            _this.configTaskId = typeof window.BiliupProgressTaskId === 'function'
+                ? window.BiliupProgressTaskId() : ('config-' + Date.now());
             if ((_this.exportConfig.exportLiveMsg || _this.exportConfig.exportStats) && !_this.exportConfig.exportHistory) {
                 _this.exportConfig.exportHistory = true;
             }
@@ -470,7 +472,7 @@
             // 大备份在浏览器接收完整 Blob 前会持续很久；请求发出后立即收起选项弹窗，
             // 进度卡片继续反馈状态，失败时通过错误状态和消息提示用户
             _this.exportConfigDialog = false;
-            RoomApi.exportConfig(_this.exportConfig, function (blob, headers) {
+            RoomApi.exportConfig(_this.exportConfig, _this.configTaskId, function (blob, headers) {
                     _this.updateConfigProgress(100, '正在交给浏览器下载',
                         '配置文件已生成，正在唤起浏览器下载…');
                     var disposition = headers && headers.get ? headers.get('Content-Disposition') : null;

@@ -5,6 +5,50 @@
     'use strict';
 
     window.HistoryPagePreviewMethods = {
+        destroyPreviewProgressInterpolator: function () {
+            if (this.previewProgressInterpolator) this.previewProgressInterpolator.destroy();
+            this.previewProgressInterpolator = null;
+            this.previewProgressDisplay = null;
+        },
+        previewTaskPercent: function () {
+            var display = this.previewProgressDisplay;
+            if (display && display.value !== undefined) return Math.round(Math.max(0, Math.min(100, display.value)));
+            return Math.round(Math.max(0, Math.min(100, Number(this.previewTask && this.previewTask.percent) || 0)));
+        },
+        previewTaskEstimated: function () {
+            return !!(this.previewProgressDisplay && this.previewProgressDisplay.estimated);
+        },
+        applyPreviewTaskProgress: function (task) {
+            if (!task || !this.previewPart || !window.BiliupProgressInterpolator) return;
+            var self = this;
+            var status = task.status;
+            var key = String(this.previewPart.partId) + '|' + String(task.startedAt || '');
+            if (!this.previewProgressInterpolator) {
+                this.previewProgressInterpolator = new window.BiliupProgressInterpolator({
+                    pollIntervalMs: 1000,
+                    allowPrediction: true,
+                    onUpdate: function (display) {
+                        self.previewProgressDisplay = display;
+                    }
+                });
+            }
+            var terminal = status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELLED';
+            if (status === 'SUCCESS') {
+                this.previewProgressInterpolator.complete({ confirmedValue: 100 });
+            } else if (terminal) {
+                this.previewProgressInterpolator.fail();
+            } else {
+                this.previewProgressInterpolator.update({
+                    key: key,
+                    unit: 'preview-percent',
+                    total: 100,
+                    confirmedValue: Number(task.percent) || 0,
+                    confirmedPercent: Number(task.percent) || 0,
+                    running: status === 'RUNNING' || status === 'PENDING',
+                    updatedAtEpochMs: Date.now()
+                });
+            }
+        },
         canPreviewPart: function(p) {
             return !!(p && p.partId && p.localFileAvailable);
         },
@@ -683,6 +727,7 @@
             PreviewApi.prepare(_this.previewPart.partId, force, function(resp) {
                 _this.previewPreparing = false;
                 _this.previewTask = (resp && resp.task) ? resp.task : null;
+                _this.applyPreviewTaskProgress(_this.previewTask);
                 if (resp && resp.cacheReady) {
                     if (_this.previewMeta) {
                         _this.$set(_this.previewMeta, 'cacheReady', true);
@@ -711,6 +756,7 @@
                 }
                 PreviewApi.task(_this.previewPart.partId, function(resp) {
                     _this.previewTask = (resp && resp.task) ? resp.task : null;
+                    _this.applyPreviewTaskProgress(_this.previewTask);
                     var status = _this.previewTask && _this.previewTask.status;
                     if (status === 'SUCCESS' && resp && resp.cacheReady) {
                         _this.stopPreviewTaskPolling();
@@ -744,6 +790,7 @@
             PreviewApi.cancel(_this.previewPart.partId, function(resp) {
                 _this.previewTask = (resp && resp.task) ? resp.task : null;
                 _this.stopPreviewTaskPolling();
+                _this.destroyPreviewProgressInterpolator();
                 _this.switchPreviewSource('flv');
             }, function() {
                 _this.$message({ message: '取消封装失败', type: 'warning' });
@@ -766,6 +813,7 @@
         },
         stopPartPreview: function() {
             this.stopPreviewTaskPolling();
+            this.destroyPreviewProgressInterpolator();
             this.destroyPreviewArtPlayer();
             this.previewDialogVisible = false;
             this.previewPart = null;

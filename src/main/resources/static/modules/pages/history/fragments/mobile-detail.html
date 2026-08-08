@@ -137,7 +137,7 @@
                         <span>UPLOAD</span>
                         <h3>上传进度</h3>
                     </div>
-                    <strong>{{ calcOverallUploadPercent() }}%</strong>
+                    <strong>{{ overallUploadPercentEstimated() ? '≈' : '' }}{{ calcOverallUploadPercent() }}%</strong>
                 </header>
                 <div class="mobile-history-detail-progress-track">
                     <div :style="{ width: calcOverallUploadPercent() + '%' }"></div>
@@ -190,7 +190,7 @@
                                 <em class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</em>
                             </div>
                             <div class="mobile-history-detail-progress-track">
-                                <div :style="{ width: (p.state === 'SKIPPED' ? 0 : (p.percent || 0)) + '%' }"></div>
+                                <div :style="{ width: uploadItemPercent(p) + '%' }"></div>
                             </div>
                             <p>
                                 <span v-if="p.fileSize">{{ formatSize(p.fileSize) }}</span>

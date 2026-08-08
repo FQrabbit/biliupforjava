@@ -321,6 +321,7 @@ public class StatsAggregationService {
                 RecordHistoryPart part = partRepository.findById(partId).orElse(null);
                 if (part == null) {
                     processed++;
+                    updateTaskProgress("正在检查 XML", processed, safeIds.size(), "分P记录不存在：" + partId);
                     continue;
                 }
                 updateTaskProgress("正在检查 XML", processed, safeIds.size(), part.getRoomId() + " / " + partId);
@@ -380,17 +381,23 @@ public class StatsAggregationService {
                     })
                     .collect(Collectors.toList());
             updateTaskProgress("扫描完成", 0, targets.size(), "需要补全 " + targets.size() + " 场");
+            int processed = 0;
             int updated = 0;
+            int skipped = 0;
             for (RecordHistory history : targets) {
-                updateTaskProgress("正在补全", updated, targets.size(), history.getRoomId() + " / " + history.getId());
+                updateTaskProgress("正在补全", processed, targets.size(), history.getRoomId() + " / " + history.getId());
                 if (aggregateHistory(history)) {
                     updated++;
+                } else {
+                    skipped++;
                 }
-                updateTaskProgress("正在补全", updated, targets.size(), history.getRoomId() + " / " + history.getId());
+                processed++;
+                updateTaskProgress("正在补全", processed, targets.size(), history.getRoomId() + " / " + history.getId());
             }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("updated", updated);
+            result.put("skipped", skipped);
             result.put("statsVersion", STATS_VERSION);
             result.put("status", getStatsStatus());
             updateTaskDone("补全完成", result);
@@ -416,17 +423,23 @@ public class StatsAggregationService {
             List<RecordHistory> histories = historyRepository.findByEndTimeIsNotNullOrderByEndTimeDesc().stream()
                     .filter(history -> history != null && history.getId() != null)
                     .collect(Collectors.toList());
+            int processed = 0;
             int updated = 0;
+            int skipped = 0;
             for (RecordHistory history : histories) {
-                updateTaskProgress("正在重建", updated, histories.size(), history.getRoomId() + " / " + history.getId());
+                updateTaskProgress("正在重建", processed, histories.size(), history.getRoomId() + " / " + history.getId());
                 if (aggregateHistory(history)) {
                     updated++;
+                } else {
+                    skipped++;
                 }
-                updateTaskProgress("正在重建", updated, histories.size(), history.getRoomId() + " / " + history.getId());
+                processed++;
+                updateTaskProgress("正在重建", processed, histories.size(), history.getRoomId() + " / " + history.getId());
             }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("updated", updated);
+            result.put("skipped", skipped);
             result.putAll(cleanup.toMap());
             result.put("deletedParseStates", deletedParseStates);
             result.put("statsVersion", STATS_VERSION);
@@ -838,7 +851,7 @@ public class StatsAggregationService {
 
         private StatsTaskStatus failed(String message) {
             return new StatsTaskStatus(taskId, task, title, false, false, false,
-                    "FAILED", message, detail, processed, total, 100, startedAt, LocalDateTime.now(), result);
+                    "FAILED", message, detail, processed, total, Math.min(99, percent), startedAt, LocalDateTime.now(), result);
         }
 
         private StatsTaskStatus busy(String message) {
@@ -871,7 +884,7 @@ public class StatsAggregationService {
             if (startedAt == null) {
                 return 0L;
             }
-            LocalDateTime end = updatedAt == null ? LocalDateTime.now() : updatedAt;
+            LocalDateTime end = running || updatedAt == null ? LocalDateTime.now() : updatedAt;
             return Math.max(0L, Duration.between(startedAt, end).getSeconds());
         }
     }

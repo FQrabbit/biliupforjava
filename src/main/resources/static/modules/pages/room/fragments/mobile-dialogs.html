@@ -289,7 +289,7 @@
                                  :status="deleteRoomProgress.status === 'active' ? undefined : deleteRoomProgress.status"
                                  :stroke-width="10"></el-progress>
                     <div class="room-delete-progress-meta">
-                        <span>阶段：{{ deleteRoomPhaseLabel(deleteRoomProgress.phase) }}</span>
+                        <span>阶段：{{ deleteRoomPhaseLabel(deleteRoomProgress.phase) }}{{ deleteRoomProgress.estimated ? ' · ≈估算' : '' }}</span>
                         <span v-if="deleteRoomProgressCountLabel">{{ deleteRoomProgressCountLabel }}</span>
                     </div>
                     <p v-if="deleteRoomProgress.detail" class="room-delete-progress-detail">{{ deleteRoomProgress.detail }}</p>

@@ -29,6 +29,8 @@ return {
             maintenancePoller: null,
             statsTaskPoller: null,
             activeStatsTaskId: null,
+            statsProgressInterpolator: null,
+            statsProgressLatestStatus: null,
             operationProgressTimer: null,
             operationProgressHideTimer: null,
             resizeHandler: null,
@@ -39,6 +41,7 @@ return {
                 message: '',
                 detail: '',
                 percent: 0,
+                estimated: false,
                 status: 'active'
             },
             overview: {},
@@ -288,6 +291,10 @@ return {
         if (this.operationProgressHideTimer) {
             clearTimeout(this.operationProgressHideTimer);
             this.operationProgressHideTimer = null;
+        }
+        if (this.statsProgressInterpolator) {
+            this.statsProgressInterpolator.destroy();
+            this.statsProgressInterpolator = null;
         }
         Object.keys(this.sortAnimationTimers || {}).forEach(function (key) {
             if (this.sortAnimationTimers[key]) clearTimeout(this.sortAnimationTimers[key]);

@@ -1,9 +1,12 @@
 (function(window) {
     'use strict';
 
-    function exportFailureFromTaskStatus(fallbackMessage) {
+    function exportFailureFromTaskStatus(fallbackMessage, taskId) {
         return new Promise(function(resolve, reject) {
-            ApiUtil.get('/room/configTask/status', function(status) {
+            var url = taskId
+                ? '/room/configTask/status/' + encodeURIComponent(taskId)
+                : '/room/configTask/status';
+            ApiUtil.get(url, function(status) {
                 var message = fallbackMessage;
                 if (status && status.phase === 'FAILED' && status.message) {
                     message = status.message;
@@ -15,7 +18,7 @@
         });
     }
 
-    function verifyCompletedConfigExport(result) {
+    function verifyCompletedConfigExport(result, taskId) {
         var blob = result && result.blob;
         if (!blob || typeof blob.slice !== 'function') {
             return Promise.reject(new Error('导出响应无效，未收到配置文件'));
@@ -25,7 +28,7 @@
             if (/"exportCompleted"\s*:\s*true\s*}\s*$/.test(tail)) {
                 return result;
             }
-            return exportFailureFromTaskStatus('导出内容不完整，后端在生成配置文件时中断');
+            return exportFailureFromTaskStatus('导出内容不完整，后端在生成配置文件时中断', taskId);
         });
     }
 
@@ -54,11 +57,14 @@
         sort: function(data, callback, errorCallback) {
             ApiUtil.post('/room/sort', data, callback, errorCallback);
         },
-        exportConfig: function(data, callback, errorCallback) {
+        exportConfig: function(data, taskId, callback, errorCallback) {
             ApiUtil.fetchBlob('/room/exportConfig', {
                 method: 'POST',
                 acceptAnyBlob: true,
-                headers: { 'Content-Type': 'application/json;charset=utf-8' },
+                headers: {
+                    'Content-Type': 'application/json;charset=utf-8',
+                    'X-Config-Task-Id': taskId || ''
+                },
                 body: JSON.stringify(data),
                 handleError: function(response) {
                     return response.text().then(function(text) {
@@ -67,7 +73,9 @@
                         return Promise.reject(new Error(message));
                     });
                 }
-            }).then(verifyCompletedConfigExport).then(function(result) {
+            }).then(function(result) {
+                return verifyCompletedConfigExport(result, taskId);
+            }).then(function(result) {
                 callback(result.blob, result.headers);
             }).catch(function(error) {
                 if (errorCallback) errorCallback(error);

@@ -32,7 +32,7 @@
                     <strong>{{ configOperationProgress.title }}</strong>
                     <span>{{ configOperationProgress.message }}</span>
                 </div>
-                <em>{{ configOperationProgress.percent }}%</em>
+                <em>{{ configOperationProgress.estimated ? '≈' : '' }}{{ configOperationProgress.percent }}%</em>
             </div>
             <el-progress :percentage="configOperationProgress.percent" :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)" :stroke-width="8"></el-progress>
             <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>
@@ -169,7 +169,7 @@
                         <button type="button" @click="enterSortMode(); closeMobileRoomSheets()"><i class="el-icon-rank"></i><span>调整顺序</span></button>
                         <button type="button" @click="openMobileExportConfig"><i class="el-icon-download"></i><span>导出配置</span></button>
                         <el-upload class="mobile-room-upload-action" action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false">
-                            <button type="button" @click="mobileRoomActionsVisible = false"><i class="el-icon-upload2"></i><span>导入配置</span></button>
+                            <button type="button" @click="prepareConfigUpload(); mobileRoomActionsVisible = false"><i class="el-icon-upload2"></i><span>导入配置</span></button>
                         </el-upload>
                     </div>
                 </template>

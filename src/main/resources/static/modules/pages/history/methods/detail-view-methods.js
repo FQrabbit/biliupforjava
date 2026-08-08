@@ -452,6 +452,7 @@
             // 窗口关闭动画结束后，清理数据以释放内存并重置状态
             this.clearPartsAutoScrollTimer();
             this.stopProgressPolling();
+            this.clearUploadProgressInterpolators();
             this.cancelAuditStatusLoadingRequest();
             this.cancelEditParts(true);
             this.historyUploadProgress = null;

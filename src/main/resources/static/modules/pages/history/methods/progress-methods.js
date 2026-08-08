@@ -26,11 +26,13 @@
             const _this = this;
             if (!historyId) return;
             _this.stopProgressPolling();
+            _this.clearUploadProgressInterpolators();
             const requestToken = ++_this.progressRequestToken;
             _this.progressSpeedTracking = {};
 
             _this.fetchHistoryProgressOnce(historyId, true, function (resp) {
                 if (!_this.isCurrentHistoryDetail(historyId) || requestToken !== _this.progressRequestToken) return;
+                _this.applyInterpolatedUploadProgress(resp);
                 _this.historyUploadProgress = resp;
                 _this.updateSpeedTracking(resp);
                 if (_this.shouldKeepUploadProgressPolling(resp)) {
@@ -84,6 +86,7 @@
                                 });
                             }
 
+                            _this.applyInterpolatedUploadProgress(nextResp);
                             _this.historyUploadProgress = nextResp;
                             _this.updateSpeedTracking(nextResp);
 
@@ -115,6 +118,83 @@
                 this.progressTimer = null;
             }
             this.progressSpeedTracking = {};
+        },
+        uploadProgressItemKey: function(item) {
+            if (!item) return '';
+            // mergedParts 会保留文件字节总量而不是 tracker 的分片总数，不能把 chunkTotal 放进匹配键。
+            return String(item.partId || item.page || '') + '|' + String(item.uploadFlow || '');
+        },
+        clearUploadProgressInterpolators: function() {
+            var map = this.uploadProgressInterpolators || {};
+            Object.keys(map).forEach(function(key) {
+                if (map[key]) map[key].destroy();
+            });
+            this.uploadProgressInterpolators = {};
+            this.uploadProgressDisplayByKey = {};
+        },
+        applyInterpolatedUploadProgress: function(resp) {
+            var self = this;
+            if (!resp || !Array.isArray(resp.items) || !window.BiliupProgressInterpolator) return;
+            var activeKeys = {};
+            resp.items.forEach(function(item) {
+                if (!item) return;
+                var key = self.uploadProgressItemKey(item);
+                if (!key) return;
+                activeKeys[key] = true;
+                var interpolator = self.uploadProgressInterpolators[key];
+                if (!interpolator) {
+                    interpolator = new window.BiliupProgressInterpolator({
+                        pollIntervalMs: 1500,
+                        allowPrediction: true,
+                        onUpdate: function(display) {
+                            self.$set(self.uploadProgressDisplayByKey, key, display);
+                        }
+                    });
+                    self.$set(self.uploadProgressInterpolators, key, interpolator);
+                }
+                interpolator.setPollInterval(1500);
+                var terminal = item.state === 'SUCCESS' || item.state === 'FAILED'
+                    || item.state === 'PAUSED' || item.state === 'SKIPPED';
+                if (terminal && item.state === 'SUCCESS') {
+                    interpolator.complete({ confirmedValue: 100 });
+                } else if (terminal) {
+                    interpolator.fail();
+                } else {
+                    interpolator.update({
+                        key: key,
+                        unit: 'upload-percent',
+                        total: 100,
+                        confirmedValue: Number(item.percent) || 0,
+                        confirmedPercent: Number(item.percent) || 0,
+                        running: item.state === 'UPLOADING' || item.state === 'RETRY_WAIT',
+                        updatedAtEpochMs: Number(item.updateAtMs) || Date.now()
+                    });
+                }
+            });
+            Object.keys(self.uploadProgressInterpolators || {}).forEach(function(key) {
+                if (!activeKeys[key]) {
+                    self.uploadProgressInterpolators[key].destroy();
+                    self.$delete(self.uploadProgressInterpolators, key);
+                    self.$delete(self.uploadProgressDisplayByKey, key);
+                }
+            });
+        },
+        uploadItemPercent: function(item) {
+            if (!item || item.state === 'SKIPPED') return 0;
+            var display = this.uploadProgressDisplayByKey
+                && this.uploadProgressDisplayByKey[this.uploadProgressItemKey(item)];
+            if (display && display.value !== undefined) return Math.round(Math.max(0, Math.min(100, display.value)));
+            return Math.round(Math.max(0, Math.min(100, Number(item.percent) || 0)));
+        },
+        uploadItemEstimated: function(item) {
+            var display = this.uploadProgressDisplayByKey
+                && this.uploadProgressDisplayByKey[this.uploadProgressItemKey(item)];
+            return !!(display && display.estimated);
+        },
+        overallUploadPercentEstimated: function() {
+            return this.getEffectiveProgressItems().some(function(item) {
+                return this.uploadItemEstimated(item);
+            }, this);
         },
         shouldKeepUploadProgressPolling: function(resp) {
             if (resp && Number(resp.activeCount) > 0) return true;
@@ -170,7 +250,7 @@
             for (let i = 0; i < items.length; i++) {
                 const p = items[i] || {};
                 if (p.state === 'UPLOADING' || p.state === 'RETRY_WAIT') {
-                    const percent = Math.min(Math.max(Number(p.percent) || 0, 0), 100);
+                    const percent = this.uploadItemPercent(p);
                     uploadingFraction += (percent / 100.0);
                 }
             }
@@ -204,7 +284,8 @@
                 return active > 0 ? ('上传中：' + active + ' 个分P') : '当前无上传中的分P';
             }
             if (active > 0) {
-                return '已上传：' + uploaded + '/' + total + '，上传中：' + active + '，待上传：' + pending;
+                return (this.overallUploadPercentEstimated() ? '≈ ' : '')
+                    + '已上传：' + uploaded + '/' + total + '，上传中：' + active + '，待上传：' + pending;
             }
             if (uploaded >= total) {
                 return '已上传：' + uploaded + '/' + total + '（全部完成）';

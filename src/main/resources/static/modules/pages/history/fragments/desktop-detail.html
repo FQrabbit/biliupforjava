@@ -400,7 +400,7 @@
                     <div class="progress-bar-wrapper">
                         <el-progress :percentage="calcOverallUploadPercent()" :status="calcOverallUploadStatus()" :stroke-width="10" :show-text="false"></el-progress>
                     </div>
-                    <div class="progress-main-percent">{{ calcOverallUploadPercent() }}%</div>
+                    <div class="progress-main-percent">{{ overallUploadPercentEstimated() ? '≈' : '' }}{{ calcOverallUploadPercent() }}%</div>
                 </div>
 
                 <!-- 等待提醒 -->
@@ -448,9 +448,9 @@
                             <span v-if="p.state !== 'SUCCESS' && p.state !== 'SKIPPED' && calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
                         </div>
                         <div class="progress-bar-mini" :class="p.state === 'SKIPPED' ? 'skipped' : ''">
-                            <el-progress :percentage="p.state === 'SKIPPED' ? 0 : (p.percent || 0)" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
+                            <el-progress :percentage="uploadItemPercent(p)" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
                         </div>
-                        <div class="progress-percent-text" :class="p.state === 'SKIPPED' ? 'skipped-text' : ''">{{ p.state === 'SKIPPED' ? '-' : ((p.percent || 0) + '%') }}</div>
+                        <div class="progress-percent-text" :class="p.state === 'SKIPPED' ? 'skipped-text' : ''">{{ p.state === 'SKIPPED' ? '-' : ((uploadItemEstimated(p) ? '≈' : '') + uploadItemPercent(p) + '%') }}</div>
                         <div v-if="canPreviewPart(p)" class="progress-filepath-mini part-preview-actions">
                             <el-button class="part-action-btn part-action-btn--preview" size="mini" type="primary" plain icon="el-icon-video-play" @click.stop="openPartPreview(p)">预览</el-button>
                         </div>

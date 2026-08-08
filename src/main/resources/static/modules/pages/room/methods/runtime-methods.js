@@ -6,6 +6,9 @@
 
     window.RoomPageRuntimeMethods = {
         beforeConfigUpload: function (file) {
+            // 点击选择文件时已经生成任务 ID。这里不能再次生成，否则 Element Upload
+            // 可能仍把旧 ID 放进请求头，而状态轮询已经切到新 ID，界面就会永远停在 1%
+            if (!this.configTaskId) this.prepareConfigUpload();
             var maxConfigSize = 512 * 1024 * 1024;
             if (file && file.size > maxConfigSize) {
                 this.$message.error('导入配置文件不能超过 512MB，请重新导出时减少数据范围再试');
@@ -15,6 +18,10 @@
             this.startConfigProgress('导入配置', '正在上传并解析配置文件', '后端解析中...');
             this.pollConfigTaskStatus('import');
             return true;
+        },
+        prepareConfigUpload: function () {
+            this.configTaskId = typeof window.BiliupProgressTaskId === 'function'
+                ? window.BiliupProgressTaskId() : ('config-' + Date.now());
         },
         promptCoreRestart: function () {
             var self = this;
@@ -81,11 +88,9 @@
             this.failConfigProgress('导入失败');
         },
         cancelConfigProgressAnimation: function () {
-            if (!this.configProgressAnimationFrame) return;
-            if (window.cancelAnimationFrame) {
-                window.cancelAnimationFrame(this.configProgressAnimationFrame);
-            } else {
-                clearTimeout(this.configProgressAnimationFrame);
+            if (this.configProgressInterpolator) {
+                this.configProgressInterpolator.destroy();
+                this.configProgressInterpolator = null;
             }
             this.configProgressAnimationFrame = null;
         },
@@ -156,70 +161,71 @@
             if (status.running && staleSeconds >= 2) {
                 parts.push('核心仍在处理 · ' + staleSeconds + '秒前更新');
             }
+            if (this.configOperationProgress && this.configOperationProgress.estimated) {
+                parts.unshift('≈ 估算进度');
+            }
             return parts.join(' · ');
         },
         animateConfigTaskStatus: function (status) {
-            var self = this;
-            var now = Date.now();
-            var state = this.configProgressMetricsState;
             var taskId = status.taskId || status.task || '';
+            var unit = status.unit || 'records';
+            var confirmedValue = unit === 'bytes'
+                ? Math.max(0, Number(status.bytesProcessed) || 0)
+                : Math.max(0, Number(status.recordsProcessed) || 0);
+            var total = unit === 'bytes'
+                ? Math.max(0, Number(status.bytesTotal) || 0)
+                : Math.max(0, Number(status.recordsTotal) || 0);
+            var self = this;
+            var metricsState = this.configProgressMetricsState || {};
+            if (metricsState.taskId !== taskId || (unit === 'records'
+                && Number(status.recordsProcessed || 0) < Number(metricsState.lastServerRecords || 0))) {
+                metricsState.taskId = taskId;
+                metricsState.displayedRecords = 0;
+                metricsState.lastServerRecords = 0;
+                metricsState.lastSampleAt = 0;
+                metricsState.recordsPerSecond = 0;
+            }
             var confirmedRecords = Math.max(0, Number(status.recordsProcessed) || 0);
-
-            if (!state || state.taskId !== taskId || confirmedRecords < state.lastServerRecords) {
-                this.resetConfigProgressMetrics();
-                state = this.configProgressMetricsState;
-                state.taskId = taskId;
-                state.displayedRecords = 0;
+            if (unit === 'records' && confirmedRecords > metricsState.lastServerRecords) {
+                var sampleElapsed = Math.max(0.001, (Date.now() - (metricsState.lastSampleAt || Date.now())) / 1000);
+                var sampleRate = metricsState.lastSampleAt > 0
+                    ? (confirmedRecords - metricsState.lastServerRecords) / sampleElapsed
+                    : confirmedRecords / Math.max(1, (Date.now() - (Number(status.startedAtEpochMs) || Date.now())) / 1000);
+                metricsState.recordsPerSecond = metricsState.recordsPerSecond > 0
+                    ? metricsState.recordsPerSecond * 0.65 + sampleRate * 0.35 : sampleRate;
+                metricsState.lastServerRecords = confirmedRecords;
+                metricsState.lastSampleAt = Date.now();
             }
-
-            if (confirmedRecords > state.lastServerRecords) {
-                if (state.lastSampleAt > 0) {
-                    var elapsed = Math.max(0.001, (now - state.lastSampleAt) / 1000);
-                    var instantRate = (confirmedRecords - state.lastServerRecords) / elapsed;
-                    state.recordsPerSecond = state.recordsPerSecond > 0
-                        ? state.recordsPerSecond * 0.65 + instantRate * 0.35
-                        : instantRate;
-                } else {
-                    var startedAt = Number(status.startedAtEpochMs) || now;
-                    var totalElapsed = Math.max(1, (now - startedAt) / 1000);
-                    state.recordsPerSecond = confirmedRecords / totalElapsed;
-                }
-                state.lastServerRecords = confirmedRecords;
-                state.lastSampleAt = now;
+            this.configProgressMetricsState = metricsState;
+            this.configProgressLatestStatus = status;
+            if (!this.configProgressInterpolator || this.configProgressInterpolator.key !== taskId) {
+                if (this.configProgressInterpolator) this.configProgressInterpolator.destroy();
+                this.configProgressInterpolator = new window.BiliupProgressInterpolator({
+                    pollIntervalMs: 500,
+                    allowPrediction: true,
+                    onUpdate: function (display) {
+                        var latest = self.configProgressLatestStatus || {};
+                        self.configProgressMetricsState.displayedRecords = Math.floor(display.value);
+                        self.configOperationProgress.visible = true;
+                        self.configOperationProgress.percent = Math.round(display.percent);
+                        self.configOperationProgress.estimated = display.estimated;
+                        self.configOperationProgress.message = latest.message || latest.phase || '处理中';
+                        self.configOperationProgress.detail = latest.detail || '';
+                        self.configOperationProgress.metrics = self.buildConfigProgressMetrics(
+                            latest, Math.floor(display.value));
+                    }
+                });
             }
-
-            var startRecords = Math.max(0, Number(state.displayedRecords) || 0);
-            var startPercent = Math.max(0, Number(this.configOperationProgress.percent) || 0);
-            var targetPercent = Math.max(0, Math.min(100, Number(status.percent) || 0));
-            var duration = !status.running
-                || (confirmedRecords === startRecords && targetPercent === startPercent) ? 0 : 850;
-            var started = null;
-            this.cancelConfigProgressAnimation();
-
-            var draw = function (timestamp) {
-                if (started === null) started = timestamp;
-                var progress = duration === 0 ? 1 : Math.min(1, (timestamp - started) / duration);
-                var eased = progress < 0.5
-                    ? 4 * progress * progress * progress
-                    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-                state.displayedRecords = Math.floor(startRecords
-                    + (confirmedRecords - startRecords) * eased);
-                self.configOperationProgress.visible = true;
-                self.configOperationProgress.percent = Math.round(startPercent
-                    + (targetPercent - startPercent) * eased);
-                self.configOperationProgress.message = status.message || status.phase || '处理中';
-                self.configOperationProgress.detail = status.detail || '';
-                self.configOperationProgress.metrics = self.buildConfigProgressMetrics(
-                    status, state.displayedRecords);
-                if (progress < 1) {
-                    self.configProgressAnimationFrame = window.requestAnimationFrame
-                        ? window.requestAnimationFrame(draw)
-                        : setTimeout(function () { draw(Date.now()); }, 16);
-                } else {
-                    self.configProgressAnimationFrame = null;
-                }
-            };
-            draw(window.performance && window.performance.now ? window.performance.now() : now);
+            this.configProgressInterpolator.setPollInterval(500);
+            this.configProgressInterpolator.update({
+                key: taskId,
+                unit: unit,
+                total: total,
+                confirmedValue: confirmedValue,
+                confirmedPercent: Number(status.percent) || 0,
+                running: !!status.running,
+                updatedAtEpochMs: status.updatedAtEpochMs
+            });
         },
         startConfigProgress: function (title, message, detail) {
             if (this.configProgressHideTimer) {
@@ -234,12 +240,14 @@
                 detail: detail || '',
                 metrics: '',
                 percent: 1,
+                estimated: false,
                 status: 'active'
             };
         },
         updateConfigProgress: function (percent, message, detail) {
             this.configOperationProgress.visible = true;
             this.configOperationProgress.percent = Math.max(0, Math.min(100, Number(percent) || 0));
+            this.configOperationProgress.estimated = false;
             this.configOperationProgress.message = message || this.configOperationProgress.message;
             if (detail !== undefined) {
                 this.configOperationProgress.detail = detail;
@@ -254,6 +262,7 @@
             }
             this.configOperationProgress.status = 'success';
             this.configOperationProgress.percent = 100;
+            this.configOperationProgress.estimated = false;
             this.configOperationProgress.message = message || '处理完成';
             if (detail !== undefined) {
                 this.configOperationProgress.detail = detail;
@@ -267,6 +276,9 @@
             }, hideAfterMs === undefined ? 3500 : hideAfterMs);
         },
         failConfigProgress: function (message, detail) {
+            var confirmedPercent = this.configProgressInterpolator
+                ? this.configProgressInterpolator.confirmedPercent
+                : this.configOperationProgress.percent;
             this.cancelConfigProgressAnimation();
             if (this.configTaskPoller) {
                 clearInterval(this.configTaskPoller);
@@ -278,7 +290,8 @@
             }
             this.configOperationProgress.visible = true;
             this.configOperationProgress.status = 'error';
-            this.configOperationProgress.percent = 100;
+            this.configOperationProgress.percent = Math.round(Math.max(0, Math.min(99, confirmedPercent || 0)));
+            this.configOperationProgress.estimated = false;
             this.configOperationProgress.message = message || '处理失败';
             if (detail !== undefined) {
                 this.configOperationProgress.detail = detail;
@@ -287,34 +300,65 @@
         pollConfigTaskStatus: function (task) {
             var self = this;
             var pollingStartedAt = Date.now();
+            var idlePolls = 0;
+            var fallbackInFlight = false;
             if (this.configTaskPoller) {
                 clearInterval(this.configTaskPoller);
             }
-            var check = function () {
+            var taskId = this.configTaskId;
+            var statusUrl = taskId
+                ? '/room/configTask/status/' + encodeURIComponent(taskId)
+                : '/room/configTask/status';
+            var applyStatus = function (status, adoptTaskId) {
+                if (!status || status.task === 'idle' || (task && status.task !== task)) {
+                    return false;
+                }
+                if (Number(status.startedAtEpochMs) > 0
+                    && Number(status.startedAtEpochMs) < pollingStartedAt - 1000) {
+                    return false;
+                }
+                if (adoptTaskId && status.taskId && status.taskId !== taskId) {
+                    taskId = status.taskId;
+                    self.configTaskId = status.taskId;
+                    statusUrl = '/room/configTask/status/' + encodeURIComponent(taskId);
+                }
+                idlePolls = 0;
+                var detail = status.detail || '';
+                self.animateConfigTaskStatus(status);
+                if (!status.running) {
+                    if (status.success && status.phase === 'DONE' && task === 'export') {
+                        // 服务端写完响应并不代表浏览器已收齐 Blob；保持进度卡直到下载链接实际触发
+                        clearInterval(self.configTaskPoller);
+                        self.configTaskPoller = null;
+                        self.updateConfigProgress(100, '正在接收导出文件',
+                            '服务端已生成配置，正在接收完整文件…');
+                        self.configOperationProgress.metrics = '';
+                    } else if (status.success && status.phase === 'DONE') {
+                        self.finishConfigProgress(status.message || '处理完成', detail);
+                    } else if (status.phase === 'FAILED') {
+                        self.failConfigProgress(status.message || '处理失败', detail);
+                    }
+                }
+                return true;
+            };
+            var recoverLatestTask = function () {
+                if (fallbackInFlight || !taskId) return;
+                fallbackInFlight = true;
                 $.getJSON('/room/configTask/status')
+                    .done(function (latest) {
+                        applyStatus(latest, true);
+                    })
+                    .always(function () {
+                        fallbackInFlight = false;
+                    });
+            };
+            var check = function () {
+                $.getJSON(statusUrl)
                     .done(function (status) {
-                        if (!status || (task && status.task !== task)) {
-                            return;
-                        }
-                        if (Number(status.startedAtEpochMs) > 0
-                            && Number(status.startedAtEpochMs) < pollingStartedAt - 1000) {
-                            return;
-                        }
-                        var detail = status.detail || '';
-                        self.animateConfigTaskStatus(status);
-                        if (!status.running) {
-                            if (status.success && status.phase === 'DONE' && task === 'export') {
-                                // 服务端写完响应并不代表浏览器已收齐 Blob；保持进度卡直到下载链接实际触发
-                                clearInterval(self.configTaskPoller);
-                                self.configTaskPoller = null;
-                                self.updateConfigProgress(100, '正在接收导出文件',
-                                    '服务端已生成配置，正在接收完整文件…');
-                                self.configOperationProgress.metrics = '';
-                            } else if (status.success && status.phase === 'DONE') {
-                                self.finishConfigProgress(status.message || '处理完成', detail);
-                            } else if (status.phase === 'FAILED') {
-                                self.failConfigProgress(status.message || '处理失败', detail);
-                            }
+                        if (applyStatus(status, false)) return;
+                        if (status && status.task === 'idle') {
+                            idlePolls++;
+                            if (idlePolls >= 3) recoverLatestTask();
                         }
                     });
             };

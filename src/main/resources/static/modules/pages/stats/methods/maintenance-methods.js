@@ -5,6 +5,11 @@
     'use strict';
 
     window.StatsPageMaintenanceMethods = {
+        destroyStatsProgressInterpolator: function () {
+            if (this.statsProgressInterpolator) this.statsProgressInterpolator.destroy();
+            this.statsProgressInterpolator = null;
+            this.statsProgressLatestStatus = null;
+        },
         startOperationProgress: function (title, message, detail) {
             if (this.operationProgressTimer) {
                 clearInterval(this.operationProgressTimer);
@@ -14,12 +19,14 @@
                 clearTimeout(this.operationProgressHideTimer);
                 this.operationProgressHideTimer = null;
             }
+            this.destroyStatsProgressInterpolator();
             this.operationProgress = {
                 visible: true,
                 title: title,
                 message: message || '正在处理，请稍候',
                 detail: detail || '',
                 percent: 1,
+                estimated: false,
                 status: 'active'
             };
             this.notifyPageOperationState(true);
@@ -43,8 +50,15 @@
                 clearInterval(this.operationProgressTimer);
                 this.operationProgressTimer = null;
             }
+            if (this.statsProgressInterpolator) {
+                this.statsProgressInterpolator.complete({
+                    confirmedValue: Number(this.statsProgressLatestStatus && this.statsProgressLatestStatus.processed || 0)
+                });
+                this.destroyStatsProgressInterpolator();
+            }
             this.operationProgress.status = 'success';
             this.operationProgress.percent = 100;
+            this.operationProgress.estimated = false;
             this.operationProgress.message = message || '处理完成';
             this.notifyPageOperationState(false);
             if (detail !== undefined) {
@@ -72,9 +86,14 @@
                 clearTimeout(this.operationProgressHideTimer);
                 this.operationProgressHideTimer = null;
             }
+            if (this.statsProgressInterpolator) {
+                this.statsProgressInterpolator.fail();
+                this.destroyStatsProgressInterpolator();
+            }
             this.operationProgress.visible = true;
             this.operationProgress.status = 'error';
-            this.operationProgress.percent = 100;
+            if (!this.operationProgress.percent) this.operationProgress.percent = 1;
+            this.operationProgress.estimated = false;
             this.operationProgress.message = message || '处理失败';
             this.notifyPageOperationState(false);
             if (detail !== undefined) {
@@ -252,7 +271,11 @@
             this.setStatsTaskLoading(status.task, !!status.running);
             var detail = this.statsTaskDetail(status);
             this.operationProgress.title = status.title || this.statsTaskTitle(status.task);
-            this.updateOperationProgress(status.percent || 0, status.message || status.phase || '处理中', detail);
+            if (status.task === 'backfill' || status.task === 'rebuild' || status.task === 'xmlRecheck') {
+                this.updateStatsTaskProgress(status, detail);
+            } else {
+                this.updateOperationProgress(status.percent || 0, status.message || status.phase || '处理中', detail);
+            }
             if (status.running) {
                 this.operationProgress.status = 'active';
                 return true;
@@ -282,6 +305,39 @@
             }
             return true;
         },
+        updateStatsTaskProgress: function (status, detail) {
+            var self = this;
+            var taskId = status.taskId || status.task;
+            this.statsProgressLatestStatus = status;
+            if (!this.statsProgressInterpolator) {
+                this.statsProgressInterpolator = new window.BiliupProgressInterpolator({
+                    pollIntervalMs: 1000,
+                    allowPrediction: true,
+                    onUpdate: function (display) {
+                        var latest = self.statsProgressLatestStatus || {};
+                        self.operationProgress.visible = true;
+                        self.operationProgress.percent = Math.round(display.percent);
+                        self.operationProgress.estimated = display.estimated;
+                        self.operationProgress.message = latest.message || latest.phase || '处理中';
+                        self.operationProgress.detail = self.statsTaskDetail(latest)
+                            + (display.estimated ? ' · ≈ 估算进度' : '');
+                    }
+                });
+            }
+            this.statsProgressInterpolator.setPollInterval(1000);
+            this.statsProgressInterpolator.update({
+                key: taskId,
+                unit: 'stats-records',
+                total: Math.max(0, Number(status.total) || 0),
+                confirmedValue: Math.max(0, Number(status.processed) || 0),
+                confirmedPercent: Number(status.percent) || 0,
+                running: !!status.running,
+                updatedAtEpochMs: status.updatedAtEpochMs
+            });
+            this.operationProgress.visible = true;
+            this.operationProgress.message = status.message || status.phase || '处理中';
+            this.operationProgress.detail = detail || '';
+        },
         setStatsTaskLoading: function (task, running) {
             this.backfilling = running && task === 'backfill';
             this.rebuilding = running && task === 'rebuild';
@@ -305,6 +361,7 @@
                 var extra = [];
                 if (status.elapsedSeconds !== undefined) extra.push('耗时 ' + this.durationText(status.elapsedSeconds));
                 if (result.updated !== undefined) extra.push('更新 ' + result.updated + ' 场');
+                if (result.skipped !== undefined) extra.push('跳过 ' + result.skipped + ' 场');
                 if (result.deletedTotalStats !== undefined) extra.push('清理统计缓存 ' + result.deletedTotalStats + ' 条');
                 if (result.deletedParseStates !== undefined) extra.push('清空解析标记 ' + result.deletedParseStates + ' 条');
                 if (result.checked !== undefined) extra.push('检查 ' + result.checked + ' 个 XML');

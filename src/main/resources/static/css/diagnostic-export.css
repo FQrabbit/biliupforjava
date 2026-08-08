@@ -72,6 +72,16 @@
 .diagnostic-export-progress-detail { min-height: 22px; margin-top: 14px; color: var(--text-primary); font-size: 13px; }
 .diagnostic-export-progress-meta { margin-top: 7px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .diagnostic-export-progress .el-progress-bar__outer { background: var(--bg-secondary); }
+.diagnostic-export-progress.is-stale .el-progress-bar__inner {
+    background-image: linear-gradient(45deg, rgba(255,255,255,.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.2) 50%, rgba(255,255,255,.2) 75%, transparent 75%, transparent);
+    background-size: 24px 24px;
+    animation: diagnostic-progress-stripes .8s linear infinite;
+}
+@keyframes diagnostic-progress-stripes { from { background-position: 0 0; } to { background-position: 24px 0; } }
+[data-theme="dark"] .diagnostic-export-progress.is-stale .el-progress-bar__outer { background: var(--bg-tertiary); }
+@media (prefers-reduced-motion: reduce) {
+    .diagnostic-export-progress.is-stale .el-progress-bar__inner { animation: none; }
+}
 [data-theme="dark"] .diagnostic-export-progress .el-progress-bar__outer { background: var(--bg-tertiary); }
 .diagnostic-export-dialog .el-textarea__inner { padding-bottom: 28px; }
 .diagnostic-export-dialog .el-textarea .el-input__count {

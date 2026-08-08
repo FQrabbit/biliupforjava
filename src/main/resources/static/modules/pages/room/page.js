@@ -29,6 +29,9 @@ return {
         wxDialogVisible: false,
         addRoomDialog: false,
         exportConfigDialog: false,
+        configTaskId: '',
+        configProgressInterpolator: null,
+        configProgressLatestStatus: null,
         editLiveMsgSettingVisible: false,
         room: {},
         originalRoomDeleteType: null,
@@ -59,6 +62,7 @@ return {
             detail: '',
             metrics: '',
             percent: 0,
+            estimated: false,
             status: 'active'
         },
         seasonsList: [],
@@ -126,6 +130,7 @@ return {
         deleteRoomTaskPollFailures: 0,
         deleteRoomBeforeUnloadHandler: null,
         deleteRoomVisibilityHandler: null,
+        deleteRoomProgressInterpolator: null,
         deleteRoomProgress: {
             visible: false,
             taskId: '',
@@ -137,6 +142,7 @@ return {
             processed: 0,
             total: 0,
             percent: 0,
+            estimated: false,
             status: 'active',
             result: null
         },
@@ -152,7 +158,9 @@ return {
     computed: {
         uploadConfigHeaders: function () {
             var token = localStorage.getItem('biliup_auth');
-            return token ? { Authorization: token } : {};
+            var headers = token ? { Authorization: token } : {};
+            if (this.configTaskId) headers['X-Config-Task-Id'] = this.configTaskId;
+            return headers;
         },
         filteredTableData: function () {
             if (this.roomFilter === 'live') {
@@ -204,9 +212,9 @@ return {
                 return '';
             }
             if (this.deleteRoomOptions.deleteHistories || Number(this.deleteRoomPreview.historyCount || 0) > 0) {
-                return '已处理 ' + Math.min(processed, total) + ' / ' + total + ' 项删除工作';
+                return (progress.estimated ? '≈ ' : '') + '已处理 ' + Math.min(processed, total) + ' / ' + total + ' 项删除工作';
             }
-            return '正在处理删除步骤 ' + Math.min(processed, total) + ' / ' + total;
+            return (progress.estimated ? '≈ ' : '') + '正在处理删除步骤 ' + Math.min(processed, total) + ' / ' + total;
         }
     },
     methods: Object.assign({},
@@ -346,6 +354,14 @@ return {
                 clearTimeout(this.configProgressAnimationFrame);
             }
             this.configProgressAnimationFrame = null;
+        }
+        if (this.configProgressInterpolator) {
+            this.configProgressInterpolator.destroy();
+            this.configProgressInterpolator = null;
+        }
+        if (this.deleteRoomProgressInterpolator) {
+            this.deleteRoomProgressInterpolator.destroy();
+            this.deleteRoomProgressInterpolator = null;
         }
         if (this.partitionBackTimer) {
             clearTimeout(this.partitionBackTimer);

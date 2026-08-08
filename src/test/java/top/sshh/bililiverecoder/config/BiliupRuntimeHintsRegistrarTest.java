@@ -17,6 +17,7 @@ import top.sshh.bililiverecoder.notification.NotificationEventDescriptor;
 import top.sshh.bililiverecoder.notification.NotificationMessage;
 import top.sshh.bililiverecoder.notification.NotificationSendResult;
 import top.sshh.bililiverecoder.service.RoomDeletionService;
+import top.sshh.bililiverecoder.service.StorageRootChangeAssessmentService;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,6 +42,8 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, NotificationSendResult.class);
         assertReflectionRegistered(hints, RoomController.RoomDeletionRequest.class);
         assertReflectionRegistered(hints, RoomDeletionService.DeletionPreview.class);
+        assertReflectionRegistered(hints, StorageRootChangeAssessmentService.Snapshot.class);
+        assertReflectionRegistered(hints, StorageRootChangeAssessmentService.State.class);
     }
 
     private void assertReflectionRegistered(RuntimeHints hints, Class<?> type) {

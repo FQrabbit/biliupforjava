@@ -83,7 +83,7 @@
                     导出配置
                 </el-button>
             </el-tooltip>
-            <el-upload action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false" style="display: inline-block;">
+            <el-upload action="/room/uploadConfig" accept=".json" :headers="uploadConfigHeaders" :before-upload="beforeConfigUpload" :on-success="uploadSuccess" :on-error="uploadConfigError" :show-file-list="false" @click.native="prepareConfigUpload" style="display: inline-block;">
                 <el-button class="modern-btn" type="primary" icon="el-icon-upload2">导入配置</el-button>
             </el-upload>
             <el-radio-group v-model="viewMode" size="small">
@@ -100,7 +100,7 @@
                     <strong>{{ configOperationProgress.title }}</strong>
                     <span>{{ configOperationProgress.message }}</span>
                 </div>
-                <em>{{ configOperationProgress.percent }}%</em>
+                <em>{{ configOperationProgress.estimated ? '≈' : '' }}{{ configOperationProgress.percent }}%</em>
             </div>
             <el-progress
                     :percentage="configOperationProgress.percent"

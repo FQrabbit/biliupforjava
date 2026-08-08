@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -257,7 +258,14 @@ public class DiagnosticExportProgressService {
             result.put("totalFiles", totalFiles);
             result.put("startedAt", startedAt);
             result.put("updatedAt", updatedAt);
-            result.put("elapsedSeconds", Math.max(0, Duration.between(startedAt, updatedAt).getSeconds()));
+            long startedAtEpochMs = startedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            long updatedAtEpochMs = updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            result.put("startedAtEpochMs", startedAtEpochMs);
+            result.put("updatedAtEpochMs", updatedAtEpochMs);
+            long elapsedSeconds = "RUNNING".equals(state)
+                    ? Math.max(0, (System.currentTimeMillis() - startedAtEpochMs) / 1000)
+                    : Math.max(0, Duration.between(startedAt, updatedAt).getSeconds());
+            result.put("elapsedSeconds", elapsedSeconds);
             return Collections.unmodifiableMap(result);
         }
 

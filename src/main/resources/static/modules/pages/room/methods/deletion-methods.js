@@ -19,6 +19,8 @@
         },
         resetDeleteRoomProgress: function () {
             this.stopDeleteRoomTaskPolling();
+            if (this.deleteRoomProgressInterpolator) this.deleteRoomProgressInterpolator.destroy();
+            this.deleteRoomProgressInterpolator = null;
             this.deleteRoomProgress = {
                 visible: false,
                 taskId: '',
@@ -30,6 +32,7 @@
                 processed: 0,
                 total: 0,
                 percent: 0,
+                estimated: false,
                 status: 'active',
                 result: null
             };
@@ -83,6 +86,37 @@
                 status: running ? 'active' : (status.success === false ? 'exception' : 'success'),
                 result: status.result || null
             });
+            var self = this;
+            var taskId = status.taskId || current.taskId || '';
+            if (taskId && window.BiliupProgressInterpolator) {
+                if (!this.deleteRoomProgressInterpolator) {
+                    this.deleteRoomProgressInterpolator = new window.BiliupProgressInterpolator({
+                        pollIntervalMs: 700,
+                        allowPrediction: true,
+                        onUpdate: function (display) {
+                            self.deleteRoomProgress.percent = Math.round(display.percent);
+                            self.deleteRoomProgress.processed = Math.floor(display.value);
+                            self.deleteRoomProgress.estimated = display.estimated;
+                        }
+                    });
+                }
+                this.deleteRoomProgressInterpolator.setPollInterval(700);
+                if (!running && status.success !== false) {
+                    this.deleteRoomProgressInterpolator.complete({ confirmedValue: Number(status.processed || 0) });
+                } else if (!running) {
+                    this.deleteRoomProgressInterpolator.fail();
+                } else {
+                    this.deleteRoomProgressInterpolator.update({
+                        key: taskId,
+                        unit: 'delete-work',
+                        total: Number(status.total || 0),
+                        confirmedValue: Number(status.processed || 0),
+                        confirmedPercent: Number(status.percent || 0),
+                        running: true,
+                        updatedAtEpochMs: Number(status.updatedAtEpochMs) || Date.now()
+                    });
+                }
+            }
             if (status.roomDatabaseId && (!this.deleteRoomTarget || !this.deleteRoomTarget.id)) {
                 this.deleteRoomTarget = {
                     id: status.roomDatabaseId,
@@ -215,6 +249,9 @@
         },
         failDeleteRoomTask: function (message) {
             this.stopDeleteRoomTaskPolling();
+            if (this.deleteRoomProgressInterpolator) this.deleteRoomProgressInterpolator.fail();
+            if (this.deleteRoomProgressInterpolator) this.deleteRoomProgressInterpolator.destroy();
+            this.deleteRoomProgressInterpolator = null;
             this.deleteRoomSubmitting = false;
             this.deleteRoomProgress = Object.assign({}, this.deleteRoomProgress, {
                 visible: true,
@@ -223,6 +260,7 @@
                 phase: 'FAILED',
                 message: message || '房间删除失败',
                 detail: '可以关闭此窗口，确认服务状态后再重试。',
+                estimated: false,
                 status: 'exception'
             });
             this.clearPersistedDeleteRoomTask();

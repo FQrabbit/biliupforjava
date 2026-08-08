@@ -20,6 +20,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.BiliUserCard;
@@ -66,6 +67,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -159,14 +161,16 @@ public class RoomController {
             .expireAfterWrite(1, TimeUnit.DAYS)
             .build();
     private static final long ROOM_AVATAR_CACHE_DAYS = 30;
+    private static final Duration CONFIG_TASK_RETENTION = Duration.ofMinutes(10);
     private final Map<String, CompletableFuture<CachedImage>> imageInflight = new ConcurrentHashMap<>();
     private final Semaphore imageProxySemaphore = new Semaphore(3, true);
     private final Semaphore avatarProxySemaphore = new Semaphore(8, true);
     // 记录上一次请求B站的时间戳
     private final AtomicLong lastRequestTime = new AtomicLong(0);
-    private final AtomicLong configImportBytesRead = new AtomicLong(0);
-    private final AtomicLong lastConfigTaskReportNs = new AtomicLong(0);
-    private volatile ConfigTaskStatus configTaskStatus = ConfigTaskStatus.idle();
+    private final ConcurrentHashMap<String, ConfigTaskStatus> configTaskStatuses = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConfigTaskRuntime> configTaskRuntimes = new ConcurrentHashMap<>();
+    private final ThreadLocal<String> currentConfigTaskId = new ThreadLocal<>();
+    private volatile String latestConfigTaskId;
 
     @Data
     @AllArgsConstructor
@@ -203,13 +207,15 @@ public class RoomController {
                     "records", 0, 0, 0, 0, now, now, LocalDateTime.now());
         }
 
-        private static ConfigTaskStatus start(String task, String title, long total,
+        private static ConfigTaskStatus start(String taskId, String task, String title, long total,
                                               String unit, long bytesTotal) {
             long now = System.currentTimeMillis();
             long safeTotal = Math.max(0, total);
             long safeBytesTotal = Math.max(0, bytesTotal);
-            return new ConfigTaskStatus(UUID.randomUUID().toString(), task, title, true, true, "STARTING",
-                    "正在启动任务", "", 0, safeTotal, 1,
+            String phase = "records".equals(unit) && safeTotal <= 0 ? "COUNTING" : "STARTING";
+            String message = "COUNTING".equals(phase) ? "正在统计处理范围" : "正在启动任务";
+            return new ConfigTaskStatus(taskId, task, title, true, true, phase,
+                    message, "", 0, safeTotal, 1,
                     unit, 0, "records".equals(unit) ? safeTotal : 0,
                     0, safeBytesTotal, now, now, LocalDateTime.now());
         }
@@ -251,7 +257,7 @@ public class RoomController {
         private ConfigTaskStatus failed(String message) {
             long now = System.currentTimeMillis();
             return new ConfigTaskStatus(taskId, task, title, false, false, "FAILED", message,
-                    detail, processed, total, 100, unit,
+                    detail, processed, total, Math.min(99, percent), unit,
                     recordsProcessed, recordsTotal, bytesProcessed, bytesTotal,
                     startedAtEpochMs, now, LocalDateTime.now());
         }
@@ -319,44 +325,130 @@ public class RoomController {
 
     @GetMapping("/configTask/status")
     public Map<String, Object> configTaskStatus() {
-        return configTaskStatus.toMap();
+        cleanupConfigTasks();
+        ConfigTaskStatus status = latestConfigTaskId == null
+                ? ConfigTaskStatus.idle() : configTaskStatuses.get(latestConfigTaskId);
+        return (status == null ? ConfigTaskStatus.idle() : status).toMap();
     }
 
-    private void startConfigTask(String task, String title, long total) {
-        configTaskStatus = ConfigTaskStatus.start(task, title, total, "records", 0);
-        lastConfigTaskReportNs.set(0);
+    @GetMapping("/configTask/status/{taskId}")
+    public Map<String, Object> configTaskStatus(@PathVariable("taskId") String taskId) {
+        cleanupConfigTasks();
+        ConfigTaskStatus status = configTaskStatuses.get(taskId);
+        return (status == null ? ConfigTaskStatus.idle() : status).toMap();
     }
 
-    private void startConfigImportTask(String title, long fileSize) {
-        configImportBytesRead.set(0);
-        configTaskStatus = ConfigTaskStatus.start("import", title, fileSize, "bytes", fileSize);
-        lastConfigTaskReportNs.set(0);
+    private String resolveConfigTaskId(String requestedTaskId) {
+        if (StringUtils.isBlank(requestedTaskId)) return UUID.randomUUID().toString();
+        try {
+            return UUID.fromString(requestedTaskId.trim()).toString();
+        } catch (IllegalArgumentException e) {
+            return UUID.randomUUID().toString();
+        }
+    }
+
+    private String startConfigTask(String requestedTaskId, String task, String title, long total) {
+        String taskId = resolveConfigTaskId(requestedTaskId);
+        ConfigTaskRuntime runtime = new ConfigTaskRuntime();
+        ConfigTaskStatus initial = ConfigTaskStatus.start(taskId, task, title, total, "records", 0);
+        synchronized (configTaskStatuses) {
+            ConfigTaskStatus existing = configTaskStatuses.get(taskId);
+            if (existing != null && existing.running()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "配置任务正在使用相同的任务 ID");
+            }
+            if (existing == null) {
+                configTaskStatuses.put(taskId, initial);
+            } else {
+                configTaskStatuses.replace(taskId, existing, initial);
+            }
+            configTaskRuntimes.put(taskId, runtime);
+        }
+        latestConfigTaskId = taskId;
+        currentConfigTaskId.set(taskId);
+        cleanupConfigTasks();
+        return taskId;
+    }
+
+    private String startConfigImportTask(String requestedTaskId, String title, long fileSize) {
+        String taskId = startConfigTask(requestedTaskId, "import", title, fileSize);
+        ConfigTaskRuntime runtime = configTaskRuntimes.get(taskId);
+        if (runtime != null) runtime.importBytesRead.set(0);
+        configTaskStatuses.put(taskId, ConfigTaskStatus.start(taskId, "import", title, fileSize, "bytes", fileSize));
+        return taskId;
+    }
+
+    private ConfigTaskStatus currentConfigTaskStatus() {
+        String taskId = currentConfigTaskId.get();
+        if (taskId == null) taskId = latestConfigTaskId;
+        ConfigTaskStatus status = taskId == null ? null : configTaskStatuses.get(taskId);
+        return status == null ? ConfigTaskStatus.idle() : status;
+    }
+
+    private ConfigTaskRuntime currentConfigTaskRuntime() {
+        String taskId = currentConfigTaskId.get();
+        if (taskId == null) taskId = latestConfigTaskId;
+        return taskId == null ? null : configTaskRuntimes.get(taskId);
+    }
+
+    private void storeCurrentConfigTask(ConfigTaskStatus status) {
+        String taskId = status == null ? null : status.taskId();
+        if (taskId == null) return;
+        configTaskStatuses.put(taskId, status);
     }
 
     private void setConfigTaskRecordTotal(long total) {
-        configTaskStatus = configTaskStatus.withRecordTotal(total);
+        ConfigTaskStatus status = currentConfigTaskStatus();
+        if (status.taskId() != null) storeCurrentConfigTask(status.withRecordTotal(total));
     }
 
     private void updateConfigTask(String phase, String detail, long processed) {
-        configTaskStatus = configTaskStatus.progress(
-                phase, detail, processed, configImportBytesRead.get());
-        lastConfigTaskReportNs.set(System.nanoTime());
+        ConfigTaskStatus status = currentConfigTaskStatus();
+        ConfigTaskRuntime runtime = currentConfigTaskRuntime();
+        if (status.taskId() == null || runtime == null) return;
+        storeCurrentConfigTask(status.progress(
+                phase, detail, processed, runtime.importBytesRead.get()));
+        runtime.lastReportNs.set(System.nanoTime());
     }
 
     private void updateConfigTaskThrottled(String phase, String detail, long processed) {
+        ConfigTaskRuntime runtime = currentConfigTaskRuntime();
+        if (runtime == null) return;
         long now = System.nanoTime();
-        long previous = lastConfigTaskReportNs.get();
+        long previous = runtime.lastReportNs.get();
         if (previous == 0 || now - previous >= CONFIG_TASK_REPORT_INTERVAL_NS) {
             updateConfigTask(phase, detail, processed);
         }
     }
 
     private void finishConfigTask(String message) {
-        configTaskStatus = configTaskStatus.done(message);
+        ConfigTaskStatus status = currentConfigTaskStatus();
+        if (status.taskId() != null) storeCurrentConfigTask(status.done(message));
     }
 
     private void failConfigTask(String message) {
-        configTaskStatus = configTaskStatus.failed(message);
+        ConfigTaskStatus status = currentConfigTaskStatus();
+        if (status.taskId() != null) storeCurrentConfigTask(status.failed(message));
+    }
+
+    private void cleanupConfigTasks() {
+        long cutoff = System.currentTimeMillis() - CONFIG_TASK_RETENTION.toMillis();
+        configTaskStatuses.forEach((taskId, status) -> {
+            if (status != null && !status.running() && status.updatedAtEpochMs() < cutoff) {
+                configTaskStatuses.remove(taskId, status);
+                configTaskRuntimes.remove(taskId);
+                if (taskId.equals(latestConfigTaskId)) latestConfigTaskId = null;
+            }
+        });
+    }
+
+    private void clearConfigTaskContext() {
+        currentConfigTaskId.remove();
+    }
+
+    private static final class ConfigTaskRuntime {
+        private final AtomicLong importBytesRead = new AtomicLong();
+        private final AtomicLong lastReportNs = new AtomicLong();
     }
 
 
@@ -431,38 +523,52 @@ public class RoomController {
      * 流式导出配置：直接从数据库逐条读取实体并写入 HTTP 响应输出流，
      * 不在内存中构建完整的 Map 或 JSON String，避免大文件（如百万级弹幕）导致 OOM
      */
+    public void exportConfig(ExportConfigParams params, HttpServletResponse response) throws IOException {
+        exportConfig(params, null, response);
+    }
+
     @Transactional(readOnly = true)
     @PostMapping("/exportConfig")
-    public void exportConfig(@RequestBody ExportConfigParams params, HttpServletResponse response) throws IOException {
+    public void exportConfig(@RequestBody ExportConfigParams params,
+                             @RequestHeader(value = "X-Config-Task-Id", required = false) String requestedTaskId,
+                             HttpServletResponse response) throws IOException {
         boolean exportHistory = params.isExportHistory() || params.isExportStats();
+        String taskId = startConfigTask(requestedTaskId, "export", "导出配置", 0);
         Map<String, Long> sectionCounts = new LinkedHashMap<>();
-        if (params.isExportUser()) sectionCounts.put("userList", userRepository.count());
-        if (params.isExportRoom()) sectionCounts.put("roomList", roomRepository.count());
-        if (exportHistory) {
-            sectionCounts.put("storageRootList", storageRootRepository.count());
-            sectionCounts.put("historyList", historyRepository.count());
-            sectionCounts.put("partList", partRepository.count());
-            sectionCounts.put("partFileLocationList", partFileLocationRepository.countByStateNot(
-                    PartFileLocation.LocationState.PROCESSING));
+        long total;
+        try {
+            if (params.isExportUser()) sectionCounts.put("userList", userRepository.count());
+            if (params.isExportRoom()) sectionCounts.put("roomList", roomRepository.count());
+            if (exportHistory) {
+                sectionCounts.put("storageRootList", storageRootRepository.count());
+                sectionCounts.put("historyList", historyRepository.count());
+                sectionCounts.put("partList", partRepository.count());
+                sectionCounts.put("partFileLocationList", partFileLocationRepository.countByStateNot(
+                        PartFileLocation.LocationState.PROCESSING));
+            }
+            if (params.isExportSystemConfig()) {
+                sectionCounts.put("systemConfigList", systemConfigRepository.count());
+                sectionCounts.put("notificationChannelList", notificationChannelRepository.count());
+                sectionCounts.put("notificationRuleList", notificationRuleRepository.count());
+            }
+            if (params.isExportLiveMsg()) sectionCounts.put("liveMsgList", liveMsgRepository.count());
+            if (params.isExportStats()) {
+                sectionCounts.put("roomLiveSessionStatsList", sessionStatsRepository.count());
+                sectionCounts.put("roomLiveDailyStatsList", dailyStatsRepository.count());
+                sectionCounts.put("roomLiveMsgBucketStatsList", bucketStatsRepository.count());
+                sectionCounts.put("roomLiveDanmuUserStatsList", danmuUserStatsRepository.count());
+                sectionCounts.put("roomLiveEventList", eventRepository.count());
+                sectionCounts.put("roomLiveEventParseStateList", eventParseStateRepository.count());
+                sectionCounts.put("roomLiveEventXmlIssueList", xmlIssueRepository.count());
+            }
+            total = sectionCounts.values().stream().mapToLong(Long::longValue).sum();
+        } catch (RuntimeException e) {
+            failConfigTask("导出失败：统计导出范围失败：" + e.getMessage());
+            clearConfigTaskContext();
+            throw e;
         }
-        if (params.isExportSystemConfig()) {
-            sectionCounts.put("systemConfigList", systemConfigRepository.count());
-            sectionCounts.put("notificationChannelList", notificationChannelRepository.count());
-            sectionCounts.put("notificationRuleList", notificationRuleRepository.count());
-        }
-        if (params.isExportLiveMsg()) sectionCounts.put("liveMsgList", liveMsgRepository.count());
-        if (params.isExportStats()) {
-            sectionCounts.put("roomLiveSessionStatsList", sessionStatsRepository.count());
-            sectionCounts.put("roomLiveDailyStatsList", dailyStatsRepository.count());
-            sectionCounts.put("roomLiveMsgBucketStatsList", bucketStatsRepository.count());
-            sectionCounts.put("roomLiveDanmuUserStatsList", danmuUserStatsRepository.count());
-            sectionCounts.put("roomLiveEventList", eventRepository.count());
-            sectionCounts.put("roomLiveEventParseStateList", eventParseStateRepository.count());
-            sectionCounts.put("roomLiveEventXmlIssueList", xmlIssueRepository.count());
-        }
-        long total = sectionCounts.values().stream().mapToLong(Long::longValue).sum();
         long processed = 0;
-        startConfigTask("export", "导出配置", total);
+        setConfigTaskRecordTotal(total);
 
         String timeString = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分"));
         String encodedFilename = URLEncoder.encode("biliupForJavaConfig_"+timeString+".json", StandardCharsets.UTF_8)
@@ -470,6 +576,7 @@ public class RoomController {
 
         response.setContentType("application/json; charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename="+encodedFilename);
+        response.setHeader("X-Config-Task-Id", taskId);
 
         try (OutputStream out = response.getOutputStream();
              BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), 65536)) {
@@ -668,6 +775,8 @@ public class RoomController {
         } catch (IOException | RuntimeException e) {
             failConfigTask("导出失败：" + e.getMessage());
             throw e;
+        } finally {
+            clearConfigTaskContext();
         }
     }
 
@@ -744,7 +853,9 @@ public class RoomController {
     private static final int IMPORT_BATCH_SIZE = 1000;
 
     @PostMapping("/uploadConfig")
-    public Map<String, Object> uploadConfig(@RequestParam("file") MultipartFile file) throws IOException {
+    public Map<String, Object> uploadConfig(@RequestParam("file") MultipartFile file,
+                                            @RequestHeader(value = "X-Config-Task-Id", required = false) String requestedTaskId)
+            throws IOException {
         long fileSize = file.getSize();
         if (fileSize > MAX_CONFIG_IMPORT_SIZE) {
             throw new IOException("配置文件过大（" + (fileSize / 1024 / 1024) + "MB），"
@@ -773,9 +884,11 @@ public class RoomController {
         int skippedLiveMsgCount = 0;
 
         // 流式解析：使用 JSONReader 逐 section 读取，避免将整个文件加载到内存
-        startConfigImportTask("导入配置", Math.max(1L, fileSize));
+        String taskId = startConfigImportTask(requestedTaskId, "导入配置", Math.max(1L, fileSize));
+        ConfigTaskRuntime taskRuntime = currentConfigTaskRuntime();
         try (InputStream is = new ImportCountingInputStream(
-                     new BufferedInputStream(file.getInputStream(), 65536), configImportBytesRead);
+                     new BufferedInputStream(file.getInputStream(), 65536),
+                     taskRuntime == null ? new AtomicLong() : taskRuntime.importBytesRead);
              JSONReader reader = new JSONReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
 
             reader.startObject();
@@ -833,8 +946,8 @@ public class RoomController {
                         if (!importedSectionCounts.isEmpty()) {
                             long sectionTotal = importedSectionCounts.values().stream()
                                     .mapToLong(Long::longValue).sum();
-                            if (configTaskStatus.recordsTotal() > 0
-                                    && configTaskStatus.recordsTotal() != sectionTotal) {
+                            if (currentConfigTaskStatus().recordsTotal() > 0
+                                    && currentConfigTaskStatus().recordsTotal() != sectionTotal) {
                                 throw new IllegalArgumentException("配置文件记录总数与数据段统计不一致");
                             }
                             setConfigTaskRecordTotal(sectionTotal);
@@ -1087,6 +1200,7 @@ public class RoomController {
             finishConfigTask("导入完成");
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
+            result.put("configTaskId", taskId);
             result.put("configFormatVersion", importedFormatVersion[0]);
             result.put("restartRecommended", true);
             result.put("importedUsers", importedUserCount);
@@ -1103,6 +1217,8 @@ public class RoomController {
         } catch (IOException | RuntimeException e) {
             failConfigTask("导入失败：" + e.getMessage());
             throw e;
+        } finally {
+            clearConfigTaskContext();
         }
     }
 

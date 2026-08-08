@@ -83,6 +83,8 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
             "top.sshh.bililiverecoder.entity.RecordHistoryDTO",
             "top.sshh.bililiverecoder.controller.RoomController$RoomDeletionRequest",
             "top.sshh.bililiverecoder.service.RoomDeletionService$DeletionPreview",
+            "top.sshh.bililiverecoder.service.StorageRootChangeAssessmentService$Snapshot",
+            "top.sshh.bililiverecoder.service.StorageRootChangeAssessmentService$State",
             "top.sshh.bililiverecoder.notification.NotificationEvent",
             "top.sshh.bililiverecoder.notification.NotificationEventDescriptor",
             "top.sshh.bililiverecoder.notification.NotificationEventType",

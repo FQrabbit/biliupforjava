@@ -104,8 +104,10 @@ class RoomControllerExportTest {
 
     @Test
     void legacyImportProgressKeepsBytesAndRecordsInSeparateUnits() {
-        ReflectionTestUtils.invokeMethod(controller, "startConfigImportTask", "导入配置", 1_000L);
-        AtomicLong bytesRead = (AtomicLong) ReflectionTestUtils.getField(controller, "configImportBytesRead");
+        String taskId = ReflectionTestUtils.invokeMethod(controller, "startConfigImportTask", "legacy-task", "导入配置", 1_000L);
+        Map<String, ?> runtimes = (Map<String, ?>) ReflectionTestUtils.getField(controller, "configTaskRuntimes");
+        Object runtime = runtimes.get(taskId);
+        AtomicLong bytesRead = (AtomicLong) ReflectionTestUtils.getField(runtime, "importBytesRead");
         bytesRead.set(500L);
         ReflectionTestUtils.invokeMethod(controller, "updateConfigTask", "导入弹幕", "正在处理", 100_000L);
 
@@ -119,7 +121,7 @@ class RoomControllerExportTest {
 
     @Test
     void importProgressUsesRecordTotalWhenBackupContainsMetadata() {
-        ReflectionTestUtils.invokeMethod(controller, "startConfigImportTask", "导入配置", 10_000L);
+        ReflectionTestUtils.invokeMethod(controller, "startConfigImportTask", "record-total-task", "导入配置", 10_000L);
         ReflectionTestUtils.invokeMethod(controller, "setConfigTaskRecordTotal", 2_000L);
         ReflectionTestUtils.invokeMethod(controller, "updateConfigTask", "导入弹幕", "正在处理", 1_000L);
 

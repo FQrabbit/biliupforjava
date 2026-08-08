@@ -74,6 +74,7 @@ return {
         this.clearPartsAutoScrollTimer();
         this.stopPolling();
         this.stopProgressPolling();
+        this.clearUploadProgressInterpolators();
         if (typeof this.finishBatchDeleteOperation === 'function') {
             this.finishBatchDeleteOperation();
         }
@@ -120,6 +121,10 @@ return {
         if (this.previewTaskTimer) {
             clearInterval(this.previewTaskTimer);
             this.previewTaskTimer = null;
+        }
+        if (this.previewProgressInterpolator) {
+            this.previewProgressInterpolator.destroy();
+            this.previewProgressInterpolator = null;
         }
         if (typeof this.clearPartPreviewRecoveryTimer === 'function') this.clearPartPreviewRecoveryTimer();
         if (this.editPartsTaskTimer) {
