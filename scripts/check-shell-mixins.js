@@ -19,7 +19,8 @@ const files = [
     'connection-readiness.js',
     'viewport-scroll.js',
     'workspace.js',
-    'update-alerts.js'
+    'update-alerts.js',
+    'storage-attention.js'
 ];
 
 for (const file of files) {
@@ -32,7 +33,8 @@ const names = [
     'connectionReadiness',
     'viewportScroll',
     'workspace',
-    'updateAlerts'
+    'updateAlerts',
+    'storageAttention'
 ];
 const mixins = names.map((name) => {
     const mixin = global.BiliupShellMixins[name];
@@ -131,7 +133,7 @@ for (const mixin of mixins) {
     Object.keys(mixin.methods || {}).forEach((key) => rootDeclared.add(key));
 }
 const vueInstanceKeys = new Set([
-    '$confirm', '$delete', '$el', '$message', '$nextTick', '$notify', '$prompt', '$refs', '$set',
+    '$alert', '$confirm', '$delete', '$el', '$message', '$nextTick', '$notify', '$prompt', '$refs', '$set',
     'privacyMode'
 ]);
 const unresolvedRootReferences = new Set();

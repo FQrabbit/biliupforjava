@@ -29,6 +29,8 @@
     <script src="js/api.js"></script>
     <script src="js/api/system-api.js"></script>
     <script src="js/api/diagnostic-api.js"></script>
+    <script src="js/api/storage-api.js"></script>
+    <script src="js/progress-interpolator.js"></script>
     <script src="js/frontend-cache-refresh.js"></script>
     <script src="js/mixins.js"></script>
     <script src="js/privacy.js"></script>
@@ -42,6 +44,54 @@
 </head>
 <body>
 <div id="app" class="app-container" :class="{ 'is-operation-locked': pageOperating }">
+    <transition name="fade-slide">
+        <div v-if="storageChangePending" class="storage-change-banner" role="alert" @click="openStorageChangeDetails">
+            <i class="el-icon-warning-outline"></i>
+            <span>工作目录变更待确认：部分文件操作可能暂停。</span>
+            <el-button type="text" size="mini" @click.stop="openStorageChangeDialog">查看并处理</el-button>
+        </div>
+    </transition>
+    <el-dialog title="检测到工作目录变更" :visible.sync="storageChangeDialogVisible"
+               width="620px" append-to-body custom-class="storage-change-dialog"
+               :close-on-click-modal="false">
+        <div class="storage-change-dialog-body">
+            <p class="storage-change-lead">系统不会搬动任何文件，请根据文件实际所在位置选择处理方式。</p>
+            <div class="storage-change-paths">
+                <div><span>当前数据库映射</span><strong>{{ storageChangeState.activeRoot ? storageChangeState.activeRoot.path : '-' }}</strong></div>
+                <i class="el-icon-right"></i>
+                <div><span>配置的新目录</span><strong>{{ storageChangeState.configuredPath || '-' }}</strong></div>
+            </div>
+            <p class="storage-change-hint">{{ storageChangeContainerHint }}</p>
+            <p class="storage-change-hint">{{ storageChangeState.h2Warning }}</p>
+            <div v-if="storageChangeAssessment.state === 'RUNNING' || storageChangeAssessment.state === 'SUCCEEDED'" class="storage-change-assessment">
+                <div class="storage-change-assessment-head"><span>历史文件校验</span><strong>{{ storageChangeAssessmentPercent }}%</strong></div>
+                <el-progress :percentage="storageChangeAssessmentPercent" :status="storageChangeAssessment.state === 'SUCCEEDED' && storageChangeAssessment.missing === 0 && storageChangeAssessment.sizeMismatch === 0 ? 'success' : null"></el-progress>
+                <small>已检查 {{ storageChangeAssessment.checked }} / {{ storageChangeAssessment.total }}，匹配 {{ storageChangeAssessment.matched }}，缺失 {{ storageChangeAssessment.missing }}，大小异常 {{ storageChangeAssessment.sizeMismatch }}</small>
+            </div>
+            <div class="storage-change-options">
+                <div class="storage-change-option" :class="{ 'is-recommended': storageChangeRecommendation.mode === 'FUTURE_ONLY' }">
+                    <div><strong>仅用于后续新稿件</strong><el-tag v-if="storageChangeRecommendation.mode === 'FUTURE_ONLY'" size="mini" type="success">推荐</el-tag></div>
+                    <p>{{ storageChangeOptionDescription('FUTURE_ONLY') }}</p>
+                    <el-button size="small" type="primary" :disabled="storageChangeState.actions && storageChangeState.actions.FUTURE_ONLY && !storageChangeState.actions.FUTURE_ONLY.enabled" @click="resolveStorageChange('FUTURE_ONLY')">确认使用新目录</el-button>
+                </div>
+                <div class="storage-change-option" :class="{ 'is-recommended': storageChangeRecommendation.mode === 'REMAP_EXISTING' }">
+                    <div><strong>文件已搬好，更新数据库映射</strong><el-tag v-if="storageChangeRecommendation.mode === 'REMAP_EXISTING'" size="mini" type="success">推荐</el-tag></div>
+                    <p>{{ storageChangeOptionDescription('REMAP_EXISTING') }}</p>
+                    <el-button size="small" type="warning" :disabled="storageChangeState.actions && storageChangeState.actions.REMAP_EXISTING && !storageChangeState.actions.REMAP_EXISTING.enabled" @click="resolveStorageChange('REMAP_EXISTING')">完成校验后更新映射</el-button>
+                </div>
+                <div class="storage-change-option">
+                    <div><strong>新目录配置有误</strong></div>
+                    <p>{{ storageChangeOptionDescription('RESTORE_CONFIG') }}</p>
+                    <el-button size="small" plain @click="restoreStorageChangeConfig">查看恢复方法</el-button>
+                </div>
+            </div>
+            <p class="storage-change-recommendation">{{ storageChangeRecommendation.reason }}</p>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button @click="deferStorageChange">稍后处理</el-button>
+            <el-button type="primary" plain @click="openStorageChangeDetails">打开存储目录设置</el-button>
+        </span>
+    </el-dialog>
     <!-- 顶部导航栏 -->
     <header class="app-header" :class="{ 'is-compact': headerCompact }">
         <div class="header-top">
@@ -234,7 +284,7 @@
                     module-name="system-settings"
                     surface="desktop"
                     :active="activeName === 'home'"
-                    :component-props="{ expanded: configExpanded, surface: 'desktop', notificationRequestId: notificationSettingsRequestId }"
+                    :component-props="{ expanded: configExpanded, surface: 'desktop', notificationRequestId: notificationSettingsRequestId, storageRequestId: storageSettingsRequestId }"
                     @update:expanded="configExpanded = $event"
                     @dirty-change="handleSettingsDirtyChange">
                 </biliup-shell-module-host>
@@ -366,12 +416,12 @@
             </el-collapse-item>
         </el-collapse>
     </el-form>
-    <div v-if="exporting || exportState === 'success'" class="diagnostic-export-progress" aria-live="polite">
+    <div v-if="exporting || exportState === 'success'" class="diagnostic-export-progress" :class="{ 'is-stale': exportProgress.stale }" aria-live="polite">
         <div class="diagnostic-export-progress-title">{{ progressPhaseText }}</div>
         <el-progress :percentage="Number(exportProgress.percent || 0)" :status="exportState === 'success' ? 'success' : null" :stroke-width="12"></el-progress>
         <div class="diagnostic-export-progress-detail">{{ exportProgress.detail || progressFileText }}</div>
         <div class="diagnostic-export-progress-meta">{{ progressFileText }}</div>
-        <div class="diagnostic-export-progress-meta">{{ progressByteText }} · 已用时 {{ Number(exportProgress.elapsedSeconds || 0) }} 秒</div>
+        <div class="diagnostic-export-progress-meta">{{ exportProgress.estimated ? '≈ ' : '' }}{{ Number(exportProgress.percent || 0) }}% · {{ progressByteText }} · 已用时 {{ Number(exportProgress.elapsedSeconds || 0) }} 秒<span v-if="exportProgress.stale"> · 等待后端确认</span></div>
     </div>
     <span slot="footer" class="dialog-footer">
         <el-button v-if="exporting" type="danger" @click="cancelExport">取消导出</el-button>
@@ -387,6 +437,7 @@
 <script src="js/app/shell/viewport-scroll.js"></script>
 <script src="js/app/shell/workspace.js"></script>
 <script src="js/app/shell/update-alerts.js"></script>
+<script src="js/app/shell/storage-attention.js"></script>
 <script src="js/app/shell.js"></script>
 </body>
 </html>

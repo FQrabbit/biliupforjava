@@ -9,7 +9,8 @@
         'connectionReadiness',
         'viewportScroll',
         'workspace',
-        'updateAlerts'
+        'updateAlerts',
+        'storageAttention'
     ];
     var mixins = mixinNames.map(function (name) {
         var mixin = window.BiliupShellMixins && window.BiliupShellMixins[name];

@@ -14,7 +14,6 @@ new Vue({
                 timezone: 'Asia/Shanghai',
                 cachePath: '',
                 jvmArgs: '',
-                workPathChangeMode: 'FUTURE_ONLY',
                 confirmH2WorkPathRisk: false
             },
             rules: {
@@ -66,6 +65,7 @@ new Vue({
             loading: false,
             containerized: false,
             originalWorkPath: '',
+            h2DatabaseFollowsWorkPath: false,
             workPathChangeWarning: '本地H2数据库位于 work-path/db，本次不会自动迁移数据库',
             theme: localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'ocean',
@@ -116,6 +116,11 @@ new Vue({
                         if (data.jvmArgs) this.form.jvmArgs = data.jvmArgs;
                         if (data.workPathChangeWarning) this.workPathChangeWarning = data.workPathChangeWarning;
                         if (data.containerized !== undefined) this.containerized = data.containerized;
+                        if (data.h2DatabaseFollowsWorkPath !== undefined) {
+                            this.h2DatabaseFollowsWorkPath = !!data.h2DatabaseFollowsWorkPath;
+                        }
+                        var restorePath = new URLSearchParams(window.location.search).get('restoreWorkPath');
+                        if (restorePath) this.form.workPath = restorePath;
                     }
                 })
                 .catch(() => { /* 向导模式或无网络，忽略 */ });
@@ -186,7 +191,8 @@ new Vue({
         handleSave() {
             this.$refs.setupForm.validate(async valid => {
                 if (valid) {
-                    if (this.workPathChanged && !this.form.confirmH2WorkPathRisk) {
+                    if (this.workPathChanged && this.h2DatabaseFollowsWorkPath
+                        && !this.form.confirmH2WorkPathRisk) {
                         this.$message.warning('请确认 H2 数据库迁移风险');
                         return;
                     }

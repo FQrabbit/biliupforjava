@@ -106,13 +106,8 @@
                         </el-row>
 
                         <el-alert v-if="workPathChanged" :title="workPathChangeWarning" type="warning" :closable="false" show-icon style="margin-bottom: 16px;"></el-alert>
-                        <el-form-item v-if="workPathChanged" label="历史素材处理方式" prop="workPathChangeMode">
-                            <el-radio-group v-model="form.workPathChangeMode" size="small">
-                                <el-radio-button label="FUTURE_ONLY">仅影响新文件</el-radio-button>
-                                <el-radio-button label="RELOCATE_EXISTING">迁移现有目录</el-radio-button>
-                            </el-radio-group>
-                        </el-form-item>
-                        <el-checkbox v-if="workPathChanged" v-model="form.confirmH2WorkPathRisk" style="margin-bottom: 18px; white-space: normal;">
+                        <p v-if="workPathChanged" class="work-path-change-help">保存并重启后，程序会弹窗引导你选择“仅用于后续新稿件”或“文件已搬好，更新数据库映射”。系统不会搬动任何文件。</p>
+                        <el-checkbox v-if="workPathChanged && h2DatabaseFollowsWorkPath" v-model="form.confirmH2WorkPathRisk" style="margin-bottom: 18px; white-space: normal;">
                             已迁移旧 work-path/db，或当前使用独立 MySQL
                         </el-checkbox>
 

@@ -12,7 +12,7 @@
         <div class="config-title">
             <i class="el-icon-setting"></i>
             <span>系统配置</span>
-            <el-badge v-if="hasConfigChanges" is-dot class="config-badge"></el-badge>
+            <el-badge v-if="hasConfigChanges || (workPathChange && workPathChange.pending)" is-dot class="config-badge"></el-badge>
         </div>
         <div class="config-actions">
             <el-button v-if="hasConfigChanges" type="text" size="mini" @click.stop="resetConfig" class="reset-btn">
@@ -161,10 +161,10 @@
                                 <p>当前活动目录：{{ workPathChange.activeRoot ? workPathChange.activeRoot.path : '-' }}</p>
                                 <p>配置文件目录：{{ workPathChange.configuredPath || '-' }}</p>
                                 <p>{{ workPathChange.h2Warning }}</p>
-                            </div>
+                                </div>
                             <div class="storage-change-actions">
                                 <el-button size="small" type="primary" plain :loading="storageResolving" @click="resolveWorkPathChange('FUTURE_ONLY')">仅影响新文件</el-button>
-                                <el-button size="small" type="warning" plain :loading="storageResolving" @click="resolveWorkPathChange('RELOCATE_EXISTING')">迁移现有目录</el-button>
+                                <el-button size="small" type="warning" plain :loading="storageResolving" @click="resolveWorkPathChange('REMAP_EXISTING')">文件已搬好，更新数据库映射</el-button>
                             </div>
                         </div>
                         <div class="storage-root-list">

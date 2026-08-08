@@ -27,7 +27,7 @@ import java.util.*;
 @Service
 public class StorageRootService {
 
-    public enum WorkPathChangeMode { FUTURE_ONLY, RELOCATE_EXISTING }
+    public enum WorkPathChangeMode { FUTURE_ONLY, REMAP_EXISTING, RELOCATE_EXISTING }
 
     public record RootMatch(StorageRoot root, String relativePath, Path resolvedPath) {}
     public record WorkPathChange(boolean pending, String configuredPath, StorageRoot activeRoot) {}
@@ -63,23 +63,14 @@ public class StorageRootService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void applyExplicitSetupChange() {
-        if (!hasConfiguredWorkPath()) return;
-        WorkPathChange change = workPathChange();
-        if (!change.pending() || change.activeRoot() == null) return;
-        if (requestedChangeMode == null || requestedChangeMode.isBlank()
-                || requestedChangeFrom == null || requestedChangeFrom.isBlank()
-                || requestedChangeTo == null || requestedChangeTo.isBlank()) return;
-        if (!samePath(change.activeRoot().getPath(), requestedChangeFrom)
-                || !samePath(configuredWorkPath, requestedChangeTo)) return;
-        try {
-            resolveWorkPathChange(WorkPathChangeMode.valueOf(requestedChangeMode));
-            log.info("[BLR] {}", LogKvs.event("StorageRoot.WorkPathChange.Applied")
-                    .add("mode", requestedChangeMode).add("from", requestedChangeFrom)
+        // 工作目录变更统一通过交互式确认流程处理
+        // 旧配置里可能还留有 work-path-change-* 配置项，这里只保留作诊断
+        // 启动时不会在没有用户确认和完整后台校验的情况下自动更新数据库映射
+        if (requestedChangeMode != null && !requestedChangeMode.isBlank()) {
+            log.info("[BLR] {}", LogKvs.event("StorageRoot.WorkPathChange.PendingReview")
+                    .add("mode", requestedChangeMode)
+                    .add("from", requestedChangeFrom)
                     .add("to", requestedChangeTo));
-        } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("StorageRoot.WorkPathChange.Failed")
-                    .add("mode", requestedChangeMode).add("from", requestedChangeFrom)
-                    .add("to", requestedChangeTo).add("err", e.getMessage()), e);
         }
     }
 
@@ -135,10 +126,20 @@ public class StorageRootService {
 
     @Transactional
     public StorageRoot resolveWorkPathChange(WorkPathChangeMode mode) {
+        return resolveWorkPathChange(mode, false);
+    }
+
+    /**
+     * 使用已经完成的完整校验结果，不在 HTTP 请求里再次扫描同一个网络目录
+     * 只有确认 changeId 仍然有效且校验成功后，调用方才能传入 {@code prevalidated=true}
+     */
+    @Transactional
+    public StorageRoot resolveWorkPathChange(WorkPathChangeMode mode, boolean prevalidated) {
         requireConfiguredWorkPath();
         StorageRoot active = activeWorkRoot().orElseThrow(() -> new IllegalStateException("active work root missing"));
         if (!hasPendingWorkPathChange()) return active;
         if (mode == WorkPathChangeMode.FUTURE_ONLY) {
+            validateTargetDirectory(normalizeAbsolute(configuredWorkPath));
             active.setActiveForNewFiles(false);
             rootRepository.save(active);
             StorageRoot next = findByPath(configuredWorkPath, StorageRoot.RootType.WORK).orElseGet(StorageRoot::new);
@@ -148,7 +149,7 @@ public class StorageRootService {
             refreshHealth(next);
             return rootRepository.save(next);
         }
-        validateRelocation(active, normalizeAbsolute(configuredWorkPath));
+        if (!prevalidated) validateRelocation(active, normalizeAbsolute(configuredWorkPath));
         active.setPath(configuredWorkPath);
         refreshHealth(active);
         StorageRoot relocated = rootRepository.save(active);
@@ -355,24 +356,28 @@ public class StorageRootService {
     }
 
     private void validateRelocation(StorageRoot active, Path targetRoot) {
-        if (!Files.isDirectory(targetRoot) || !Files.isReadable(targetRoot)) {
-            throw new IllegalArgumentException("new work path is not readable");
-        }
-        List<PartFileLocation> sample = locationRepository
-                .findTop20ByStorageRootIdAndStateOrderByIdAsc(
-                        active.getId(), PartFileLocation.LocationState.AVAILABLE);
-        for (PartFileLocation location : sample) {
+        validateTargetDirectory(targetRoot);
+        List<PartFileLocation> locations = locationRepository
+                .findByStorageRootIdOrderByIdAsc(active.getId());
+        for (PartFileLocation location : locations) {
+            if (location.getState() != PartFileLocation.LocationState.AVAILABLE) continue;
             Path candidate = targetRoot.resolve(Paths.get(location.getRelativePath())).normalize();
             if (!isUnder(targetRoot, candidate) || !Files.isRegularFile(candidate)) {
                 throw new IllegalArgumentException("relocation validation failed: " + location.getRelativePath());
             }
             try {
-                if (location.getExpectedSize() > 0 && Files.size(candidate) != location.getExpectedSize()) {
+                if (Files.size(candidate) != location.getExpectedSize()) {
                     throw new IllegalArgumentException("relocation size validation failed: " + location.getRelativePath());
                 }
             } catch (IOException e) {
                 throw new IllegalArgumentException("relocation validation failed: " + location.getRelativePath(), e);
             }
+        }
+    }
+
+    private static void validateTargetDirectory(Path targetRoot) {
+        if (!Files.isDirectory(targetRoot) || !Files.isReadable(targetRoot) || !Files.isWritable(targetRoot)) {
+            throw new IllegalArgumentException("new work path must be a readable and writable directory");
         }
     }
 

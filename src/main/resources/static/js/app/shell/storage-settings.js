@@ -5,8 +5,8 @@
     window.BiliupShellMixins.storageSettings = {
         data: function () {
             return {
-                storageRoots: [],
-                workPathChange: { pending: false, configuredPath: '', activeRoot: null, h2Warning: '' },
+            storageRoots: [],
+                workPathChange: { pending: false, changeId: '', configuredPath: '', activeRoot: null, h2Warning: '', assessment: null },
                 storageLoading: false,
                 storageResolving: false
             };
@@ -29,7 +29,7 @@
                     done();
                 }, done);
                 window.StorageApi.workPathChange(function (data) {
-                    self.workPathChange = data || { pending: false, configuredPath: '', activeRoot: null, h2Warning: '' };
+                    self.workPathChange = data || { pending: false, changeId: '', configuredPath: '', activeRoot: null, h2Warning: '', assessment: null };
                     done();
                 }, done);
             },
@@ -39,16 +39,18 @@
                 var futureOnly = mode === 'FUTURE_ONLY';
                 var action = futureOnly
                     ? '旧稿件继续使用旧目录，新录制文件写入新目录。'
-                    : '仅当新目录中抽样历史文件的相对路径和大小验证通过时，才更新原存储根。';
+                    : '系统不会搬动文件；只有新目录中的全部历史文件通过路径和大小校验后，才更新数据库映射。';
                 var warning = (self.workPathChange && self.workPathChange.h2Warning)
                     || '本地 H2 数据库仍位于旧 work-path/db，本次不会自动迁移。';
-                self.$confirm(action + '\n\n' + warning, futureOnly ? '确认仅影响新文件' : '确认迁移现有目录', {
+                self.$confirm(action + '\n\n' + warning, futureOnly ? '确认仅用于后续新稿件' : '确认更新数据库映射', {
                     confirmButtonText: '确认执行',
                     cancelButtonText: '取消',
                     type: 'warning'
                 }).then(function () {
                     self.storageResolving = true;
-                    window.StorageApi.resolveWorkPathChange(mode, function (response) {
+                    window.StorageApi.resolveWorkPathChange(mode,
+                        self.workPathChange && self.workPathChange.changeId,
+                        function (response) {
                         self.storageResolving = false;
                         if (response && response.success) {
                             self.$message.success('工作目录变更已确认');

@@ -13,7 +13,8 @@
             props: {
                 expanded: { type: Boolean, default: false },
                 surface: { type: String, default: context.surface },
-                notificationRequestId: { type: Number, default: 0 }
+                notificationRequestId: { type: Number, default: 0 },
+                storageRequestId: { type: Number, default: 0 }
             },
             computed: {
                 configExpanded: {
@@ -37,6 +38,12 @@
                     handler: function (value) {
                         if (value > 0) this.openNotificationSettings();
                     }
+                },
+                storageRequestId: {
+                    immediate: true,
+                    handler: function (value) {
+                        if (value > 0) this.openStorageSettings();
+                    }
                 }
             },
             methods: {
@@ -57,6 +64,10 @@
                             try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
                         }
                     });
+                },
+                openStorageSettings: function () {
+                    this.configExpanded = true;
+                    this.configActiveTab = 'storage';
                 },
                 refreshNotificationTableLayout: function () {
                     var host = this.$refs.notificationSettingsHost;

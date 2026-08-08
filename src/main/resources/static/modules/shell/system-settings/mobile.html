@@ -190,7 +190,7 @@
                     <p>{{ workPathChange.h2Warning }}</p>
                     <div>
                         <button type="button" :disabled="storageResolving" @click="resolveWorkPathChange('FUTURE_ONLY')">仅影响新文件</button>
-                        <button type="button" class="is-warning" :disabled="storageResolving" @click="resolveWorkPathChange('RELOCATE_EXISTING')">迁移现有目录</button>
+                        <button type="button" class="is-warning" :disabled="storageResolving" @click="resolveWorkPathChange('REMAP_EXISTING')">文件已搬好，更新数据库映射</button>
                     </div>
                 </div>
                 <div class="mobile-storage-roots">
