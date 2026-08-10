@@ -162,7 +162,7 @@
                 parts.push('核心仍在处理 · ' + staleSeconds + '秒前更新');
             }
             if (this.configOperationProgress && this.configOperationProgress.estimated) {
-                parts.unshift('≈ 估算进度');
+                parts.unshift('估算进度');
             }
             return parts.join(' · ');
         },

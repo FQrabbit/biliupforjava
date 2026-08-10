@@ -1141,6 +1141,23 @@ public class RecordBiliPublishService {
                 if (isSkippedPart(uploadPart)) {
                     continue;
                 }
+                if (uploadPart.isUpload()) {
+                    if (StringUtils.isNotBlank(uploadPart.getFileName())) {
+                        // 已有服务器文件标识时可以直接复用，不能再要求本地视频存在
+                        continue;
+                    }
+                    log.error("[BLR] {}", LogKvs.event("Publish.Part.UploadIdentityInvalid")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", history.getId())
+                            .add("partId", uploadPart.getId())
+                            .add("upload", true)
+                            .add("fileDelete", uploadPart.isFileDelete())
+                            .addIfNotBlank("fileName", uploadPart.getFileName())
+                            .add("cid", uploadPart.getCid()));
+                    TaskUtil.publishTask.remove(history.getId());
+                    return false;
+                }
                 PartFileLocationService.FileResolution fileResolution = partFileLocationService.resolveReadable(uploadPart.getId());
                 String filePath = fileResolution.available() ? normalizeFilePath(fileResolution.path().toString()) : null;
                 if (StringUtils.isBlank(filePath)) {
@@ -1156,10 +1173,6 @@ public class RecordBiliPublishService {
                 uploadPart.setFilePath(filePath);
                 filePath = filePath.intern();
                 File file = new File(filePath);
-                //已经上传完成就跳过
-                if (uploadPart.isUpload()) {
-                    continue;
-                }
                 if (file.exists()) {
                     if (uploadPart.getEndTime() == null) {
                         log.warn("[BLR] {}", LogKvs.event("Publish.Part.FileStillWriting")

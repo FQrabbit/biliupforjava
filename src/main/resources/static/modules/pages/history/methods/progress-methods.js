@@ -121,7 +121,7 @@
         },
         uploadProgressItemKey: function(item) {
             if (!item) return '';
-            // mergedParts 会保留文件字节总量而不是 tracker 的分片总数，不能把 chunkTotal 放进匹配键。
+            // mergedParts 会保留文件字节总量而不是 tracker 的分片总数，不能把 chunkTotal 放进匹配键
             return String(item.partId || item.page || '') + '|' + String(item.uploadFlow || '');
         },
         clearUploadProgressInterpolators: function() {
@@ -284,7 +284,7 @@
                 return active > 0 ? ('上传中：' + active + ' 个分P') : '当前无上传中的分P';
             }
             if (active > 0) {
-                return (this.overallUploadPercentEstimated() ? '≈ ' : '')
+                return ''
                     + '已上传：' + uploaded + '/' + total + '，上传中：' + active + '，待上传：' + pending;
             }
             if (uploaded >= total) {

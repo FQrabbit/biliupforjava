@@ -86,7 +86,7 @@
             progressFileText: function() {
                 var p = this.exportProgress || {};
                 if (!p.totalFiles) return '正在读取日志文件';
-                return (p.estimated ? '≈ ' : '') + '已处理 ' + Number(p.processedFiles || 0)
+                return '已处理 ' + Number(p.processedFiles || 0)
                     + ' / ' + Number(p.totalFiles || 0) + ' 个日志文件';
             },
             progressByteText: function() {

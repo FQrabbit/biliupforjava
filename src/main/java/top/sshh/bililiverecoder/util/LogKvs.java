@@ -228,6 +228,7 @@ public final class LogKvs {
         EVENT_ZH.put("Publish.Part.StillRecording", "投稿失败：存在仍在录制中的分P");
         EVENT_ZH.put("Publish.Part.FileStillWriting", "投稿：检测到文件仍在写入/未稳定，暂停本次投稿");
         EVENT_ZH.put("Publish.Part.FilePathInvalid", "投稿异常：分P文件路径无效");
+        EVENT_ZH.put("Publish.Part.UploadIdentityInvalid", "投稿异常：分P已标记上传但缺少服务器文件名");
         EVENT_ZH.put("Publish.Part.EndTimeSuspicious", "投稿异常：分P结束时间异常(可能时间不同步)");
         EVENT_ZH.put("Publish.Part.SkipBelowSizeLimit", "投稿：分P文件小于忽略大小阈值，删除记录");
         EVENT_ZH.put("Publish.Part.SkipBelowDurationLimit", "投稿：分P时长小于忽略时长阈值，删除记录");

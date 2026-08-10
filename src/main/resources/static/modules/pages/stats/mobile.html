@@ -112,7 +112,7 @@
                         <span>{{ operationProgress.title }}</span>
                         <strong>{{ operationProgress.message }}</strong>
                     </div>
-                    <em>{{ operationProgress.estimated ? '≈' : '' }}{{ operationProgress.percent }}%</em>
+                    <em>{{ operationProgress.percent }}%</em>
                 </div>
                 <div class="mobile-stats-progress-track">
                     <div :style="{ width: operationProgress.percent + '%' }"></div>

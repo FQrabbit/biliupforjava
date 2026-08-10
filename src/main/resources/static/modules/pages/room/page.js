@@ -212,9 +212,9 @@ return {
                 return '';
             }
             if (this.deleteRoomOptions.deleteHistories || Number(this.deleteRoomPreview.historyCount || 0) > 0) {
-                return (progress.estimated ? '≈ ' : '') + '已处理 ' + Math.min(processed, total) + ' / ' + total + ' 项删除工作';
+                return '已处理 ' + Math.min(processed, total) + ' / ' + total + ' 项删除工作';
             }
-            return (progress.estimated ? '≈ ' : '') + '正在处理删除步骤 ' + Math.min(processed, total) + ' / ' + total;
+            return '正在处理删除步骤 ' + Math.min(processed, total) + ' / ' + total;
         }
     },
     methods: Object.assign({},

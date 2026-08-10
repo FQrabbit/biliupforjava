@@ -421,7 +421,7 @@
         <el-progress :percentage="Number(exportProgress.percent || 0)" :status="exportState === 'success' ? 'success' : null" :stroke-width="12"></el-progress>
         <div class="diagnostic-export-progress-detail">{{ exportProgress.detail || progressFileText }}</div>
         <div class="diagnostic-export-progress-meta">{{ progressFileText }}</div>
-        <div class="diagnostic-export-progress-meta">{{ exportProgress.estimated ? '≈ ' : '' }}{{ Number(exportProgress.percent || 0) }}% · {{ progressByteText }} · 已用时 {{ Number(exportProgress.elapsedSeconds || 0) }} 秒<span v-if="exportProgress.stale"> · 等待后端确认</span></div>
+        <div class="diagnostic-export-progress-meta">{{ Number(exportProgress.percent || 0) }}% · {{ progressByteText }} · 已用时 {{ Number(exportProgress.elapsedSeconds || 0) }} 秒<span v-if="exportProgress.stale"> · 等待后端确认</span></div>
     </div>
     <span slot="footer" class="dialog-footer">
         <el-button v-if="exporting" type="danger" @click="cancelExport">取消导出</el-button>

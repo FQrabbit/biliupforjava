@@ -137,7 +137,7 @@
                         <span>UPLOAD</span>
                         <h3>上传进度</h3>
                     </div>
-                    <strong>{{ overallUploadPercentEstimated() ? '≈' : '' }}{{ calcOverallUploadPercent() }}%</strong>
+                    <strong>{{ calcOverallUploadPercent() }}%</strong>
                 </header>
                 <div class="mobile-history-detail-progress-track">
                     <div :style="{ width: calcOverallUploadPercent() + '%' }"></div>

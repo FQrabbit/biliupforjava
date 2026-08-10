@@ -320,7 +320,7 @@
                         self.operationProgress.estimated = display.estimated;
                         self.operationProgress.message = latest.message || latest.phase || '处理中';
                         self.operationProgress.detail = self.statsTaskDetail(latest)
-                            + (display.estimated ? ' · ≈ 估算进度' : '');
+                            + (display.estimated ? ' · 估算进度' : '');
                     }
                 });
             }

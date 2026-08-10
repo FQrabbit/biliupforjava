@@ -32,7 +32,7 @@
                     <strong>{{ configOperationProgress.title }}</strong>
                     <span>{{ configOperationProgress.message }}</span>
                 </div>
-                <em>{{ configOperationProgress.estimated ? '≈' : '' }}{{ configOperationProgress.percent }}%</em>
+                <em>{{ configOperationProgress.percent }}%</em>
             </div>
             <el-progress :percentage="configOperationProgress.percent" :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)" :stroke-width="8"></el-progress>
             <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>

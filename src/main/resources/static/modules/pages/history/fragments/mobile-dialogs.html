@@ -199,7 +199,7 @@
             </div>
             <div v-if="previewTask && (previewTask.status === 'RUNNING' || previewTask.status === 'PENDING')" class="part-preview-progress">
                 <el-progress :percentage="previewTaskPercent()" :stroke-width="8"></el-progress>
-                <span>{{ previewTaskEstimated() ? '≈ ' : '' }}{{ previewTask.message || '正在生成可拖动预览' }}</span>
+                <span>{{ previewTask.message || '正在生成可拖动预览' }}</span>
             </div>
             <div v-if="previewError" class="part-preview-tip is-error">{{ previewError }}</div>
         </div>

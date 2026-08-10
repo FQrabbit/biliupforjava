@@ -100,7 +100,7 @@
                     <strong>{{ configOperationProgress.title }}</strong>
                     <span>{{ configOperationProgress.message }}</span>
                 </div>
-                <em>{{ configOperationProgress.estimated ? '≈' : '' }}{{ configOperationProgress.percent }}%</em>
+                <em>{{ configOperationProgress.percent }}%</em>
             </div>
             <el-progress
                     :percentage="configOperationProgress.percent"
