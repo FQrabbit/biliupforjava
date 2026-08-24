@@ -313,7 +313,7 @@
                 <div class="data-card"
                      :class="{
                         'is-processing': item.publish && (item.code == -1 || item.code == -9 || item.code == -30),
-                        'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || (abnormalPartCount(item) > 0),
+                         'is-failed': (item.publish && (item.code == -2 || item.code == -4 || item.code == -100)) || hasTimestampJump(item) || (abnormalPartCount(item) > 0),
                         'is-success': item.publish && (item.code == 0 || item.code == -50),
                         'is-selected': isMultiSelectMode && isSelected(item),
                         'press-anim': pressedCardId === item.id
@@ -343,8 +343,11 @@
                                     <i class="el-icon-view"></i> 仅自己可见
                                 </el-tag>
 
-                                <el-tooltip popper-class="history-page-tooltip-popper" v-if="abnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
-                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ abnormalPartCount(item) }}</span>
+                                <el-tooltip popper-class="history-page-tooltip-popper" v-if="hasTimestampJump(item)" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
+                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">时间戳跳变<span v-if="timestampJumpPartCount(item) > 0"> {{ timestampJumpPartCount(item) }}</span></span>
+                                </el-tooltip>
+                                <el-tooltip popper-class="history-page-tooltip-popper" v-if="otherAbnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
+                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ otherAbnormalPartCount(item) }}</span>
                                 </el-tooltip>
                                 <el-tooltip popper-class="history-page-tooltip-popper" v-if="skippedOnlyCount(item) > 0" effect="dark" content="文件低于配置阈值，已自动跳过" placement="top">
                                     <span class="status-chip" style="background: rgba(230, 162, 60, 0.15); color: #e6a23c;">已跳过 {{ skippedOnlyCount(item) }}</span>
@@ -401,7 +404,8 @@
                     <el-table-column label="已上传分P" prop="uploadPartCount" width="80"></el-table-column>
                     <el-table-column label="异常分P" prop="giveUpPartCount" width="80">
                         <template slot-scope="scope">
-                            <el-tag v-if="abnormalPartCount(scope.row) > 0" size="mini" type="danger">{{ abnormalPartCount(scope.row) }}</el-tag>
+                            <el-tag v-if="hasTimestampJump(scope.row)" size="mini" type="danger">时间戳跳变<span v-if="timestampJumpPartCount(scope.row) > 0"> {{ timestampJumpPartCount(scope.row) }}</span></el-tag>
+                            <el-tag v-else-if="otherAbnormalPartCount(scope.row) > 0" size="mini" type="danger">{{ otherAbnormalPartCount(scope.row) }}</el-tag>
                             <el-tag v-else-if="skippedOnlyCount(scope.row) > 0" size="mini" type="warning">跳过{{ skippedOnlyCount(scope.row) }}</el-tag>
                             <span v-else style="color: #909399;">0</span>
                         </template>

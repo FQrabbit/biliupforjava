@@ -94,6 +94,15 @@ public class RecordHistory {
     @Column(name = "upload_pause_reason", length = 256)
     private String uploadPauseReason;
 
+    @Column(name = "publish_issue_type", length = 64)
+    private String publishIssueType;
+
+    @Column(name = "publish_issue_reason", length = 512)
+    private String publishIssueReason;
+
+    @Column(name = "publish_issue_part_count", columnDefinition = "int default 0")
+    private int publishIssuePartCount;
+
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
@@ -229,6 +238,10 @@ public class RecordHistory {
         }
         if (recording) {
             return "正在录制";
+        }
+
+        if ("TIMESTAMP_JUMP".equals(publishIssueType)) {
+            return "时间戳跳变";
         }
         
         // 只有真正的异常（不包括低于阈值的跳过）时才显示"存在异常"

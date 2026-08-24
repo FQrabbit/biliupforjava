@@ -250,9 +250,10 @@
                             <span><i class="el-icon-coin"></i>{{ formatFileSize(item.fileSize) }}</span>
                             <span><i class="el-icon-time"></i>{{ formatDuration(item.partDuration) }}</span>
                         </div>
-                        <div class="mobile-history-alerts" v-if="abnormalPartCount(item) > 0 || skippedOnlyCount(item) > 0 || uploadFlowFallbackCount(item) > 0 || item.code === -50">
+                        <div class="mobile-history-alerts" v-if="hasTimestampJump(item) || otherAbnormalPartCount(item) > 0 || skippedOnlyCount(item) > 0 || uploadFlowFallbackCount(item) > 0 || item.code === -50">
                             <span v-if="item.code === -50" class="is-private"><i class="el-icon-view"></i>仅自己可见</span>
-                            <span v-if="abnormalPartCount(item) > 0" class="is-danger"><i class="el-icon-warning"></i>异常分P {{ abnormalPartCount(item) }}</span>
+                            <span v-if="hasTimestampJump(item)" class="is-danger"><i class="el-icon-warning"></i>时间戳跳变<span v-if="timestampJumpPartCount(item) > 0"> {{ timestampJumpPartCount(item) }}</span></span>
+                            <span v-if="otherAbnormalPartCount(item) > 0" class="is-danger"><i class="el-icon-warning"></i>异常分P {{ otherAbnormalPartCount(item) }}</span>
                             <span v-if="skippedOnlyCount(item) > 0" class="is-warning"><i class="el-icon-remove-outline"></i>跳过 {{ skippedOnlyCount(item) }}</span>
                             <span v-if="uploadFlowFallbackCount(item) > 0" class="is-warning"><i class="el-icon-refresh-left"></i>上传回退 {{ uploadFlowFallbackCount(item) }}</span>
                         </div>

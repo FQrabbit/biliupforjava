@@ -36,6 +36,9 @@ public class DatabaseSchemaColumnPatchRunner implements ApplicationRunner {
             ensureColumnIfMissing("record_history", "force_archived", "BOOLEAN DEFAULT FALSE");
             ensureColumnIfMissing("record_history", "publish_user_id", "BIGINT");
             ensureColumnIfMissing("record_history", "edit_parts_uploading", "BOOLEAN DEFAULT FALSE");
+            ensureColumnIfMissing("record_history", "publish_issue_type", "VARCHAR(64)");
+            ensureColumnIfMissing("record_history", "publish_issue_reason", "VARCHAR(512)");
+            ensureColumnIfMissing("record_history", "publish_issue_part_count", "INT DEFAULT 0");
             ensureColumnIfMissing("record_history_part", "manual_skip", "BOOLEAN DEFAULT FALSE");
             ensureColumnIfMissing("record_history_part", "skip_reason", "VARCHAR(255)");
             ensureColumnIfMissing("room_live_gift_catalog", "room_id", "VARCHAR(255)");

@@ -988,6 +988,7 @@ public class RecordBiliPublishService {
                     history.setAvId(String.valueOf(aid));
                 }
                 markHistoryPendingReviewAfterEdit(history);
+                clearTimestampJumpIssueIfResolved(history);
                 historyRepository.save(history);
                 syncEditHistoryStatusImmediately(history.getId());
                 return true;
@@ -1581,80 +1582,10 @@ public class RecordBiliPublishService {
                     }
                     String uploadRes = null;
                     try {
+                        int timestampJumpRounds = 0;
+                        while (true) {
                         webPublishStartNs = System.nanoTime();
-                        uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-                        log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Response")
-                                .add("roomId", room.getRoomId())
-                                .add("uname", room.getUname())
-                                .add("historyId", history.getId())
-                                .add("respLen", uploadRes == null ? 0 : uploadRes.length())
-                                .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
-                        if (uploadRes.contains("验证码")) {
-                            try {
-                                String voucher = JsonPath.read(uploadRes, "data.v_voucher");
-                                Map<String, Object> data = JsonPath.read(uploadRes, "data");
-                                log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Required")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", history.getId())
-                                        .addIfNotBlank("title", history.getTitle())
-                                        .addUrl("captchaUrl", "http://localhost:" + serverPort + "/html/captcha.html"));
-                                // 尝试从 data 中获取 geetest 相关信息，如果没有，前端会使用默认的 V4 captchaId
-                                captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
-                                Map<String, String> captchaResult = captchaService.waitForCaptcha();
-                                if (captchaResult != null) {
-                                    // 如果前端返回了 V4 的结果，我们需要确保包含 v_voucher
-                                    if (!captchaResult.containsKey("v_voucher")) {
-                                        captchaResult.put("v_voucher", voucher);
-                                    }
-                                    log.info("[BLR] {}", LogKvs.event("Publish.Captcha.Submit")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("historyId", history.getId())
-                                            .add("hasV4", captchaResult.containsKey("captcha_key"))
-                                            .add("hasVoucher", captchaResult.containsKey("v_voucher")));
-                                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto, captchaResult);
-                                    log.info("[BLR] {}", LogKvs.event("Publish.Captcha.PublishResponse")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("historyId", history.getId())
-                                            .add("respLen", uploadRes == null ? 0 : uploadRes.length())
-                                            .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
-                                    
-                                    if (uploadRes.contains("验证码") || uploadRes.contains("\"code\":601")) {
-                                        log.error("[BLR] {}", LogKvs.event("Publish.Captcha.VerifyFailedPause")
-                                                .add("roomId", room.getRoomId())
-                                                .add("uname", room.getUname())
-                                                .add("historyId", history.getId())
-                                                .add("pauseSeconds", 300));
-                                        Thread.sleep(300 * 1000L);
-                                        // 抛出异常以触发重试机制，但有了长休眠，不会频繁刷屏
-                                        throw new RuntimeException("验证码验证失败: " + uploadRes);
-                                    }
-                                } else {
-                                    log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Timeout")
-                                            .add("roomId", room.getRoomId())
-                                            .add("uname", room.getUname())
-                                            .add("historyId", history.getId())
-                                            .add("waitSeconds", 0));
-                                    Thread.sleep(10 * 1000L);
-                                    uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-                                }
-                            } catch (Exception e) {
-                                log.error("[BLR] {}", LogKvs.event("Publish.Captcha.HandleError")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", history.getId()), e);
-                                Thread.sleep(120 * 1000L);
-                                uploadRes = BiliApi.webPublish(biliBiliUser, videoUploadDto);
-                                log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Response")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", history.getId())
-                                        .add("respLen", uploadRes == null ? 0 : uploadRes.length())
-                                        .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
-                            }
-                        }
+                        uploadRes = submitWebPublishWithCaptcha(biliBiliUser, videoUploadDto, room, history);
                         JSONObject publishRoot = parseJsonObject(uploadRes);
                         JSONObject publishData = publishRoot == null ? null : publishRoot.getJSONObject("data");
                         log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Parsed")
@@ -1668,9 +1599,88 @@ public class RecordBiliPublishService {
                                 .addIfNotBlank("rootKeys", publishRoot == null ? "" : String.join(",", publishRoot.keySet()))
                                 .addIfNotBlank("dataKeys", publishData == null ? "" : String.join(",", publishData.keySet()))
                                 .addIfNotBlank("respSnippet", abbreviatePublishResponse(uploadRes, 320)));
+                        Integer publishCode = publishRoot == null ? null : publishRoot.getInteger("code");
+                        String publishMessage = publishRoot == null ? null : publishRoot.getString("message");
+                        Set<Long> timestampJumpCids = extractTimestampJumpCids(publishData);
+                        boolean timestampJump = Objects.equals(publishCode, 21588)
+                                || !timestampJumpCids.isEmpty()
+                                || (StringUtils.isNotBlank(publishMessage)
+                                && (publishMessage.contains("时间跳跃") || publishMessage.contains("时间戳跳变")));
+                        if (timestampJump) {
+                            history.setPublishIssueType("TIMESTAMP_JUMP");
+                            history.setPublishIssueReason(StringUtils.defaultIfBlank(publishMessage,
+                                    "B站返回时间戳跳变，无法完成整稿投稿"));
+                            if (timestampJumpCids.isEmpty()) {
+                                history.setPublishIssuePartCount(0);
+                                history.setUpload(false);
+                                history.setUpdateTime(LocalDateTime.now());
+                                historyRepository.save(history);
+                                log.error("[BLR] {}", LogKvs.event("Publish.TimestampJump.Unresolved")
+                                        .add("roomId", room.getRoomId())
+                                        .add("historyId", history.getId())
+                                        .add("code", publishCode)
+                                        .addIfNotBlank("message", publishMessage));
+                                return false;
+                            }
+                            List<RecordHistoryPart> timestampParts = uploadParts.stream()
+                                    .filter(part -> part.getCid() != null && timestampJumpCids.contains(part.getCid()))
+                                    .toList();
+                            if (timestampParts.size() != timestampJumpCids.size()) {
+                                history.setPublishIssuePartCount(0);
+                                history.setUpload(false);
+                                history.setUpdateTime(LocalDateTime.now());
+                                historyRepository.save(history);
+                                log.error("[BLR] {}", LogKvs.event("Publish.TimestampJump.Unresolved")
+                                        .add("roomId", room.getRoomId())
+                                        .add("historyId", history.getId())
+                                        .add("reportedCidCount", timestampJumpCids.size())
+                                        .add("matchedPartCount", timestampParts.size()));
+                                return false;
+                            }
+                            timestampJumpRounds++;
+                            if (timestampJumpRounds > uploadParts.size()) {
+                                throw new RuntimeException("timestamp jump response made no bounded progress");
+                            }
+                            for (RecordHistoryPart part : timestampParts) {
+                                Long rejectedCid = part.getCid();
+                                part.setUpload(false);
+                                part.setCid(null);
+                                part.setFileName(null);
+                                part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                                part.setDeleteFailType("TIMESTAMP_JUMP");
+                                part.setDeleteFailReason("分P转码失败(时间戳跳变-文件损坏)，B站CID=" + rejectedCid);
+                                partRepository.save(part);
+                                log.info("[BLR] {}", LogKvs.event("Publish.TimestampJump.MarkPartGiveUp")
+                                        .add("historyId", history.getId())
+                                        .add("partId", part.getId())
+                                        .add("partTitle", part.getTitle())
+                                        .add("cid", rejectedCid));
+                            }
+                            history.setPublishIssuePartCount(history.getPublishIssuePartCount() + timestampParts.size());
+                            historyRepository.save(history);
+                            Set<Long> rejectedCids = timestampJumpCids;
+                            uploadParts = uploadParts.stream()
+                                    .filter(part -> part.getCid() != null && !rejectedCids.contains(part.getCid()))
+                                    .toList();
+                            dtos.removeIf(dto -> dto.getCid() != null && rejectedCids.contains(dto.getCid()));
+                            if (uploadParts.isEmpty() || dtos.isEmpty()) {
+                                history.setUpload(false);
+                                history.setUpdateTime(LocalDateTime.now());
+                                historyRepository.save(history);
+                                log.error("[BLR] {}", LogKvs.event("Publish.TimestampJump.AllPartsGiveUp")
+                                        .add("roomId", room.getRoomId())
+                                        .add("historyId", history.getId()));
+                                return false;
+                            }
+                            videoUploadDto.setVideos(dtos);
+                            log.warn("[BLR] {}", LogKvs.event("Publish.TimestampJump.RetryWithoutParts")
+                                    .add("roomId", room.getRoomId())
+                                    .add("historyId", history.getId())
+                                    .add("removedPartCount", timestampParts.size())
+                                    .add("remainingPartCount", uploadParts.size()));
+                            continue;
+                        }
                         if (publishData == null) {
-                            Integer publishCode = publishRoot == null ? null : publishRoot.getInteger("code");
-                            String publishMessage = publishRoot == null ? null : publishRoot.getString("message");
                             log.warn("[BLR] {}", LogKvs.event("Publish.WebPublish.MissingData")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
@@ -1686,33 +1696,6 @@ public class RecordBiliPublishService {
                         String bvid = publishData == null ? null : publishData.getString("bvid");
                         String aid = publishData == null ? null : publishData.getString("aid");
                         if (StringUtils.isBlank(bvid) || StringUtils.isBlank(aid)) {
-                            // 检测是否是时间戳跳变错误(code:21588)，如果是则放弃该投稿
-                            if (StringUtils.contains(uploadRes, "21588") || StringUtils.contains(uploadRes, "时间跳跃") || StringUtils.contains(uploadRes, "时间戳")) {
-                                log.error("[BLR] {}", LogKvs.event("Publish.TimestampJump.GiveUpHistory")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", history.getId())
-                                        .addIfNotBlank("title", history.getTitle())
-                                        .add("code", 21588));
-                                // 标记所有未上传的分P为放弃（时间戳跳变）
-                                for (RecordHistoryPart part : uploadParts) {
-                                    if (!part.isUpload() && !isSkippedPart(part)) {
-                                        part.setUpload(false);
-                                        part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
-                                        part.setDeleteFailType("TIMESTAMP_JUMP");
-                                        part.setDeleteFailReason("分P转码失败(时间戳跳变-文件损坏)，已放弃重新上传");
-                                        partRepository.save(part);
-                                        log.info("[BLR] {}", LogKvs.event("Publish.TimestampJump.MarkPartGiveUp")
-                                                .add("historyId", history.getId())
-                                                .add("partId", part.getId())
-                                                .add("partTitle", part.getTitle()));
-                                    }
-                                }
-                                // 设置为不上传，避免后续任务再次扫描到
-                                history.setUpload(false);
-                                historyRepository.save(history);
-                                return false;
-                            }
                             log.warn("[BLR] {}", LogKvs.event("Publish.WebPublish.MissingIds")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
@@ -1736,8 +1719,8 @@ public class RecordBiliPublishService {
                             .addStageCostMs("total", publishStartNs)
                             .addStageField("loadParts", "costMs", loadPartsCostMs)
                             .addStageField("ensureUpload", "costMs", ensureUploadCostMs)
-                            .addStageField("webPublish", "costMs", webPublishCostMs)
-                            .addStageField("postProcess", "costMs", postProcessCostMs));
+                             .addStageField("webPublish", "costMs", webPublishCostMs)
+                             .addStageField("postProcess", "costMs", postProcessCostMs));
 
                         // 兜底：部分情况下创建投稿接口可能不稳定地忽略 is_only_self，这里在投稿成功后强制同步一次可见性
                         try {
@@ -1804,15 +1787,17 @@ public class RecordBiliPublishService {
                         try {
                             for (RecordHistoryPart part : uploadParts) {
                                 String filePath = part.getFilePath();
-                                if (partFileCleanupPolicy.isPostPublishCleanupType(room.getDeleteType())
-                                        && partFileCleanupPolicy.shouldSkipProtectedArchive(room, history, part, filePath, "Publish", "postPublishCleanup")) {
-                                    continue;
-                                }
-                                if (room.getDeleteType() == 9) {
-                                    partFileOperationService.delete(part.getId());
-                                } else if (StringUtils.isNotBlank(room.getMoveDir()) && room.getDeleteType() == 10) {
-                                    partFileOperationService.move(part.getId(), room.getMoveDir());
-                                }
+                                 if ((partFileCleanupPolicy.isPostUploadCleanupType(room.getDeleteType())
+                                         || partFileCleanupPolicy.isPostPublishCleanupType(room.getDeleteType()))
+                                         && partFileCleanupPolicy.shouldSkipProtectedArchive(room, history, part, filePath, "Publish", "postPublishCleanup")) {
+                                     continue;
+                                 }
+                                 if (room.getDeleteType() == 1 || room.getDeleteType() == 9) {
+                                     partFileOperationService.delete(part.getId());
+                                 } else if (StringUtils.isNotBlank(room.getMoveDir())
+                                         && (room.getDeleteType() == 4 || room.getDeleteType() == 10)) {
+                                     partFileOperationService.move(part.getId(), room.getMoveDir());
+                                 }
                             }
                         } catch (Exception de) {
                             log.error("[BLR] {}", LogKvs.event("Publish.File.PostProcess.Error")
@@ -1821,7 +1806,9 @@ public class RecordBiliPublishService {
                                     .add("historyId", history.getId()), de);
                         }
                         postProcessCostMs = postProcessStartNs > 0L ? (System.nanoTime() - postProcessStartNs) / 1_000_000L : -1L;
+                        break;
 
+                        }
                     } catch (Exception e) {
                         webPublishCostMs = webPublishStartNs > 0L ? (System.nanoTime() - webPublishStartNs) / 1_000_000L : -1L;
                         history.setUploadRetryCount(history.getUploadRetryCount() + 1);
@@ -1841,8 +1828,8 @@ public class RecordBiliPublishService {
                     } finally {
                         TaskUtil.publishTask.remove(history.getId());
                     }
-                }
             }
+        }
         } catch (Exception e) {
             log.error("[BLR] {}", LogKvs.event("Publish.Error")
                     .add("historyId", history.getId())
@@ -2991,7 +2978,9 @@ public class RecordBiliPublishService {
         if (parts == null || parts.isEmpty()) {
             return new ArrayList<>();
         }
-        List<RecordHistoryPart> candidates = parts.stream().filter(p -> !isSkippedPart(p)).collect(Collectors.toList());
+        List<RecordHistoryPart> candidates = parts.stream()
+                .filter(p -> !isSkippedPart(p) && !"TIMESTAMP_JUMP".equals(p.getDeleteFailType()))
+                .collect(Collectors.toList());
         RecordPartPathService.PartSelection selection = partPathService.selectPreferredParts(candidates);
         if (!selection.suppressed().isEmpty()) {
             Long historyId = selection.selected().isEmpty() ? null : selection.selected().get(0).getHistoryId();
@@ -3001,6 +2990,19 @@ public class RecordBiliPublishService {
                     .add("filteredPartIds", joinPartIds(selection.suppressed())));
         }
         return selection.selected();
+    }
+
+    private void clearTimestampJumpIssueIfResolved(RecordHistory history) {
+        if (history == null || !"TIMESTAMP_JUMP".equals(history.getPublishIssueType())) {
+            return;
+        }
+        boolean remains = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()).stream()
+                .anyMatch(part -> "TIMESTAMP_JUMP".equals(part.getDeleteFailType()));
+        if (!remains) {
+            history.setPublishIssueType(null);
+            history.setPublishIssueReason(null);
+            history.setPublishIssuePartCount(0);
+        }
     }
 
     private static String joinPartIds(List<RecordHistoryPart> parts) {
@@ -3039,6 +3041,98 @@ public class RecordBiliPublishService {
             return name.substring(0, dot);
         }
         return name;
+    }
+
+    private String submitWebPublishWithCaptcha(BiliBiliUser user,
+                                                VideoUploadDto videoUploadDto,
+                                                RecordRoom room,
+                                                RecordHistory history) throws InterruptedException {
+        String uploadRes = BiliApi.webPublish(user, videoUploadDto);
+        log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Response")
+                .add("roomId", room.getRoomId())
+                .add("uname", room.getUname())
+                .add("historyId", history.getId())
+                .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
+        if (!StringUtils.contains(uploadRes, "验证码")) {
+            return uploadRes;
+        }
+        try {
+            String voucher = JsonPath.read(uploadRes, "data.v_voucher");
+            Map<String, Object> data = JsonPath.read(uploadRes, "data");
+            log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Required")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", history.getId())
+                    .addIfNotBlank("title", history.getTitle())
+                    .addUrl("captchaUrl", "http://localhost:" + serverPort + "/html/captcha.html"));
+            captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
+            Map<String, String> captchaResult = captchaService.waitForCaptcha();
+            if (captchaResult != null) {
+                if (!captchaResult.containsKey("v_voucher")) {
+                    captchaResult.put("v_voucher", voucher);
+                }
+                log.info("[BLR] {}", LogKvs.event("Publish.Captcha.Submit")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", history.getId())
+                        .add("hasV4", captchaResult.containsKey("captcha_key"))
+                        .add("hasVoucher", captchaResult.containsKey("v_voucher")));
+                uploadRes = BiliApi.webPublish(user, videoUploadDto, captchaResult);
+                log.info("[BLR] {}", LogKvs.event("Publish.Captcha.PublishResponse")
+                        .add("roomId", room.getRoomId())
+                        .add("uname", room.getUname())
+                        .add("historyId", history.getId())
+                        .add("respLen", uploadRes == null ? 0 : uploadRes.length())
+                        .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
+                if (StringUtils.contains(uploadRes, "验证码") || StringUtils.contains(uploadRes, "\"code\":601")) {
+                    log.error("[BLR] {}", LogKvs.event("Publish.Captcha.VerifyFailedPause")
+                            .add("roomId", room.getRoomId())
+                            .add("uname", room.getUname())
+                            .add("historyId", history.getId())
+                            .add("pauseSeconds", 300));
+                    Thread.sleep(300 * 1000L);
+                    throw new RuntimeException("验证码验证失败: " + uploadRes);
+                }
+                return uploadRes;
+            }
+            log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Timeout")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", history.getId())
+                    .add("waitSeconds", 0));
+            Thread.sleep(10 * 1000L);
+            return BiliApi.webPublish(user, videoUploadDto);
+        } catch (Exception e) {
+            log.error("[BLR] {}", LogKvs.event("Publish.Captcha.HandleError")
+                    .add("roomId", room.getRoomId())
+                    .add("uname", room.getUname())
+                    .add("historyId", history.getId()), e);
+            Thread.sleep(120 * 1000L);
+            return BiliApi.webPublish(user, videoUploadDto);
+        }
+    }
+
+    static Set<Long> extractTimestampJumpCids(JSONObject publishData) {
+        if (publishData == null) {
+            return Collections.emptySet();
+        }
+        Object rawCheck = publishData.get("bvc_check");
+        if (!(rawCheck instanceof JSONObject check)) {
+            return Collections.emptySet();
+        }
+        Set<Long> cids = new LinkedHashSet<>();
+        for (String key : check.keySet()) {
+            try {
+                long cid = Long.parseLong(key);
+                if (cid > 0) {
+                    cids.add(cid);
+                }
+            } catch (NumberFormatException ignored) {
+                // 忽略平台返回的非CID诊断键值
+            }
+        }
+        return cids;
     }
 
     private JSONObject parseJsonObject(String raw) {

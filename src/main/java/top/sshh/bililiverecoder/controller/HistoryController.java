@@ -1185,6 +1185,9 @@ public class HistoryController {
             history.setForceArchived(false);
             history.setPublishUserId(null);
             history.setCode(-1);
+            history.setPublishIssueType(null);
+            history.setPublishIssueReason(null);
+            history.setPublishIssuePartCount(0);
             history.setUploadRetryCount(0);
             history.setUpdateTime(now);
             int resetPartCount = 0;
@@ -1636,6 +1639,7 @@ public class HistoryController {
         return criteriaBuilder.and(
                 criteriaBuilder.equal(root.get("publish"), true),
                 root.get("code").in(0, -50),
+                criteriaBuilder.isNull(root.get("publishIssueType")),
                 criteriaBuilder.or(criteriaBuilder.equal(root.get("sendReply"), true), allDmDisabled)
         );
     }
@@ -1662,6 +1666,7 @@ public class HistoryController {
         );
         Predicate isNoUploadArchived = criteriaBuilder.and(
                 criteriaBuilder.equal(root.get("upload"), false),
+                criteriaBuilder.isNull(root.get("publishIssueType")),
                 criteriaBuilder.not(criteriaBuilder.exists(recordingPartExists))
         );
 

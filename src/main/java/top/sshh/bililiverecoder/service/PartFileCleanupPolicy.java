@@ -35,7 +35,7 @@ public class PartFileCleanupPolicy {
                                               String filePath,
                                               String source,
                                               String action) {
-        if (!isProtectedFromPartFileCleanup(history)) {
+        if (!isProtectedFromPartFileCleanup(history, part)) {
             return false;
         }
         log.info("[BLR] {}", LogKvs.event("PartFileCleanup.SkipProtectedArchive")
@@ -48,7 +48,7 @@ public class PartFileCleanupPolicy {
                 .addIfNotBlank("bvid", history.getBvId())
                 .addIfNotBlank("aid", history.getAvId())
                 .add("code", history.getCode())
-                .addIfNotBlank("protectedReason", protectedReason(history))
+                .addIfNotBlank("protectedReason", protectedReason(history, part))
                 .add("forceArchived", history.isForceArchived())
                 .add("partId", part == null ? null : part.getId())
                 .addIfNotBlank("partTitle", part == null ? null : part.getTitle())
@@ -59,7 +59,31 @@ public class PartFileCleanupPolicy {
 
     public boolean isProtectedFromPartFileCleanup(RecordHistory history) {
         return history != null
-                && (history.isForceArchived() || history.getCode() == -2 || history.getCode() == -4);
+                && (history.isForceArchived()
+                || history.getCode() == -2
+                || history.getCode() == -4
+                || "TIMESTAMP_JUMP".equals(history.getPublishIssueType()));
+    }
+
+    public boolean isProtectedFromPartFileCleanup(RecordHistory history, RecordHistoryPart part) {
+        if (history == null) {
+            return false;
+        }
+        if (history.isForceArchived() || history.getCode() == -2 || history.getCode() == -4) {
+            return true;
+        }
+        if (!"TIMESTAMP_JUMP".equals(history.getPublishIssueType())) {
+            return false;
+        }
+        if (history.getPublishIssuePartCount() <= 0) {
+            return true;
+        }
+        return part != null && "TIMESTAMP_JUMP".equals(part.getDeleteFailType());
+    }
+
+    public boolean shouldDeferPostUploadCleanup(RecordHistoryPart part) {
+        RecordHistory history = resolveHistory(part);
+        return history != null && history.isUpload() && !history.isPublish();
     }
 
     public boolean isPostUploadCleanupType(int deleteType) {
@@ -100,7 +124,7 @@ public class PartFileCleanupPolicy {
         return historyRepository.findById(part.getHistoryId()).orElse(null);
     }
 
-    private String protectedReason(RecordHistory history) {
+    private String protectedReason(RecordHistory history, RecordHistoryPart part) {
         if (history == null) {
             return null;
         }
@@ -114,6 +138,11 @@ public class PartFileCleanupPolicy {
         }
         if (history.isForceArchived()) {
             return "forceArchived";
+        }
+        if ("TIMESTAMP_JUMP".equals(history.getPublishIssueType())) {
+            return history.getPublishIssuePartCount() <= 0 || (part != null && "TIMESTAMP_JUMP".equals(part.getDeleteFailType()))
+                    ? "timestampJump"
+                    : null;
         }
         return null;
     }
