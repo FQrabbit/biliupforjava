@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -66,6 +68,8 @@ public class PartPreviewService {
     private ExecutorService executor;
     private String resolvedFfmpegPath;
     private final Map<Long, PreviewTaskStatus> tasks = new ConcurrentHashMap<>();
+    private final Set<String> warnedInvalidPathEntries = ConcurrentHashMap.newKeySet();
+    private volatile String lastScannedPath;
 
     @PostConstruct
     public void init() {
@@ -627,20 +631,44 @@ public class PartPreviewService {
     }
 
     private String findCommandOnPath(String executableName) {
-        String pathEnv = System.getenv("PATH");
+        return findCommandOnPath(System.getenv("PATH"), executableName);
+    }
+
+    String findCommandOnPath(String pathEnv, String executableName) {
         if (StringUtils.isBlank(pathEnv)) {
             return null;
         }
-        for (String entry : pathEnv.split(Pattern.quote(File.pathSeparator))) {
+        String[] entries = pathEnv.split(Pattern.quote(File.pathSeparator), -1);
+        for (int index = 0; index < entries.length; index++) {
+            String entry = entries[index];
             if (StringUtils.isBlank(entry)) {
                 continue;
             }
-            Path candidate = Paths.get(entry).resolve(executableName);
-            if (Files.isRegularFile(candidate)) {
-                return candidate.toAbsolutePath().normalize().toString();
+            try {
+                Path candidate = Paths.get(entry).resolve(executableName);
+                if (Files.isRegularFile(candidate)) {
+                    return candidate.toAbsolutePath().normalize().toString();
+                }
+            } catch (InvalidPathException | SecurityException e) {
+                if (shouldWarnInvalidPathEntry(pathEnv, index, entry)) {
+                    log.warn("[BLR] {}", LogKvs.event("PartPreview.FFmpeg.InvalidPathEntry")
+                            .add("index", index)
+                            .add("entry", entry)
+                            .add("ex", e.getClass().getSimpleName()));
+                }
             }
         }
         return null;
+    }
+
+    private boolean shouldWarnInvalidPathEntry(String pathEnv, int index, String entry) {
+        synchronized (warnedInvalidPathEntries) {
+            if (!StringUtils.equals(lastScannedPath, pathEnv)) {
+                warnedInvalidPathEntries.clear();
+                lastScannedPath = pathEnv;
+            }
+            return warnedInvalidPathEntries.add(index + "\u0000" + entry);
+        }
     }
 
     private String ffmpegExecutableName() {

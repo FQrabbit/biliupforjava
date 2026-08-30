@@ -537,6 +537,7 @@ public final class LogKvs {
         // 视频预览
         EVENT_ZH.put("PartPreview.FFmpeg.NotFound", "视频预览：系统缺少 ffmpeg，生成可拖动 MP4 预览等部分功能可能无法正常使用");
         EVENT_ZH.put("PartPreview.FFmpeg.Resolved", "视频预览：已找到 ffmpeg");
+        EVENT_ZH.put("PartPreview.FFmpeg.InvalidPathEntry", "视频预览：PATH 中存在无效路径项，已跳过");
         EVENT_ZH.put("PartPreview.PrepareFailed", "视频预览：生成可拖动 MP4 预览失败");
         EVENT_ZH.put("PartPreview.CacheCleanupFailed", "视频预览：清理预览缓存失败");
 
