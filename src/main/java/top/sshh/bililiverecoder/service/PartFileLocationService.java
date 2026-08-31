@@ -30,6 +30,55 @@ public class PartFileLocationService {
         public boolean available() { return path != null && location != null; }
     }
 
+    public enum RecoveryStatus { RECOVERED, ALREADY_AVAILABLE, MISSING, ROOT_OFFLINE, SKIPPED_POLICY, FAILED }
+    public record RecoveryResult(RecoveryStatus status, Path path, String reason) {}
+
+    @Transactional
+    public RecoveryResult recoverExact(Long partId) {
+        RecordHistoryPart part = partId == null ? null : partRepository.findById(partId).orElse(null);
+        if (part == null) return new RecoveryResult(RecoveryStatus.FAILED, null, "part missing");
+        if (part.isFileDelete()) return new RecoveryResult(RecoveryStatus.SKIPPED_POLICY, null, "fileDelete=true");
+        List<PartFileLocation> locations = locationRepository.findByPartIdOrderByIdAsc(partId);
+        boolean candidate = locations.isEmpty();
+        for (PartFileLocation l : locations) {
+            if (l.getStorageRootId() == null || l.getState() == PartFileLocation.LocationState.PROCESS_FAILED
+                    || l.getState() == PartFileLocation.LocationState.MISSING_UNEXPECTED) candidate = true;
+            if (l.getState() == PartFileLocation.LocationState.DELETED_BY_POLICY
+                    || l.getState() == PartFileLocation.LocationState.MOVED_AWAY
+                    || l.getState() == PartFileLocation.LocationState.PROCESSING) {
+                if (!candidate) return new RecoveryResult(RecoveryStatus.SKIPPED_POLICY, null, l.getState().name());
+            }
+            if (l.getState() == PartFileLocation.LocationState.AVAILABLE && l.getStorageRootId() != null) {
+                StorageRoot r = rootService.findById(l.getStorageRootId()).orElse(null);
+                if (r != null && !rootService.ensureOnline(r)) return new RecoveryResult(RecoveryStatus.ROOT_OFFLINE, null, "storage root offline");
+            }
+        }
+        if (!candidate) return new RecoveryResult(RecoveryStatus.ALREADY_AVAILABLE, null, null);
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        if (part.getFilePath() != null) paths.add(part.getFilePath());
+        for (PartFileLocation l : locations) if (l.getAbsolutePathSnapshot() != null) paths.add(l.getAbsolutePathSnapshot());
+        for (String value : paths) {
+            try {
+                Path p = Path.of(value);
+                if (!Files.isRegularFile(p)) continue;
+                StorageRootService.RootMatch match = rootService.matchTrustedExisting(p).orElse(null);
+                if (match == null) continue;
+                long size = Files.size(match.resolvedPath());
+                if (size <= 0 || (part.getFileSize() > 0 && part.getFileSize() != size)) continue;
+                PartFileLocation target = locations.stream().filter(l -> Objects.equals(l.getStorageRootId(), match.root().getId())
+                        && Objects.equals(l.getRelativePath(), match.relativePath())).findFirst().orElseGet(PartFileLocation::new);
+                target.setPartId(partId); target.setStorageRootId(match.root().getId()); target.setRelativePath(match.relativePath());
+                target.setAbsolutePathSnapshot(match.resolvedPath().toString()); target.setRole(PartFileLocation.LocationRole.PRIMARY);
+                target.setState(PartFileLocation.LocationState.AVAILABLE); target.setExpectedSize(size);
+                target.setLastVerifiedAt(LocalDateTime.now()); target.setErrorMessage(null); locationRepository.save(target);
+                for (PartFileLocation other : locations) if (!Objects.equals(other.getId(), target.getId()) && other.getRole() == PartFileLocation.LocationRole.PRIMARY) { other.setRole(PartFileLocation.LocationRole.REPLICA); locationRepository.save(other); }
+                part.setFileSize(size); part.setFilePath(match.resolvedPath().toString().replace('\\','/')); part.setUpdateTime(LocalDateTime.now()); partRepository.save(part);
+                return new RecoveryResult(RecoveryStatus.RECOVERED, match.resolvedPath(), null);
+            } catch (Exception e) { return new RecoveryResult(RecoveryStatus.FAILED, null, e.getClass().getSimpleName()+": "+e.getMessage()); }
+        }
+        return new RecoveryResult(RecoveryStatus.MISSING, null, "exact path unavailable");
+    }
+
     public record LocalFileView(LocalFileState state, boolean available, boolean expected,
                                 String primaryPath, String storageType, String rootStatus, long replicaCount,
                                 String message) {}
@@ -105,7 +154,32 @@ public class PartFileLocationService {
         PartFileLocation primary = null;
         for (PartFileLocation location : locations) {
             if (location.getRole() == PartFileLocation.LocationRole.PRIMARY) primary = location;
-            if (location.getState() != PartFileLocation.LocationState.AVAILABLE || location.getStorageRootId() == null) continue;
+            if (location.getState() == PartFileLocation.LocationState.DELETED_BY_POLICY
+                    || location.getState() == PartFileLocation.LocationState.MOVED_AWAY
+                    || location.getState() == PartFileLocation.LocationState.PROCESSING) continue;
+            if (location.getStorageRootId() == null) {
+                repairUntrustedLocation(part, location);
+                if (location.getStorageRootId() == null) continue;
+            }
+            if (location.getState() == PartFileLocation.LocationState.MISSING_UNEXPECTED) {
+                StorageRoot knownRoot = rootService.findById(location.getStorageRootId()).orElse(null);
+                if (knownRoot != null && rootService.ensureOnline(knownRoot)) {
+                    try {
+                        Path knownPath = rootService.resolve(knownRoot, location.getRelativePath());
+                        if (Files.isRegularFile(knownPath)
+                                && (location.getExpectedSize() <= 0 || Files.size(knownPath) == location.getExpectedSize())) {
+                            location.setState(PartFileLocation.LocationState.AVAILABLE);
+                            location.setAbsolutePathSnapshot(knownPath.toString());
+                            location.setLastVerifiedAt(LocalDateTime.now());
+                            location.setErrorMessage(null);
+                            locationRepository.save(location);
+                        }
+                    } catch (Exception ignored) {
+                        // 暂时保持缺失状态，等后续精确路径检查成功再说
+                    }
+                }
+            }
+            if (location.getState() != PartFileLocation.LocationState.AVAILABLE) continue;
             StorageRoot root = rootService.findById(location.getStorageRootId()).orElse(null);
             if (root == null || !rootService.ensureOnline(root)) {
                 if (offlineRoot == null) {
@@ -141,6 +215,51 @@ public class PartFileLocationService {
                 .orElse(primary);
         PartFileLocation.LocationState state = representative == null ? null : representative.getState();
         return new FileResolution(mapState(state), null, representative, null, messageFor(state));
+    }
+
+    /**
+     * 只修复录制管线持久化的确切路径
+     * 这里特意不做目录扫描,这样对配置的驱动器根目录是安全的
+     * 也不会发现无关文件
+     */
+    private void repairUntrustedLocation(RecordHistoryPart part, PartFileLocation location) {
+        if (part.isFileDelete()) return;
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        if (location.getAbsolutePathSnapshot() != null) candidates.add(location.getAbsolutePathSnapshot());
+        if (part.getFilePath() != null) candidates.add(part.getFilePath());
+        for (String value : candidates) {
+            try {
+                Path candidate = Path.of(value);
+                if (!Files.isRegularFile(candidate)) continue;
+                StorageRootService.RootMatch match = rootService.matchTrustedExisting(candidate).orElse(null);
+                if (match == null) continue;
+                long size = Files.size(match.resolvedPath());
+                if (size <= 0) continue;
+                if (location.getExpectedSize() > 0 && size != location.getExpectedSize()) continue;
+                for (PartFileLocation current : locationRepository.findByPartIdOrderByIdAsc(part.getId())) {
+                    if (!Objects.equals(current.getId(), location.getId())
+                            && current.getRole() == PartFileLocation.LocationRole.PRIMARY) {
+                        current.setRole(PartFileLocation.LocationRole.REPLICA);
+                        locationRepository.save(current);
+                    }
+                }
+                location.setStorageRootId(match.root().getId());
+                location.setRelativePath(match.relativePath());
+                location.setAbsolutePathSnapshot(match.resolvedPath().toString());
+                location.setRole(PartFileLocation.LocationRole.PRIMARY);
+                location.setState(PartFileLocation.LocationState.AVAILABLE);
+                location.setExpectedSize(size);
+                location.setLastVerifiedAt(LocalDateTime.now());
+                location.setErrorMessage(null);
+                locationRepository.save(location);
+                part.setFilePath(match.resolvedPath().toString().replace('\\', '/'));
+                if (part.getFileSize() <= 0 || part.getFileSize() != size) part.setFileSize(size);
+                partRepository.save(part);
+                return;
+            } catch (Exception ignored) {
+                // 保留原始状态，尝试下一个确切持久化的路径
+            }
+        }
     }
 
     @Transactional

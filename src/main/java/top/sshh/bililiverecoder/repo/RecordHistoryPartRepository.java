@@ -20,6 +20,12 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     @Query("select p from RecordHistoryPart p where p.roomId = ?1 and (p.recording = true or p.endTime is null) order by p.id desc")
     List<RecordHistoryPart> findOpenCandidatesByRoomId(String roomId);
 
+    @Query("select p from RecordHistoryPart p where p.recording = true or p.endTime is null order by p.id asc")
+    List<RecordHistoryPart> findOpenCandidates(Pageable pageable);
+
+    @Query("select p from RecordHistoryPart p where p.id > ?1 and (p.recording = true or p.endTime is null) order by p.id asc")
+    List<RecordHistoryPart> findOpenCandidatesAfterId(Long id, Pageable pageable);
+
     @Query("""
             select p from RecordHistoryPart p
             where p.historyId = ?1
@@ -69,6 +75,9 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     List<RecordHistoryPart> findByRoomIdAndSessionIdOrderByIdDesc(String roomId, String sessionId);
 
     List<RecordHistoryPart> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
+
+    @Query("select p from RecordHistoryPart p where p.id > ?1 and p.filePath is not null and p.historyId is not null and p.upload = false and exists (select 1 from RecordHistory h where h.id = p.historyId and h.upload = true and h.publish = false and h.forceArchived = false and (h.uploadPaused is null or h.uploadPaused = false)) order by p.id asc")
+    List<RecordHistoryPart> findStorageRecoveryCandidatesAfterId(Long id, Pageable pageable);
 
     @Query("""
             select p from RecordHistoryPart p
@@ -166,13 +175,16 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
           and (p.deleteFailType is null or p.deleteFailType not in ('SKIPPED_THRESHOLD', 'MANUAL_SKIP'))
-          and p.endTime between :startTime and :endTime
+          and p.endTime is not null
+          and (p.endTime between :startTime and :endTime or p.updateTime >= :startTime)
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
                 and h.upload = true
+                and h.forceArchived = false
                 and (h.uploadPaused is null or h.uploadPaused = false)
                 and h.publish = false
+                and h.forceArchived = false
           )
         order by p.endTime asc
         """)
@@ -187,7 +199,8 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and (p.uploadPaused is null or p.uploadPaused = false)
           and p.uploadRetryCount < 9999
           and (p.deleteFailType is null or p.deleteFailType not in ('SKIPPED_THRESHOLD', 'MANUAL_SKIP'))
-          and p.endTime between :startTime and :endTime
+          and p.endTime is not null
+          and (p.endTime between :startTime and :endTime or p.updateTime >= :startTime)
           and (p.sourceType is null or p.sourceType <> 'EDIT_PART')
           and exists (
               select 1 from RecordHistory h

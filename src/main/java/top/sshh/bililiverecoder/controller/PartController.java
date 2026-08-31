@@ -480,7 +480,13 @@ public class PartController {
             changed = true;
         }
         if (part.getEndTime() == null) {
-            part.setEndTime(LocalDateTime.now());
+            LocalDateTime fileTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(file.lastModified()), java.time.ZoneId.systemDefault());
+            if (part.getStartTime() != null && fileTime.isBefore(part.getStartTime())) {
+                result.put("type", "warning");
+                result.put("msg", "文件时间早于分P开始时间，拒绝自动收尾");
+                return result;
+            }
+            part.setEndTime(fileTime);
             changed = true;
         }
         long size = file.length();
@@ -493,25 +499,6 @@ public class PartController {
         }
 
         boolean triggered = false;
-        Optional<RecordHistory> historyOptional = part.getHistoryId() == null ? Optional.empty() : historyRepository.findById(part.getHistoryId());
-        if (!shutdownState.isShuttingDown() && historyOptional.isPresent()
-                && historyOptional.get().isUpload() && !historyOptional.get().isPublish()) {
-            RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
-            if (room != null) {
-                try {
-                    uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);
-                    triggered = true;
-                } catch (Exception e) {
-                    log.error("[BLR] {}", LogKvs.event("PartRepair.Rescan.UploadTriggerFailed")
-                            .add("partId", part.getId())
-                            .add("historyId", part.getHistoryId())
-                            .add("roomId", part.getRoomId())
-                            .add("err", e.getMessage())
-                            .add("ex", e.getClass().getSimpleName())
-                            .addStageCostMs("total", totalStartNs), e);
-                }
-            }
-        }
 
         log.info("[BLR] {}", LogKvs.event("PartRepair.Rescan.Done")
                 .add("partId", part.getId())
@@ -522,7 +509,7 @@ public class PartController {
                 .addStageCostMs("total", totalStartNs));
 
         result.put("type", "success");
-        result.put("msg", triggered ? "已重试扫描并触发上传" : "已重试扫描并修正状态");
+        result.put("msg", "已重试扫描并修正状态，上传将由补偿任务处理");
         return result;
     }
 

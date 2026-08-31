@@ -12,6 +12,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import top.sshh.bililiverecoder.entity.PartFileLocation;
 import top.sshh.bililiverecoder.entity.PartFileOperation;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
+import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.StorageRoot;
 import top.sshh.bililiverecoder.repo.PartFileLocationRepository;
@@ -39,7 +40,7 @@ import static org.mockito.Mockito.doThrow;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({StorageRootService.class, PartFileLocationService.class,
         PartFileOperationService.class, PartFileStorageAdapter.class,
-        StorageLifecycleMigrationService.class})
+        StorageLifecycleMigrationService.class, RecordPartStaleReconciler.class})
 class PartFileLifecycleServiceTest {
 
     @TempDir
@@ -61,6 +62,8 @@ class PartFileLifecycleServiceTest {
     @Autowired
     private RecordHistoryPartRepository partRepository;
     @Autowired
+    private top.sshh.bililiverecoder.repo.RecordHistoryRepository historyRepository;
+    @Autowired
     private PartFileLocationRepository locationRepository;
     @Autowired
     private PartFileOperationRepository operationRepository;
@@ -72,6 +75,8 @@ class PartFileLifecycleServiceTest {
     private SystemConfigRepository configRepository;
     @Autowired
     private StorageLifecycleMigrationService migrationService;
+    @Autowired
+    private RecordPartStaleReconciler staleReconciler;
 
     @Test
     void moveVerifiesTargetSwitchesPrimaryAndIsIdempotent() throws Exception {
@@ -253,6 +258,72 @@ class PartFileLifecycleServiceTest {
     }
 
     @Test
+    void driveRootContainmentIsSegmentAwareOnWindows() {
+        if (!System.getProperty("os.name", "").toLowerCase().contains("win")) return;
+        Path driveRoot = Path.of("D:\\");
+        assertTrue(StorageRootService.isUnder(driveRoot, Path.of("D:\\recordings\\clip.flv")));
+        assertTrue(StorageRootService.isUnder(driveRoot, Path.of("d:\\recordings\\clip.flv")));
+        Path recordingsRoot = Path.of("D:\\recordings");
+        assertFalse(StorageRootService.isUnder(recordingsRoot, Path.of("D:\\recordings2\\clip.flv")));
+    }
+
+    @Test
+    void resolveReadableRepairsExistingLegacyProcessFailureUnderTrustedRoot() throws Exception {
+        Path source = createVideo("legacy-repair/video.flv", "legacy-repair-data");
+        RecordHistoryPart part = createPartRecord(source, false, Files.size(source));
+        PartFileLocation broken = new PartFileLocation();
+        broken.setPartId(part.getId());
+        broken.setStorageRootId(null);
+        broken.setRelativePath(source.getFileName().toString());
+        broken.setAbsolutePathSnapshot(source.toString());
+        broken.setRole(PartFileLocation.LocationRole.PRIMARY);
+        broken.setState(PartFileLocation.LocationState.PROCESS_FAILED);
+        broken.setExpectedSize(Files.size(source));
+        locationRepository.save(broken);
+
+        PartFileLocationService.FileResolution resolution = locationService.resolveReadable(part.getId());
+
+        assertTrue(resolution.available());
+        assertEquals(PartFileLocationService.LocalFileState.AVAILABLE_WORK, resolution.state());
+        PartFileLocation repaired = locationRepository.findById(broken.getId()).orElseThrow();
+        assertNotNull(repaired.getStorageRootId());
+        assertEquals(PartFileLocation.LocationState.AVAILABLE, repaired.getState());
+    }
+
+    @Test
+    void staleStablePartIsClosedAndHistoryIsClosed() throws Exception {
+        Path source = createVideo("stale-repair/video.flv", "stale-repair-data");
+        Files.setLastModifiedTime(source, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 11 * 60 * 1000L));
+        String roomId = "stale-room-" + UUID.randomUUID();
+        RecordHistory history = new RecordHistory();
+        history.setRoomId(roomId);
+        history.setEventId("history-" + UUID.randomUUID());
+        history.setRecording(true);
+        history.setUpload(true);
+        history = historyRepository.save(history);
+        RecordRoom room = new RecordRoom();
+        room.setRoomId(roomId);
+        room.setHistoryId(history.getId());
+        room.setRecording(false);
+        roomRepository.save(room);
+        RecordHistoryPart part = createPartRecord(source, false, Files.size(source));
+        part.setRoomId(roomId);
+        part.setHistoryId(history.getId());
+        part.setRecording(true);
+        part.setStartTime(java.time.LocalDateTime.now().minusMinutes(20));
+        part.setEndTime(null);
+        part = partRepository.save(part);
+        locationService.registerPrimary(part);
+
+        assertEquals(1, staleReconciler.reconcileBatch());
+        RecordHistoryPart repaired = partRepository.findById(part.getId()).orElseThrow();
+        assertFalse(repaired.isRecording());
+        assertNotNull(repaired.getEndTime());
+        assertTrue(repaired.getDuration() > 0);
+        assertFalse(historyRepository.findById(history.getId()).orElseThrow().isRecording());
+    }
+
+    @Test
     void futureOnlyKeepsOldRootAndActivatesConfiguredWorkRoot() throws Exception {
         Path oldRoot = Files.createDirectories(tempDir.resolve("work-future-old"));
         StorageRoot previous = repointActiveWorkRoot(oldRoot);
@@ -424,8 +495,15 @@ class PartFileLifecycleServiceTest {
     @Test
     void legacyMigrationIsRepeatableAndPreservesSubmissionState() throws Exception {
         Path source = createVideo("migration/video.flv", "migration-data");
+        RecordHistory history = new RecordHistory();
+        history.setRoomId("migration-room");
+        history.setEventId("migration-history-" + UUID.randomUUID());
+        history.setUpload(true);
+        history.setPublish(false);
+        history = historyRepository.save(history);
         RecordHistoryPart part = createPartRecord(source, false, Files.size(source));
-        part.setUpload(true);
+        part.setHistoryId(history.getId());
+        part.setUpload(false);
         part.setDeleteFailType("NETWORK_ERROR");
         part = partRepository.save(part);
         Path archive = Files.createDirectories(tempDir.resolve("archive-from-room"));
@@ -446,7 +524,7 @@ class PartFileLifecycleServiceTest {
         assertEquals(PartFileLocation.LocationState.AVAILABLE,
                 locationService.findLocations(part.getId()).get(0).getState());
         RecordHistoryPart unchanged = partRepository.findById(part.getId()).orElseThrow();
-        assertTrue(unchanged.isUpload());
+        assertFalse(unchanged.isUpload());
         assertEquals("NETWORK_ERROR", unchanged.getDeleteFailType());
         assertTrue(rootService.findAll().stream().anyMatch(root ->
                 root.getRootType() == StorageRoot.RootType.ARCHIVE

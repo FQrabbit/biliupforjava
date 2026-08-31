@@ -321,11 +321,18 @@ public class StorageRootService {
         }
     }
 
-    private static boolean isUnder(Path base, Path child) {
-        if (!isWindows()) return child.startsWith(base);
-        String baseValue = base.toString().toLowerCase(Locale.ROOT);
-        String childValue = child.toString().toLowerCase(Locale.ROOT);
-        return childValue.equals(baseValue) || childValue.startsWith(baseValue + java.io.File.separator.toLowerCase(Locale.ROOT));
+    static boolean isUnder(Path base, Path child) {
+        if (base == null || child == null) return false;
+        try {
+            Path normalizedBase = base.toAbsolutePath().normalize();
+            Path normalizedChild = child.toAbsolutePath().normalize();
+            // Windows Path 提供程序执行不区分大小写、按段（segment）感知的比较
+            // 字符串前缀检查对于驱动器根目录是错误的
+            // （D:\ + 分隔符会变成 D:\\）
+            return normalizedChild.startsWith(normalizedBase);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static boolean isWindows() {
