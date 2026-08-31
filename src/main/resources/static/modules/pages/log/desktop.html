@@ -135,7 +135,7 @@
                                     <el-tag :type="getAlertType(alert.type)" size="mini" effect="plain">{{ alert.type }}</el-tag>
                                     <span class="alert-sidebar-count" v-if="alert.count > 1">×{{ alert.count }}</span>
                                 </div>
-                                <div class="alert-sidebar-time">{{ formatDate(alert.lastTime || alert.timestamp) }}</div>
+                                <div class="alert-sidebar-time">{{ formatDate(alert.lastTime || alert.timestamp) }}<span v-if="alert.firstTime"> · 首次 {{ formatDate(alert.firstTime) }}</span></div>
                                 <div class="alert-sidebar-msg">{{ getBriefMessage(alert.message) }}</div>
                                 <div class="alert-sidebar-actions">
                                     <el-button size="mini" type="text" @click="showContext(alert)">上下文</el-button>
@@ -257,7 +257,7 @@
                     </el-input>
                 </div>
                 <div class="filter-right">
-                    <span style="color: #909399; font-size: 12px;">{{ filteredAllDetails.length }} / {{ alerts.length }} 条</span>
+                    <span style="color: #909399; font-size: 12px;">{{ filteredAllDetails.length }} / {{ alerts.length }} 类</span>
                 </div>
             </div>
 
@@ -289,7 +289,7 @@
                     <el-table-column label="告警信息" min-width="400">
                         <template slot-scope="scope">
                             <span style="font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; display: block;">
-                                {{ scope.row.message }}
+                                <strong v-if="scope.row.event">{{ scope.row.event }}<span v-if="scope.row.retryCategory"> · {{ scope.row.retryCategory }}</span><span v-if="scope.row.host"> · {{ scope.row.host }}</span><br></strong>{{ scope.row.message }}
                             </span>
                         </template>
                     </el-table-column>

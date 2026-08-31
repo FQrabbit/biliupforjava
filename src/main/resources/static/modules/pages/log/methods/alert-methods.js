@@ -65,15 +65,24 @@
             var self = this;
             LogApi.alerts(function (data) {
                 if (self.componentDestroyed) return;
-                var previousCount = self.alerts.length;
+                var previousAlerts = self.alerts;
                 self.alerts = data;
-                if (self.alerts.length > 0 && self.alerts.length > previousCount) {
+                var previousByFingerprint = {};
+                previousAlerts.forEach(function (alert) {
+                    previousByFingerprint[alert.fingerprint || (alert.type + '|' + alert.message)] = alert;
+                });
+                var shouldNotify = self.alerts.some(function (alert) {
+                    var key = alert.fingerprint || (alert.type + '|' + alert.message);
+                    var previous = previousByFingerprint[key];
+                    return !previous || (alert.level === 'ERROR' && previous.level !== 'ERROR');
+                });
+                if (self.alerts.length > 0 && shouldNotify) {
                     if (!self.sidebarVisible && window.innerWidth >= 1024) {
                         self.sidebarVisible = true;
                     }
                     self.$notify({
                         title: '系统异常提醒',
-                        message: '发现 ' + self.alerts.length + ' 条异常记录',
+                        message: '发现 ' + self.alerts.length + ' 类异常',
                         type: 'warning',
                         position: 'bottom-right',
                         duration: 3000

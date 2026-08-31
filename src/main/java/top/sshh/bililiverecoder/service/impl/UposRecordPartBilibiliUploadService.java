@@ -904,7 +904,8 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                     if (finalUseMultipartFlow && finalMultipartSession != null) {
                                                         multipartUploadSessionService.markRetryWait(finalMultipartSession, retryMessage);
                                                     }
-                                                    log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Retryable")
+                                                    if (chunkRetryCount + 1 >= UploadRetryLogPolicy.CHUNK_WARN_RETRY_THRESHOLD) {
+                                                        log.warn("[BLR] {}", LogKvs.event("Upload.Chunk.Retryable")
                                                             .add("roomId", room.getRoomId())
                                                             .add("uname", room.getUname())
                                                             .add("partId", partId)
@@ -912,11 +913,28 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                             .add("chunkIndex", finalI)
                                                             .add("chunkRetryCount", chunkRetryCount + 1)
                                                             .add("retryCategory", retryAssessment.category())
+                                                            .add("host", resolveUploadHost(finalPreUploadBean))
                                                             .addIfNotBlank("remoteCode", retryAssessment.remoteCode())
                                                             .add("backoffMs", backoffMs)
                                                             .addIfNotBlank("reason", retryMessage)
                                                             .addIfNotBlank("err", e.getMessage())
                                                             .add("ex", e.getClass().getSimpleName()), e);
+                                                    } else {
+                                                        log.info("[BLR] {}", LogKvs.event("Upload.Chunk.Retryable")
+                                                                .add("roomId", room.getRoomId())
+                                                                .add("uname", room.getUname())
+                                                                .add("partId", partId)
+                                                                .add("historyId", historyId)
+                                                                .add("chunkIndex", finalI)
+                                                                .add("chunkRetryCount", chunkRetryCount + 1)
+                                                                .add("retryCategory", retryAssessment.category())
+                                                                .add("host", resolveUploadHost(finalPreUploadBean))
+                                                                .addIfNotBlank("remoteCode", retryAssessment.remoteCode())
+                                                                .add("backoffMs", backoffMs)
+                                                                .addIfNotBlank("reason", retryMessage)
+                                                                .addIfNotBlank("err", e.getMessage())
+                                                                .add("ex", e.getClass().getSimpleName()), e);
+                                                    }
                                                     chunkRetryCount++;
                                                     try {
                                                         Thread.sleep(backoffMs);

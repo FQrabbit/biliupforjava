@@ -9,6 +9,10 @@ public class LogAlert {
     private String message;
     private Date timestamp;
     private String level;
+    private String fingerprint;
+    private String event;
+    private String retryCategory;
+    private String host;
     private boolean read;
     private int count;
     private Date firstTime;
@@ -23,6 +27,15 @@ public class LogAlert {
         this.lastTime = this.timestamp;
         this.read = false;
         this.count = 1;
+    }
+
+    public LogAlert(String type, String message, String level, String fingerprint,
+                    String event, String retryCategory, String host) {
+        this(type, message, level);
+        this.fingerprint = fingerprint;
+        this.event = event;
+        this.retryCategory = retryCategory;
+        this.host = host;
     }
 
     public void incrementCount() {

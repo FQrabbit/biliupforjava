@@ -8,6 +8,10 @@ import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -16,6 +20,7 @@ public class LogAnalyzeService {
     private static LogAnalyzeService instance;
     private final List<LogAlert> alerts = new CopyOnWriteArrayList<>();
     private static final int MAX_ALERTS = 100;
+    private static final Pattern KV_PATTERN = Pattern.compile("(?:^|[|\\s])([A-Za-z][A-Za-z0-9.]*)=([^|]*)");
 
     @PostConstruct
     public void init() {
@@ -47,15 +52,29 @@ public class LogAnalyzeService {
         }
 
         if (type != null) {
-            addAlert(new LogAlert(type, message, level));
+            Map<String, String> fields = parseFields(message);
+            String event = fields.get("event");
+            String retryCategory = fields.getOrDefault("retryCategory", fields.get("category"));
+            String host = fields.getOrDefault("host", fields.get("uploadHost"));
+            String fingerprint = buildFingerprint(type, message, event, retryCategory, host);
+            addAlert(new LogAlert(type, message, level, fingerprint, event, retryCategory, host));
         }
     }
 
     private synchronized void addAlert(LogAlert newAlert) {
         // 检查是否存在重复日志
         for (LogAlert alert : alerts) {
-            if (alert.getMessage().equals(newAlert.getMessage()) && alert.getType().equals(newAlert.getType())) {
+            if (java.util.Objects.equals(alert.getFingerprint(), newAlert.getFingerprint())) {
                 alerts.remove(alert); // 移除旧日志
+                if ("ERROR".equalsIgnoreCase(newAlert.getLevel())
+                        && !"ERROR".equalsIgnoreCase(alert.getLevel())) {
+                    alert.setLevel(newAlert.getLevel());
+                    alert.setType(newAlert.getType());
+                }
+                alert.setMessage(newAlert.getMessage());
+                alert.setEvent(newAlert.getEvent());
+                alert.setRetryCategory(newAlert.getRetryCategory());
+                alert.setHost(newAlert.getHost());
                 alert.incrementCount(); // 更新计数和时间
                 alerts.add(alert); // 重新添加到末尾（表示最新）
                 return;
@@ -74,5 +93,32 @@ public class LogAnalyzeService {
     
     public void clearAlerts() {
         alerts.clear();
+    }
+
+    private static Map<String, String> parseFields(String message) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        Matcher matcher = KV_PATTERN.matcher(message);
+        while (matcher.find()) {
+            fields.put(matcher.group(1), matcher.group(2).trim());
+        }
+        return fields;
+    }
+
+    private static String buildFingerprint(String type, String message, String event,
+                                           String retryCategory, String host) {
+        if (event != null && !event.isBlank()) {
+            return String.join("|", event,
+                    valueOrUnknown(retryCategory), valueOrUnknown(host));
+        }
+        return type + "|" + normalizeMessage(message);
+    }
+
+    private static String normalizeMessage(String message) {
+        return message.replaceAll("\\b(roomId|historyId|partId|chunkIndex|chunkRetryCount|globalFailCount|backoffMs|timestamp)=([^| ]+)", "$1=?")
+                .replaceAll("\\s+", " ").trim();
+    }
+
+    private static String valueOrUnknown(String value) {
+        return value == null || value.isBlank() ? "?" : value;
     }
 }

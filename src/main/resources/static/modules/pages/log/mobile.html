@@ -393,7 +393,7 @@
                 <div>
                     <span>ALERTS</span>
                     <h3>告警详情</h3>
-                    <p>{{ filteredAllDetails.length }} / {{ alerts.length }} 条</p>
+                    <p>{{ filteredAllDetails.length }} / {{ alerts.length }} 类</p>
                 </div>
                 <button type="button" @click="allDetailsDialogVisible = false" aria-label="关闭告警详情">
                     <i class="el-icon-close"></i>
@@ -419,7 +419,7 @@
                     <div class="mobile-log-alert-meta">
                         <span :class="'is-' + getAlertType(alert.type)">{{ alert.type }}</span>
                         <em v-if="alert.count > 1">×{{ alert.count }}</em>
-                        <time>{{ formatDate(alert.lastTime || alert.timestamp) }}</time>
+                        <time>{{ formatDate(alert.lastTime || alert.timestamp) }}<span v-if="alert.firstTime"> · 首次 {{ formatDate(alert.firstTime) }}</span></time>
                     </div>
                     <p>{{ getBriefMessage(alert.message) }}</p>
                     <div class="mobile-log-alert-actions">
