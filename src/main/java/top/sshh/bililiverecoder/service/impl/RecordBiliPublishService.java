@@ -1405,6 +1405,7 @@ public class RecordBiliPublishService {
                     for (int i = 0; i < uploadParts.size(); i++) {
                         RecordHistoryPart uploadPart = uploadParts.get(i);
                         SingleVideoDto dto = new SingleVideoDto();
+                        uploadPart.setSourcePartOrder(i + 1);
                         Map<String, Object> partTemplateMap = buildPartTemplateMap(historyTemplateMap, uploadPart, i + 1);
                         String partTitle = this.template(room.getPartTitleTemplate(), partTemplateMap).getDesc();
                         dto.setTitle(partTitle);
@@ -2450,6 +2451,7 @@ public class RecordBiliPublishService {
     private RecordHistoryPart syncEditPartLocalState(RecordHistoryPart part, int page, String title, String filePath, String fileName, Long cid, Long fileSize) {
         part.setPage(page);
         part.setPartOrder(page);
+        part.setSourcePartOrder(page);
         part.setTitle(title);
         if (StringUtils.isNotBlank(filePath)) {
             part.setFilePath(filePath);

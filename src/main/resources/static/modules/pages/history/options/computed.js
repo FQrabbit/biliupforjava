@@ -147,7 +147,7 @@
                     if (issueCode === 'SKIPPED_THRESHOLD' || issueCode === 'MANUAL_SKIP' || issueCode === 'GIVE_UP') {
                         state = 'SKIPPED';
                         percent = 100;
-                    } else if (blocking || actionable) {
+                    } else if (blocking || actionable || issueCode === 'TIMESTAMP_JUMP') {
                         state = 'ISSUE';
                         percent = 0;
                     }
@@ -158,8 +158,11 @@
                 return {
                     partId: p.id,
                     mergedPartIds: Array.isArray(p.mergedPartIds) ? p.mergedPartIds.slice() : [p.id],
-                    // 如果线上顺序无效 (<=0)，则使用 index + 1 作为备选
-                    page: (p.displayPartOrder && p.displayPartOrder > 0) ? p.displayPartOrder : ((p.partOrder && p.partOrder > 0) ? p.partOrder : ((p.page && p.page > 0) ? p.page : (index + 1))),
+                    // page 保持线上页码语义；展示序号单独使用 sourcePage。
+                    page: (p.onlinePage && p.onlinePage > 0) ? p.onlinePage : ((p.page && p.page > 0) ? p.page : 0),
+                    sourcePage: (p.sourcePage && p.sourcePage > 0) ? p.sourcePage : null,
+                    onlinePage: (p.onlinePage && p.onlinePage > 0) ? p.onlinePage : ((p.page && p.page > 0) ? p.page : null),
+                    sourcePageSource: p.sourcePageSource || 'UNKNOWN',
                     title: p.title,
                     fileName: p.fileName,
                     upload: p.upload,
@@ -214,7 +217,7 @@
                     });
                     // 如果 ID 匹配不到，尝试通过 page 匹配 (fallback)
                     if (!match && !mergedIntoOtherPart && active.page) {
-                        match = parts.find(p => p.page === active.page);
+                        match = parts.find(p => p.onlinePage === active.page);
                     }
 
                     if (match) {
@@ -240,7 +243,11 @@
             }
 
             // 按分P排序
-            parts.sort((a, b) => a.page - b.page);
+            parts.sort((a, b) => {
+                const aOrder = a.sourcePage || a.onlinePage || Number.MAX_SAFE_INTEGER;
+                const bOrder = b.sourcePage || b.onlinePage || Number.MAX_SAFE_INTEGER;
+                return aOrder - bOrder;
+            });
             return parts;
         },
         isAuditRejected: function() {

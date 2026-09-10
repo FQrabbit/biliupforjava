@@ -48,6 +48,12 @@ public class RecordHistoryPart {
     @Column(name = "part_order")
     private Integer partOrder;
 
+    /**
+     * 最近一次明确投稿/编辑时的内容顺序。与 B 站当前 page 以及内部 partOrder 分离
+     */
+    @Column(name = "source_part_order")
+    private Integer sourcePartOrder;
+
     private float duration;
 
     /**

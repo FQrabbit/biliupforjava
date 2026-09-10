@@ -41,6 +41,7 @@ public class DatabaseSchemaColumnPatchRunner implements ApplicationRunner {
             ensureColumnIfMissing("record_history", "publish_issue_part_count", "INT DEFAULT 0");
             ensureColumnIfMissing("record_history_part", "manual_skip", "BOOLEAN DEFAULT FALSE");
             ensureColumnIfMissing("record_history_part", "skip_reason", "VARCHAR(255)");
+            ensureColumnIfMissing("record_history_part", "source_part_order", "INT");
             ensureColumnIfMissing("room_live_gift_catalog", "room_id", "VARCHAR(255)");
             ensureColumnIfMissing("room_live_session_stats", "imported_snapshot", "BOOLEAN DEFAULT FALSE NOT NULL");
             dropSingleColumnUniqueConstraintIfExists("room_live_gift_catalog", "gift_id");

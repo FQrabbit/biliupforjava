@@ -313,6 +313,8 @@
             return windowsPath ? normalized.toLowerCase() : normalized;
         },
         getPartLogicalOrder: function(part, index) {
+            var sourcePage = Number(part && part.sourcePage);
+            if (isFinite(sourcePage) && sourcePage > 0) return sourcePage;
             var partOrder = Number(part && part.partOrder);
             if (isFinite(partOrder) && partOrder > 0) return partOrder;
             var page = Number(part && part.page);

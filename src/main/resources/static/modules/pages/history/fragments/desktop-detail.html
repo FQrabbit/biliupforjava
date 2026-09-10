@@ -430,7 +430,8 @@
                 <div v-show="showAllParts" class="progress-list-modern" ref="partsList">
                     <div class="progress-row-modern item" v-for="(p, idx) in mergedParts" :key="p.partId || idx">
                         <div class="progress-info-mini">
-                            <span class="part-badge">P{{ p.page }}</span>
+                            <span class="part-badge">{{ p.issueCode && !p.onlinePage ? (p.sourcePage ? '原 P' + p.sourcePage : '未上线') : (p.sourcePage ? 'P' + p.sourcePage : (p.onlinePage ? 'P' + p.onlinePage : '未上线')) }}</span>
+                            <span v-if="p.onlinePage && p.sourcePage && p.onlinePage !== p.sourcePage" class="part-meta">线上 P{{ p.onlinePage }}</span>
                             <span class="part-status" :class="p.state">{{ formatProgressState(p.state) }}</span>
                             <span class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</span>
                             <span class="part-meta">

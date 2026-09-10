@@ -194,6 +194,15 @@ public class PartController {
             m.put("historyId", p.getHistoryId());
             m.put("page", p.getPage());
             m.put("partOrder", p.getPartOrder());
+            Integer sourcePage = p.getSourcePartOrder();
+            String sourcePageSource = "PERSISTED";
+            if (sourcePage == null || sourcePage <= 0) {
+                sourcePage = parseTitlePartNumber(p.getTitle());
+                sourcePageSource = sourcePage == null ? "UNKNOWN" : "TITLE_PREFIX";
+            }
+            m.put("sourcePage", sourcePage);
+            m.put("onlinePage", p.getPage() > 0 ? p.getPage() : null);
+            m.put("sourcePageSource", sourcePageSource);
             m.put("title", p.getTitle());
             m.put("fileName", p.getFileName());
             m.put("filePath", p.getFilePath());
@@ -1100,6 +1109,25 @@ public class PartController {
 
     private static boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
+    }
+
+    static Integer parseTitlePartNumber(String title) {
+        if (isBlank(title) || title.charAt(0) != 'P') {
+            return null;
+        }
+        int index = 1;
+        while (index < title.length() && Character.isDigit(title.charAt(index))) {
+            index++;
+        }
+        if (index <= 1 || index >= title.length() || title.charAt(index) != '-') {
+            return null;
+        }
+        try {
+            int value = Integer.parseInt(title.substring(1, index));
+            return value > 0 ? value : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static boolean parseBooleanFlag(Object value) {

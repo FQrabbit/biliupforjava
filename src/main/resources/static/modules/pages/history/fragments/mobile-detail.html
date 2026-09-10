@@ -185,7 +185,8 @@
                     <div v-show="showAllParts" class="mobile-history-detail-part-list">
                         <article v-for="(p, idx) in mergedParts" :key="p.partId || idx" class="mobile-history-detail-part">
                             <div class="mobile-history-detail-part-head">
-                                <span>P{{ p.page }}</span>
+                                <span>{{ p.issueCode && !p.onlinePage ? (p.sourcePage ? '原 P' + p.sourcePage : '未上线') : (p.sourcePage ? 'P' + p.sourcePage : (p.onlinePage ? 'P' + p.onlinePage : '未上线')) }}</span>
+                                <small v-if="p.onlinePage && p.sourcePage && p.onlinePage !== p.sourcePage">线上 P{{ p.onlinePage }}</small>
                                 <strong>{{ formatProgressState(p.state) }}</strong>
                                 <em class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</em>
                             </div>
