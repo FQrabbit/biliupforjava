@@ -106,6 +106,10 @@
             });
         },
         openBindFileDialog: function(p) {
+            if (this.currentDetail && (this.currentDetail.publish || this.currentDetail.avId || this.currentDetail.bvId)) {
+                this.openEditPartsFromPart();
+                return;
+            }
             this.bindTargetPart = p;
             this.selectedCandidateFile = '';
             this.bindTriggerUpload = true;
@@ -127,6 +131,11 @@
             var _this = this;
             if (!_this.bindTargetPart || !_this.bindTargetPart.partId) return;
             if (!_this.selectedCandidateFile) return;
+            if (_this.currentDetail && (_this.currentDetail.publish || _this.currentDetail.avId || _this.currentDetail.bvId)) {
+                _this.bindFileDialogVisible = false;
+                _this.openEditPartsFromPart();
+                return;
+            }
             PartApi.bindFile(_this.bindTargetPart.partId, {
                 filePath: _this.selectedCandidateFile,
                 triggerUpload: _this.bindTriggerUpload

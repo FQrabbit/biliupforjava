@@ -12,6 +12,23 @@
             const code = Number(this.currentDetail.code);
             return hasOnlineId && (code === 0 || code === -50 || code === -2);
         },
+        openEditPartsFromPart: function() {
+            if (!this.currentDetail || !this.currentDetail.id) return;
+            if (!this.canEditPublishedParts()) {
+                var message = '当前稿件暂不可编辑分P，请刷新状态后重试';
+                if (this.currentDetail.editPartsUploading) {
+                    message = '分P编辑任务正在上传，请等待当前任务完成';
+                } else if (!this.currentDetail.publish || !(this.currentDetail.avId || this.currentDetail.bvId)) {
+                    message = '当前稿件尚未具备可编辑的线上稿件标识，请刷新状态';
+                } else if (![0, -50, -2].includes(Number(this.currentDetail.code))) {
+                    message = '当前审核状态不支持编辑分P，请等待审核或刷新状态';
+                }
+                this.$message({ message: message, type: 'warning' });
+                return;
+            }
+            this.$message({ message: '请在“编辑分P”中添加或替换文件，保存后更新线上稿件', type: 'info' });
+            this.startEditParts();
+        },
         startEditParts: function() {
             if (!this.currentDetail || !this.currentDetail.id) return;
             const _this = this;

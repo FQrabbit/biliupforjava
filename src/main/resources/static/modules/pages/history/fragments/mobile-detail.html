@@ -205,6 +205,7 @@
                                 </button>
                                 <button v-if="p.actions && p.actions.indexOf('PAUSE_UPLOAD') !== -1" type="button" class="is-warning" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="pausePartUpload(p)">暂停</button>
                                 <button v-if="p.actions && p.actions.indexOf('RESUME_UPLOAD') !== -1" type="button" class="is-success" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="resumePartUpload(p)">继续</button>
+                                <button v-if="p.actions && p.actions.indexOf('EDIT_PARTS') !== -1" type="button" @click.stop="openEditPartsFromPart">编辑分P</button>
                                 <button v-if="p.actions && p.actions.indexOf('BIND_FILE') !== -1" type="button" @click.stop="openBindFileDialog(p)">补全</button>
                                 <button v-if="p.actions && p.actions.indexOf('MARK_FINISHED') !== -1" type="button" class="is-warning" @click.stop="confirmMarkFinished(p)">结束</button>
                                 <button v-if="p.actions && p.actions.indexOf('RESCAN') !== -1" type="button" @click.stop="rescanPart(p)">重试</button>

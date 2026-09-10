@@ -298,13 +298,13 @@ public class PartController {
                         || "MANUAL_SKIP".equals(issueCode)
                         || "FILE_MISSING".equals(issueCode)
                         || p.getUploadRetryCount() >= 9999;
-                if (actionable && (!historyPublished || historyEditableOnline)) {
-                    actions.add("BIND_FILE");
+                if (actionable) {
+                    actions.add(historyPublished || historyEditableOnline ? "EDIT_PARTS" : "BIND_FILE");
                     if (!historyPublished) {
                         actions.add("MARK_FINISHED");
                     }
                 }
-            } else if (!historyPublished || historyEditableOnline) {
+            } else {
                 String fp = localFile.primaryPath();
                 File f = fp == null ? null : new File(fp);
                 boolean fileExists = localFile.available() && f != null && f.exists();
@@ -326,7 +326,7 @@ public class PartController {
                     issueMessage = "分P文件不存在或路径为空";
                     actionable = true;
                     blockingIssue = !p.isUpload() && !historyPublished;
-                    actions.add("BIND_FILE");
+                    actions.add(historyPublished || historyEditableOnline ? "EDIT_PARTS" : "BIND_FILE");
                     if (!historyPublished) {
                         actions.add("MARK_FINISHED");
                     }
@@ -585,15 +585,13 @@ public class PartController {
         }
         RecordHistoryPart part = partOptional.get();
         Optional<RecordHistory> historyOptional = part.getHistoryId() == null ? Optional.empty() : historyRepository.findById(part.getHistoryId());
-        // 已投稿稿件不允许补全文件
-        if (part.getHistoryId() != null) {
-            if (historyOptional.isPresent()
-                    && historyOptional.get().isPublish()
-                    && !RecordBiliPublishService.hasOnlineIdentity(historyOptional.get())) {
+        // 已投稿或已有线上稿件标识的稿件必须通过编辑分P更新，不能重置补全上传状态
+        if (historyOptional.isPresent()
+                && (historyOptional.get().isPublish()
+                || RecordBiliPublishService.hasOnlineIdentity(historyOptional.get()))) {
                 result.put("type", "warning");
-                result.put("msg", "该稿件已投稿但缺少 avId/bvId，无法补全后编辑稿件");
+                result.put("msg", "该稿件已投稿或已有线上稿件，请使用“编辑分P”添加或替换文件");
                 return result;
-            }
         }
         String filePath = body == null ? null : String.valueOf(body.get("filePath"));
         if (filePath != null) {
