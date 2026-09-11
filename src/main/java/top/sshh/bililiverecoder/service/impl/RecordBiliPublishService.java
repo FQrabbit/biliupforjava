@@ -693,6 +693,8 @@ public class RecordBiliPublishService {
             List<EditPartSubmitItem> items = parseEditPartSubmitItems(request == null ? null : request.get("items"));
             List<SingleVideoDto> videos = new ArrayList<>();
             Set<Long> submittedPartIds = new HashSet<>();
+            List<java.util.function.Supplier<RecordHistoryPart>> acceptedPartUpdates = new ArrayList<>();
+            final RecordHistory editHistory = history;
             int page = 1;
             for (EditPartSubmitItem item : items) {
                 if (item.deleted) {
@@ -725,11 +727,11 @@ public class RecordBiliPublishService {
                         dto.setCid(part.getCid());
                     }
                     String persistedFilePath = "local".equalsIgnoreCase(item.source) ? null : part.getFilePath();
-                    RecordHistoryPart synced = syncEditUploadResult(history, item, part, page, dto.getTitle(),
-                            persistedFilePath, dto.getFilename(), dto.getCid(), part.getFileSize());
-                    if (synced != null && synced.getId() != null) {
-                        submittedPartIds.add(synced.getId());
-                    }
+                    final RecordHistoryPart uploadedPart = part;
+                    final int submittedPage = page;
+                    acceptedPartUpdates.add(() -> syncEditUploadResult(editHistory, item, uploadedPart,
+                            submittedPage, dto.getTitle(), persistedFilePath, dto.getFilename(), dto.getCid(),
+                            uploadedPart.getFileSize()));
                 } else {
                     BiliVideoPartInfoResponse.Video online = findOnlineVideoForSubmitItem(item, onlineByPage, onlineByTitle, onlineByFilename, onlineByCid);
                     if (online == null) {
@@ -744,10 +746,8 @@ public class RecordBiliPublishService {
                     if (online.getCid() > 0) {
                         dto.setCid(online.getCid());
                     }
-                    RecordHistoryPart synced = syncExistingOnlinePart(history, item, page, dto);
-                    if (synced != null && synced.getId() != null) {
-                        submittedPartIds.add(synced.getId());
-                    }
+                    final int submittedPage = page;
+                    acceptedPartUpdates.add(() -> syncExistingOnlinePart(editHistory, item, submittedPage, dto));
                 }
                 videos.add(dto);
                 page++;
@@ -766,6 +766,13 @@ public class RecordBiliPublishService {
             status.responseMessage = message;
             status.responseSnippet = abbreviatePublishResponse(editRes, 320);
             if (code != null && code == 0) {
+                // 上传完成不代表编辑被接受；仅在 B 站接受完整列表后更新原分P。
+                for (java.util.function.Supplier<RecordHistoryPart> update : acceptedPartUpdates) {
+                    RecordHistoryPart synced = update.get();
+                    if (synced != null && synced.getId() != null) {
+                        submittedPartIds.add(synced.getId());
+                    }
+                }
                 history.setPublish(true);
                 if (StringUtils.isBlank(history.getAvId())) {
                     history.setAvId(String.valueOf(aid));
@@ -773,6 +780,8 @@ public class RecordBiliPublishService {
                 markHistoryPendingReviewAfterEdit(history);
                 historyRepository.save(history);
                 cleanupStaleEditPartLocalState(history, submittedPartIds);
+                clearTimestampJumpIssueIfResolved(history);
+                historyRepository.save(history);
                 syncEditHistoryStatusImmediately(history.getId());
                 cleanupEditPartTempFiles(historyId, status.sessionId);
                 captureEditPartsHistoryState(status);
@@ -2998,9 +3007,10 @@ public class RecordBiliPublishService {
         if (history == null || !"TIMESTAMP_JUMP".equals(history.getPublishIssueType())) {
             return;
         }
-        boolean remains = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()).stream()
-                .anyMatch(part -> "TIMESTAMP_JUMP".equals(part.getDeleteFailType()));
-        if (!remains) {
+        long remaining = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()).stream()
+                .filter(part -> "TIMESTAMP_JUMP".equals(part.getDeleteFailType())).count();
+        history.setPublishIssuePartCount(Math.toIntExact(remaining));
+        if (remaining == 0) {
             history.setPublishIssueType(null);
             history.setPublishIssueReason(null);
             history.setPublishIssuePartCount(0);
