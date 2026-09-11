@@ -410,7 +410,7 @@
                             <span v-else>删除任务已完成。</span>
                         </div>
                     </div>
-                    <el-progress :percentage="deleteRoomProgress.percent"
+                    <el-progress v-render-progress="deleteRoomProgressInterpolator" :percentage="deleteRoomProgress.percent"
                                  :status="deleteRoomProgress.status === 'active' ? undefined : deleteRoomProgress.status"
                                  :stroke-width="10"></el-progress>
                     <div class="room-delete-progress-meta">

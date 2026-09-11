@@ -125,8 +125,106 @@
         }
     }
 
+    function bindProgress(element, binding) {
+        var previous = element.__biliupProgress || [];
+        var next = [].concat(binding.value || []).filter(Boolean);
+        previous.forEach(function (item) { if (next.indexOf(item) < 0) item.bindElement(null); });
+        next.forEach(function (item) { item.bindElement(element); });
+        element.__biliupProgress = next;
+    }
+    window.Vue.directive('render-progress', {
+        inserted: bindProgress,
+        componentUpdated: bindProgress,
+        unbind: function (element) { bindProgress(element, { value: [] }); }
+    });
+    window.Vue.directive('render-region', {
+        inserted: function (element, binding, vnode) {
+            var coordinator = window.BiliupPageStateCoordinator;
+            var id = 'surface-' + (++sequence);
+            function sync() {
+                coordinator.setRenderRegion(id, { element: element, modal: true,
+                    page: pageName(vnode.context), active: element.isConnected && element.style.display !== 'none' });
+            }
+            var observer = new MutationObserver(sync);
+            observer.observe(element, { attributes: true, attributeFilter: ['style'] });
+            element.__biliupRegionCleanup = function () {
+                observer.disconnect();
+                coordinator.setRenderRegion(id, { remove: true });
+            };
+            sync();
+        },
+        unbind: function (element, binding, vnode) {
+            var cleanup = element.__biliupRegionCleanup;
+            if (!cleanup) return;
+            if (!element.isConnected || vnode.context._isBeingDestroyed) { cleanup(); return; }
+            // v-if 触发离开过渡时，Vue 会先调用 unbind，之后过渡才真正把 DOM 移除
+            var removal = new MutationObserver(function () {
+                if (!element.isConnected) { removal.disconnect(); cleanup(); }
+            });
+            removal.observe(document.body, { childList: true, subtree: true });
+        }
+    });
+
     window.Vue.mixin({
+        mounted: function () {
+            var coordinator = window.BiliupPageStateCoordinator;
+            var vm = this;
+            var name = this.$options.name;
+            var modal = ['ElDialog', 'ElDrawer', 'ElMessageBox'].indexOf(name) >= 0;
+            if (!coordinator || (!modal && pageOwner(this) !== this && this.$root !== this)) return;
+            if (!this.$el || this.$el.nodeType !== 1) return;
+            var id = 'view-' + (++sequence);
+            this.__biliupRenderId = id;
+            function sync() {
+                if (vm._isDestroyed) return;
+                // v-show 只有在离开过渡完成后，才会写入 display:none
+                var active = !modal || (vm.$el.isConnected && vm.$el.style.display !== 'none');
+                coordinator.setRenderRegion(id, {
+                    element: vm.$el, page: pageName(vm),
+                    parent: vm.$parent && vm.$parent.__biliupRenderId || '',
+                    modal: modal && vm.modal !== false, active: active
+                });
+            }
+            sync();
+            if (!modal && pageOwner(this) === this) {
+                this.__biliupPendingRefresh = this.__biliupPendingRefresh || Object.create(null);
+                this.__biliupPendingCommits = this.__biliupPendingCommits || Object.create(null);
+                this.__biliupViewUnsubscribe = coordinator.observeVisibility(this.$el, function (paused) {
+                    vm.__biliupViewPaused = paused;
+                    if (paused) return;
+                    var commits = vm.__biliupPendingCommits;
+                    vm.__biliupPendingCommits = Object.create(null);
+                    Object.keys(commits).forEach(function (key) { if (!vm._isDestroyed) commits[key](); });
+                    var pending = vm.__biliupPendingRefresh;
+                    vm.__biliupPendingRefresh = Object.create(null);
+                    Object.keys(pending).forEach(function (method) {
+                        if (!vm._isDestroyed && typeof vm[method] === 'function') vm[method].apply(vm, pending[method]);
+                    });
+                });
+            }
+            if (modal) {
+                this.__biliupRenderObserver = new MutationObserver(sync);
+                // 不要监听 class 或后代节点：进度渲染绝不能触发图层扫描
+                this.__biliupRenderObserver.observe(this.$el, { attributes: true, attributeFilter: ['style'] });
+                this.__biliupRenderUnwatch = this.$watch('visible', function (visible) {
+                    if (visible) vm.$nextTick(sync);
+                });
+            }
+        },
         methods: {
+            $pageCommit: function (key, commit) {
+                if (this._isDestroyed || this._isBeingDestroyed) return;
+                if (this.__biliupViewPaused || document.hidden) {
+                    this.__biliupPendingCommits = this.__biliupPendingCommits || Object.create(null);
+                    this.__biliupPendingCommits[key] = commit;
+                } else commit();
+            },
+            $pageRefresh: function (method, args) {
+                if (this.__biliupViewPaused || document.hidden) {
+                    this.__biliupPendingRefresh = this.__biliupPendingRefresh || Object.create(null);
+                    this.__biliupPendingRefresh[method] = args || [];
+                } else if (!this._isDestroyed) this[method].apply(this, args || []);
+            },
             $pageConfirm: function (message, title, options) {
                 if (title && typeof title === 'object') {
                     return invokeMessageBox(this, '$confirm', [message, title], 1);
@@ -195,6 +293,12 @@
             }
         },
         beforeDestroy: function () {
+            if (this.__biliupViewUnsubscribe) this.__biliupViewUnsubscribe();
+            this.__biliupPendingRefresh = Object.create(null);
+            this.__biliupPendingCommits = Object.create(null);
+            if (this.__biliupRenderObserver) this.__biliupRenderObserver.disconnect();
+            if (this.__biliupRenderUnwatch) this.__biliupRenderUnwatch();
+            if (this.__biliupRenderId) window.BiliupPageStateCoordinator.setRenderRegion(this.__biliupRenderId, { remove: true });
             closeForVm(this);
         }
     });

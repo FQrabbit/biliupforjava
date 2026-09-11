@@ -201,6 +201,9 @@
             if (!this.configProgressInterpolator || this.configProgressInterpolator.key !== taskId) {
                 if (this.configProgressInterpolator) this.configProgressInterpolator.destroy();
                 this.configProgressInterpolator = new window.BiliupProgressInterpolator({
+                    floorValue: true,
+                    visibilityManaged: true,
+                    integerDisplay: true,
                     pollIntervalMs: 500,
                     allowPrediction: true,
                     onUpdate: function (display) {
@@ -369,9 +372,7 @@
             var self = this;
             this.stopPolling();
             this.pollingTimer = setInterval(function () {
-                // 页面不可见时暂停轮询
-                if (document.hidden) return;
-                self.initTable(true);
+                self.$pageRefresh('initTable', [true]);
             }, 30000); // 30秒一次
         },
         stopPolling: function () {
@@ -382,8 +383,14 @@
         },
         initTable: function (silent) {
             let _this = this;
+            if (silent && this._listInFlight) return;
+            var token = this._listRequestToken = (this._listRequestToken || 0) + 1;
+            this._listInFlight = token;
             if (!silent) _this.loading = true;
             RoomApi.list(function (data) {
+                    if (_this._listInFlight === token) _this._listInFlight = null;
+                    _this.$pageCommit('room-list', function () {
+                    if (_this.componentDestroyed || token !== _this._listRequestToken) return;
                     if (_this.isSortMode) {
                         if (!silent) _this.loading = false;
                         return;
@@ -404,7 +411,10 @@
                         _this.$emit('connection-status', false);
                         _this.$emit('page-ready');
                     });
+                    });
                 }, function () {
+                    if (_this._listInFlight === token) _this._listInFlight = null;
+                    if (_this.componentDestroyed || token !== _this._listRequestToken) return;
                     _this.$emit('connection-status', true);
                     if (!silent) _this.loading = false;
                 });

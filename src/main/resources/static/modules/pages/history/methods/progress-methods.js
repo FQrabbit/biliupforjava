@@ -9,11 +9,9 @@
             var self = this;
             this.stopPolling();
             this.pollingTimer = setInterval(function () {
-                // 页面不可见时暂停轮询
-                if (document.hidden) return;
                 if (self.isMultiSelectMode) return;
                 // 仅在"工作中"页签或列表页刷新数据
-                self.initTable(true);
+                self.$pageRefresh('initTable', [true]);
             }, 30000); // 30秒一次
         },
         stopPolling: function () {
@@ -29,41 +27,51 @@
             _this.clearUploadProgressInterpolators();
             const requestToken = ++_this.progressRequestToken;
             _this.progressSpeedTracking = {};
+            _this._detailProgressPaused = true;
+            _this.$nextTick(function () {
+                var dialog = _this.$refs.uploadDetailDialog;
+                if (!dialog || !_this.isCurrentHistoryDetail(historyId) || requestToken !== _this.progressRequestToken) return;
+                _this._detailProgressUnsubscribe = window.BiliupPageStateCoordinator.observeVisibility(dialog.$el, function (paused) {
+                    _this._detailProgressPaused = paused;
+                    if (paused) _this.clearPartsAutoScrollTimer();
+                    if (!paused && _this._latestHistoryProgress) _this.commitHistoryProgress(_this._latestHistoryProgress);
+                    Object.keys(_this.uploadProgressInterpolators).forEach(function (key) {
+                        _this.uploadProgressInterpolators[key].setPaused(paused, 'detail');
+                    });
+                });
+            });
 
             _this.fetchHistoryProgressOnce(historyId, true, function (resp) {
                 if (!_this.isCurrentHistoryDetail(historyId) || requestToken !== _this.progressRequestToken) return;
-                _this.applyInterpolatedUploadProgress(resp);
-                _this.historyUploadProgress = resp;
-                _this.updateSpeedTracking(resp);
+                _this.receiveHistoryProgress(resp);
                 if (_this.shouldKeepUploadProgressPolling(resp)) {
                     _this.progressTimer = setInterval(function () {
                         if (!_this.isCurrentHistoryDetail(historyId) || requestToken !== _this.progressRequestToken) {
                             _this.stopProgressPolling();
                             return;
                         }
-                        // 页面不可见时暂停轮询
-                        if (document.hidden) return;
                         if (!_this.detailDialogVisible || !_this.currentDetail || _this.currentDetail.id !== historyId) {
                             _this.stopProgressPolling();
                             return;
                         }
+                        if (_this._progressInFlight && _this._progressInFlight.token === requestToken) return;
                         _this.fetchHistoryProgressOnce(historyId, true, function (nextResp) {
                             if (!_this.isCurrentHistoryDetail(historyId) || requestToken !== _this.progressRequestToken) return;
                             // 检查是否有分P进度达到 100% 或从活跃列表消失，触发静默刷新以同步整体进度
                             var shouldRefresh = false;
-                            if (_this.historyUploadProgress && _this.historyUploadProgress.items && nextResp) {
+                            if (_this._latestHistoryProgress && _this._latestHistoryProgress.items && nextResp) {
                                 // 1. 检查是否有分P新达到 100%
                                 if (nextResp.items && Array.isArray(nextResp.items)) {
                                     nextResp.items.forEach(function(newItem) {
-                                        var oldItem = _this.historyUploadProgress.items.find(function(i) { return (i.partId || i.page) === (newItem.partId || newItem.page); });
+                                        var oldItem = _this._latestHistoryProgress.items.find(function(i) { return (i.partId || i.page) === (newItem.partId || newItem.page); });
                                         if (newItem.percent >= 100 && (!oldItem || oldItem.percent < 100)) {
                                             shouldRefresh = true;
                                         }
                                     });
                                 }
                                 // 2. 检查是否有分P从列表中消失（通常意味着上传完成并从内存 Tracker 移除）
-                                if (_this.historyUploadProgress.items && Array.isArray(_this.historyUploadProgress.items)) {
-                                    _this.historyUploadProgress.items.forEach(function(oldItem) {
+                                if (_this._latestHistoryProgress.items && Array.isArray(_this._latestHistoryProgress.items)) {
+                                    _this._latestHistoryProgress.items.forEach(function(oldItem) {
                                         var newItem = nextResp.items ? nextResp.items.find(function(i) { return (i.partId || i.page) === (oldItem.partId || oldItem.page); }) : null;
                                         if (!newItem && oldItem.state !== 'FAILED') {
                                             shouldRefresh = true;
@@ -74,8 +82,8 @@
 
                             // 将从 tracker 消失的已完成分P（非失败）保留为 SUCCESS/100% 状态，
                             // 防止 UI 在 DB 刷新前瞬间回弹到 0%
-                            if (nextResp && _this.historyUploadProgress && Array.isArray(_this.historyUploadProgress.items)) {
-                                _this.historyUploadProgress.items.forEach(function(oldItem) {
+                            if (nextResp && _this._latestHistoryProgress && Array.isArray(_this._latestHistoryProgress.items)) {
+                                _this._latestHistoryProgress.items.forEach(function(oldItem) {
                                     var stillPresent = nextResp.items && Array.isArray(nextResp.items) && nextResp.items.find(function(ni) {
                                         return (ni.partId && ni.partId === oldItem.partId) || (ni.page && ni.page === oldItem.page);
                                     });
@@ -86,25 +94,19 @@
                                 });
                             }
 
-                            _this.applyInterpolatedUploadProgress(nextResp);
-                            _this.historyUploadProgress = nextResp;
-                            _this.updateSpeedTracking(nextResp);
+                            _this.receiveHistoryProgress(nextResp);
 
-                            if (shouldRefresh) {
-                                _this.initTable(true);
+                            var finished = !_this.shouldKeepUploadProgressPolling(nextResp);
+                            if (shouldRefresh || finished) {
+                                _this.$pageRefresh('initTable', [true]);
                                 // 同步刷新详情中的分P列表
                                 if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === historyId) {
                                     _this.fetchPartList(historyId, function () {});
                                 }
                             }
 
-                            if (!_this.shouldKeepUploadProgressPolling(nextResp)) {
+                            if (finished) {
                                 _this.stopProgressPolling();
-                                // 最后再刷一次确保状态最终一致
-                                _this.initTable(true);
-                                if (_this.detailDialogVisible && _this.currentDetail && _this.currentDetail.id === historyId) {
-                                    _this.fetchPartList(historyId, function () {});
-                                }
                             }
                         });
                     }, 1500);
@@ -125,12 +127,24 @@
             return String(item.partId || item.page || '') + '|' + String(item.uploadFlow || '');
         },
         clearUploadProgressInterpolators: function() {
+            if (this._detailProgressUnsubscribe) this._detailProgressUnsubscribe();
+            this._detailProgressUnsubscribe = null;
+            this._latestHistoryProgress = null;
             var map = this.uploadProgressInterpolators || {};
             Object.keys(map).forEach(function(key) {
                 if (map[key]) map[key].destroy();
             });
             this.uploadProgressInterpolators = {};
             this.uploadProgressDisplayByKey = {};
+        },
+        receiveHistoryProgress: function (resp) {
+            this._latestHistoryProgress = resp;
+            if (!this._detailProgressPaused) this.commitHistoryProgress(resp);
+        },
+        commitHistoryProgress: function (resp) {
+            this.applyInterpolatedUploadProgress(resp);
+            this.historyUploadProgress = resp;
+            this.updateSpeedTracking(resp);
         },
         applyInterpolatedUploadProgress: function(resp) {
             var self = this;
@@ -144,6 +158,8 @@
                 var interpolator = self.uploadProgressInterpolators[key];
                 if (!interpolator) {
                     interpolator = new window.BiliupProgressInterpolator({
+                        visibilityManaged: true,
+                        integerDisplay: true,
                         pollIntervalMs: 1500,
                         allowPrediction: true,
                         onUpdate: function(display) {
@@ -151,6 +167,7 @@
                         }
                     });
                     self.$set(self.uploadProgressInterpolators, key, interpolator);
+                    interpolator.setPaused(!!self._detailProgressPaused, 'detail');
                 }
                 interpolator.setPollInterval(1500);
                 var terminal = item.state === 'SUCCESS' || item.state === 'FAILED'
@@ -158,7 +175,7 @@
                 if (terminal && item.state === 'SUCCESS') {
                     interpolator.complete({ confirmedValue: 100 });
                 } else if (terminal) {
-                    interpolator.fail();
+                    interpolator.fail({ confirmedValue: Number(item.percent) || 0, confirmedPercent: Number(item.percent) || 0 });
                 } else {
                     interpolator.update({
                         key: key,
@@ -196,6 +213,12 @@
                 return this.uploadItemEstimated(item);
             }, this);
         },
+        uploadProgressDecorationsPaused: function () {
+            var displays = this.uploadProgressDisplayByKey || {};
+            return !Object.keys(displays).some(function (key) {
+                return displays[key].running && !displays[key].stale;
+            });
+        },
         shouldKeepUploadProgressPolling: function(resp) {
             if (resp && Number(resp.activeCount) > 0) return true;
             if (resp && Number(resp.queuedCount) > 0) return true;
@@ -204,19 +227,32 @@
         },
         fetchHistoryProgressOnce: function(historyId, silent, callback) {
             const _this = this;
+            var token = this.progressRequestToken;
+            var current = this._progressInFlight;
+            if (current && current.historyId === historyId && current.token === token) {
+                if (callback) current.callbacks.push(callback);
+                return;
+            }
+            var flight = { historyId: historyId, token: token, callbacks: callback ? [callback] : [] };
+            this._progressInFlight = flight;
+            function finish(data) {
+                if (_this._progressInFlight === flight) _this._progressInFlight = null;
+                if (_this.componentDestroyed || token !== _this.progressRequestToken) return;
+                flight.callbacks.forEach(function (cb) { cb(_this.normalizeHistoryProgress(data)); });
+            }
             HistoryApi.progress(historyId, function (data) {
-                const resp = _this.normalizeHistoryProgress(data);
-                if (callback) callback(resp);
+                finish(data);
             }, function () {
                 if (!silent) {
                     _this.$message({ message: '获取上传进度失败', type: 'warning' });
                 }
-                if (callback) callback(_this.normalizeHistoryProgress(null));
+                // 请求失败并不等于“tracker 为空”或“任务完成”的信号
+                finish(_this._latestHistoryProgress || { historyId: historyId, activeCount: 1, items: [] });
             });
         },
         normalizeHistoryProgress: function(data) {
             if (!data) return { historyId: null, activeCount: 0, queuedCount: 0, overallPercent: 0, items: [] };
-            const items = Array.isArray(data.items) ? data.items : [];
+            const items = Array.isArray(data.items) ? data.items.map(function (item) { return Object.assign({}, item); }) : [];
             return {
                 historyId: data.historyId || null,
                 activeCount: Number(data.activeCount) || 0,

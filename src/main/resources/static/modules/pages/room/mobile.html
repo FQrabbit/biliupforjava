@@ -34,7 +34,7 @@
                 </div>
                 <em>{{ configOperationProgress.percent }}%</em>
             </div>
-            <el-progress :percentage="configOperationProgress.percent" :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)" :stroke-width="8"></el-progress>
+            <el-progress v-render-progress="configProgressInterpolator" :percentage="configOperationProgress.percent" :status="configOperationProgress.status === 'error' ? 'exception' : (configOperationProgress.percent >= 100 ? 'success' : undefined)" :stroke-width="8"></el-progress>
             <div v-if="configOperationProgress.detail" class="config-progress-detail">{{ configOperationProgress.detail }}</div>
             <div v-if="configOperationProgress.metrics" class="config-progress-metrics">{{ configOperationProgress.metrics }}</div>
         </section>
@@ -145,7 +145,7 @@
     </transition>
 
     <transition name="mobile-room-sheet">
-        <aside v-if="mobileRoomActionsVisible" class="mobile-room-action-sheet" role="dialog" aria-label="房间管理操作">
+        <aside v-if="mobileRoomActionsVisible" class="mobile-room-action-sheet" v-render-region role="dialog" aria-label="房间管理操作">
             <div class="mobile-room-sheet-handle"></div>
             <div class="mobile-room-sheet-head">
                 <div>
@@ -178,7 +178,7 @@
     </transition>
 
     <transition name="mobile-room-sheet">
-        <aside v-if="mobileRoomCardActionsVisible && mobileActionRoom" class="mobile-room-action-sheet" role="dialog" aria-label="房间操作">
+        <aside v-if="mobileRoomCardActionsVisible && mobileActionRoom" class="mobile-room-action-sheet" v-render-region role="dialog" aria-label="房间操作">
             <div class="mobile-room-sheet-handle"></div>
             <div class="mobile-room-sheet-head">
                 <div><span>Room</span><h3>{{ maskText(mobileActionRoom.uname) }}</h3></div>

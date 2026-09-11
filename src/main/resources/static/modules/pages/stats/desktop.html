@@ -71,7 +71,7 @@
                     <em>{{ operationProgress.percent }}%</em>
                 </div>
                 <el-progress
-                        :percentage="operationProgress.percent"
+                        v-render-progress="statsProgressInterpolator" :percentage="operationProgress.percent"
                         :status="operationProgress.status === 'error' ? 'exception' : (operationProgress.percent >= 100 ? 'success' : undefined)"
                         :stroke-width="8">
                 </el-progress>

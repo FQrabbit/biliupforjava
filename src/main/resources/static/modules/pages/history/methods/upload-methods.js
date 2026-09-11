@@ -49,7 +49,7 @@
                     }
                 });
                 _this.fetchPartList(_this.currentDetail.id, function () {});
-                _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.historyUploadProgress = nextResp; });
+                _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.receiveHistoryProgress(nextResp); });
             }, function() {
                 _this.uploadPauseLoading = false;
                 _this.$message({ message: '暂停上传失败', type: 'warning' });
@@ -81,7 +81,7 @@
                 _this.setPartUploadPauseSettling(p.partId, 3000);
                 _this.fetchPartList(_this.currentDetail.id, function () {});
                 if (_this.currentDetail && _this.currentDetail.id) {
-                    _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.historyUploadProgress = nextResp; });
+                    _this.fetchHistoryProgressOnce(_this.currentDetail.id, true, function (nextResp) { _this.receiveHistoryProgress(nextResp); });
                 }
             }, function() {
                 _this.$set(_this.uploadPartPauseLoading, p.partId, false);
@@ -394,7 +394,7 @@
             this.showAllParts = !this.showAllParts;
             if (this.showAllParts) {
                 this.$nextTick(() => {
-                    if (!this.detailDialogVisible) return;
+                    if (!this.detailDialogVisible || this._detailProgressPaused || document.hidden) return;
                     const list = this.$refs.partsList;
                     const detailContent = this.$refs.detailContent;
                     if (!list) return;
@@ -422,7 +422,8 @@
 
                     this.clearPartsAutoScrollTimer();
                     this.partsAutoScrollTimer = setTimeout(() => {
-                        if (!this.detailDialogVisible) return;
+                        this.partsAutoScrollTimer = null;
+                        if (!this.detailDialogVisible || this._detailProgressPaused || document.hidden) return;
                         const activeList = this.$refs.partsList;
                         const activeDetail = this.$refs.detailContent;
                         if (activeList && activeDetail) {

@@ -205,6 +205,8 @@
                 if (!status || !this.exportId || !window.BiliupProgressInterpolator) return;
                 if (!this.exportByteInterpolator) {
                     this.exportByteInterpolator = new window.BiliupProgressInterpolator({
+                        visibilityManaged: true,
+                        integerDisplay: true,
                         pollIntervalMs: 700,
                         allowPrediction: true,
                         onUpdate: function(display) {
@@ -220,6 +222,9 @@
                 }
                 if (!this.exportFileInterpolator) {
                     this.exportFileInterpolator = new window.BiliupProgressInterpolator({
+                        floorValue: true,
+                        visibilityManaged: true,
+                        integerDisplay: true,
                         pollIntervalMs: 700,
                         allowPrediction: true,
                         onUpdate: function(display) {

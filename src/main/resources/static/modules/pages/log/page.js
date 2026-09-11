@@ -29,7 +29,6 @@ return {
             wsConnectAttempt: 0,
             statusText: '未连接',
             maxLogs: 500,
-            nextLogId: 1,
             alerts: [],
             showAlerts: false,
             sidebarVisible: context.surface === 'desktop' && window.innerWidth >= 1024,
@@ -174,21 +173,22 @@ return {
     watch: {
         visibleLevels: {
             handler: function () {
-                this.startProgressiveRender(this.filteredLogs);
+                this.startProgressiveRender();
             },
             deep: true
         },
         searchKeyword: function () {
-            this.startProgressiveRender(this.filteredLogs);
+            this.startProgressiveRender();
         },
         privacyMode: function () {
             this.logs.forEach(function (log) { log.__formatted = null; });
-            this.$forceUpdate();
+            this.startProgressiveRender();
         },
         autoScroll: function (val) {
             if (val) {
                 var self = this;
                 this.$nextTick(function () {
+                    if (self._logRenderPaused || document.hidden || self.componentDestroyed) return;
                     var container = self.$refs.console;
                     if (container) {
                         self.isAutoScrolling = true;
@@ -212,15 +212,32 @@ return {
         window.LogPageUiMethods || {}
     ),
     created: function () {
+        this._logPending = [];
+        this._logRetained = [];
+        this._logCursor = 0;
+        this._nextLogId = 1;
+        this._logHistoryToken = 0;
+        this._logDirty = false;
+        this._logRenderPaused = true;
+        this._logFlushTimer = null;
         this.handleResize();
         window.addEventListener('resize', this.handleResize);
     },
     mounted: function () {
+        var self = this;
+        this._logRenderUnsubscribe = window.BiliupPageStateCoordinator.observeVisibility(this.$el, function (paused) {
+            self._logRenderPaused = paused;
+            if (paused && self._logFlushTimer) {
+                clearTimeout(self._logFlushTimer);
+                self._logFlushTimer = null;
+            }
+            if (!paused) self.flushLogBuffer();
+        });
         this.$emit('page-ready');
         this.initScrollListener();
         this.connectWs();
         this.fetchAlerts();
-        this.alertPollingTimer = setInterval(this.fetchAlerts, 30000);
+        this.alertPollingTimer = setInterval(function () { self.$pageRefresh('fetchAlerts'); }, 30000);
     },
     activated: function () {
         this.realtime = true;
@@ -231,6 +248,9 @@ return {
         this.disconnectWs();
     },
     beforeDestroy: function () {
+        if (this._logRenderUnsubscribe) this._logRenderUnsubscribe();
+        this.resetPendingLogs();
+        this._logRetained = [];
         this.componentDestroyed = true;
         this.realtime = false;
         this.wsConnectAttempt++;

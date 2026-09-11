@@ -454,7 +454,7 @@
 
         <transition name="mobile-config-help">
             <div v-if="mobileConfigHelpVisible" class="mobile-config-help-layer" @click.self="closeMobileConfigHelp">
-                <section class="mobile-config-help-panel" role="dialog" aria-modal="true" :aria-label="mobileConfigHelpTitle">
+                <section class="mobile-config-help-panel" v-render-region role="dialog" aria-modal="true" :aria-label="mobileConfigHelpTitle">
                     <div class="mobile-config-help-icon">
                         <i class="el-icon-question"></i>
                     </div>

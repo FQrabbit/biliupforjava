@@ -155,13 +155,28 @@ class FrontendModuleManifestTest {
             assertTrue(html.indexOf("url-resolver.js") < html.indexOf("api.js"));
             assertFalse(html.contains("class=\"config-panel\""));
             assertFalse(html.contains("notificationRuleEditor"));
-            assertFalse(html.contains("api/storage-api.js"));
             assertFalse(html.contains("api/notification-api.js"));
             assertFalse(html.contains("shell/system-settings.js"));
             assertFalse(html.contains("shell/notifications.js"));
         }
         assertTrue(readText("static/modules/shell/system-settings/mobile.html")
                 .contains("v-show=\"configExpanded\""));
+    }
+
+    @Test
+    void shellLoadsStorageApiBeforeStartupPathCheck() throws IOException {
+        // StorageApi 由设置模块和 shell 启动时的路径变更检查共用
+        // 如果让它保持惰性初始化，该检查就会被静默跳过，直到打开设置为止
+        for (String resource : new String[]{"static/index.html", "static/mobile/index.html"}) {
+            String html = readText(resource);
+            int api = html.indexOf("api/storage-api.js");
+            int attention = html.indexOf("app/shell/storage-attention.js");
+            int shell = html.indexOf("app/shell.js");
+            assertTrue(api >= 0, resource + " must load the shared storage API");
+            assertTrue(attention > api, resource + " must load StorageApi before storage attention");
+            assertTrue(shell > attention, resource + " must register storage attention before shell startup");
+            assertEquals(api, html.lastIndexOf("api/storage-api.js"), resource + " must not duplicate StorageApi");
+        }
     }
 
     @Test

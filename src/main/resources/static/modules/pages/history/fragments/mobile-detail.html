@@ -1,5 +1,5 @@
     <!-- 详情弹窗 -->
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :fullscreen="true" append-to-body :custom-class="'history-page-dialog detail-dialog mobile-history-detail-dialog' + (editPartsEditing ? ' detail-dialog--parts-editing' : '')" :before-close="beforeCloseDetailDialog" @closed="onDetailClosed">
+    <el-dialog ref="uploadDetailDialog" title="详细信息" :visible.sync="detailDialogVisible" :fullscreen="true" append-to-body :custom-class="'history-page-dialog detail-dialog mobile-history-detail-dialog' + (editPartsEditing ? ' detail-dialog--parts-editing' : '')" :before-close="beforeCloseDetailDialog" @closed="onDetailClosed">
         <section v-if="currentDetail.id && !editPartsEditing" class="mobile-history-detail-workbench" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
             <div class="mobile-history-detail-grabber"></div>
             <header class="mobile-history-detail-hero">
@@ -190,7 +190,7 @@
                                 <strong>{{ formatProgressState(p.state) }}</strong>
                                 <em class="local-file-badge" :class="getLocalFileClass(p)">{{ getLocalFileLabel(p) }}</em>
                             </div>
-                            <div class="mobile-history-detail-progress-track">
+                            <div class="mobile-history-detail-progress-track" v-render-progress="uploadProgressInterpolators[uploadProgressItemKey(p)]">
                                 <div :style="{ width: uploadItemPercent(p) + '%' }"></div>
                             </div>
                             <p>
@@ -380,7 +380,7 @@
 
     <div v-if="mobileDanmakuStatsVisible" ref="mobileDanmakuStatsPortal" class="mobile-history-danmaku-portal" :class="{ 'is-leaving': mobileDanmakuStatsLeaving }">
         <div class="mobile-history-danmaku-backdrop" @click="closeMobileDanmakuStats"></div>
-        <aside class="mobile-history-danmaku-sheet" role="dialog" aria-modal="true" aria-label="弹幕数据" @click.stop>
+        <aside class="mobile-history-danmaku-sheet" v-render-region role="dialog" aria-modal="true" aria-label="弹幕数据" @click.stop>
             <div class="mobile-history-sheet-grabber"></div>
             <header class="mobile-history-danmaku-head">
                 <div>

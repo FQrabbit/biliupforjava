@@ -8,6 +8,71 @@
     };
     var inputSources = Object.create(null);
     var listeners = [];
+    var renderRegions = Object.create(null);
+    var renderListeners = [];
+    var renderOrder = 0;
+    function syncDocumentDecoration() {
+        if (document.hidden) document.documentElement.style.setProperty('--biliup-document-play-state', 'paused');
+        else document.documentElement.style.removeProperty('--biliup-document-play-state');
+    }
+    document.addEventListener('visibilitychange', syncDocumentDecoration);
+    syncDocumentDecoration();
+
+    function refreshRenderRegions() {
+        var regions = Object.keys(renderRegions).map(function (id) { return renderRegions[id]; });
+        var top = regions.filter(function (r) { return r.modal && r.active; })
+            .sort(function (a, b) { return b.order - a.order; })[0];
+        var state = Object.create(null);
+        regions.forEach(function (r) {
+            r.paused = !!top && r !== top;
+            state[r.id] = r.paused;
+            if (r.element && r.element.style) {
+                var playState = r.paused ? 'paused' : 'running';
+                if (r.element.style.getPropertyValue('--biliup-decoration-play-state') !== playState) {
+                    r.element.style.setProperty('--biliup-decoration-play-state', playState);
+                }
+            }
+        });
+        renderListeners.slice().forEach(function (listener) { listener(state); });
+    }
+
+    function isElementPaused(element) {
+        if (!element || !element.isConnected) return true;
+        var current = element;
+        while (current) {
+            var ids = Object.keys(renderRegions);
+            for (var i = 0; i < ids.length; i++) {
+                var region = renderRegions[ids[i]];
+                if (region.element === current) return region.paused || !region.active;
+            }
+            current = current.parentElement;
+        }
+        return Object.keys(renderRegions).some(function (id) { return renderRegions[id].modal && renderRegions[id].active; });
+    }
+
+    // 合并彼此独立的原因；视口事件绝不能撤销模态/文档的挂起
+    function observeVisibility(element, listener, viewport) {
+        var inView = true;
+        var previous;
+        function update() {
+            var paused = document.hidden || !inView || isElementPaused(element);
+            if (paused !== previous) { previous = paused; listener(paused); }
+        }
+        renderListeners.push(update);
+        document.addEventListener('visibilitychange', update);
+        var observer = viewport && window.IntersectionObserver ? new window.IntersectionObserver(function (entries) {
+            inView = entries.some(function (entry) { return entry.isIntersecting; });
+            update();
+        }) : null;
+        if (observer && element) observer.observe(element);
+        update();
+        return function () {
+            if (observer) observer.disconnect();
+            document.removeEventListener('visibilitychange', update);
+            var index = renderListeners.indexOf(update);
+            if (index >= 0) renderListeners.splice(index, 1);
+        };
+    }
 
     function sourceKey(pageName, source) {
         return String(pageName || 'page') + ':' + String(source || 'default');
@@ -41,8 +106,23 @@
             }),
             inputFocused: Object.keys(inputSources).some(function (key) {
                 return !!inputSources[key];
-            })
+            }),
+            renderPaused: Object.keys(renderRegions).some(function (key) { return !!renderRegions[key].paused; })
         };
+    }
+    function setRenderRegion(id, payload) {
+        id = String(id || ''); payload = payload || {};
+        if (!id) return;
+        var previous = renderRegions[id];
+        if (payload.remove) {
+            if (previous && previous.element) previous.element.style.removeProperty('--biliup-decoration-play-state');
+            delete renderRegions[id];
+        } else {
+            var region = Object.assign({ id: id, active: true, modal: false, parent: '', page: '' }, previous, payload);
+            if (!previous || (!previous.active && region.active)) region.order = ++renderOrder;
+            renderRegions[id] = region;
+        }
+        refreshRenderRegions();
     }
 
     function notify() {
@@ -93,6 +173,9 @@
                 }
             });
         });
+        Object.keys(renderRegions).forEach(function (key) {
+            if (renderRegions[key].page === pageName) setRenderRegion(key, { remove: true });
+        });
         return notify();
     }
 
@@ -125,6 +208,17 @@
         resetPage: resetPage,
         setInputFocused: setInputFocused,
         subscribe: subscribe,
-        snapshot: snapshot
+        snapshot: snapshot,
+        setRenderRegion: setRenderRegion,
+        isElementPaused: isElementPaused,
+        observeVisibility: observeVisibility,
+        subscribeRender: function (listener) {
+            if (typeof listener !== 'function') return function () {};
+            renderListeners.push(listener);
+            var initial = Object.create(null);
+            Object.keys(renderRegions).forEach(function (key) { initial[key] = !!renderRegions[key].paused; });
+            try { listener(initial); } catch (e) {}
+            return function () { var i = renderListeners.indexOf(listener); if (i >= 0) renderListeners.splice(i, 1); };
+        }
     };
 })(window);

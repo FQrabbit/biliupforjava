@@ -25,7 +25,7 @@
     </transition>
 
     <transition name="mobile-room-detail">
-        <aside v-if="detailDialogVisible && currentDetail" class="mobile-room-detail-sheet" role="dialog" aria-label="房间详情">
+        <aside v-if="detailDialogVisible && currentDetail" class="mobile-room-detail-sheet" v-render-region role="dialog" aria-label="房间详情">
             <div class="mobile-room-sheet-handle"></div>
             <div class="mobile-room-detail-head">
                 <div class="mobile-room-detail-avatar">
@@ -285,7 +285,7 @@
                             <span v-else>删除任务已完成。</span>
                         </div>
                     </div>
-                    <el-progress :percentage="deleteRoomProgress.percent"
+                    <el-progress v-render-progress="deleteRoomProgressInterpolator" :percentage="deleteRoomProgress.percent"
                                  :status="deleteRoomProgress.status === 'active' ? undefined : deleteRoomProgress.status"
                                  :stroke-width="10"></el-progress>
                     <div class="room-delete-progress-meta">

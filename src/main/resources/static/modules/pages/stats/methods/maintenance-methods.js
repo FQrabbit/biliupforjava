@@ -311,6 +311,8 @@
             this.statsProgressLatestStatus = status;
             if (!this.statsProgressInterpolator) {
                 this.statsProgressInterpolator = new window.BiliupProgressInterpolator({
+                    visibilityManaged: true,
+                    integerDisplay: true,
                     pollIntervalMs: 1000,
                     allowPrediction: true,
                     onUpdate: function (display) {

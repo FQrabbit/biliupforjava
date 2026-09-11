@@ -64,6 +64,7 @@
             this.initTable(false, { skipCategoryCounts: true });
         },
         initTable: function (silent, options) {
+            if (silent && this._listInFlight) return;
             if (this.isMultiSelectMode) {
                 if (!silent) this.loading = false;
                 return;
@@ -71,11 +72,14 @@
             if (!silent) this.loading = true;
             let _this = this;
             var requestToken = ++this.listRequestToken;
+            this._listInFlight = requestToken;
             var requestBody = Object.assign({}, _this.form);
             if (options && options.skipCategoryCounts === true) {
                 requestBody.skipCategoryCounts = true;
             }
             HistoryApi.list(requestBody, function (data) {
+                    if (_this._listInFlight === requestToken) _this._listInFlight = null;
+                    _this.$pageCommit('history-list', function () {
                     if (!_this.isHistoryComponentActive() || requestToken !== _this.listRequestToken) return;
                     _this.tableData = data.data;
                     _this.total = data.total;
@@ -101,7 +105,9 @@
                         _this.$emit('connection-status', false);
                         _this.$emit('page-ready');
                     });
+                    });
                 }, function () {
+                    if (_this._listInFlight === requestToken) _this._listInFlight = null;
                     if (!_this.isHistoryComponentActive() || requestToken !== _this.listRequestToken) return;
                     _this.$emit('connection-status', true);
                     if (!silent) _this.loading = false;

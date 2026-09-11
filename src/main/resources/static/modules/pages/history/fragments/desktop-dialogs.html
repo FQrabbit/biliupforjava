@@ -196,7 +196,7 @@
                 FLV 快速预览适合确认内容，拖动进度可能不稳定。生成 MP4 后可获得更好的拖动体验。
             </div>
             <div v-if="previewTask && (previewTask.status === 'RUNNING' || previewTask.status === 'PENDING')" class="part-preview-progress">
-                <el-progress :percentage="previewTaskPercent()" :stroke-width="8"></el-progress>
+                <el-progress v-render-progress="previewProgressInterpolator" :percentage="previewTaskPercent()" :stroke-width="8"></el-progress>
                 <span>{{ previewTask.message || '正在生成可拖动预览' }}</span>
             </div>
             <div v-if="previewError" class="part-preview-tip is-error">{{ previewError }}</div>

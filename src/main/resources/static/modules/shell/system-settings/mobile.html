@@ -3,7 +3,7 @@
         <div v-show="configExpanded" class="mobile-config-backdrop" @click="closeMobileConfigPanel"></div>
 </transition>
 <transition name="mobile-config-sheet">
-        <aside v-show="configExpanded" class="mobile-config-sheet" role="dialog" aria-label="系统配置" @click.stop>
+        <aside v-show="configExpanded" class="mobile-config-sheet" v-render-region role="dialog" aria-label="系统配置" @click.stop>
         <div class="mobile-sheet-handle"></div>
         <div class="mobile-sheet-header">
             <div>

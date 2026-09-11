@@ -58,7 +58,7 @@
             <div v-if="moreActionsVisible" class="mobile-stats-actions-backdrop" @click="moreActionsVisible = false"></div>
         </transition>
         <transition name="mobile-stats-sheet">
-            <aside v-if="moreActionsVisible" class="mobile-stats-actions-sheet" role="dialog" aria-modal="true" aria-label="统计维护操作" @click.stop>
+            <aside v-if="moreActionsVisible" class="mobile-stats-actions-sheet" v-render-region role="dialog" aria-modal="true" aria-label="统计维护操作" @click.stop>
                 <div class="mobile-stats-sheet-grabber"></div>
                 <header class="mobile-stats-sheet-head">
                     <div>
@@ -114,7 +114,7 @@
                     </div>
                     <em>{{ operationProgress.percent }}%</em>
                 </div>
-                <div class="mobile-stats-progress-track">
+                <div class="mobile-stats-progress-track" v-render-progress="statsProgressInterpolator">
                     <div :style="{ width: operationProgress.percent + '%' }"></div>
                 </div>
                 <p v-if="operationProgress.detail">{{ operationProgress.detail }}</p>

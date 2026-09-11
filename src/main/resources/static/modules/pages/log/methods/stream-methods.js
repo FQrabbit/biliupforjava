@@ -43,14 +43,18 @@
         connectWs: function () {
             var self = this;
             if (!this.realtime) return;
+            if (this.ws && this.ws.readyState <= 1) return;
+            if (this._wsTicketAttempt) return;
 
             var attempt = ++this.wsConnectAttempt;
+            this._wsTicketAttempt = attempt;
 
             if (this.wsConnectStartTime === 0) {
                 this.wsConnectStartTime = Date.now();
             }
 
             LogApi.wsTicket(function(ticketData) {
+                if (self._wsTicketAttempt === attempt) self._wsTicketAttempt = null;
                 if (!self.realtime || attempt !== self.wsConnectAttempt || !ticketData || !ticketData.ticket) return;
                 var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 var host = window.location.host;
@@ -60,6 +64,7 @@
                 self.ws = new WebSocket(protocol + '//' + host + socketPath + '?ticket=' + encodeURIComponent(ticketData.ticket));
 
                 self.ws.onopen = function () {
+                    if (self.componentDestroyed || !self.realtime || attempt !== self.wsConnectAttempt) return;
                     self.statusText = '实时连接已建立';
                     self.wsConnectStartTime = 0;
                     self.reportConnection(false);
@@ -67,6 +72,7 @@
                 };
 
                 self.ws.onmessage = function (event) {
+                    if (self.componentDestroyed || !self.realtime || attempt !== self.wsConnectAttempt) return;
                     try {
                         var log = JSON.parse(event.data);
                         self.addLog(log);
@@ -93,6 +99,7 @@
                     }
                 };
             }, function() {
+                if (self._wsTicketAttempt === attempt) self._wsTicketAttempt = null;
                 if (attempt !== self.wsConnectAttempt || !self.realtime) return;
                 self.statusText = '获取实时日志凭据失败';
                 self.reportConnection(true);
@@ -101,7 +108,9 @@
         },
 
         disconnectWs: function () {
+            this.resetPendingLogs();
             this.realtime = false;
+            this._wsTicketAttempt = null;
             this.wsConnectAttempt++;
             if (this.wsReconnectTimer) {
                 clearTimeout(this.wsReconnectTimer);
@@ -120,19 +129,20 @@
                 this.wsConnectStartTime = Date.now();
                 this.connectWs();
             } else {
-                if (this.ws) this.ws.close();
-                this.statusText = '已暂停';
-                this.wsConnectStartTime = 0;
+                this.disconnectWs();
                 this.reportConnection(false);
             }
         },
 
         loadHistory: function () {
             var self = this;
+            if (this.loadingHistory) return;
+            var token = ++this._logHistoryToken;
+            var firstLiveId = this._nextLogId;
             this.loadingHistory = true;
             var lines = this.getHistoryLines();
             LogApi.history(lines, function (data) {
-                if (self.componentDestroyed) return;
+                if (self.componentDestroyed || token !== self._logHistoryToken) return;
                 var parsedLogs = data.map(function (line) {
                     var parts = line.split('|');
                     if (parts.length >= 5) {
@@ -151,17 +161,20 @@
                         };
                     }
                 });
-                var base = self.nextLogId;
+                var base = self._nextLogId;
                 for (var i = 0; i < parsedLogs.length; i++) {
                     parsedLogs[i].__id = String(base + i);
                 }
-                self.nextLogId = base + parsedLogs.length;
-                self.logs = parsedLogs;
+                self._nextLogId = base + parsedLogs.length;
+                var recent = self._logRetained.concat(self.takePendingLogs()).filter(function (log) {
+                    return Number(log.__id) >= firstLiveId;
+                });
+                self._logRetained = parsedLogs.concat(recent).slice(-self.maxLogs);
                 self.loadingHistory = false;
-                self.startProgressiveRender(self.filteredLogs);
+                self.startProgressiveRender();
                 self.reportConnection(false);
             }, function (err) {
-                if (self.componentDestroyed) return;
+                if (self.componentDestroyed || token !== self._logHistoryToken) return;
                 console.error(err);
                 self.loadingHistory = false;
                 self.$message.error('加载历史日志失败');

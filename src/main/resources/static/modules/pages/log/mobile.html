@@ -198,7 +198,7 @@
     <transition name="mobile-log-sheet">
         <aside v-if="mobileFilterVisible"
                class="mobile-log-sheet mobile-log-filter-sheet"
-               role="dialog"
+               v-render-region role="dialog"
                aria-label="日志筛选"
                @click.stop>
             <div class="mobile-log-sheet-handle"></div>
@@ -252,7 +252,7 @@
     <transition name="mobile-log-sheet">
         <aside v-if="settingsDrawerVisible"
                class="mobile-log-sheet mobile-log-settings-sheet"
-               role="dialog"
+               v-render-region role="dialog"
                aria-label="日志设置"
                @click.stop>
             <div class="mobile-log-sheet-handle"></div>
@@ -313,7 +313,7 @@
     <transition name="mobile-log-sheet">
         <aside v-if="detailDialogVisible"
                class="mobile-log-sheet mobile-log-detail-sheet"
-               role="dialog"
+               v-render-region role="dialog"
                aria-label="日志详情"
                @click.stop>
             <div class="mobile-log-sheet-handle"></div>
@@ -348,7 +348,7 @@
     <transition name="mobile-log-sheet">
         <aside v-if="contextDialogVisible"
                class="mobile-log-sheet mobile-log-context-sheet"
-               role="dialog"
+               v-render-region role="dialog"
                aria-label="日志上下文"
                @click.stop>
             <div class="mobile-log-sheet-handle"></div>
@@ -385,7 +385,7 @@
     <transition name="mobile-log-sheet">
         <aside v-if="allDetailsDialogVisible"
                class="mobile-log-sheet mobile-log-alert-sheet"
-               role="dialog"
+               v-render-region role="dialog"
                aria-label="告警详情"
                @click.stop>
             <div class="mobile-log-sheet-handle"></div>

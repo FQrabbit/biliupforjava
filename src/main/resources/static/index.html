@@ -271,6 +271,10 @@
                     <el-option v-for="item in themePaletteOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
                 </el-select>
             </div>
+            <div class="theme-popover-row">
+                <span class="theme-popover-label">低特效</span>
+                <el-switch v-model="lowEffects" @change="toggleLowEffects" aria-label="低特效模式"></el-switch>
+            </div>
         </div>
     </transition>
     
@@ -418,7 +422,7 @@
     </el-form>
     <div v-if="exporting || exportState === 'success'" class="diagnostic-export-progress" :class="{ 'is-stale': exportProgress.stale }" aria-live="polite">
         <div class="diagnostic-export-progress-title">{{ progressPhaseText }}</div>
-        <el-progress :percentage="Number(exportProgress.percent || 0)" :status="exportState === 'success' ? 'success' : null" :stroke-width="12"></el-progress>
+        <el-progress v-render-progress="[exportByteInterpolator, exportFileInterpolator]" :percentage="Number(exportProgress.percent || 0)" :status="exportState === 'success' ? 'success' : null" :stroke-width="12"></el-progress>
         <div class="diagnostic-export-progress-detail">{{ exportProgress.detail || progressFileText }}</div>
         <div class="diagnostic-export-progress-meta">{{ progressFileText }}</div>
         <div class="diagnostic-export-progress-meta">{{ Number(exportProgress.percent || 0) }}% · {{ progressByteText }} · 已用时 {{ Number(exportProgress.elapsedSeconds || 0) }} 秒<span v-if="exportProgress.stale"> · 等待后端确认</span></div>

@@ -18,19 +18,11 @@
         },
 
         handleDetailedModeChange: function () {
+            this.resetPendingLogs();
             var newMax = this.detailedMode ? this.maxLogsDetailed : this.maxLogsLite;
             this.maxLogs = newMax;
-
-            if (this.logs.length > newMax) {
-                var container = this.$refs.console;
-                var anchor = (!this.autoScroll && container) ? this.getScrollAnchor() : null;
-                var beforeScrollHeight = (container ? container.scrollHeight : 0);
-                this.logs.splice(0, this.logs.length - newMax);
-                if (!this.autoScroll && container) {
-                    this.restoreScrollAnchor(anchor, beforeScrollHeight);
-                }
-            }
-
+            this._logRetained = this._logRetained.slice(-newMax);
+            this.startProgressiveRender();
             this.loadHistory();
         },
 
@@ -65,6 +57,7 @@
             if (!container || !anchor || !anchor.id) return;
 
             this.$nextTick(function () {
+                if (self.componentDestroyed || self._logRenderPaused || document.hidden) return;
                 var c = self.$refs.console;
                 if (!c) return;
                 var el = c.querySelector('.log-line[data-log-id="' + anchor.id + '"]');
@@ -87,110 +80,78 @@
             }
         },
 
+        resetPendingLogs: function () {
+            if (this._logFlushTimer) clearTimeout(this._logFlushTimer);
+            this._logFlushTimer = null;
+            this._logPending = [];
+            this._logCursor = 0;
+            this._logHistoryToken++;
+            this.loadingHistory = false;
+        },
+
+        takePendingLogs: function () {
+            var pending = this._logPending;
+            var result = this._logCursor ? pending.slice(this._logCursor).concat(pending.slice(0, this._logCursor)) : pending;
+            this._logPending = [];
+            this._logCursor = 0;
+            return result;
+        },
+
+        scheduleLogFlush: function () {
+            if (this.componentDestroyed || this._logRenderPaused || this._logFlushTimer) return;
+            var self = this;
+            this._logFlushTimer = setTimeout(function () {
+                self._logFlushTimer = null;
+                self.flushLogBuffer();
+            }, 100);
+        },
+
         addLog: function (log) {
-            if (log && (log.__id === undefined || log.__id === null)) {
-                log.__id = String(this.nextLogId++);
+            if (!log || this.componentDestroyed || !this.realtime) return;
+            log.__id = String(this._nextLogId++);
+            // 定长环形缓冲区：接收日志绝不会触碰 Vue 观察的数组
+            if (this._logPending.length < this.maxLogs) this._logPending.push(log);
+            else {
+                this._logPending[this._logCursor] = log;
+                this._logCursor = (this._logCursor + 1) % this.maxLogs;
             }
+            this.scheduleLogFlush();
+        },
 
-            var willTrim = (this.logs.length + 1 > this.maxLogs);
+        flushLogBuffer: function () {
+            if (this._logFlushTimer) clearTimeout(this._logFlushTimer);
+            this._logFlushTimer = null;
+            if (this.componentDestroyed || this._logRenderPaused || document.hidden) return;
+            var batch = this.takePendingLogs();
+            if (!batch.length && !this._logDirty) return;
             var container = this.$refs.console;
-            var anchor = null;
-            var beforeScrollHeight = 0;
-            if (willTrim && !this.autoScroll && container) {
-                anchor = this.getScrollAnchor();
-                beforeScrollHeight = container.scrollHeight;
-            }
-
-            this.logs.push(log);
-
-            if (!this.rendering) {
-                var matchLevel = this.visibleLevels.indexOf(log.level) >= 0;
-                var matchSearch = true;
-                if (this.searchKeyword && this.searchKeyword.trim()) {
-                    var keyword = this.searchKeyword.trim().toLowerCase();
-                    var message = (log.message || '').toLowerCase();
-                    var timestamp = (log.timestamp || '').toLowerCase();
-                    var thread = (log.thread || '').toLowerCase();
-                    matchSearch = message.indexOf(keyword) >= 0 ||
-                                 timestamp.indexOf(keyword) >= 0 ||
-                                 thread.indexOf(keyword) >= 0;
-                }
-
-                if (matchLevel && matchSearch) {
-                    this.displayedLogs.push(log);
-                    if (this.displayedLogs.length > this.maxLogs) {
-                        this.displayedLogs.shift();
+            var anchor = !this.autoScroll && container ? this.getScrollAnchor() : null;
+            var height = container ? container.scrollHeight : 0;
+            this._logRetained = this._logRetained.concat(batch).slice(-this.maxLogs);
+            this.logs = this._logRetained.slice();
+            this.displayedLogs = this.filteredLogs;
+            this._logDirty = false;
+            this.rendering = false;
+            if (!this.autoScroll) {
+                this.restoreScrollAnchor(anchor, height);
+            } else {
+                var self = this;
+                this.$nextTick(function () {
+                    if (self.componentDestroyed || self._logRenderPaused || document.hidden) return;
+                    var c = self.$refs.console;
+                    if (c && self.autoScroll) {
+                        self.isAutoScrolling = true;
+                        c.scrollTop = c.scrollHeight;
+                        self.scheduleAutoScrollReset();
                     }
-
-                    if (this.autoScroll) {
-                        var self = this;
-                        this.$nextTick(function () {
-                            var c = self.$refs.console;
-                            if (c) {
-                                self.isAutoScrolling = true;
-                                c.scrollTop = c.scrollHeight;
-                                self.scheduleAutoScrollReset();
-                            }
-                        });
-                    }
-                }
-            }
-
-            if (willTrim) {
-                var removeCount = this.logs.length - this.maxLogs;
-                if (removeCount > 0) {
-                    this.logs.splice(0, removeCount);
-                }
-            }
-            if (willTrim && !this.autoScroll && container) {
-                this.restoreScrollAnchor(anchor, beforeScrollHeight);
+                });
             }
         },
 
-        startProgressiveRender: function (allLogs) {
-            var self = this;
-            if (this.renderTimer) {
-                cancelAnimationFrame(this.renderTimer);
-            }
-
-            this.displayedLogs = [];
-
-            if (allLogs.length > 200) {
-                this.rendering = true;
-            }
-
-            var index = 0;
-            var chunkSize = this.isMobile ? 50 : 100;
-
-            var render = function () {
-                var nextBatch = allLogs.slice(index, index + chunkSize);
-                self.displayedLogs.push.apply(self.displayedLogs, nextBatch);
-                index += chunkSize;
-
-                if (index < allLogs.length) {
-                    self.renderTimer = requestAnimationFrame(render);
-                } else {
-                    var finalLogs = self.filteredLogs;
-                    if (self.displayedLogs.length < finalLogs.length) {
-                        var remaining = finalLogs.slice(self.displayedLogs.length);
-                        self.displayedLogs.push.apply(self.displayedLogs, remaining);
-                    }
-                    self.rendering = false;
-                    self.renderTimer = null;
-                    self.$nextTick(function () {
-                        if (self.autoScroll) {
-                            var container = self.$refs.console;
-                            if (container) {
-                                self.isAutoScrolling = true;
-                                container.scrollTop = container.scrollHeight;
-                                self.scheduleAutoScrollReset();
-                            }
-                        }
-                    });
-                }
-            };
-
-            this.renderTimer = requestAnimationFrame(render);
+        startProgressiveRender: function () {
+            // 过滤/历史记录与实时流共用同一条单一提交路径
+            this._logDirty = true;
+            this.scheduleLogFlush();
         },
 
         getFormattedMessage: function (log) {
@@ -203,13 +164,10 @@
         },
 
         clearLogs: function () {
-            this.logs = [];
-            this.displayedLogs = [];
-            if (this.renderTimer) {
-                cancelAnimationFrame(this.renderTimer);
-                this.renderTimer = null;
-            }
-            this.rendering = false;
+            this.resetPendingLogs();
+            this._logRetained = [];
+            this._logDirty = true;
+            this.flushLogBuffer();
         }
     };
 })(window);

@@ -198,8 +198,7 @@
         },
         handleVisibilityChange: function() {
             if (document.hidden) {
-                // 页面不可见时停止进度轮询
-                this.stopProgressPolling();
+                // 视觉订阅负责处理挂起；任务轮询则继续接收最终状态
                 // 如果正在进行批量操作，提醒用户
                 if (this.batchVisibilityRunning) {
                     this.$notify.warning({
@@ -210,15 +209,7 @@
                     });
                 }
             } else {
-                // 页面恢复可见时立即刷新一次数据
-                if (!this.isMultiSelectMode) {
-                    this.initTable(true);
-                }
-
-                if (this.detailDialogVisible && this.currentDetail && this.currentDetail.id) {
-                    // 页面可见且详情弹窗打开时恢复进度轮询
-                    this.startProgressPolling(this.currentDetail.id);
-                }
+                // 区域协调器在恢复时合并被推迟的列表刷新
             }
         },
         handlePageHide: function() {

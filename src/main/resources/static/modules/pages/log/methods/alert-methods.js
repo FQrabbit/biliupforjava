@@ -63,8 +63,13 @@
 
         fetchAlerts: function () {
             var self = this;
+            if (this._alertInFlight) return;
+            var token = this._alertRequestToken = (this._alertRequestToken || 0) + 1;
+            this._alertInFlight = token;
             LogApi.alerts(function (data) {
-                if (self.componentDestroyed) return;
+                if (self._alertInFlight === token) self._alertInFlight = null;
+                self.$pageCommit('alerts', function () {
+                if (self.componentDestroyed || token !== self._alertRequestToken) return;
                 var previousAlerts = self.alerts;
                 self.alerts = data;
                 var previousByFingerprint = {};
@@ -88,11 +93,16 @@
                         duration: 3000
                     });
                 }
+                });
+            }, function () {
+                if (self._alertInFlight === token) self._alertInFlight = null;
             });
         },
 
         clearAlerts: function () {
             var self = this;
+            this._alertRequestToken = (this._alertRequestToken || 0) + 1;
+            this._alertInFlight = null;
             LogApi.clearAlerts(function () {
                 if (self.componentDestroyed) return;
                 self.alerts = [];

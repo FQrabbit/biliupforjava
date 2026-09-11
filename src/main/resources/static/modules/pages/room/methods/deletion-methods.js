@@ -91,6 +91,9 @@
             if (taskId && window.BiliupProgressInterpolator) {
                 if (!this.deleteRoomProgressInterpolator) {
                     this.deleteRoomProgressInterpolator = new window.BiliupProgressInterpolator({
+                        floorValue: true,
+                        visibilityManaged: true,
+                        integerDisplay: true,
                         pollIntervalMs: 700,
                         allowPrediction: true,
                         onUpdate: function (display) {
@@ -104,7 +107,7 @@
                 if (!running && status.success !== false) {
                     this.deleteRoomProgressInterpolator.complete({ confirmedValue: Number(status.processed || 0) });
                 } else if (!running) {
-                    this.deleteRoomProgressInterpolator.fail();
+                    this.deleteRoomProgressInterpolator.fail({ confirmedValue: Number(status.processed) || 0, confirmedPercent: Number(status.percent) || 0 });
                 } else {
                     this.deleteRoomProgressInterpolator.update({
                         key: taskId,

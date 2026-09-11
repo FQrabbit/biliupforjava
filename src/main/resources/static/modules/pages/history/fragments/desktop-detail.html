@@ -1,5 +1,5 @@
     <!-- 详情弹窗 -->
-    <el-dialog title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body :custom-class="'history-page-dialog detail-dialog' + (editPartsEditing ? ' detail-dialog--parts-editing' : '')" :before-close="beforeCloseDetailDialog" @closed="onDetailClosed">
+    <el-dialog ref="uploadDetailDialog" title="详细信息" :visible.sync="detailDialogVisible" :width="isMobile ? '100%' : '92vw'" :fullscreen="isMobile" append-to-body :custom-class="'history-page-dialog detail-dialog' + (editPartsEditing ? ' detail-dialog--parts-editing' : '')" :before-close="beforeCloseDetailDialog" @closed="onDetailClosed">
         <div class="detail-content-modern" ref="detailContent" v-if="currentDetail.id" :style="{ '--detail-footer-offset': detailFooterOffset + 'px' }">
             <!-- 头部信息 -->
             <div class="detail-header-modern">
@@ -333,7 +333,7 @@
                     </template>
                 </span>
             </div>
-            <div class="detail-progress-container">
+            <div class="detail-progress-container" :class="{ 'is-progress-idle': uploadProgressDecorationsPaused() }">
                 <transition name="edit-parts-slide">
                 <div v-if="editPartsEditing" class="edit-parts-panel">
                     <div class="edit-parts-toolbar">
@@ -449,7 +449,7 @@
                             <span v-if="p.state !== 'SUCCESS' && p.state !== 'SKIPPED' && calculateRemainingTime(p)" class="part-remaining-time">{{ calculateRemainingTime(p) }}</span>
                         </div>
                         <div class="progress-bar-mini" :class="p.state === 'SKIPPED' ? 'skipped' : ''">
-                            <el-progress :percentage="uploadItemPercent(p)" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
+                            <el-progress v-render-progress="uploadProgressInterpolators[uploadProgressItemKey(p)]" :percentage="uploadItemPercent(p)" :status="progressBarStatus(p.state, p.percent || 0)" :stroke-width="6" :show-text="false"></el-progress>
                         </div>
                         <div class="progress-percent-text" :class="p.state === 'SKIPPED' ? 'skipped-text' : ''">{{ p.state === 'SKIPPED' ? '-' : (uploadItemPercent(p) + '%') }}</div>
                         <div v-if="canPreviewPart(p)" class="progress-filepath-mini part-preview-actions">

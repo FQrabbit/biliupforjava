@@ -28,6 +28,7 @@
             themePanelStyle: {},
             theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
             themePalette: (window.ThemeTokens && typeof window.ThemeTokens.getPalette === 'function') ? window.ThemeTokens.getPalette() : 'ocean',
+            lowEffects: localStorage.getItem('low-effects') === 'true',
             navIndicatorStyle: { left: '0px', width: '0px', opacity: 0 },
             pressedNavTab: '',
             modulePages: ['room', 'user', 'history', 'stats', 'log'],
@@ -100,6 +101,7 @@
                 });
             }
             this.applyTheme(this.theme);
+            this.toggleLowEffects();
             this.beforeUnloadHandler = function (event) {
                 if (!self.pageOperationBlocksUnload) return;
                 event.preventDefault();
@@ -172,6 +174,11 @@
                 document.documentElement.classList.remove('theme-transitioning');
                 this.themeTransitionTimer = null;
             }.bind(this), 400);
+        },
+        toggleLowEffects: function() {
+            this.lowEffects = !!this.lowEffects;
+            document.documentElement.classList.toggle('low-effects', this.lowEffects);
+            try { localStorage.setItem('low-effects', this.lowEffects ? 'true' : 'false'); } catch (e) {}
         },
         applyThemePalette: function(paletteName) {
             if (this.pageOperating) {

@@ -185,7 +185,7 @@
     <transition name="mobile-user-sheet">
         <aside v-if="mobileUserActionsVisible && mobileActionUser"
                class="mobile-user-action-sheet"
-               role="dialog"
+               v-render-region role="dialog"
                aria-label="账号操作"
                @click.stop>
             <div class="mobile-user-sheet-handle"></div>

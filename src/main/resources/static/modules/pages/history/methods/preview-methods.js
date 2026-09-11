@@ -25,6 +25,8 @@
             var key = String(this.previewPart.partId) + '|' + String(task.startedAt || '');
             if (!this.previewProgressInterpolator) {
                 this.previewProgressInterpolator = new window.BiliupProgressInterpolator({
+                    visibilityManaged: true,
+                    integerDisplay: true,
                     pollIntervalMs: 1000,
                     allowPrediction: true,
                     onUpdate: function (display) {
@@ -36,7 +38,7 @@
             if (status === 'SUCCESS') {
                 this.previewProgressInterpolator.complete({ confirmedValue: 100 });
             } else if (terminal) {
-                this.previewProgressInterpolator.fail();
+                this.previewProgressInterpolator.fail({ confirmedValue: Number(task.percent) || 0, confirmedPercent: Number(task.percent) || 0 });
             } else {
                 this.previewProgressInterpolator.update({
                     key: key,

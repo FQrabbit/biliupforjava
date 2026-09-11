@@ -282,7 +282,7 @@
             <div v-if="filterExpanded" class="mobile-history-filter-backdrop" @click="filterExpanded = false"></div>
         </transition>
         <transition name="mobile-history-sheet">
-            <aside v-if="filterExpanded" class="mobile-history-filter-sheet" role="dialog" aria-modal="true" aria-label="筛选录制历史">
+            <aside v-if="filterExpanded" class="mobile-history-filter-sheet" v-render-region role="dialog" aria-modal="true" aria-label="筛选录制历史">
                 <div class="mobile-history-sheet-grabber"></div>
                 <header class="mobile-history-sheet-head">
                     <div>
