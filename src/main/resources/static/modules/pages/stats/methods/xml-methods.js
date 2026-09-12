@@ -183,6 +183,27 @@
                 self.xmlIssueActionLoading = false;
             });
         },
+        repairXmlIssue: function (item) {
+            if (!this.xmlIssueCanRepair(item) || this.xmlIssueActionLoading) return;
+            var self = this;
+            this.xmlIssueActionLoading = true;
+            this.startOperationProgress('修复 XML', '正在启动修复任务', '修复当前文件，验证通过后备份替换并重新解析');
+            StatsApi.repairXmlIssue(item.partId, function (result) {
+                if (!result || result.success === false || result.busy) {
+                    var message = (result && result.message) || 'XML 修复任务暂时无法启动';
+                    self.$message.error(message);
+                    self.failOperationProgress(message);
+                    self.xmlIssueActionLoading = false;
+                    return;
+                }
+                self.activeStatsTaskId = result.taskId || null;
+                self.pollStatsTaskStatus('xmlRepair');
+            }, function () {
+                self.$message.error('启动 XML 修复失败');
+                self.failOperationProgress('启动 XML 修复失败');
+                self.xmlIssueActionLoading = false;
+            });
+        },
         ignoreOneXmlIssue: function (item) {
             this.xmlIssueSelection = item ? [item] : [];
             this.ignoreXmlIssues(false);
@@ -265,7 +286,7 @@
                     var result = self.xmlRepairResultFromHeaders(headers, file.name);
                     self.xmlRepairResult = result;
                     self.downloadBlob(blob, result.outputName || self.repairedXmlFileName(file.name));
-                    self.$message.success(result.message || 'XML 修复完成，已开始下载修复版文件');
+                    self.$message[result.report && result.report.lossy ? 'warning' : 'success'](result.message || 'XML 修复完成，已开始下载修复版文件');
             }).catch(function (err) {
                 self.xmlRepairResult = {
                     success: false,
@@ -279,6 +300,7 @@
                     gift: err.gift || 0,
                     sc: err.sc || 0,
                     guard: err.guard || 0,
+                    report: err.report || null,
                     error: err.error || err.message || ''
                 };
                 self.$message.error(self.xmlRepairResult.message);
@@ -317,6 +339,7 @@
             var outputName = this.fileNameFromContentDisposition(contentDisposition) || this.repairedXmlFileName(fallbackName);
             var actions = (headers.get('x-xml-repair-actions') || '').split(',').filter(Boolean);
             return {
+                report: JSON.parse(this.decodeHeader(headers.get('x-xml-repair-report')) || '{}'),
                 success: headers.get('x-xml-repair-success') === 'true',
                 message: this.decodeHeader(headers.get('x-xml-repair-message')) || 'XML 修复完成',
                 fileName: fallbackName,

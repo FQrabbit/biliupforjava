@@ -39,6 +39,9 @@
         recheckXmlIssues: function(payload, callback, errorCallback) {
             ApiUtil.post('/stats/xml/issues/recheck', payload, callback, errorCallback);
         },
+        repairXmlIssue: function(partId, callback, errorCallback) {
+            ApiUtil.post('/stats/xml/issues/' + encodeURIComponent(partId) + '/repair', {}, callback, errorCallback);
+        },
         repairXml: function(options) {
             return ApiUtil.fetchBlob('/stats/xml/repair', options);
         }

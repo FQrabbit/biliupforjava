@@ -459,7 +459,7 @@
                     <p>最后检查 {{ dateTime(item.lastCheckedAt) }}{{ item.rootStatus ? ' · 存储根 ' + item.rootStatus : '' }}</p>
                     <div class="mobile-stats-xml-issue-card-actions">
                         <button type="button" :disabled="xmlIssueActionLoading" @click="recheckXmlIssues([item.partId])">重新检查</button>
-                        <button v-if="xmlIssueCanRepair(item)" type="button" :disabled="xmlIssueActionLoading" @click="chooseXmlRepairFile">修复 XML</button>
+                        <button v-if="xmlIssueCanRepair(item)" type="button" :disabled="xmlIssueActionLoading" @click="repairXmlIssue(item)">修复 XML</button>
                         <button v-if="item.ignoredAt" type="button" :disabled="xmlIssueActionLoading" @click="resumeOneXmlIssue(item)">恢复检查</button>
                         <button v-else-if="item.issueType !== 'ROOT_OFFLINE'" type="button" :disabled="xmlIssueActionLoading" @click="ignoreOneXmlIssue(item)">停止检查</button>
                     </div>
@@ -504,12 +504,16 @@
                 <span>SC {{ number(xmlRepairResult.sc) }}</span>
                 <span>舰长 {{ number(xmlRepairResult.guard) }}</span>
             </div>
+            <p v-if="xmlRepairResult.report && xmlRepairResult.report.summary">恢复报告：{{ xmlRepairResult.report.summary }}</p>
+            <template v-if="xmlRepairResult.report && xmlRepairResult.report.reasons">
+                <p v-for="(count, reason) in xmlRepairResult.report.reasons" :key="reason">{{ reason }}（{{ count }} 条）</p>
+            </template>
             <p v-if="xmlRepairResult.actions && xmlRepairResult.actions.length">动作：{{ xmlRepairResult.actions.join('、') }}</p>
             <p v-if="xmlRepairResult.error" class="mobile-stats-xml-error">失败原因：{{ maskLogLine(xmlRepairResult.error) }}</p>
             <p class="mobile-stats-xml-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再回到 XML 问题管理里重新检查。</p>
         </div>
         <div v-else class="mobile-stats-xml-empty">
-            请选择一个录播姬 XML 文件，系统会尝试做简单语法修复并返回可下载文件。
+            请选择一个录播姬 XML 文件，系统会尝试做逐条恢复并返回可下载文件。
         </div>
         <span slot="footer" class="dialog-footer">
             <el-button size="small" @click="xmlRepairDialogVisible = false">关闭</el-button>

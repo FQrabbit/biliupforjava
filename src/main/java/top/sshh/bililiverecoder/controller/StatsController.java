@@ -152,6 +152,15 @@ public class StatsController {
         }
     }
 
+    @PostMapping("/xml/issues/{partId}/repair")
+    public Map<String, Object> repairXmlIssue(@PathVariable Long partId) {
+        try {
+            return statsAggregationService.startXmlIssueRepair(partId);
+        } catch (IllegalArgumentException e) {
+            return invalidXmlIssueRequest(e);
+        }
+    }
+
     @GetMapping("/maintenance/status")
     public Map<String, Object> maintenanceStatus() {
         return databaseMaintenanceService.status();
@@ -247,6 +256,7 @@ public class StatsController {
         headers.set("X-Xml-Repair-After-Valid", String.valueOf(result.after().valid()));
         headers.set("X-Xml-Repair-Changed", String.valueOf(result.changed()));
         headers.set("X-Xml-Repair-Actions", String.join(",", result.actions()));
+        headers.set("X-Xml-Repair-Report", URLEncoder.encode(com.alibaba.fastjson.JSON.toJSONString(result.report()), StandardCharsets.UTF_8));
         headers.set("X-Xml-Repair-Danmu", String.valueOf(result.counts().danmu()));
         headers.set("X-Xml-Repair-Gift", String.valueOf(result.counts().gift()));
         headers.set("X-Xml-Repair-Sc", String.valueOf(result.counts().sc()));
@@ -285,15 +295,16 @@ public class StatsController {
         result.put("afterValid", repair.after().valid());
         result.put("changed", repair.changed());
         result.put("actions", repair.actions());
+        result.put("report", repair.report());
         result.put("danmu", repair.counts().danmu());
         result.put("gift", repair.counts().gift());
         result.put("sc", repair.counts().sc());
         result.put("guard", repair.counts().guard());
         if (!repair.after().valid()) {
             result.put("error", repair.after().message());
-            result.put("message", "修复失败，文件可能不是简单截断，或存在更复杂的 XML 结构损坏");
+            result.put("message", "恢复失败：" + repair.after().message());
         } else if (repair.changed()) {
-            result.put("message", "修复成功，已生成可下载的修复版 XML");
+            result.put("message", "已生成恢复版 XML：" + repair.report().getOrDefault("summary", "处理完成"));
         } else {
             result.put("message", repair.before().valid() ? "文件本身已经是有效 XML，已原样提供下载" : "文件无需改动但通过了修复后校验");
         }

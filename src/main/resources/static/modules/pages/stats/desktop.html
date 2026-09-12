@@ -576,7 +576,7 @@
             <el-table-column label="操作" width="190" fixed="right">
                 <template slot-scope="scope">
                     <el-button size="mini" type="primary" plain @click="recheckXmlIssues([scope.row.partId])">重检</el-button>
-                    <el-button v-if="xmlIssueCanRepair(scope.row)" size="mini" @click="chooseXmlRepairFile">修复</el-button>
+                    <el-button v-if="xmlIssueCanRepair(scope.row)" size="mini" :disabled="xmlIssueActionLoading" @click="repairXmlIssue(scope.row)">修复</el-button>
                     <el-button v-if="scope.row.ignoredAt" size="mini" @click="resumeOneXmlIssue(scope.row)">恢复</el-button>
                     <el-button v-else-if="scope.row.issueType !== 'ROOT_OFFLINE'" size="mini" type="warning" plain @click="ignoreOneXmlIssue(scope.row)">停止</el-button>
                 </template>
@@ -609,12 +609,16 @@
                 <span>SC {{ number(xmlRepairResult.sc) }}</span>
                 <span>舰长 {{ number(xmlRepairResult.guard) }}</span>
             </div>
+            <p v-if="xmlRepairResult.report && xmlRepairResult.report.summary">恢复报告：{{ xmlRepairResult.report.summary }}</p>
+            <template v-if="xmlRepairResult.report && xmlRepairResult.report.reasons">
+                <p v-for="(count, reason) in xmlRepairResult.report.reasons" :key="reason">{{ reason }}（{{ count }} 条）</p>
+            </template>
             <p v-if="xmlRepairResult.actions && xmlRepairResult.actions.length">动作：{{ xmlRepairResult.actions.join('、') }}</p>
             <p v-if="xmlRepairResult.error" class="xml-repair-error">失败原因：{{ maskLogLine(xmlRepairResult.error) }}</p>
             <p class="xml-repair-tip">工具不会替你修改原始录像目录。请下载修复版 XML 后，自行确认并替换对应文件，再回到 XML 问题管理里重新检查。</p>
         </div>
         <div v-else class="xml-repair-empty">
-            请选择一个录播姬 XML 文件，系统会尝试做简单语法修复并返回可下载文件。
+            请选择一个录播姬 XML 文件，系统会尝试做逐条恢复并返回可下载文件。
         </div>
         <span slot="footer" class="dialog-footer">
             <el-button size="small" @click="xmlRepairDialogVisible = false">关闭</el-button>

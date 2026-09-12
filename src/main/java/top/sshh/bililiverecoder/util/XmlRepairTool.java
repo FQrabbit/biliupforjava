@@ -42,10 +42,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Conservative repair helper for BililiveRecorder danmaku XML files.
+ * 用于 BililiveRecorder 弹幕 XML 文件的保守修复工具
  *
- * <p>Default mode is dry-run. Use --write to generate "*.repaired.xml" files,
- * or --replace to overwrite the original after creating a "*.bak" backup.</p>
+ * <p>默认模式为试运行（dry-run）。使用 --write 生成 "*.repaired.xml" 文件，
+ * 或使用 --replace 在创建 "*.bak" 备份后覆盖原文件</p>
  */
 public final class XmlRepairTool {
 
@@ -93,40 +93,25 @@ public final class XmlRepairTool {
             }
         }
 
-        Counts counts = countElements(after.valid() ? repaired : original);
+        Counts counts = contentResult.counts();
         return new RepairResult(source, before, after, changed, write, replace, output, backup, contentResult.actions(), counts);
     }
 
     public static ContentRepairResult repairContent(String original) {
-        Validation before = validate(original);
-
-        List<String> actions = new ArrayList<>();
-        TextChange cleaned = stripBom(original);
-        String repaired = cleaned.text();
-        if (cleaned.count() > 0) {
-            actions.add("removedBom");
+        try {
+            var result = streamRepair(new java.io.ByteArrayInputStream(original.getBytes(StandardCharsets.UTF_8)));
+            try {
+                List<String> actions = new ArrayList<>(result.actions());
+                if (result.changed()) actions.add(String.valueOf(result.report().get("summary")));
+                return new ContentRepairResult(result.before(), result.after(), result.changed(),
+                        Files.readString(result.tempFile(), StandardCharsets.UTF_8), actions, result.counts());
+            } finally {
+                Files.deleteIfExists(result.tempFile());
+            }
+        } catch (IOException e) {
+            return new ContentRepairResult(validate(original), new Validation(false, e.getMessage()),
+                    false, original, List.of(), countElements(original));
         }
-
-        cleaned = removeIllegalXmlChars(repaired);
-        repaired = cleaned.text();
-        if (cleaned.count() > 0) {
-            actions.add("removedIllegalXmlChars=" + cleaned.count());
-        }
-
-        cleaned = trimTrailingPartialTag(repaired);
-        repaired = cleaned.text();
-        if (cleaned.count() > 0) {
-            actions.add("trimmedTrailingPartialTag");
-        }
-
-        if (looksLikeOpenRoot(repaired) && !hasRootEndTag(repaired)) {
-            repaired = repaired.stripTrailing() + System.lineSeparator() + "</i>" + System.lineSeparator();
-            actions.add("appendedMissingRootEndTag");
-        }
-
-        Validation after = validate(repaired);
-        Counts counts = countElements(after.valid() ? repaired : original);
-        return new ContentRepairResult(before, after, !original.equals(repaired), repaired, actions, counts);
     }
 
     private static List<Path> expandXmlPaths(List<Path> inputs) throws IOException {
@@ -233,7 +218,7 @@ public final class XmlRepairTool {
         try {
             factory.setFeature(feature, value);
         } catch (ParserConfigurationException ignored) {
-            // Different XML parsers support different hardening flags.
+            // 不同的 XML 解析器所支持的加固开关各不相同
         }
     }
 
@@ -363,192 +348,79 @@ public final class XmlRepairTool {
             Validation after,
             boolean changed,
             List<String> actions,
-            Counts counts
+            Counts counts,
+            java.util.Map<String, Object> report
     ) {
     }
 
     /**
-     * Result from {@link #filterLegalChars(char[], int, char)}:
-     * number of chars written into the buffer and a high surrogate
-     * deferred to the next chunk (0 = none).
+     * {@link #filterLegalChars(char[], int, char)} 的返回结果：
+     * 写入缓冲区的字符数，以及延迟到下一个分块的高代理项（0 表示没有）
      */
     record CharFilterResult(int writePos, char pendingHigh) {
     }
 
     /**
-     * Stream-based XML repair that minimizes memory pressure by processing
-     * the input stream in 64KB chunks, writing repaired content directly
-     * to a temporary file.
+     * 基于流的 XML 修复：以 64KB 分块处理输入流，将修复后的内容直接写入临时文件，
+     * 从而把内存占用降到最低
      *
-     * @param in the InputStream to repair (caller should close it)
-     * @return StreamRepairResult with path to the temporary repaired file
-     * @throws IOException if I/O fails
+     * @param in 待修复的输入流（由调用方负责关闭）
+     * @return StreamRepairResult，其中包含修复后临时文件的路径
+     * @throws IOException 当 I/O 失败时抛出
      */
     public static StreamRepairResult streamRepair(InputStream in) throws IOException {
-        Path tempFile = Files.createTempFile("xml-repair-", ".xml");
-        try {
-            List<String> actions = new ArrayList<>();
-            boolean hasRootStart = false;
-            boolean hasRootEnd = false;
-
-            // Phase 1: stream filter into temp file
-            try (Reader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8), 65536);
-                 Writer writer = new BufferedWriter(new OutputStreamWriter(
-                         new BufferedOutputStream(Files.newOutputStream(tempFile)), StandardCharsets.UTF_8), 65536)) {
-
-                // Check and skip BOM
-                reader.mark(1);
-                int firstChar = reader.read();
-                if (firstChar == 0xFEFF) {
-                    actions.add("removedBom");
-                } else if (firstChar != -1) {
-                    reader.reset();
-                }
-
-                char[] buf = new char[65536];
-                char pendingHigh = 0;
-                int len;
-                String overlap = ""; // tail of previous chunk for cross-boundary detection
-                while ((len = reader.read(buf)) != -1) {
-                    CharFilterResult result = filterLegalChars(buf, len, pendingHigh);
-                    int writePos = result.writePos();
-                    pendingHigh = result.pendingHigh();
-                    int removed = len - writePos - (pendingHigh != 0 ? 1 : 0);
-
-                    if (writePos > 0) {
-                        String chunk = new String(buf, 0, writePos);
-
-                        // Track <i> root tag with overlap to avoid
-                        // missing a tag split across chunk boundaries
-                        if (!hasRootStart || !hasRootEnd) {
-                            String window = overlap + chunk;
-                            if (!hasRootStart && ROOT_I_PATTERN.matcher(window).find()) {
-                                hasRootStart = true;
-                            }
-                            if (!hasRootEnd && window.contains("</i>")) {
-                                hasRootEnd = true;
-                            }
-                        }
-
-                        // Update overlap: keep the last 16 chars (enough
-                        // to cover any tag: <i is 2 chars, </i> is 4 chars)
-                        int overlapLen = Math.min(16, writePos);
-                        overlap = chunk.substring(writePos - overlapLen);
-
-                        writer.write(buf, 0, writePos);
-                    }
-
-                    if (removed > 0 && !actions.contains("removedIllegalXmlChars")) {
-                        actions.add("removedIllegalXmlChars");
-                    }
-                }
-                writer.flush();
-            } // close reader/writer (Phase 1 end)
-
-            // Phase 2: trim trailing partial tag using byte-level detection.
-            // < and > are ASCII (0x3C, 0x3E) and never appear inside a
-            // well-formed UTF-8 multi-byte sequence, so scanning bytes is safe.
-            try (RandomAccessFile raf = new RandomAccessFile(tempFile.toFile(), "rw")) {
-                long fileLen = raf.length();
-                if (fileLen > 0) {
-                    // Read last 64KB as bytes to find trailing partial tag
-                    int tailLen = (int) Math.min(fileLen, 65536L);
-                    long tailStart = fileLen - tailLen;
-                    raf.seek(tailStart);
-                    byte[] tail = new byte[tailLen];
-                    raf.readFully(tail);
-
-                    int lastLt = -1, lastGt = -1;
-                    for (int i = tail.length - 1; i >= 0; i--) {
-                        if (lastLt < 0 && tail[i] == '<') lastLt = i;
-                        if (lastGt < 0 && tail[i] == '>') lastGt = i;
-                        if (lastLt >= 0 && lastGt >= 0) break;
-                    }
-
-                    if (lastLt > lastGt) {
-                        raf.setLength(tailStart + lastLt);
-                        actions.add("trimmedTrailingPartialTag");
-                    }
-                }
-            }
-
-            // Phase 3: append missing root end tag
-            if (hasRootStart && !hasRootEnd) {
-                try (Writer writer = new BufferedWriter(new OutputStreamWriter(
-                        new BufferedOutputStream(Files.newOutputStream(tempFile, StandardOpenOption.APPEND)),
-                        StandardCharsets.UTF_8))) {
-                    writer.write(System.lineSeparator() + "</i>" + System.lineSeparator());
-                }
-                actions.add("appendedMissingRootEndTag");
-            }
-
-            // Phase 4: count elements from the repaired temp file
-            Counts counts = countElementsFromFile(tempFile);
-
-            // Phase 5: SAX validation
-            Validation after = validateSax(tempFile);
-            Validation before = new Validation(false, "streaming mode - before validation not available");
-
-            return new StreamRepairResult(tempFile, before, after,
-                    !actions.isEmpty(), actions, counts);
-        } catch (Exception e) {
-            // Clean up temp file on failure
-            Files.deleteIfExists(tempFile);
-            throw e;
-        }
+        return RecorderXmlRecovery.repair(in);
     }
 
     /**
-     * Filter chars[] in-place: keep only legal XML 1.0 characters
-     * (0x9, 0xA, 0xD, [0x20, 0xD7FF], [0xE000, 0xFFFD]) and surrogate pairs.
+     * 就地过滤 chars[]：只保留合法的 XML 1.0 字符
+     * （0x9、0xA、0xD、[0x20, 0xD7FF]、[0xE000, 0xFFFD]）以及代理项对
      * <p>
-     * When a high surrogate is the last char in {@code buf} (i.e. the pair
-     * is split across chunk boundaries), it is not written and instead returned
-     * as {@link CharFilterResult#pendingHigh()} to be prepended to the next chunk.
+     * 当高代理项是 {@code buf} 中的最后一个字符时（即代理项对被分块边界拆开），
+     * 该字符不会被写出，而是通过 {@link CharFilterResult#pendingHigh()} 返回，
+     * 以便前插到下一个分块中
      *
-     * @param buf         the chunk buffer (modified in-place)
-     * @param len         number of valid chars in the buffer
-     * @param pendingHigh high surrogate deferred from the previous chunk, or 0
-     * @return write position and optionally a high surrogate for the next chunk
+     * @param buf         分块缓冲区（就地修改），在需要携带代理项时需预留一个空位
+     * @param len         缓冲区中有效字符的数量
+     * @param pendingHigh 从上一个分块延迟下来的高代理项，或 0
+     * @return 写入位置，以及可选的、供下一个分块使用的高代理项
      */
     static CharFilterResult filterLegalChars(char[] buf, int len, char pendingHigh) {
         int w = 0;
-        int r = 0;
-
-        // Consume pending high surrogate from previous chunk
+        // 在不覆盖未读取输入的前提下前插；这样该代理项对就能按常规方式处理
         if (pendingHigh != 0) {
             if (len > 0 && Character.isLowSurrogate(buf[0])) {
-                buf[w++] = pendingHigh;
-                buf[w++] = buf[0];
-                r = 1;
+                System.arraycopy(buf, 0, buf, 1, len);
+                buf[0] = pendingHigh;
+                len++;
             }
-            // else: orphaned high surrogate — discard
+            // 否则：孤立的高代理项 —— 直接丢弃
         }
 
-        for (int i = r; i < len; i++) {
+        for (int i = 0; i < len; i++) {
             char c = buf[i];
             if (Character.isHighSurrogate(c)) {
                 if (i + 1 < len) {
                     if (Character.isLowSurrogate(buf[i + 1])) {
                         buf[w++] = c;
                         i++;
-                        buf[w++] = buf[i]; // low surrogate
+                        buf[w++] = buf[i]; // 低代理项
                     }
-                    // else: orphan high surrogate followed by non-low — skip
+                    // 否则：孤立的高代理项后面跟着非低代理项 —— 跳过
                 } else {
-                    // High surrogate at end of buffer — defer to next chunk
+                    // 高代理项位于缓冲区末尾 —— 延迟到下一个分块处理
                     return new CharFilterResult(w, c);
                 }
             } else if (isLegalXml10Char(c)) {
                 buf[w++] = c;
             }
-            // else: skip illegal char
+            // 否则：跳过非法字符
         }
         return new CharFilterResult(w, '\0');
     }
 
     /**
-     * From XML 1.0 spec: allowed chars are #x9 | #xA | #xD |
+     * 依据 XML 1.0 规范：允许的字符为 #x9 | #xA | #xD |
      * [#x20-#xD7FF] | [#xE000-#xFFFD]
      */
     private static boolean isLegalXml10Char(char c) {
@@ -558,42 +430,46 @@ public final class XmlRepairTool {
     }
 
     /**
-     * Count danmaku elements by scanning the repaired file in 64KB chunks,
-     * with 16-char overlap to handle patterns split across chunk boundaries.
-     * Double-counting is avoided by subtracting matches found in the
-     * overlap-only portion.
+     * 以 64KB 分块扫描修复后的文件来统计弹幕元素数量，
+     * 分块之间重叠 16 个字符，以处理被分块边界拆开的匹配模式
+     * 通过扣除仅出现在重叠部分中的匹配，避免重复计数
      */
     static Counts countElementsFromFile(Path file) throws IOException {
-        int danmu = 0, gift = 0, sc = 0, guard = 0;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                new BufferedInputStream(Files.newInputStream(file)), StandardCharsets.UTF_8), 65536)) {
-            char[] buf = new char[65536];
-            int len;
-            String overlap = "";
-            while ((len = reader.read(buf)) != -1) {
-                String chunk = new String(buf, 0, len);
-                String window = overlap + chunk;
-
-                danmu += count(DANMU_PATTERN, window) - count(DANMU_PATTERN, overlap);
-                gift += count(GIFT_PATTERN, window) - count(GIFT_PATTERN, overlap);
-                sc += count(SC_PATTERN, window) - count(SC_PATTERN, overlap);
-                guard += count(GUARD_PATTERN, window) - count(GUARD_PATTERN, overlap);
-
-                int overlapLen = Math.min(16, len);
-                overlap = new String(buf, len - overlapLen, overlapLen);
-            }
-        }
-        return new Counts(danmu, gift, sc, guard);
+        int[] counts = new int[4];
+        try {
+            SAXParserFactory factory = SAXParserFactory.newInstance();
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            XMLReader reader = factory.newSAXParser().getXMLReader();
+            reader.setContentHandler(new DefaultHandler() {
+                int depth;
+                @Override public void startElement(String uri, String local, String tag, Attributes attributes) {
+                    if (depth++ == 1) {
+                        switch (tag) {
+                            case "d" -> counts[0]++;
+                            case "gift" -> counts[1]++;
+                            case "sc" -> counts[2]++;
+                            case "guard" -> counts[3]++;
+                        }
+                    }
+                }
+                @Override public void endElement(String uri, String local, String tag) { depth--; }
+            });
+            try (var input = Files.newInputStream(file)) { reader.parse(new InputSource(input)); }
+            return new Counts(counts[0], counts[1], counts[2], counts[3]);
+        } catch (Exception e) { throw new IOException("XML 事件计数失败", e); }
     }
 
     /**
-     * SAX-based XML 1.0 well-formedness validation against an existing file.
-     * Uses the same local-entity-safe configuration as the DOM validator.
+     * 基于 SAX 的 XML 1.0 良构性校验，针对已存在的文件
+     * 使用与 DOM 校验器相同的本地实体安全配置
      */
     public static Validation validateSax(Path file) {
         try {
             SAXParserFactory factory = SAXParserFactory.newInstance();
             factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
             factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
             factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
             factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);

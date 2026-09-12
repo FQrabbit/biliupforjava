@@ -62,6 +62,8 @@ public class StatsAggregationService {
     @Autowired
     private RoomLiveEventXmlIssueService xmlIssueService;
     @Autowired
+    private RoomLiveEventXmlRepairService xmlRepairService;
+    @Autowired
     @Qualifier("myAsyncPool")
     private TaskExecutor taskExecutor;
 
@@ -233,6 +235,66 @@ public class StatsAggregationService {
             throw new IllegalArgumentException("一次最多重新检查 100 个 XML 记录");
         }
         return startXmlIssueRecheckTask(safeIds, "重新检查 XML");
+    }
+
+    public Map<String, Object> startXmlIssueRepair(Long partId) {
+        if (partId == null || partId <= 0) {
+            throw new IllegalArgumentException("请选择需要修复的 XML 记录");
+        }
+        return startStatsTask("xmlRepair", "修复 XML", () -> runXmlIssueRepairTask(partId));
+    }
+
+    private void runXmlIssueRepairTask(Long partId) {
+        try {
+            updateTaskProgress("等待统计读写完成", 0, 3, "分P " + partId);
+            if (!statsWriteLock.tryLock(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                updateTaskBusy("等待统计读写超时，请稍后重试");
+                return;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            updateTaskFailed("XML 修复等待被中断，请重试");
+            return;
+        }
+        String stage = "XML 修复失败";
+        String terminalMessage = "XML 修复意外结束";
+        Map<String, Object> terminalResult = null;
+        try {
+            RecordHistoryPart part = partRepository.findById(partId).orElseThrow(() ->
+                    new IllegalArgumentException("分P记录不存在：" + partId));
+            updateTaskProgress("正在修复 XML", 0, 3, "分P " + partId);
+            Map<String, Object> repairReport = xmlRepairService.repairWithReport(part);
+            stage = "XML 文件处理完成，但重新解析失败";
+            updateTaskProgress("正在重新解析 XML", 1, 3, "分P " + partId);
+            var parsed = roomLiveEventParseService.parsePart(part, true);
+            if (!parsed.parsed()) {
+                String reason = xmlIssueService.find(partId).map(RoomLiveEventXmlIssue::getErrorMessage)
+                        .orElse(parsed.reason());
+                throw new IllegalStateException(reason);
+            }
+            stage = "XML 已修复并解析，但刷新统计失败";
+            updateTaskProgress("正在刷新统计", 2, 3, "分P " + partId);
+            if (part.getHistoryId() != null) {
+                historyRepository.findById(part.getHistoryId()).ifPresent(this::aggregateHistory);
+            }
+            Map<String, Object> result = new LinkedHashMap<>(repairReport);
+            result.put("success", true);
+            result.put("resolved", 1);
+            result.put("partId", partId);
+            String message = "XML 已重新解析：" + repairReport.getOrDefault("summary", "处理完成");
+            if (repairReport.containsKey("backupPath")) message += "；原文件已备份";
+            terminalMessage = message;
+            terminalResult = result;
+        } catch (Throwable e) {
+            terminalMessage = stage + "：" + e.getMessage();
+            log.warn("XML repair failed for part {}: {}", partId, e.getMessage(), e);
+        } finally {
+            statsWriteLock.unlock();
+            // 保持任务持续运行，直到其锁被释放：客户端一旦观察到 DONE/FAILED
+            // 下一个任务就可能立即启动
+            if (terminalResult != null) updateTaskDone(terminalMessage, terminalResult);
+            else updateTaskFailed(terminalMessage);
+        }
     }
 
     public void startXmlIssueRecheckByRoot(Long storageRootId) {

@@ -204,11 +204,16 @@
             if (this.statsTaskPoller) {
                 clearInterval(this.statsTaskPoller);
             }
+            var generation = {};
+            this.statsTaskPollGeneration = generation;
+            var inFlight = false;
             var check = function () {
-                if (self.componentDestroyed) return;
+                if (self.componentDestroyed || self.statsTaskPollGeneration !== generation || inFlight) return;
+                inFlight = true;
                 $.getJSON('/stats/task/status')
                     .done(function (status) {
-                        if (self.componentDestroyed) return;
+                        inFlight = false;
+                        if (self.componentDestroyed || self.statsTaskPollGeneration !== generation) return;
                         if (!self.applyStatsTaskStatus(status, task, false)) {
                             return;
                         }
@@ -218,17 +223,19 @@
                         }
                     })
                     .fail(function () {
-                        if (self.componentDestroyed) return;
+                        inFlight = false;
+                        if (self.componentDestroyed || self.statsTaskPollGeneration !== generation) return;
                         clearInterval(self.statsTaskPoller);
                         self.statsTaskPoller = null;
                         self.backfilling = false;
                         self.rebuilding = false;
                         self.cleaning = false;
+                        self.xmlIssueActionLoading = false;
                         self.failOperationProgress('查询任务进度失败');
                     });
             };
-            check();
             this.statsTaskPoller = setInterval(check, 1000);
+            check();
         },
         recoverStatsTaskStatus: function () {
             if (this.componentDestroyed) return;
@@ -271,7 +278,7 @@
             this.setStatsTaskLoading(status.task, !!status.running);
             var detail = this.statsTaskDetail(status);
             this.operationProgress.title = status.title || this.statsTaskTitle(status.task);
-            if (status.task === 'backfill' || status.task === 'rebuild' || status.task === 'xmlRecheck') {
+            if (status.task === 'backfill' || status.task === 'rebuild' || status.task === 'xmlRecheck' || status.task === 'xmlRepair') {
                 this.updateStatsTaskProgress(status, detail);
             } else {
                 this.updateOperationProgress(status.percent || 0, status.message || status.phase || '处理中', detail);
@@ -285,7 +292,7 @@
             this.cleaning = false;
             if (status.success && status.phase === 'DONE') {
                 if (!recovering) {
-                    this.$message.success(status.message || '处理完成');
+                    this.$message[status.result && status.result.lossy ? 'warning' : 'success'](status.message || '处理完成');
                 }
                 this.finishOperationProgress(status.message || '处理完成', detail, true);
                 if (!recovering) {
@@ -300,7 +307,9 @@
                 }
                 this.failOperationProgress(status.message || '处理失败', detail);
                 if (!recovering) {
-                    this.reload();
+                    if (status.task === 'xmlRepair') this.loadXmlIssueSummary();
+                    else this.reload();
+                    if (this.xmlIssueDialogVisible) this.loadXmlIssues(1);
                 }
             }
             return true;
@@ -344,13 +353,14 @@
             this.backfilling = running && task === 'backfill';
             this.rebuilding = running && task === 'rebuild';
             this.cleaning = running && task === 'cleanup';
-            this.xmlIssueActionLoading = running && task === 'xmlRecheck';
+            this.xmlIssueActionLoading = running && (task === 'xmlRecheck' || task === 'xmlRepair');
         },
         statsTaskTitle: function (task) {
             if (task === 'backfill') return '补全未统计';
             if (task === 'rebuild') return '重建统计';
             if (task === 'cleanup') return '清理缓存';
             if (task === 'xmlRecheck') return '重新检查 XML';
+            if (task === 'xmlRepair') return '修复 XML';
             return '统计任务';
         },
         statsTaskDetail: function (status) {
@@ -370,6 +380,15 @@
                 if (result.resolved !== undefined) extra.push('恢复 ' + result.resolved + ' 个');
                 if (result.missing !== undefined && result.missing > 0) extra.push('仍缺失 ' + result.missing + ' 个');
                 if (result.offline !== undefined && result.offline > 0) extra.push('存储离线 ' + result.offline + ' 个');
+                if (result.discarded) {
+                    var labels = { d: '弹幕', gift: '礼物', sc: 'SC', guard: '舰长' };
+                    Object.keys(labels).forEach(function (key) {
+                        if (result.discarded[key]) extra.push('丢弃' + labels[key] + ' ' + result.discarded[key] + ' 条');
+                    });
+                }
+                if (result.reasons) Object.keys(result.reasons).forEach(function (reason) {
+                    extra.push(reason + '（' + result.reasons[reason] + ' 条）');
+                });
                 if (extra.length) {
                     detail = (detail ? detail + ' · ' : '') + extra.join('，');
                 }
