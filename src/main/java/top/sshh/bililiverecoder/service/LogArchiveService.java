@@ -135,6 +135,8 @@ public class LogArchiveService {
                     }
                     lines.addLast(line);
                 }
+            } catch (IOException e) {
+                throw describeReadFailure(file, e);
             }
         }
         return new ArrayList<>(lines);
@@ -172,12 +174,23 @@ public class LogArchiveService {
                         before.addLast(line);
                     }
                 }
+            } catch (IOException e) {
+                throw describeReadFailure(file, e);
             }
         }
         if (candidate != null && remaining > 0) {
             latest = List.copyOf(candidate);
         }
         return latest;
+    }
+
+    private IOException describeReadFailure(LogFile file, IOException cause) {
+        String name = file.path().getFileName().toString();
+        if (name.endsWith(".gz")) {
+            return new IOException("日志压缩包「" + name + "」读取出错，可能是磁盘空间不足导致压缩包不完整，"
+                    + "也可能是压缩尚未完成或文件损坏。请检查磁盘剩余空间及该文件。原始错误: " + cause.getMessage(), cause);
+        }
+        return new IOException("日志文件「" + name + "」读取出错: " + cause.getMessage(), cause);
     }
 
     public void streamLines(List<LogFile> files, Consumer<String> consumer) throws IOException {

@@ -10,10 +10,37 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPOutputStream;
+import java.util.Arrays;
+import org.springframework.test.util.ReflectionTestUtils;
+import top.sshh.bililiverecoder.controller.LogController;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LogArchiveServiceTest {
+
+    @Test
+    void truncatedArchiveExplainsFailureInHistoryAndContext(@TempDir Path tempDir) throws Exception {
+        String name = "spring.log.2026-08-07.0.gz";
+        Path archive = tempDir.resolve(name);
+        try (OutputStream output = new GZIPOutputStream(Files.newOutputStream(archive))) {
+            output.write("example log line\n".repeat(100).getBytes(StandardCharsets.UTF_8));
+        }
+        byte[] compressed = Files.readAllBytes(archive);
+        Files.write(archive, Arrays.copyOf(compressed, compressed.length / 2));
+        LogArchiveService service = new LogArchiveService();
+        ReflectionTestUtils.setField(service, "logPath", tempDir.toString());
+        ReflectionTestUtils.setField(service, "logName", "spring.log");
+        LogController controller = new LogController(null, service, null);
+
+        for (String message : new String[] {controller.getHistoryLogs(20).get(0),
+                controller.getContextLogs("example", 5).get(0)}) {
+            assertTrue(message.startsWith("读取日志文件失败: "));
+            assertTrue(message.contains("日志压缩包「" + name + "」"));
+            assertTrue(message.contains("可能是磁盘空间不足"));
+            assertTrue(message.contains("Unexpected end of ZLIB input stream"));
+        }
+    }
 
     @Test
     void countsPlainLogBytes(@TempDir Path tempDir) throws Exception {
