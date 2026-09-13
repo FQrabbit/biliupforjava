@@ -190,6 +190,10 @@ public class RecordEventFileClosedService implements RecordEventService {
             float durationToSave = durationFromEvent > 0.0f ? durationFromEvent : (float) durationSeconds;
             part.setDuration(durationToSave);
             part.setEndTime(endTime);
+            part.setCloseSource("FILE_CLOSED");
+            part.setAutoCloseAt(null);
+            part.setAutoCloseFileSize(null);
+            part.setAutoCloseFileModifiedAt(null);
             part.setAreaName(eventData.getAreaNameChild());
             part.setUpdateTime(LocalDateTime.now());
             part = historyPartRepository.save(part);

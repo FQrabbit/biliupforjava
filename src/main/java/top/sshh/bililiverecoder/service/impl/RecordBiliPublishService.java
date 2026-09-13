@@ -27,6 +27,7 @@ import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartPathService;
+import top.sshh.bililiverecoder.service.RecordPartRecordingStateService;
 import top.sshh.bililiverecoder.service.RoomLiveEventXmlIssueService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
@@ -105,6 +106,8 @@ public class RecordBiliPublishService {
     private RecordHistoryPartRepository partRepository;
     @Autowired
     private RecordHistoryRepository historyRepository;
+    @Autowired
+    private RecordPartRecordingStateService recordingStateService;
     @Autowired
     private RecordRoomRepository roomRepository;
     @Autowired
@@ -1037,6 +1040,11 @@ public class RecordBiliPublishService {
             } else {
                 suspendMap.remove(history.getId());
             }
+        }
+        if (!recordingStateService.verifyAutoClosedFiles(history)) {
+            log.info("[BLR] {}", LogKvs.event("Publish.Skip.AutoClosedFileChanged")
+                    .add("historyId", history.getId()).add("roomId", history.getRoomId()));
+            return false;
         }
         if (hasOnlineIdentity(history)) {
             return editPublishedHistory(history, "publish-entry");

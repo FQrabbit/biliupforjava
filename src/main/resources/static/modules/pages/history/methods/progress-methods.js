@@ -336,6 +336,8 @@
             return 'info';
         },
         formatProgressState: function(state) {
+            if (state === 'RECORDING') return '录制中';
+            if (state === 'FINALIZING') return '等待收尾';
             if (state === 'UPLOADING') return '分片上传中';
             if (state === 'WAITING') return '等待中';
             if (state === 'RETRY_WAIT') return '等待重试';

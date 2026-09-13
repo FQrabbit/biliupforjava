@@ -150,7 +150,7 @@
         confirmMarkFinished: function(p) {
             var _this = this;
             if (!p || !p.partId) return;
-            _this.$pageConfirm('确定要标记该分P为结束/跳过吗？标记后稿件将继续推进投稿流程（不会自动补回这段内容）。', '确认操作', {
+            _this.$pageConfirm('确定要跳过此分P吗？该分P不会自动上传，稿件将继续推进投稿流程。', '确认跳过', {
                 confirmButtonText: '确定',
                 cancelButtonText: '取消',
                 type: 'warning'

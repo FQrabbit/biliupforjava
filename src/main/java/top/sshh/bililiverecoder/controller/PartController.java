@@ -26,6 +26,7 @@ import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
+import top.sshh.bililiverecoder.service.RecordPartRecordingStateService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -78,6 +79,8 @@ public class PartController {
     private PartFileLocationService partFileLocationService;
     @Autowired
     private PartFileOperationService partFileOperationService;
+    @Autowired
+    private RecordPartRecordingStateService recordingStateService;
     @Autowired
     private StorageRootService storageRootService;
 
@@ -183,9 +186,6 @@ public class PartController {
         }
         List<Map<String, Object>> items = new ArrayList<>();
         int blocking = 0;
-        long nowMs = System.currentTimeMillis();
-        long stableThresholdMs = 10L * 60L * 1000L;
-
         for (RecordHistoryPart p : parts) {
             PartFileLocationService.LocalFileView localFile = partFileLocationService.describe(p.getId());
             Map<String, Object> m = new LinkedHashMap<>();
@@ -219,6 +219,8 @@ public class PartController {
             m.put("uploadPaused", Boolean.TRUE.equals(p.getUploadPaused()));
             m.put("uploadPausedAt", p.getUploadPausedAt());
             m.put("uploadPauseReason", p.getUploadPauseReason());
+            m.put("closeSource", p.getCloseSource());
+            m.put("autoCloseAt", p.getAutoCloseAt());
             m.put("localFileState", localFile.state().name());
             m.put("localFileAvailable", localFile.available());
             m.put("localFileExpected", localFile.expected());
@@ -305,23 +307,26 @@ public class PartController {
                     }
                 }
             } else {
-                String fp = localFile.primaryPath();
-                File f = fp == null ? null : new File(fp);
-                boolean fileExists = localFile.available() && f != null && f.exists();
-                boolean fileStable = fileExists && f.lastModified() > 0 && f.lastModified() < (nowMs - stableThresholdMs);
-
                 if (p.isRecording() || p.getEndTime() == null) {
-                    if (fileExists && fileStable) {
+                    RecordPartRecordingStateService.Assessment assessment = recordingStateService.assess(p);
+                    m.put("recordingState", assessment.state().name());
+                    m.put("recordingStateMessage", assessment.message());
+                    m.put("stableForMs", assessment.stableForMs());
+                    m.put("requiredStableMs", assessment.requiredStableMs());
+                    if (assessment.state() == RecordPartRecordingStateService.State.FILE_UNAVAILABLE
+                            && !assessment.activeSession()) {
                         issueCode = "MISSING_CLOSE";
-                        issueMessage = "疑似遗漏文件关闭事件：文件已稳定但仍显示录制中";
+                        issueMessage = assessment.message();
                         actionable = true;
-                        blockingIssue = true;
+                        blockingIssue = !p.isUpload() && !historyPublished;
                         actions.add("RESCAN");
-                        if (!historyPublished) {
-                            actions.add("MARK_FINISHED");
-                        }
                     }
-                } else if (!fileExists) {
+                } else {
+                    m.put("recordingState", RecordPartRecordingStateService.State.ENDED.name());
+                    String fp = localFile.primaryPath();
+                    File f = fp == null ? null : new File(fp);
+                    boolean fileExists = localFile.available() && f != null && f.exists();
+                    if (!fileExists) {
                     issueCode = "FILE_MISSING";
                     issueMessage = "分P文件不存在或路径为空";
                     actionable = true;
@@ -329,6 +334,7 @@ public class PartController {
                     actions.add(historyPublished || historyEditableOnline ? "EDIT_PARTS" : "BIND_FILE");
                     if (!historyPublished) {
                         actions.add("MARK_FINISHED");
+                    }
                     }
                 }
             }
@@ -362,6 +368,10 @@ public class PartController {
             m.put("issueMessage", issueMessage);
             m.put("actionable", actionable);
             m.put("blocking", blockingIssue);
+            m.put("issueSeverity", blockingIssue ? "ERROR" : (issueCode == null ? "NONE" : "WARNING"));
+            m.put("requiresUserAction", actionable && blockingIssue);
+            m.put("blocksUpload", blockingIssue && !p.isUpload());
+            m.put("blocksPublish", blockingIssue && !historyPublished);
             m.put("actions", actions);
             items.add(m);
         }
@@ -468,57 +478,25 @@ public class PartController {
             return result;
         }
         RecordHistoryPart part = partOptional.get();
-        PartFileLocationService.FileResolution resolution = partFileLocationService.resolveReadable(id);
-        if (!resolution.available()) {
-            result.put("type", "warning");
-            result.put("msg", resolution.state() == PartFileLocationService.LocalFileState.ROOT_OFFLINE
-                    ? "存储目录离线，请恢复挂载后再试" : "分P文件不存在，请先补全文件");
-            return result;
-        }
-        File file = resolution.path().toFile();
-        long stableThresholdMs = 10L * 60L * 1000L;
-        long nowMs = System.currentTimeMillis();
-        if (file.lastModified() > nowMs - stableThresholdMs) {
+        RecordPartRecordingStateService.Assessment assessment = recordingStateService.assess(part);
+        if (!assessment.readyToClose()) {
             result.put("type", "info");
-            result.put("msg", "文件可能仍在写入，稍后再试");
+            result.put("msg", assessment.message());
+            result.put("recordingState", assessment.state().name());
             return result;
         }
-        boolean changed = false;
-        if (part.isRecording()) {
-            part.setRecording(false);
-            changed = true;
-        }
-        if (part.getEndTime() == null) {
-            LocalDateTime fileTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(file.lastModified()), java.time.ZoneId.systemDefault());
-            if (part.getStartTime() != null && fileTime.isBefore(part.getStartTime())) {
-                result.put("type", "warning");
-                result.put("msg", "文件时间早于分P开始时间，拒绝自动收尾");
-                return result;
-            }
-            part.setEndTime(fileTime);
-            changed = true;
-        }
-        long size = file.length();
-        if (size > 0 && part.getFileSize() != size) {
-            part.setFileSize(size);
-            changed = true;
-        }
-        if (changed) {
-            partRepository.save(part);
-        }
-
-        boolean triggered = false;
+        boolean changed = recordingStateService.closeIfReady(part.getId(), "manual-rescan");
 
         log.info("[BLR] {}", LogKvs.event("PartRepair.Rescan.Done")
                 .add("partId", part.getId())
                 .add("historyId", part.getHistoryId())
                 .add("roomId", part.getRoomId())
-                .add("triggerUpload", triggered)
+                .add("triggerUpload", false)
                 .addRoundCount("stateChanged", changed ? 1 : 0)
                 .addStageCostMs("total", totalStartNs));
 
         result.put("type", "success");
-        result.put("msg", "已重试扫描并修正状态，上传将由补偿任务处理");
+        result.put("msg", changed ? "已安全收尾，上传将由补偿任务处理" : "文件状态已变化，未修改录制状态");
         return result;
     }
 
@@ -557,6 +535,7 @@ public class PartController {
         part.setUpload(false);
         part.setUploadRetryCount(9999);
         part.setDeleteFailType("MANUAL_SKIP");
+        part.setCloseSource("MANUAL_SKIP");
         if (isBlank(part.getDeleteFailReason())) {
             part.setDeleteFailReason("用户已标记该分P结束/跳过，允许稿件继续推进");
         }

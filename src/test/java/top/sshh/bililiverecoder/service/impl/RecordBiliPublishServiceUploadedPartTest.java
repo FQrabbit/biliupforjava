@@ -14,6 +14,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartPathService;
+import top.sshh.bililiverecoder.service.RecordPartRecordingStateService;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,8 @@ class RecordBiliPublishServiceUploadedPartTest {
     private PartFileLocationService partFileLocationService;
     @Mock
     private RecordPartPathService partPathService;
+    @Mock
+    private RecordPartRecordingStateService recordingStateService;
 
     private RecordBiliPublishService service;
     private RecordRoom room;
@@ -51,6 +54,7 @@ class RecordBiliPublishServiceUploadedPartTest {
         ReflectionTestUtils.setField(service, "roomRepository", roomRepository);
         ReflectionTestUtils.setField(service, "partFileLocationService", partFileLocationService);
         ReflectionTestUtils.setField(service, "partPathService", partPathService);
+        ReflectionTestUtils.setField(service, "recordingStateService", recordingStateService);
 
         room = new RecordRoom();
         room.setRoomId("room-1");
@@ -69,6 +73,7 @@ class RecordBiliPublishServiceUploadedPartTest {
         history.setUpload(true);
         history.setPublish(false);
         history.setRecording(false);
+        when(recordingStateService.verifyAutoClosedFiles(history)).thenReturn(true);
     }
 
     @Test

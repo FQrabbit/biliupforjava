@@ -99,13 +99,8 @@
             return !!item.recording;
         },
         hasRecordingMismatch: function(item) {
-            if (!item) return false;
-            const recordPartCount = (item.recordPartCount !== null && item.recordPartCount !== undefined) ? item.recordPartCount : null;
-            // 检测录制状态矛盾
-            // 情况1：已结束/已发布，但仍存在录制中的分P
-            if ((!!item.endTime || item.publish === true) && recordPartCount !== null && recordPartCount > 0) return true;
-            // 情况2：标记为录制中，但没有任何录制中分P且已有结束时间
-            return item.recording === true && recordPartCount === 0 && !!item.endTime;
+            // history.endTime 在分P关闭时也会更新，不能光看它就说整场录制结束了
+            return false;
         },
         handleCommand: function(command, row) {
             this.showMoreActions = false;

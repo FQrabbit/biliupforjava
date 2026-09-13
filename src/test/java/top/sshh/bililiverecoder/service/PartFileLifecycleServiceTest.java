@@ -35,12 +35,15 @@ import static org.mockito.Mockito.doThrow;
         "spring.datasource.hikari.jdbc-url=jdbc:h2:mem:file-lifecycle;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;DATABASE_TO_UPPER=false",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "record.part-stable-threshold-ms=0",
+        "record.part-active-stable-threshold-ms=0"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({StorageRootService.class, PartFileLocationService.class,
         PartFileOperationService.class, PartFileStorageAdapter.class,
-        StorageLifecycleMigrationService.class, RecordPartStaleReconciler.class})
+        StorageLifecycleMigrationService.class, RecordPartStaleReconciler.class,
+        RecordPartRecordingStateService.class})
 class PartFileLifecycleServiceTest {
 
     @TempDir
@@ -77,6 +80,8 @@ class PartFileLifecycleServiceTest {
     private StorageLifecycleMigrationService migrationService;
     @Autowired
     private RecordPartStaleReconciler staleReconciler;
+    @Autowired
+    private RecordPartRecordingStateService recordingStateService;
 
     @Test
     void moveVerifiesTargetSwitchesPrimaryAndIsIdempotent() throws Exception {
@@ -315,12 +320,55 @@ class PartFileLifecycleServiceTest {
         part = partRepository.save(part);
         locationService.registerPrimary(part);
 
+        assertEquals(0, staleReconciler.reconcileBatch(), "首次观察不能仅凭旧修改时间直接收尾");
         assertEquals(1, staleReconciler.reconcileBatch());
         RecordHistoryPart repaired = partRepository.findById(part.getId()).orElseThrow();
         assertFalse(repaired.isRecording());
         assertNotNull(repaired.getEndTime());
-        assertTrue(repaired.getDuration() > 0);
+        assertEquals("STABLE_FALLBACK", repaired.getCloseSource());
+        assertNotNull(repaired.getAutoCloseAt());
+        assertEquals(0, repaired.getDuration(), "自动收尾不应以墙钟差伪造媒体时长");
         assertFalse(historyRepository.findById(history.getId()).orElseThrow().isRecording());
+    }
+
+    @Test
+    void activeSessionAlsoNeedsTwoObservationsBeforeFallbackClose() throws Exception {
+        Path source = createVideo("active-stale/video.flv", "active-stale-data");
+        String roomId = "active-stale-" + UUID.randomUUID();
+        RecordHistory history = new RecordHistory();
+        history.setRoomId(roomId);
+        history.setEventId("history-" + UUID.randomUUID());
+        history.setRecording(true);
+        history.setStreaming(true);
+        history.setUpload(true);
+        history = historyRepository.save(history);
+        RecordRoom room = new RecordRoom();
+        room.setRoomId(roomId);
+        room.setHistoryId(history.getId());
+        room.setRecording(true);
+        room.setStreaming(true);
+        roomRepository.save(room);
+        RecordHistoryPart part = createPartRecord(source, false, Files.size(source));
+        part.setRoomId(roomId);
+        part.setHistoryId(history.getId());
+        part.setRecording(true);
+        part.setStartTime(java.time.LocalDateTime.now().minusMinutes(20));
+        part.setEndTime(null);
+        part = partRepository.save(part);
+        locationService.registerPrimary(part);
+
+        assertEquals(0, staleReconciler.reconcileBatch());
+        assertEquals(1, staleReconciler.reconcileBatch());
+        assertFalse(partRepository.findById(part.getId()).orElseThrow().isRecording());
+        assertFalse(historyRepository.findById(history.getId()).orElseThrow().isRecording());
+
+        Files.writeString(source, "resumed-write", java.nio.file.StandardOpenOption.APPEND);
+        assertFalse(recordingStateService.verifyAutoClosedFiles(historyRepository.findById(history.getId()).orElseThrow()));
+        RecordHistoryPart resumed = partRepository.findById(part.getId()).orElseThrow();
+        assertTrue(resumed.isRecording());
+        assertNull(resumed.getEndTime());
+        assertFalse(resumed.isUpload());
+        assertNull(resumed.getFileName());
     }
 
     @Test

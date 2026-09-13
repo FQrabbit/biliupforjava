@@ -106,6 +106,12 @@ public class RecordHistory {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
+    @Column(name = "close_source", length = 32)
+    private String closeSource;
+
+    @Column(name = "close_at")
+    private LocalDateTime closeAt;
+
     private LocalDateTime updateTime;
 
 

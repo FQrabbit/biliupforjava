@@ -21,6 +21,7 @@ import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartPathService;
+import top.sshh.bililiverecoder.service.RecordPartRecordingStateService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -76,6 +77,9 @@ public class publishJob {
 
     @Autowired
     RecordPartPathService partPathService;
+
+    @Autowired
+    RecordPartRecordingStateService recordingStateService;
 
     @Autowired
     @Qualifier("myAsyncPool")
@@ -485,6 +489,10 @@ public class publishJob {
                             .add("userQuota", Math.max(1, compensateMaxTriggerPerUserPerRound))
                             .add("remainingParts", compensateParts.size() - triggeredCount));
                     break;
+                }
+                RecordHistory partHistory = part.getHistoryId() == null ? null : historyRepository.findById(part.getHistoryId()).orElse(null);
+                if (partHistory == null || !recordingStateService.verifyAutoClosedFiles(partHistory)) {
+                    continue;
                 }
                 if (isAsyncPoolBusy()) {
                     log.warn("[BLR] {}", LogKvs.event("PublishJob.PartCompensate.SkipByAsyncPoolPressure")

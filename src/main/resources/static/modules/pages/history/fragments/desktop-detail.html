@@ -412,9 +412,13 @@
                     <i class="el-icon-connection"></i>
                     <span>已自动合并 {{ duplicatePartCount }} 条重复分P记录，进度和投稿按唯一文件计算</span>
                 </div>
+                <div v-if="recordingPartCount > 0" class="waiting-tip" role="status">
+                    <i class="el-icon-video-camera"></i>
+                    <span>已上传 {{ getEffectiveUploadedParts() }} 个分P，另 {{ recordingPartCount }} 个正在录制；录制结束后会继续自动投稿</span>
+                </div>
                 <div v-if="hasEffectiveBlockingIssues" class="waiting-tip waiting-tip--blocking" role="alert">
                     <i class="el-icon-warning"></i>
-                    <span>暂停投稿：存在 {{ effectiveBlockingIssueCount }} 个异常分P，需要处理后继续</span>
+                    <span>存在 {{ effectiveBlockingIssueCount }} 个需要处理的分P，处理后将继续投稿</span>
                 </div>
 
                 <!-- 分P进度展开/收起按钮 -->
@@ -467,7 +471,7 @@
                             <el-button v-if="p.actions.indexOf('RESUME_UPLOAD') !== -1" class="part-action-btn part-action-btn--resume" size="mini" type="success" plain icon="el-icon-video-play" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="resumePartUpload(p)">继续</el-button>
                             <el-button v-if="p.actions.indexOf('EDIT_PARTS') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain icon="el-icon-edit" @click.stop="openEditPartsFromPart">编辑分P</el-button>
                             <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
-                            <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">标记结束</el-button>
+                            <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">跳过此分P</el-button>
                             <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
                             <el-button v-if="p.actions.indexOf('RETRY_FILE_PROCESS') !== -1" class="part-action-btn" size="mini" type="danger" plain icon="el-icon-refresh" :loading="!!p.fileOperationRetrying" @click.stop="retryFileProcess(p)">重试文件处理</el-button>
                         </div>

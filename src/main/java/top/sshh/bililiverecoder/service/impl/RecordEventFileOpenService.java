@@ -168,8 +168,33 @@ public class RecordEventFileOpenService implements RecordEventService {
 
                 String filePath = partPathService.resolveWebhookPath(relativePath);
 
-                if (historyPartRepository.existsByFilePath(filePath)
-                        || findByCanonicalPath(historyPartRepository.findByHistoryId(history.getId()), filePath) != null) {
+                RecordHistoryPart existingPart = findByCanonicalPath(historyPartRepository.findByHistoryId(history.getId()), filePath);
+                if (historyPartRepository.existsByFilePath(filePath) || existingPart != null) {
+                    // 自动收尾后，同一路径又收到文件打开事件，说明又开始写了，还没投稿就恢复录制
+                    // 重新观察文件是否稳定，之前的上传结果不能再用
+                    if (existingPart != null && "STABLE_FALLBACK".equals(existingPart.getCloseSource()) && !history.isPublish()) {
+                        existingPart.setRecording(true);
+                        existingPart.setEndTime(null);
+                        existingPart.setUpload(false);
+                        existingPart.setFileName(null);
+                        existingPart.setCid(null);
+                        existingPart.setCloseSource(null);
+                        existingPart.setAutoCloseAt(null);
+                        existingPart.setAutoCloseFileSize(null);
+                        existingPart.setAutoCloseFileModifiedAt(null);
+                        existingPart.setUpdateTime(LocalDateTime.now());
+                        historyPartRepository.save(existingPart);
+                        history.setRecording(true);
+                        history.setStreaming(eventData.isStreaming());
+                        history.setUpdateTime(LocalDateTime.now());
+                        historyRepository.save(history);
+                        room.setRecording(true);
+                        room.setStreaming(eventData.isStreaming());
+                        roomRepository.save(room);
+                        log.info("[BLR] {}", LogKvs.event("FileOpen.RestoreAutoClosedPart")
+                                .add("roomId", roomId).add("historyId", history.getId()).add("partId", existingPart.getId()));
+                        return;
+                    }
                     log.warn("[BLR] {}", LogKvs.event("FileOpen.PartExists.Skip")
                             .add("roomId", roomId)
                             .add("historyId", history.getId())

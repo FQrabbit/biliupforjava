@@ -73,6 +73,8 @@ public class RecordHistoryStateService {
         history.setRecording(false);
         history.setStreaming(false);
         history.setEndTime(now);
+        history.setCloseSource("SESSION_ENDED");
+        history.setCloseAt(now);
         history.setUpdateTime(now);
         historyRepository.save(history);
     }

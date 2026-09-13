@@ -127,6 +127,11 @@
         hasEffectiveBlockingIssues: function() {
             return this.effectiveBlockingIssueCount > 0;
         },
+        recordingPartCount: function() {
+            return this.effectiveDetailParts.filter(function(part) {
+                return part && (part.recordingState === 'RECORDING' || part.recordingState === 'WAITING_STABLE' || part.recordingState === 'READY_TO_CLOSE');
+            }).length;
+        },
         allEffectivePartsUploaded: function() {
             var total = this.getEffectiveTotalParts();
             return total > 0 && this.getEffectiveUploadedParts() >= total;
@@ -143,6 +148,9 @@
                 const blocking = !!p.blocking;
                 let state = p.upload ? 'SUCCESS' : 'WAITING';
                 let percent = p.upload ? 100 : 0;
+                if (!p.upload && (p.recordingState === 'RECORDING' || p.recordingState === 'WAITING_STABLE' || p.recordingState === 'READY_TO_CLOSE')) {
+                    state = p.recordingState === 'RECORDING' ? 'RECORDING' : 'FINALIZING';
+                }
                 if (issueCode) {
                     if (issueCode === 'SKIPPED_THRESHOLD' || issueCode === 'MANUAL_SKIP' || issueCode === 'GIVE_UP') {
                         state = 'SKIPPED';
@@ -168,6 +176,12 @@
                     upload: p.upload,
                     uploadPaused: !!p.uploadPaused,
                     uploadPauseReason: p.uploadPauseReason || null,
+                    recordingState: p.recordingState || null,
+                    recordingStateMessage: p.recordingStateMessage || null,
+                    issueSeverity: p.issueSeverity || 'NONE',
+                    requiresUserAction: !!p.requiresUserAction,
+                    blocksUpload: !!p.blocksUpload,
+                    blocksPublish: !!p.blocksPublish,
                     fileSize: p.fileSize,
                     filePath: p.filePath,
                     primaryPath: p.primaryPath || null,
@@ -185,6 +199,7 @@
                     percent: percent,
                     issueCode: issueCode,
                     issueMessage: issueMessage,
+                    stateMsg: p.recordingStateMessage || null,
                     reviewFailCode: (p.reviewFailCode !== undefined && p.reviewFailCode !== null) ? p.reviewFailCode : null,
                     reviewXcodeState: (p.reviewXcodeState !== undefined && p.reviewXcodeState !== null) ? p.reviewXcodeState : null,
                     reviewFailDesc: p.reviewFailDesc || null,

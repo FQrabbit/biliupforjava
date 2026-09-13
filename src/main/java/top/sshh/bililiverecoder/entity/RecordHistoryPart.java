@@ -107,6 +107,18 @@ public class RecordHistoryPart {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
+    @Column(name = "close_source", length = 32)
+    private String closeSource;
+
+    @Column(name = "auto_close_at")
+    private LocalDateTime autoCloseAt;
+
+    @Column(name = "auto_close_file_size")
+    private Long autoCloseFileSize;
+
+    @Column(name = "auto_close_file_modified_at")
+    private Long autoCloseFileModifiedAt;
+
     private LocalDateTime updateTime;
 
     @Column(columnDefinition = "bit default 0")
