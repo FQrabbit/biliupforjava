@@ -40,7 +40,7 @@
                         </span>
                     </el-tooltip>
                 </div>
-                <div style="margin-top:6px; font-size:12px; color:#909399; line-height:1.5;">
+                <div style="margin-top:6px; font-size:12px; color:var(--text-secondary); line-height:1.5;">
                     仅审核通过（公开/仅自己可见）且稿件全部流程完成时可操作。
                 </div>
             </el-form-item>
@@ -54,22 +54,22 @@
     <el-dialog title="放弃待发送队列" :visible.sync="abandonQueueDialogVisible" width="500px" append-to-body custom-class="history-page-dialog history-abandon-queue-dialog">
         <div style="margin-bottom: 20px;">
             <p style="margin-bottom: 15px;">此操作会将已排队但未发送的弹幕/评论标记为已放弃，后续任务不会继续重试。</p>
-            <div style="background-color: #fdf6ec; color: #E6A23C; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
+            <div style="background-color: var(--warning-soft-bg-faint); color: var(--warning-color); border: 1px solid var(--warning-border); padding: 10px; border-radius: var(--radius-md); margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
                 <i class="el-icon-warning"></i> 不会删除弹幕数据，也不会删除本地弹幕文件；如需重新发送，可再使用“重载弹幕”重新生成队列。
             </div>
             <el-form label-width="200px">
                 <el-form-item label="普通弹幕队列">
-                    <el-switch v-model="abandonQueueOptions.ordinary" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                    <el-switch v-model="abandonQueueOptions.ordinary" active-color="var(--warning-color)" inactive-color="var(--bg-tertiary)"></el-switch>
                 </el-form-item>
                 <el-form-item label="SC/上舰高级队列">
-                    <el-switch v-model="abandonQueueOptions.advanced" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                    <el-switch v-model="abandonQueueOptions.advanced" active-color="var(--warning-color)" inactive-color="var(--bg-tertiary)"></el-switch>
                 </el-form-item>
                 <el-form-item label="评论汇总">
-                    <el-switch v-model="abandonQueueOptions.reply" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
-                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">停止继续补发 SC/上舰/礼物评论汇总</div>
+                    <el-switch v-model="abandonQueueOptions.reply" active-color="var(--warning-color)" inactive-color="var(--bg-tertiary)"></el-switch>
+                    <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.2; margin-top: 5px;">停止继续补发 SC/上舰/礼物评论汇总</div>
                 </el-form-item>
                 <el-form-item label="同时强制归档">
-                    <el-switch v-model="abandonQueueOptions.forceArchive" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                    <el-switch v-model="abandonQueueOptions.forceArchive" active-color="var(--warning-color)" inactive-color="var(--bg-tertiary)"></el-switch>
                 </el-form-item>
             </el-form>
         </div>
@@ -89,7 +89,7 @@
                     <el-checkbox v-model="msgQueueCleanupOptions.reply">评论汇总</el-checkbox>
                 </el-form-item>
                 <el-form-item label="同时强制归档">
-                    <el-switch v-model="msgQueueCleanupOptions.forceArchive" active-color="#E6A23C" inactive-color="#dcdfe6"></el-switch>
+                    <el-switch v-model="msgQueueCleanupOptions.forceArchive" active-color="var(--warning-color)" inactive-color="var(--bg-tertiary)"></el-switch>
                 </el-form-item>
                 <el-form-item label="只处理结束超过">
                     <el-input-number v-model="msgQueueCleanupOptions.olderThanDays" :min="0" :max="3650" :step="1" controls-position="right"></el-input-number>
@@ -121,17 +121,17 @@
     <el-dialog title="重载弹幕确认" :visible.sync="reloadDialogVisible" width="500px" append-to-body custom-class="history-page-dialog history-reload-dialog">
         <div style="margin-bottom: 20px;">
             <p style="margin-bottom: 15px;">此操作将重新解析并加载弹幕文件到数据库。</p>
-            <div style="background-color: #fef0f0; color: #f56c6c; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
+            <div style="background-color: var(--danger-soft-bg-faint); color: var(--danger-color); border: 1px solid var(--danger-border); padding: 10px; border-radius: var(--radius-md); margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
                 <i class="el-icon-warning"></i> 警告：如果您开启了以下开关，可能会导致任务被强制中断并重置，从而引起弹幕重复发送等问题，请务必确认当前没有正在进行的重要发送任务！
             </div>
             <el-form label-width="200px">
                 <el-form-item label="重置普通弹幕任务">
-                    <el-switch v-model="reloadOptions.restartOrdinary" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
-                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前普通弹幕发送线程并从头开始</div>
+                    <el-switch v-model="reloadOptions.restartOrdinary" active-color="var(--danger-color)" inactive-color="var(--bg-tertiary)"></el-switch>
+                    <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.2; margin-top: 5px;">终止当前普通弹幕发送线程并从头开始</div>
                 </el-form-item>
                 <el-form-item label="重置高级弹幕任务">
-                    <el-switch v-model="reloadOptions.restartAdvanced" active-color="#ff4949" inactive-color="#dcdfe6"></el-switch>
-                    <div style="font-size: 12px; color: #909399; line-height: 1.2; margin-top: 5px;">终止当前SC/上舰发送线程并从头开始</div>
+                    <el-switch v-model="reloadOptions.restartAdvanced" active-color="var(--danger-color)" inactive-color="var(--bg-tertiary)"></el-switch>
+                    <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.2; margin-top: 5px;">终止当前SC/上舰发送线程并从头开始</div>
                 </el-form-item>
             </el-form>
         </div>
@@ -143,10 +143,10 @@
 
     <el-dialog title="补全分P文件" :visible.sync="bindFileDialogVisible" width="600px" append-to-body custom-class="history-page-dialog history-bind-file-dialog">
         <div v-if="bindTargetPart">
-            <div style="font-size: 13px; color: #606266; margin-bottom: 10px;">
+            <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 10px;">
                 P{{ bindTargetPart.page }} / partId={{ bindTargetPart.partId }}
             </div>
-            <div v-if="bindTargetPart.issueMessage" style="background: #fff7e6; border: 1px solid #f3d19e; padding: 10px; border-radius: 6px; color: #E6A23C; font-size: 13px; margin-bottom: 12px;">
+            <div v-if="bindTargetPart.issueMessage" style="background: var(--warning-soft-bg-faint); border: 1px solid var(--warning-border); padding: 10px; border-radius: var(--radius-md); color: var(--warning-color); font-size: 13px; margin-bottom: 12px;">
                 <i class="el-icon-warning"></i> {{ bindTargetPart.issueMessage }}
             </div>
         </div>
@@ -157,15 +157,15 @@
         <el-select v-model="selectedCandidateFile" filterable clearable placeholder="请选择要绑定的文件" style="width: 100%;" :loading="candidateFilesLoading" popper-class="history-page-select-popper">
             <el-option v-for="f in candidateFiles" :key="f.filePath" :label="privacyMode ? '***' : (f.name + ' (' + formatSize(f.size) + ')')" :value="f.filePath">
                 <span style="float:left">{{ maskText(f.name) }}</span>
-                <span style="float:right; color:#909399; font-size:12px;">{{ formatSize(f.size) }}</span>
+                <span style="float:right; color:var(--text-secondary); font-size:12px;">{{ formatSize(f.size) }}</span>
             </el-option>
         </el-select>
         <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <div style="font-size: 12px; color: #909399;">
+            <div style="font-size: 12px; color: var(--text-secondary);">
                 文件来自服务器工作目录
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size: 12px; color: #606266;">绑定后触发上传</span>
+                <span style="font-size: 12px; color: var(--text-primary);">绑定后触发上传</span>
                 <el-switch v-model="bindTriggerUpload"></el-switch>
             </div>
         </div>
@@ -246,10 +246,10 @@
         <el-select v-model="selectedEditCandidateFile" filterable clearable placeholder="请选择视频文件" style="width: 100%;" :loading="editCandidateFilesLoading" popper-class="history-page-select-popper">
             <el-option v-for="f in editCandidateFiles" :key="f.filePath" :label="privacyMode ? '***' : (f.name + ' (' + formatSize(f.size) + ')')" :value="f.filePath">
                 <span style="float:left">{{ maskText(f.name) }}</span>
-                <span style="float:right; color:#909399; font-size:12px;">{{ formatSize(f.size) }}</span>
+                <span style="float:right; color:var(--text-secondary); font-size:12px;">{{ formatSize(f.size) }}</span>
             </el-option>
         </el-select>
-        <div style="margin-top: 12px; font-size: 12px; color: #909399;">
+        <div style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
             文件来自当前房间工作目录，保存编辑时才会正式上传到 B 站。
         </div>
         <div slot="footer" class="dialog-footer">
@@ -289,7 +289,7 @@
     <el-dialog title="删除记录确认" :visible.sync="singleDeleteDialogVisible" width="420px" append-to-body :close-on-click-modal="false" custom-class="history-page-dialog history-single-delete-dialog">
         <div style="padding: 0 4px;">
             <div style="display:flex; align-items:flex-start; margin-bottom:16px;">
-                <i class="el-icon-warning" style="font-size:22px; color:#E6A23C; margin-right:10px; margin-top:2px; flex-shrink:0;"></i>
+                <i class="el-icon-warning" style="font-size:22px; color:var(--warning-color); margin-right:10px; margin-top:2px; flex-shrink:0;"></i>
                 <span style="line-height:1.6; color:var(--text-primary);">此操作将永久删除该条录制历史记录（数据库数据），<strong>不可恢复</strong>。</span>
             </div>
             <div style="background:var(--bg-tertiary); border-radius:6px; padding:12px 16px; margin-bottom:8px;">
@@ -299,7 +299,7 @@
                 <el-checkbox v-model="singleDeleteOptions.deleteCover" style="display:block;">封面图片（.jpg / .png 等）</el-checkbox>
             </div>
             <div v-if="singleDeleteOptions.deleteVideo || singleDeleteOptions.deleteDanmaku || singleDeleteOptions.deleteCover"
-                 style="font-size:12px; color:#F56C6C; margin-top:8px;">
+                 style="font-size:12px; color:var(--danger-color); margin-top:8px;">
                 ⚠ 勾选的本地文件将被永久删除，无法恢复！
             </div>
         </div>

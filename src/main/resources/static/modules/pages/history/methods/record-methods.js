@@ -6,6 +6,7 @@
 
     window.HistoryPageRecordMethods = {
         handleResize: function () {
+            this.tableMaxHeight = Math.max(180, window.innerHeight - 280);
             this.isMobile = this.moduleSurface === 'mobile';
             if (this.isMobile && this.viewMode !== 'card') {
                 this.viewMode = 'card';

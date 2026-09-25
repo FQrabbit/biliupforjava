@@ -2,6 +2,7 @@
     'use strict';
 
     var MANIFEST_URL = '/modules/manifest.json';
+    var DESIGN_SYSTEM_PATH = '/css/base/design-system.css';
     var manifestPromise = null;
     var modulePromises = Object.create(null);
     var assetPromises = Object.create(null);
@@ -145,6 +146,16 @@
         });
     }
 
+    function promoteDesignSystemStyle(path, node) {
+        if (assetKey(path) !== assetKey(DESIGN_SYSTEM_PATH) || !node || node.parentNode !== document.head) {
+            return node;
+        }
+        /* 动态页面样式会在切页时追加；把收口层移到 head 末尾，避免旧的
+         * 页面专属渐变/阴影覆盖公共契约。移动节点不会重复下载资源 */
+        document.head.appendChild(node);
+        return node;
+    }
+
     function loadStyle(path, pageStyle) {
         assertSafePath(path);
         var key = 'style:' + assetKey(path);
@@ -153,7 +164,7 @@
                 if (pageStyle) {
                     node.setAttribute('data-biliup-page-style', 'true');
                 }
-                return node;
+                return promoteDesignSystemStyle(path, node);
             });
         }
         assetPromises[key] = new Promise(function (resolve, reject) {
@@ -163,7 +174,9 @@
                     existing.setAttribute('data-biliup-page-style', 'true');
                     existing.media = 'not all';
                 }
-                waitForExistingAsset(existing, path, '样式').then(resolve, reject);
+                waitForExistingAsset(existing, path, '样式').then(function (node) {
+                    resolve(promoteDesignSystemStyle(path, node));
+                }, reject);
                 return;
             }
             var link = document.createElement('link');
@@ -332,7 +345,13 @@
             var templatePromise = fetchText(templatePath);
             var fragmentPromise = loadTextMap(moduleFragments(config, currentSurface));
             var pageStyle = collectionName === 'pages';
-            var stylePromise = loadStyles(moduleStyles(config, currentSurface), pageStyle);
+            var stylePromise = loadStyles(moduleStyles(config, currentSurface), pageStyle).then(function (styleNodes) {
+                /* 设计系统由入口预加载；每次切换页面后把它提升到动态模块样式
+                 * 之后，避免页面私有规则意外重写全站契约 */
+                var designNode = findExistingAsset('link', 'href', DESIGN_SYSTEM_PATH);
+                if (designNode) promoteDesignSystemStyle(DESIGN_SYSTEM_PATH, designNode);
+                return styleNodes;
+            });
             var dependencyPromise = loadSequential(config.scripts || [], loadScript);
             return Promise.all([templatePromise, fragmentPromise, stylePromise, dependencyPromise]).then(function (result) {
                 return loadScript(config.entry).then(function () {

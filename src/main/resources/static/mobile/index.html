@@ -5,7 +5,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="录播姬上传插件 - 自动化直播录制上传解决方案">
-    <meta name="theme-color" content="#5b6cff">
+    <meta name="theme-color" content="#3578c7">
     <link rel="icon" href="../img/icon.svg" type="image/svg+xml">
     <title>录播姬上传插件 - 手机端</title>
     <link href="../css/element-ui.css" rel="stylesheet">
@@ -21,6 +21,7 @@
     <link href="../css/diagnostic-export.css" rel="stylesheet">
     <link href="css/mobile-shell.css" rel="stylesheet">
     <link href="css/mobile-home.css" rel="stylesheet">
+    <link href="../css/base/design-system.css" rel="stylesheet">
     <script src="../js/app/url-resolver.js"></script>
     <script src="../js/app/mobile-viewport.js"></script>
     <script src="../js/jquery-3.3.1.min.js"></script>
@@ -43,6 +44,9 @@
     <script src="../js/components/page-host.js"></script>
     <script src="../js/components/shell-module-host.js"></script>
     <script src="../js/components/diagnostic-export-dialog.js"></script>
+    <script src="../js/components/table-preferences.js"></script>
+    <script src="../js/components/capsule-enhancer.js"></script>
+    <script src="../js/components/focus-return.js"></script>
 </head>
 <body>
 <div id="app" class="app-container mobile-shell" :class="{ 'is-page-workspace': pageWorkspaceMode || pageModalOpen, 'is-page-modal': pageModalOpen, 'is-input-focused': mobileInputFocused, 'is-operation-locked': pageOperating }">
@@ -194,7 +198,7 @@
             <div class="subnav-placeholder"></div>
         </div>
     </header>
-    <!-- Keep bottom nav outside the filtered header so fixed positioning stays viewport-based on Android Chromium. -->
+    <!-- 底部导航放在带滤镜的页头外，避免安卓浏览器中固定定位偏离视口 -->
     <nav class="header-nav" ref="headerNav" aria-label="主导航">
         <div class="nav-slide-indicator" :style="navIndicatorStyle"></div>
         <button type="button" class="nav-item" ref="navRoom"
@@ -264,13 +268,8 @@
                 <el-switch v-model="lowEffects" @change="toggleLowEffects"></el-switch>
             </div>
             <div class="theme-popover-row">
-                <span class="theme-popover-label">日夜模式</span>
-                <div class="theme-switch-container">
-                    <el-switch v-model="theme" active-value="dark" inactive-value="light" @change="applyTheme" class="theme-switch">
-                        <template slot="activeText"><i class="el-icon-moon"></i></template>
-                        <template slot="inactiveText"><i class="el-icon-sunny"></i></template>
-                    </el-switch>
-                </div>
+                <span class="theme-popover-label">深色模式</span>
+                <el-switch v-model="theme" active-value="dark" inactive-value="light" @change="applyTheme" aria-label="深色模式"></el-switch>
             </div>
             <div class="theme-popover-row">
                 <span class="theme-popover-label">主题配色</span>

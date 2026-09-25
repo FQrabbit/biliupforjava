@@ -1,4 +1,4 @@
-/* Dedicated mobile user account experience. Loaded only by /mobile/index.html. */
+/* 移动端用户页面样式，仅在移动端入口加载 */
 
 .mobile-shell .mobile-user-container {
     min-height: 100%;
@@ -21,8 +21,8 @@
     border: 1px solid var(--mobile-border);
     background: var(--mobile-surface);
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.26);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.26);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-shell .mobile-user-hero {
@@ -33,7 +33,7 @@
     min-height: 102px;
     padding: 17px;
     border-radius: 28px;
-    animation: mobileUserRise 380ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileUserRise var(--duration-base) var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-user-hero-copy {
@@ -81,14 +81,15 @@
     color: var(--text-secondary);
     background: color-mix(in srgb, var(--mobile-surface-strong) 76%, transparent);
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, border-color 180ms ease, background 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-shell .mobile-user-hero-action {
     color: var(--mobile-on-accent);
     border-color: transparent;
-    background: linear-gradient(135deg, var(--mobile-accent-1), var(--mobile-accent-2));
-    box-shadow: 0 14px 28px color-mix(in srgb, var(--mobile-accent-1) 20%, transparent);
+    background: var(--btn-primary-bg);
+    background-image: none;
+    box-shadow: var(--shadow-sm);
 }
 
 .mobile-shell .mobile-user-hero-action:active,
@@ -104,7 +105,7 @@
     margin-top: 12px;
     padding: 8px;
     border-radius: 24px;
-    animation: mobileUserRise 380ms 45ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileUserRise var(--duration-base) 45ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-user-summary-item {
@@ -154,7 +155,7 @@
     margin-top: 12px;
     padding: 8px;
     border-radius: 23px;
-    animation: mobileUserRise 380ms 90ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileUserRise var(--duration-base) 90ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-user-command,
@@ -173,7 +174,7 @@
     font-size: 14px;
     font-weight: 780;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), box-shadow var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-shell .mobile-user-command.is-primary,
@@ -181,8 +182,9 @@
 .mobile-shell .mobile-user-sheet-actions button.is-primary {
     color: var(--mobile-on-accent);
     border-color: transparent;
-    background: linear-gradient(135deg, var(--mobile-accent-1), var(--mobile-accent-2));
-    box-shadow: 0 14px 26px color-mix(in srgb, var(--mobile-accent-1) 20%, transparent);
+    background: var(--btn-primary-bg);
+    background-image: none;
+    box-shadow: var(--shadow-sm);
 }
 
 .mobile-shell .mobile-user-command:active,
@@ -203,7 +205,10 @@
     padding: 14px;
     border-radius: 25px;
     cursor: pointer;
-    transition: transform 240ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, box-shadow 220ms ease, background 220ms ease;
+    transition: transform var(--duration-overlay) var(--ease-spring),
+        border-color var(--duration-selection) var(--ease-apple),
+        box-shadow var(--duration-selection) var(--ease-apple),
+        background-color var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-user-card::before {
@@ -215,11 +220,11 @@
 }
 
 .mobile-shell .mobile-user-card.is-success::before {
-    background: linear-gradient(180deg, var(--success-color), var(--mobile-accent-2));
+    background: var(--success-color);
 }
 
 .mobile-shell .mobile-user-card.is-danger::before {
-    background: linear-gradient(180deg, var(--warning-color), var(--danger-color));
+    background: var(--danger-color);
 }
 
 .mobile-shell .mobile-user-card.is-open {
@@ -430,7 +435,7 @@
     padding: 26px 18px;
     border-radius: 28px;
     text-align: center;
-    animation: mobileUserRise 380ms 120ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileUserRise var(--duration-base) 120ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-user-empty > i {
@@ -465,8 +470,8 @@
     inset: 0;
     z-index: 3000;
     background: color-mix(in srgb, var(--bg-primary) 20%, rgba(8, 12, 23, 0.42));
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-shell .mobile-user-action-sheet {
@@ -533,8 +538,8 @@
     background: var(--mobile-surface-strong);
     box-shadow: var(--mobile-shadow);
     overflow: hidden;
-    backdrop-filter: blur(28px) saturate(1.34);
-    -webkit-backdrop-filter: blur(28px) saturate(1.34);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-shell .mobile-user-login-dialog,
@@ -778,7 +783,8 @@
 
 .mobile-user-sheet-enter-active,
 .mobile-user-sheet-leave-active {
-    transition: transform 300ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 220ms ease;
+    transition: transform var(--duration-overlay) var(--ease-modal),
+        opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-user-sheet-enter,
@@ -789,7 +795,7 @@
 
 .mobile-user-sheet-fade-enter-active,
 .mobile-user-sheet-fade-leave-active {
-    transition: opacity 220ms ease;
+    transition: opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-user-sheet-fade-enter,
@@ -799,7 +805,8 @@
 
 .mobile-user-card-enter-active,
 .mobile-user-card-leave-active {
-    transition: opacity 240ms ease, transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-overlay) var(--ease-decel),
+        transform var(--duration-overlay) var(--ease-modal);
 }
 
 .mobile-user-card-enter,
@@ -809,7 +816,7 @@
 }
 
 .mobile-user-card-move {
-    transition: transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: transform var(--duration-overlay) var(--ease-modal);
 }
 
 @keyframes mobileUserRise {
@@ -898,8 +905,8 @@
     border: 1px solid var(--mobile-border);
     background: var(--mobile-surface);
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.26);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.26);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border-radius: 22px;
     overflow: hidden;
 }
@@ -927,7 +934,7 @@
 }
 
 .mobile-shell .mobile-brec-header-title > i {
-    color: var(--mobile-accent, #00a1d6);
+    color: var(--mobile-accent-1, var(--primary-color));
     font-size: 18px;
 }
 
@@ -935,8 +942,8 @@
     font-style: normal;
     font-size: 11px;
     font-weight: 700;
-    color: #67c23a;
-    border: 1px solid rgba(103, 194, 58, 0.4);
+    color: var(--success-color);
+    border: 1px solid color-mix(in srgb, var(--success-color) 40%, var(--mobile-border));
     border-radius: 10px;
     padding: 1px 7px;
 }
@@ -987,7 +994,7 @@
     padding: 12px 16px;
     border: none;
     border-radius: 16px;
-    background: var(--mobile-accent, #00a1d6);
+    background: var(--mobile-accent-1, var(--primary-color));
     color: #fff;
     font-size: 14.5px;
     font-weight: 740;
@@ -1021,11 +1028,11 @@
 }
 
 .mobile-brec-sync-result.is-success .mobile-brec-sync-result-icon {
-    color: #67c23a;
+    color: var(--success-color);
 }
 
 .mobile-brec-sync-result.is-error .mobile-brec-sync-result-icon {
-    color: #f56c6c;
+    color: var(--danger-color);
 }
 
 .mobile-brec-sync-result-status {
@@ -1040,8 +1047,8 @@
 .mobile-brec-sync-result-code {
     font-size: 12px;
     font-weight: 600;
-    color: #f56c6c;
-    border: 1px solid rgba(245, 108, 108, 0.4);
+    color: var(--danger-color);
+    border: 1px solid color-mix(in srgb, var(--danger-color) 40%, var(--mobile-border));
     border-radius: 8px;
     padding: 1px 8px;
 }

@@ -76,23 +76,23 @@
             extra = extra || {};
             var axisPointer = Object.assign({
                 lineStyle: { color: this.chartPrimaryColor(), width: 1, opacity: 0.68 },
-                shadowStyle: { color: this.isDarkTheme() ? 'rgba(123,143,255,0.14)' : 'rgba(64,158,255,0.10)' },
+                shadowStyle: { color: this.isDarkTheme() ? 'rgba(106,169,255,0.14)' : 'rgba(23,101,209,0.10)' },
                 crossStyle: { color: this.chartPrimaryColor(), opacity: 0.68 }
             }, extra.axisPointer || {});
             return Object.assign({
                 confine: true,
                 appendToBody: true,
-                backgroundColor: this.isDarkTheme() ? 'rgba(24,24,27,0.92)' : 'rgba(255,255,255,0.94)',
+                backgroundColor: this.cssVar('--surface-overlay', this.isDarkTheme() ? '#2c323a' : '#ffffff'),
                 borderColor: this.chartPrimaryColor(),
                 borderWidth: 1,
                 padding: [10, 12],
-                textStyle: { color: this.cssVar('--text-primary', this.isDarkTheme() ? '#f5f5f5' : '#303133') },
-                extraCssText: 'border-radius:12px;box-shadow:0 18px 42px rgba(0,0,0,.18);backdrop-filter:blur(12px);',
+                textStyle: { color: this.cssVar('--text-primary', this.isDarkTheme() ? '#e7ebef' : '#343840') },
+                extraCssText: 'border-radius:12px;box-shadow:0 12px 28px rgba(15,23,42,.16);',
                 axisPointer: axisPointer
             }, extra, { axisPointer: axisPointer });
         },
         chartShadowColor: function () {
-            return this.isDarkTheme() ? 'rgba(123,143,255,0.34)' : 'rgba(64,158,255,0.28)';
+            return this.isDarkTheme() ? 'rgba(106,169,255,0.34)' : 'rgba(23,101,209,0.28)';
         },
         enhanceChartSeries: function (series) {
             var self = this;
@@ -350,22 +350,24 @@
             return value ? value.trim() : fallback;
         },
         chartPrimaryColor: function () {
-            return this.cssVar('--primary-color', '#409eff');
+            return this.cssVar('--primary-color', '#3578c7');
         },
         chartSuccessColor: function () {
-            return this.cssVar('--success-color', '#27b36a');
+            return this.cssVar('--success-color', '#167347');
         },
         chartWarningColor: function () {
-            return this.cssVar('--warning-color', '#e6a23c');
+            return this.cssVar('--warning-color', '#8a5900');
         },
         chartDangerColor: function () {
-            return this.cssVar('--danger-color', '#f56c6c');
+            return this.cssVar('--danger-color', '#c03432');
         },
         chartSoftColor: function () {
-            return this.isDarkTheme() ? 'rgba(123, 143, 255, 0.22)' : 'rgba(64, 158, 255, 0.16)';
+            return this.cssVar('--brand-soft-bg', this.isDarkTheme()
+                ? 'rgba(106, 169, 255, 0.20)'
+                : 'rgba(23, 101, 209, 0.12)');
         },
         chartTextColor: function () {
-            return this.cssVar('--text-secondary', this.isDarkTheme() ? '#e5e7eb' : '#606266');
+            return this.cssVar('--text-secondary', this.isDarkTheme() ? '#aab3bd' : '#707985');
         },
         chartLineColor: function () {
             return this.isDarkTheme() ? 'rgba(255,255,255,0.16)' : this.cssVar('--border-light', '#e4e7ed');
@@ -375,7 +377,7 @@
         },
         chartLabelStyle: function () {
             if (!this.isDarkTheme()) {
-                return { color: '#303133' };
+                return { color: this.cssVar('--text-primary', '#343840') };
             }
             return {
                 color: '#ffffff',
@@ -401,7 +403,7 @@
                         textShadowColor: 'rgba(0,0,0,0.55)',
                         textShadowBlur: 2
                     }
-                    : { color: '#606266' }
+                    : { color: this.cssVar('--text-secondary', '#707985') }
             }, extra || {});
         },
         categoryAxis: function (data, extra) {

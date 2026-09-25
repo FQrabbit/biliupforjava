@@ -4,8 +4,8 @@
     inset: 0;
     z-index: 7200;
     background: color-mix(in srgb, var(--mobile-page-surface-strong) 22%, rgba(0, 0, 0, 0.45));
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 body.mobile-danmaku-stats-open #app.mobile-shell ~ .el-dialog__wrapper:has(.mobile-history-detail-dialog) {
@@ -29,7 +29,7 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-backdrop {
     inset: 0;
     z-index: 8300;
     pointer-events: none;
-    animation: mobile-history-danmaku-backdrop-in 180ms ease-out both;
+    animation: mobile-history-danmaku-backdrop-in var(--duration-feedback) var(--ease-decel) both;
 }
 
 .mobile-history-danmaku-portal .mobile-history-danmaku-backdrop,
@@ -38,7 +38,7 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-backdrop {
 }
 
 .mobile-history-danmaku-portal.is-leaving {
-    animation: mobile-history-danmaku-backdrop-out 180ms ease-in both;
+    animation: mobile-history-danmaku-backdrop-out var(--duration-feedback) var(--ease-accel) both;
 }
 
 .mobile-history-danmaku-sheet {
@@ -61,9 +61,9 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-backdrop {
     background: var(--mobile-page-surface-strong);
     color: var(--text-primary);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
-    animation: mobile-history-danmaku-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    animation: mobile-history-danmaku-sheet-in var(--duration-overlay) var(--ease-modal) both;
 }
 
 body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
@@ -71,7 +71,7 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 }
 
 .mobile-history-danmaku-portal.is-leaving .mobile-history-danmaku-sheet {
-    animation: mobile-history-danmaku-sheet-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+    animation: mobile-history-danmaku-sheet-out var(--duration-feedback) var(--ease-accel) both;
 }
 
 @keyframes mobile-history-danmaku-backdrop-in {
@@ -172,7 +172,7 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
     font-size: 14px;
     font-weight: 820;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-danmaku-head button {
@@ -234,7 +234,7 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
     min-width: 3px;
     border-radius: inherit;
     background: linear-gradient(90deg, var(--mobile-blue), var(--mobile-teal));
-    transition: width 260ms ease;
+    transition: width var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-history-danmaku-grid {
@@ -302,7 +302,9 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 .mobile-history-danmaku-stat.is-helpable {
     cursor: pointer;
     touch-action: manipulation;
-    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    transition: border-color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple),
+        transform var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-danmaku-stat.is-helpable:active {
@@ -333,11 +335,11 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 }
 
 .danmaku-failed-hint-motion-enter-active {
-    transition: opacity 180ms ease-out, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity var(--duration-feedback) var(--ease-decel), transform var(--duration-feedback) var(--ease-decel);
 }
 
 .danmaku-failed-hint-motion-leave-active {
-    transition: opacity 130ms ease-in, transform 130ms ease-in;
+    transition: opacity var(--duration-feedback) var(--ease-accel), transform var(--duration-feedback) var(--ease-accel);
 }
 
 .danmaku-failed-hint-motion-enter,
@@ -404,7 +406,10 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
     line-height: 1;
     touch-action: manipulation;
     cursor: pointer;
-    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
+    transition: background-color var(--duration-feedback) var(--ease-apple),
+        border-color var(--duration-feedback) var(--ease-apple),
+        transform var(--duration-feedback) var(--ease-apple),
+        opacity var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-danmaku-retry button.is-force {
@@ -483,11 +488,13 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 }
 
 .danmaku-retry-feedback-motion-enter-active {
-    transition: opacity 190ms ease-out, transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity var(--duration-selection) var(--ease-decel),
+        transform var(--duration-selection) var(--ease-decel);
 }
 
 .danmaku-retry-feedback-motion-leave-active {
-    transition: opacity 130ms ease-in, transform 130ms ease-in;
+    transition: opacity var(--duration-feedback) var(--ease-accel),
+        transform var(--duration-feedback) var(--ease-accel);
 }
 
 .danmaku-retry-feedback-motion-enter,
@@ -570,7 +577,7 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 
 .mobile-history-danmaku-sheet-enter-active,
 .mobile-history-danmaku-sheet-leave-active {
-    transition: opacity 220ms ease, transform 280ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-overlay) var(--ease-decel), transform var(--duration-overlay) var(--ease-modal);
 }
 
 .mobile-history-danmaku-sheet-enter,
@@ -583,7 +590,7 @@ body.mobile-danmaku-stats-open .mobile-history-danmaku-sheet {
 .mobile-history-rise-leave-active,
 .mobile-history-sheet-enter-active,
 .mobile-history-sheet-leave-active {
-    transition: opacity 220ms ease, transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-overlay) var(--ease-decel), transform var(--duration-overlay) var(--ease-modal);
 }
 
 .mobile-history-rise-enter,

@@ -1,13 +1,13 @@
 .diagnostic-export-dialog .el-dialog__body { padding-top: 12px; }
 .diagnostic-export-form { display: flex; flex-direction: column; gap: 16px; }
 .diagnostic-export-meta { color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
-.diagnostic-segmented { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.diagnostic-segmented { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: var(--radius-xl); background: var(--bg-tertiary); }
 .diagnostic-segmented-button.modern-btn { min-width: 104px; margin: 0; border-color: var(--border-light); background: var(--bg-primary); color: var(--text-secondary); }
 .diagnostic-export-dialog .diagnostic-segmented-button.modern-btn.is-selected {
     border-color: var(--brand-accent-border-strong) !important;
-    background-color: var(--brand-soft-bg-strong) !important;
+    background-color: var(--surface-content) !important;
     color: var(--primary-color) !important;
-    box-shadow: inset 0 0 0 1px var(--brand-accent-border-light), 0 4px 16px var(--brand-soft-bg) !important;
+    box-shadow: var(--shadow-sm) !important;
 }
 .diagnostic-export-dialog .diagnostic-segmented-button.modern-btn.is-selected:hover {
     border-color: var(--primary-color) !important;

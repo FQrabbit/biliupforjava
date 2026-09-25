@@ -102,7 +102,7 @@
 
 .room-edit-form .section-header:hover {
 
-    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--brand-soft-bg-hover) 100%);
+    background: var(--brand-soft-bg-hover);
 
 }
 
@@ -436,7 +436,7 @@
 
 [data-theme="dark"] .room-edit-form .section-header:hover {
 
-    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-tertiary) 90%, transparent) 0%, var(--brand-soft-bg-subtle) 100%);
+    background: var(--brand-soft-bg-subtle);
 
 }
 
@@ -448,7 +448,7 @@
 
 [data-theme="dark"] .switch-item {
 
-    background: var(--glass-bg);
+    background: var(--bg-tertiary);
 
 }
 

@@ -36,7 +36,18 @@ assert.strictEqual(resolverWindow.BiliupUrlResolver.resolve('/biliup/api/version
 assert.strictEqual(resolverWindow.BiliupUrlResolver.resolve('https://example.test/file.js'), 'https://example.test/file.js');
 
 const pageStyles = [];
+const documentEvents = new Map();
+const decorationStyle = new Map();
 const document = {
+    hidden: false,
+    addEventListener(name, listener) { documentEvents.set(name, listener); },
+    removeEventListener(name) { documentEvents.delete(name); },
+    documentElement: {
+        style: {
+            setProperty(name, value) { decorationStyle.set(name, value); },
+            removeProperty(name) { decorationStyle.delete(name); }
+        }
+    },
     querySelectorAll(selector) {
         return selector === 'link[data-biliup-page-style]' ? pageStyles : [];
     },
@@ -117,6 +128,7 @@ class CustomEvent {
 }
 vm.runInNewContext(coordinatorSource, {
     window,
+    document,
     CustomEvent,
     Date,
     Object,
@@ -124,6 +136,13 @@ vm.runInNewContext(coordinatorSource, {
     Number,
     console
 }, { filename: 'page-state-coordinator.js' });
+
+document.hidden = true;
+documentEvents.get('visibilitychange')();
+assert.strictEqual(decorationStyle.get('--biliup-document-play-state'), 'paused');
+document.hidden = false;
+documentEvents.get('visibilitychange')();
+assert.strictEqual(decorationStyle.has('--biliup-document-play-state'), false);
 
 const coordinator = window.BiliupPageStateCoordinator;
 coordinator.set('history', { kind: 'modal', source: 'dialog-a', active: true });
@@ -141,7 +160,8 @@ assert.deepStrictEqual(
         operating: false,
         operationMessage: '',
         operationBlocksUnload: false,
-        inputFocused: false
+        inputFocused: false,
+        renderPaused: false
     }
 );
 

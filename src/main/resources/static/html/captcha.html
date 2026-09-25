@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bilibili Upload Captcha</title>
     <script src="../js/vue.min.js"></script>
     <script src="../js/jquery-3.3.1.min.js"></script>
@@ -11,12 +12,24 @@
     <script src="../js/api.js"></script>
     <script src="../js/api/captcha-api.js"></script>
     <link rel="stylesheet" href="../css/element-ui.css">
+    <link rel="stylesheet" href="../css/base/variables.css">
+    <link rel="stylesheet" href="../css/base/reset.css">
+    <link rel="stylesheet" href="../css/base/element-override.css">
+    <link rel="stylesheet" href="../css/base/dark-overrides.css">
+    <style>
+        body { background: var(--surface-page); color: var(--text-primary); }
+        .captcha-card { width: min(600px, calc(100% - 32px)); margin: 48px auto; }
+        .captcha-card .el-card__body { overflow-wrap: anywhere; }
+        @media (max-width: 768px) { .captcha-card { margin: 24px auto; } }
+    </style>
+    <link rel="stylesheet" href="../css/base/design-system.css">
 <script src="../js/app/page-bootstrap.js"></script>
+<script src="../js/components/focus-return.js"></script>
     <script src="https://static.geetest.com/v4/gt4.js"></script>
 </head>
 <body>
 <div id="app">
-    <el-card class="box-card" style="width: 600px; margin: 100px auto;">
+    <el-card class="box-card captcha-card">
         <div slot="header" class="clearfix">
             <span>Bilibili 投稿验证码</span>
         </div>
@@ -40,7 +53,7 @@
                     <div style="background-color: var(--bg-tertiary, #f5f7fa); padding: 10px; border-radius: 4px;">
                         <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word;">{{ JSON.stringify(extra, null, 2) }}</pre>
                     </div>
-                    <div style="margin-top: 5px; color: #909399; font-size: 12px;">
+                    <div style="margin-top: 5px; color: var(--text-secondary); font-size: 12px;">
                         * 如果这里显示需要手机验证或其他非滑块验证，请在浏览器完成验证后，点击下方的“已在网页完成验证”按钮
                     </div>
                 </el-collapse-item>

@@ -5,8 +5,8 @@
     inset: 0;
     z-index: 3000;
     background: rgba(9, 15, 29, 0.34);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-shell .mobile-config-sheet {
@@ -24,8 +24,8 @@
     border-radius: 30px 30px 0 0;
     background: var(--mobile-surface-strong);
     box-shadow: 0 -22px 58px rgba(35, 49, 82, 0.22);
-    backdrop-filter: blur(32px) saturate(1.35);
-    -webkit-backdrop-filter: blur(32px) saturate(1.35);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 [data-theme="dark"] .mobile-shell .mobile-config-sheet {
@@ -203,7 +203,7 @@
     color: var(--text-secondary);
     background: var(--mobile-surface);
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, border-color 180ms ease, background 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-shell .mobile-config-info i {
@@ -236,7 +236,7 @@
     border: 1px solid var(--mobile-border);
     border-radius: 20px;
     background: color-mix(in srgb, var(--mobile-surface) 74%, transparent);
-    transition: border-color 220ms ease, background 220ms ease, box-shadow 220ms ease;
+    transition: border-color var(--duration-selection) var(--ease-apple), background var(--duration-selection) var(--ease-apple), box-shadow var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-upload-flow-card.is-active {
@@ -337,7 +337,7 @@
     line-height: 1.25;
     font-weight: 760;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-shell .mobile-upload-flow-info.is-active {
@@ -381,8 +381,17 @@
 .mobile-shell .mobile-primary-action {
     border: 0;
     color: var(--mobile-on-accent);
-    background: linear-gradient(135deg, var(--mobile-accent-1), var(--mobile-accent-2));
-    box-shadow: 0 14px 26px color-mix(in srgb, var(--mobile-accent-1) 20%, transparent);
+    background: var(--btn-primary-bg);
+    background-image: none;
+    box-shadow: var(--shadow-sm);
+}
+
+.mobile-shell .mobile-primary-action:hover,
+.mobile-shell .mobile-primary-action:focus-visible {
+    color: var(--mobile-on-accent);
+    background: var(--btn-primary-bg-hover);
+    background-image: none;
+    border-color: var(--btn-primary-bg-hover);
 }
 
 .mobile-shell .mobile-full-action {
@@ -400,7 +409,7 @@
 
 .mobile-sheet-fade-enter-active,
 .mobile-sheet-fade-leave-active {
-    transition: opacity 260ms ease;
+    transition: opacity var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-sheet-fade-enter,
@@ -410,7 +419,8 @@
 
 .mobile-config-sheet-enter-active,
 .mobile-config-sheet-leave-active {
-    transition: transform 360ms cubic-bezier(0.2, 0.85, 0.2, 1), opacity 260ms ease;
+    transition: transform var(--duration-overlay) var(--ease-modal),
+        opacity var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-config-sheet-enter,
@@ -421,7 +431,8 @@
 
 .mobile-config-hint-enter-active,
 .mobile-config-hint-leave-active {
-    transition: opacity 220ms ease, transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-selection) var(--ease-apple),
+        transform var(--duration-selection) var(--ease-decel);
 }
 
 .mobile-config-hint-enter,
@@ -434,11 +445,11 @@
     display: grid;
     gap: 8px;
     padding: 12px;
-    border-left: 3px solid #e6a23c;
-    background: color-mix(in srgb, #e6a23c 8%, transparent);
+    border-left: 3px solid var(--warning-color);
+    background: color-mix(in srgb, var(--warning-color) 8%, var(--surface-content));
 }
 
-.mobile-storage-warning strong { color: #e6a23c; }
+.mobile-storage-warning strong { color: var(--warning-color); }
 .mobile-storage-warning p { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
 .mobile-storage-warning div { display: flex; gap: 8px; flex-wrap: wrap; }
 .mobile-storage-roots { display: grid; border-top: 1px solid var(--mobile-page-border); }

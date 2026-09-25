@@ -13,8 +13,8 @@
     background-color: var(--bg-tertiary);
     border-color: var(--border-color);
     color: var(--text-primary);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 [data-theme="dark"] .el-picker-panel__footer {
@@ -82,15 +82,15 @@
 }
 
 /* ========== 深色模式下的主要按钮 (普通版) ========== */
-[data-theme="dark"] .el-button--primary {
-    background-color: var(--brand-soft-bg-strong) !important;
-    border-color: var(--brand-accent-border-strong) !important;
-    color: var(--primary-light) !important;
+[data-theme="dark"] .el-button--primary:not(.is-plain) {
+    background-color: var(--btn-primary-bg) !important;
+    border-color: var(--btn-primary-bg) !important;
+    color: var(--text-inverse) !important;
 }
 
-[data-theme="dark"] .el-button--primary:hover {
-    background-color: var(--brand-soft-bg-active) !important;
-    border-color: var(--primary-color) !important;
+[data-theme="dark"] .el-button--primary:not(.is-plain):not(.is-disabled):hover {
+    background-color: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
 }
 
 /* ========== 深色模式下的危险按钮 (普通版) ========== */
@@ -136,16 +136,16 @@
     background-color: var(--brand-soft-bg-active) !important;
 }
 
-[data-theme="dark"] .modern-btn.el-button--primary {
-    background-color: var(--brand-soft-bg-strong) !important;
-    border-color: var(--brand-accent-border-strong) !important;
-    color: var(--primary-light) !important;
+[data-theme="dark"] .modern-btn.el-button--primary:not(.is-plain) {
+    background-color: var(--btn-primary-bg) !important;
+    border-color: var(--btn-primary-bg) !important;
+    color: var(--text-inverse) !important;
 }
 
-[data-theme="dark"] .modern-btn.el-button--primary:hover {
-    background-color: var(--brand-soft-bg-active) !important;
-    border-color: var(--primary-color) !important;
-    box-shadow: 0 8px 24px var(--brand-soft-bg-strong) !important;
+[data-theme="dark"] .modern-btn.el-button--primary:not(.is-plain):not(.is-disabled):hover {
+    background-color: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+    box-shadow: none !important;
 }
 
 [data-theme="dark"] .modern-btn.el-button--danger {
@@ -172,7 +172,7 @@
     box-shadow: 0 8px 24px var(--warning-soft-bg) !important;
 }
 
-/* plain 变体在深色模式 - 保持可见背景 */
+/* 朴素按钮在深色模式下也保留可见底色 */
 [data-theme="dark"] .modern-btn.is-plain {
     background-color: var(--bg-tertiary) !important;
     color: var(--text-primary) !important;
@@ -249,7 +249,7 @@
     border-color: var(--success-color) !important;
 }
 
-/* Disabled buttons must override themed primary/warning colors in dark mode. */
+/* 深色主题下禁用按钮也要覆盖主色和警告色，避免看起来还能操作 */
 [data-theme="dark"] .el-button.is-disabled,
 [data-theme="dark"] .el-button.is-disabled:focus,
 [data-theme="dark"] .el-button.is-disabled:hover,
@@ -645,93 +645,71 @@
 [data-theme="dark"] .room-card,
 [data-theme="dark"] .data-card {
     background: var(--bg-tertiary);
-    background-image: linear-gradient(145deg, color-mix(in srgb, var(--bg-tertiary) 80%, transparent) 0%, color-mix(in srgb, var(--bg-primary) 90%, transparent) 100%);
+    background-image: none;
     border-color: var(--border-color);
-    box-shadow: 
-        var(--shadow-md),
-        0 0 0 1px var(--glass-border) inset,
-        0 1px 0 var(--glass-border) inset;
+    box-shadow: var(--shadow-sm);
 }
 
 [data-theme="dark"] .room-card:hover,
 [data-theme="dark"] .data-card:hover {
-    background-image: linear-gradient(145deg, color-mix(in srgb, var(--bg-tertiary) 90%, transparent) 0%, color-mix(in srgb, var(--bg-primary) 95%, transparent) 100%);
+    background-image: none;
     border-color: var(--brand-accent-border-strong);
-    box-shadow: 
-        0 12px 40px -10px var(--brand-soft-bg-strong),
-        0 0 0 1px var(--brand-soft-bg-strong) inset,
-        0 0 30px -5px var(--brand-soft-bg);
+    box-shadow: var(--shadow-sm);
 }
 
 /* ========== 暗色主题下状态卡片增强 ========== */
 [data-theme="dark"] .data-card.is-audit-failed {
-    background: linear-gradient(145deg, color-mix(in srgb, var(--warning-soft-bg-faint) 70%, var(--bg-tertiary)) 0%, color-mix(in srgb, var(--bg-primary) 90%, transparent) 100%);
-    box-shadow: 
-        0 0 20px var(--warning-soft-bg),
-        var(--shadow-md),
-        0 0 0 1px var(--warning-shadow-soft) inset;
+    background: var(--bg-tertiary);
+    background-image: none;
+    border-color: var(--warning-border);
+    box-shadow: var(--shadow-sm);
 }
 [data-theme="dark"] .data-card.is-audit-failed:hover {
-    box-shadow: 
-        0 0 30px var(--warning-soft-bg-hover),
-        var(--shadow-lg),
-        0 0 0 1px var(--warning-soft-bg) inset;
+    box-shadow: var(--shadow-sm);
 }
 
 [data-theme="dark"] .data-card.is-processing {
-    background: linear-gradient(145deg, color-mix(in srgb, var(--brand-soft-bg-subtle) 70%, var(--bg-tertiary)) 0%, color-mix(in srgb, var(--bg-primary) 90%, transparent) 100%);
-    box-shadow: 
-        0 0 20px var(--brand-soft-bg-strong),
-        var(--shadow-md),
-        0 0 0 1px var(--brand-soft-bg) inset;
+    background: var(--bg-tertiary);
+    background-image: none;
+    border-color: var(--brand-accent-border-strong);
+    box-shadow: var(--shadow-sm);
 }
 [data-theme="dark"] .data-card.is-processing:hover {
-    box-shadow: 
-        0 0 30px var(--brand-soft-bg-active),
-        var(--shadow-lg),
-        0 0 0 1px var(--brand-soft-bg-active) inset;
+    box-shadow: var(--shadow-sm);
 }
 
 [data-theme="dark"] .data-card.is-failed {
-    background: linear-gradient(145deg, color-mix(in srgb, var(--danger-soft-bg-faint) 70%, var(--bg-tertiary)) 0%, color-mix(in srgb, var(--bg-primary) 90%, transparent) 100%);
-    box-shadow: 
-        0 0 20px var(--danger-soft-bg),
-        var(--shadow-md),
-        0 0 0 1px var(--danger-shadow-soft) inset;
+    background: var(--bg-tertiary);
+    background-image: none;
+    border-color: var(--danger-border);
+    box-shadow: var(--shadow-sm);
 }
 [data-theme="dark"] .data-card.is-failed:hover {
-    box-shadow: 
-        0 0 30px var(--danger-soft-bg-strong),
-        var(--shadow-lg),
-        0 0 0 1px var(--danger-shadow) inset;
+    box-shadow: var(--shadow-sm);
 }
 
 [data-theme="dark"] .data-card.is-success {
-    background: linear-gradient(145deg, color-mix(in srgb, var(--success-soft-bg-faint) 70%, var(--bg-tertiary)) 0%, color-mix(in srgb, var(--bg-primary) 90%, transparent) 100%);
-    box-shadow: 
-        0 0 20px var(--success-soft-bg),
-        var(--shadow-md),
-        0 0 0 1px var(--success-glow-soft) inset;
+    background: var(--bg-tertiary);
+    background-image: none;
+    border-color: var(--success-border);
+    box-shadow: var(--shadow-sm);
 }
 [data-theme="dark"] .data-card.is-success:hover {
-    box-shadow:
-        0 0 30px var(--success-soft-bg-strong),
-        var(--shadow-lg),
-        0 0 0 1px var(--success-glow) inset;
+    box-shadow: var(--shadow-sm);
 }
 
 /* ========== 深色模式下的单选框 ========== */
 [data-theme="dark"] .el-radio-button__orig-radio:checked + .el-radio-button__inner {
-    background-color: var(--primary-color) !important;
-    border-color: var(--primary-color) !important;
-    color: var(--text-inverse) !important;
-    box-shadow: -1px 0 0 0 var(--primary-color) !important;
+    background-color: var(--surface-content) !important;
+    border-color: transparent !important;
+    color: var(--primary-color) !important;
+    box-shadow: var(--shadow-sm) !important;
 }
 
 [data-theme="dark"] .el-radio-button__inner {
-    background-color: var(--bg-tertiary) !important;
-    border-color: var(--border-color) !important;
-    color: var(--text-primary) !important;
+    background-color: transparent !important;
+    border-color: transparent !important;
+    color: var(--text-secondary) !important;
 }
 
 [data-theme="dark"] .el-radio-button__inner:hover {

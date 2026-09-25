@@ -48,11 +48,14 @@ src/main/resources/static/
 │  └─ components/
 │     ├─ page-host.js                 业务页宿主
 │     ├─ shell-module-host.js         设置模块宿主
+│     ├─ capsule-enhancer.js          分段单选胶囊滑动底板
+│     ├─ focus-return.js              弹窗/浮层关闭后的焦点返回
+│     ├─ table-preferences.js         表格列与密度偏好
 │     ├─ notification-channel-fields.js
 │     └─ diagnostic-export-dialog.js
 │
 ├─ css/
-│  ├─ base/                           变量、重置、公共组件和主题覆盖
+│  ├─ base/                           变量、重置、公共组件、主题和最终收口层
 │  ├─ animations/                     公共过渡和动效
 │  ├─ pages/home.css                  壳层首页样式
 │  └─ diagnostic-export.css           全局诊断导出样式
@@ -63,10 +66,14 @@ src/main/resources/static/
    └─ captcha.html                    验证码独立页
 ```
 
+`css/base/design-system.css` 是入口最后加载的全站视觉收口层，负责语义表面、按钮、表单、表格、浮层、胶囊和低特效回退。业务模块 CSS 仍由 manifest 按需加载；`js/app/module-loader.js` 在动态样式完成后会把该收口层链接提升到 `head` 末尾，确保页面私有样式不会覆盖公共契约。`scripts/preview-frontend.py` 与 `scripts/design-preview.html` 仅用于本地无缓存视觉检查，不属于生产模块清单。
+
 模块化相关的本地检查在仓库根目录的 `scripts/`：
 
 ```text
 scripts/
+├─ check-design-contract.js
+├─ check-history-part-order.js
 ├─ check-mobile-redirect.js
 ├─ check-module-boundaries.js
 ├─ check-module-runtime.js

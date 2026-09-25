@@ -1,0 +1,3251 @@
+/*
+ * 全站设计系统收口层
+ *
+ * 模块样式按页面动态加载。此文件由入口和 module-loader 最后启用，负责
+ * 收口跨页面的视觉契约；页面专属布局仍由各模块样式负责。所有内容面板
+ * 使用不透明表面，只有明确标记的临时浮层保留轻量磨砂回退
+ */
+
+html,
+body {
+    color: var(--text-primary);
+    background: var(--surface-page);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* 历史批量面板仍使用这个旧变量名；让它明确指向内容表面，避免未定义变量
+ * 在 body 挂载的批量/清理浮层中回退成透明 */
+:root {
+    --mobile-panel-bg: var(--surface-content);
+}
+
+body,
+#app,
+.app-container,
+.module-page-host,
+.shell-module-host {
+    background-color: var(--surface-page);
+    background-image: none;
+}
+
+/* 深色移动页的旧主题规则带有更高选择器权重；明确主题选择器，确保
+ * 页面底色始终是稳定的实体层，内容不会透出装饰渐变 */
+[data-theme="dark"] body,
+body[data-theme="dark"] {
+    background-color: var(--surface-page) !important;
+    background-image: none !important;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--focus-outline-color, var(--primary-color));
+    outline-offset: 2px;
+}
+
+/* 页面骨架：标题、说明、操作和内容区始终使用同一层次 */
+.room-container,
+.history-container,
+.stats-container,
+.user-container,
+.log-page,
+.page-surface-room,
+.page-surface-history,
+.page-surface-stats,
+.mobile-room-container,
+.mobile-history-container,
+.mobile-stats-container,
+.mobile-user-container,
+.mobile-log-page,
+.system-settings-module,
+.notification-settings-module {
+    color: var(--text-primary);
+    background: var(--surface-page);
+    background-image: none !important;
+}
+
+/* 页面专属样式会在深色主题中提高选择器权重；这里明确锁定整页底色，
+ * 避免内容区再次出现整屏渐变 */
+.app-container.log-page,
+.app-container .room-container,
+.app-container .history-container,
+.app-container .stats-container,
+.app-container .user-container,
+.app-container .page-surface-room,
+.app-container .page-surface-history,
+.app-container .page-surface-stats,
+.app-container .mobile-room-container,
+.app-container .mobile-history-container,
+.app-container .mobile-stats-container,
+.app-container .mobile-user-container,
+.app-container .mobile-log-page {
+    background-color: var(--surface-page) !important;
+    background-image: none !important;
+}
+
+.app-container.page-active-room,
+.app-container.page-active-history,
+.app-container.page-active-stats,
+.app-container.page-active-user,
+.app-container.page-active-log {
+    background-color: var(--surface-page) !important;
+    background-image: none !important;
+}
+
+body.page-active-room,
+body.page-active-history,
+body.page-active-stats,
+body.page-active-user,
+body.page-active-log {
+    background-color: var(--surface-page) !important;
+    background-image: none !important;
+}
+
+.page-title,
+.history-header h2,
+.stats-header h2,
+.user-header-title,
+.log-header h2,
+.brand-title {
+    color: var(--text-primary);
+    letter-spacing: 0;
+}
+
+.brand-title {
+    background: none !important;
+    background-image: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+}
+
+.brand-mini-title {
+    color: var(--text-primary) !important;
+    background: none !important;
+    background-image: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+}
+
+.page-subtitle,
+.page-description,
+.header-description,
+.empty-desc,
+.empty-hint,
+.filter-hint,
+.form-tip,
+.field-hint {
+    color: var(--text-secondary);
+}
+
+.container,
+.el-card {
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.config-panel,
+.config-card,
+.section-group,
+.filter-panel,
+.filter-card,
+.table-container,
+.stats-panel,
+.stats-card,
+.chart-panel,
+.data-card,
+.room-card,
+.user-card,
+.notification-scope-card,
+.notification-rule-card,
+.storage-root-panel,
+.storage-root-row,
+.mobile-stats-panel,
+.mobile-stats-scope-card,
+.mobile-stats-room-card,
+.mobile-stats-session-card,
+.mobile-user-card,
+.mobile-brec-panel,
+.mobile-history-card,
+.mobile-room-card,
+.mobile-upload-flow-card,
+.mobile-config-group,
+.mobile-config-section-card {
+    color: var(--text-primary);
+    background: var(--surface-content);
+    background-image: none;
+    border: 1px solid var(--border-divider);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.container,
+.room-container,
+.history-container,
+.stats-container,
+.user-container,
+.log-page {
+    box-shadow: none;
+}
+
+.config-panel,
+.el-card,
+.filter-panel,
+.filter-card,
+.stats-panel,
+.chart-panel,
+.data-card,
+.room-card,
+.user-card,
+.notification-scope-card,
+.notification-rule-card,
+.storage-root-panel,
+.mobile-stats-panel,
+.mobile-stats-scope-card,
+.mobile-stats-room-card,
+.mobile-stats-session-card,
+.mobile-user-card,
+.mobile-brec-panel,
+.mobile-history-card,
+.mobile-room-card,
+.mobile-upload-flow-card,
+.mobile-config-group,
+.mobile-config-section-card {
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+
+.config-panel:hover,
+.el-card:hover,
+.filter-panel:hover,
+.filter-card:hover,
+.stats-panel:hover,
+.chart-panel:hover,
+.data-card:hover,
+.room-card:hover,
+.user-card:hover,
+.notification-scope-card:hover,
+.notification-rule-card:hover,
+.storage-root-panel:hover,
+.mobile-stats-panel:hover,
+.mobile-stats-scope-card:hover,
+.mobile-stats-room-card:hover,
+.mobile-stats-session-card:hover,
+.mobile-user-card:hover,
+.mobile-brec-panel:hover,
+.mobile-history-card:hover,
+.mobile-room-card:hover,
+.mobile-upload-flow-card:hover,
+.mobile-config-group:hover,
+.mobile-config-section-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+    border-color: var(--border-color);
+}
+
+/* 公共按钮契约。状态按钮沿用语义色，但取消渐变和发光 */
+button.el-button,
+.modern-btn,
+.filter-action-btn,
+.module-load-error button,
+.mobile-room-action,
+.mobile-room-command,
+.mobile-user-command,
+.mobile-user-empty-action,
+.mobile-user-sheet-actions button,
+.mobile-stats-action,
+.mobile-stats-sheet-actions button,
+.mobile-brec-save,
+.dialog-footer-modern button,
+.room-delete-dialog-footer button {
+    min-height: var(--control-height);
+    border-radius: var(--radius-pill);
+    box-shadow: none;
+    transition: background-color var(--duration-feedback) var(--ease-apple),
+        border-color var(--duration-feedback) var(--ease-apple),
+        color var(--duration-feedback) var(--ease-apple),
+        transform var(--duration-feedback) var(--ease-apple);
+}
+
+button.el-button:not(.is-disabled):not(.is-loading):active,
+.modern-btn:not(:disabled):not(.is-disabled):active,
+.mobile-room-action:not(:disabled):active,
+.mobile-room-command:not(:disabled):active,
+.mobile-user-command:not(:disabled):active,
+.mobile-user-empty-action:not(:disabled):active,
+.mobile-user-sheet-actions button:not(:disabled):active,
+.mobile-stats-action:not(:disabled):active,
+.mobile-stats-sheet-actions button:not(:disabled):active,
+.mobile-brec-save:not(:disabled):active,
+.dialog-footer-modern button:not(:disabled):active,
+.room-delete-dialog-footer button:not(:disabled):active {
+    transform: scale(0.98);
+}
+
+button.el-button.el-button--primary:not(.is-plain),
+.modern-btn.el-button--primary:not(.is-plain),
+.mobile-room-action.is-primary,
+.mobile-room-command.is-primary,
+.mobile-user-command.is-primary,
+.mobile-user-empty-action,
+.mobile-user-sheet-actions button.is-primary,
+.mobile-stats-action.is-primary,
+.mobile-stats-sheet-actions button.is-primary,
+.mobile-brec-save {
+    color: var(--text-inverse);
+    background: var(--btn-primary-bg);
+    border-color: var(--btn-primary-bg);
+}
+
+button.el-button.el-button--primary:not(.is-plain):not(.is-disabled):hover,
+.modern-btn.el-button--primary:not(.is-plain):not(.is-disabled):hover,
+.mobile-room-action.is-primary:not(:disabled):hover,
+.mobile-room-command.is-primary:not(:disabled):hover,
+.mobile-user-command.is-primary:not(:disabled):hover,
+.mobile-user-empty-action:not(:disabled):hover,
+.mobile-user-sheet-actions button.is-primary:not(:disabled):hover,
+.mobile-stats-action.is-primary:not(:disabled):hover,
+.mobile-stats-sheet-actions button.is-primary:not(:disabled):hover,
+.mobile-brec-save:not(:disabled):hover {
+    color: var(--text-inverse);
+    background: var(--btn-primary-bg-hover);
+    border-color: var(--btn-primary-bg-hover);
+}
+
+button.el-button.el-button--default,
+button.el-button.el-button--info,
+.modern-btn:not(.el-button--primary):not(.el-button--danger):not(.el-button--warning):not(.el-button--success),
+.mobile-room-action:not(.is-primary),
+.mobile-room-command:not(.is-primary),
+.mobile-user-command:not(.is-primary),
+.mobile-stats-action:not(.is-primary) {
+    color: var(--text-primary);
+    background: var(--surface-content);
+    border-color: var(--border-control);
+}
+
+button.el-button.el-button--default:hover,
+button.el-button.el-button--info:hover,
+.modern-btn:not(.el-button--primary):not(.el-button--danger):not(.el-button--warning):not(.el-button--success):hover,
+.mobile-room-action:not(.is-primary):hover,
+.mobile-room-command:not(.is-primary):hover,
+.mobile-user-command:not(.is-primary):hover,
+.mobile-stats-action:not(.is-primary):hover {
+    color: var(--primary-color);
+    background: var(--brand-soft-bg-faint);
+    border-color: var(--primary-color);
+}
+
+button.el-button.el-button--danger,
+.modern-btn.el-button--danger,
+.mobile-user-sheet-actions button.is-danger {
+    color: var(--danger-color);
+    background: var(--danger-soft-bg);
+    border-color: var(--danger-border);
+}
+
+button.el-button.el-button--warning,
+.modern-btn.el-button--warning {
+    color: var(--warning-color);
+    background: var(--warning-soft-bg);
+    border-color: var(--warning-line);
+}
+
+button.el-button.is-disabled,
+button.el-button.is-loading,
+.modern-btn.is-disabled,
+.modern-btn:disabled,
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+    transform: none;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+button.el-button--text,
+.modern-btn.el-button--text {
+    min-height: 32px;
+    color: var(--primary-color);
+    background: transparent;
+    border-color: transparent;
+}
+
+/* 相邻操作按钮保持组合语义，同时沿用胶囊外轮廓；不裁切按钮焦点环 */
+.el-button-group {
+    display: inline-flex;
+    vertical-align: middle;
+    border-radius: var(--radius-pill);
+}
+
+.el-button-group > .el-button {
+    border-radius: 0;
+}
+
+.el-button-group > .el-button:first-child {
+    border-top-left-radius: var(--radius-pill);
+    border-bottom-left-radius: var(--radius-pill);
+}
+
+.el-button-group > .el-button:last-child {
+    border-top-right-radius: var(--radius-pill);
+    border-bottom-right-radius: var(--radius-pill);
+}
+
+.el-button-group > .el-button + .el-button {
+    margin-left: -1px;
+}
+
+/* 表单控件统一高度、边界和焦点，保持长期编辑区不透明 */
+.el-input__inner,
+.el-textarea__inner,
+.el-select .el-input__inner,
+.el-date-editor .el-input__inner,
+.el-input-number .el-input__inner,
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+    color: var(--text-primary);
+    background: var(--surface-content);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-md);
+    min-height: var(--control-height);
+    box-shadow: none;
+}
+
+.el-input__inner:hover,
+.el-textarea__inner:hover,
+.el-select .el-input__inner:hover,
+.el-date-editor .el-input__inner:hover,
+.el-input-number .el-input__inner:hover,
+input:not([type="checkbox"]):not([type="radio"]):hover,
+textarea:hover,
+select:hover {
+    border-color: var(--primary-color);
+}
+
+.el-input__inner:focus,
+.el-textarea__inner:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus,
+select:focus {
+    border-color: var(--primary-color);
+    box-shadow: var(--brand-ring);
+    outline: none;
+}
+
+.el-input__inner::placeholder,
+.el-textarea__inner::placeholder,
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-secondary);
+    opacity: 1;
+}
+
+.el-form-item__label,
+label {
+    color: var(--text-primary);
+}
+
+.el-input.is-disabled .el-input__inner,
+.el-textarea.is-disabled .el-textarea__inner,
+input:disabled,
+textarea:disabled,
+select:disabled {
+    color: var(--text-disabled);
+    background: var(--bg-tertiary);
+    border-color: var(--border-divider);
+}
+
+/* 表格、分页和空态 */
+.el-table,
+.el-table__expanded-cell,
+.el-table tr,
+.el-table th.el-table__cell,
+.el-table td.el-table__cell,
+.notification-table,
+.notification-table .el-table__header,
+.notification-table .el-table__body {
+    color: var(--text-primary);
+    background: var(--surface-content);
+}
+
+.el-table th.el-table__cell,
+.notification-table th.el-table__cell {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border-bottom-color: var(--border-divider);
+    font-weight: 600;
+}
+
+.el-table td.el-table__cell,
+.notification-table td.el-table__cell {
+    border-bottom-color: var(--border-divider);
+}
+
+.el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell,
+.el-table .hover-row > td.el-table__cell {
+    background: var(--brand-soft-bg-faint);
+}
+
+.el-table__empty-text,
+.el-pagination,
+.el-pagination .btn-prev,
+.el-pagination .btn-next {
+    color: var(--text-secondary);
+}
+
+.el-pagination button,
+.el-pagination .el-pager li {
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    background: transparent;
+}
+
+.el-pagination .el-pager li.active {
+    color: var(--text-inverse);
+    background: var(--btn-primary-bg);
+}
+
+.el-pagination button,
+.el-pagination .el-pager li {
+    transition: color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple),
+        border-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-pagination button {
+    background: transparent;
+}
+
+.el-pagination button:not(:disabled):hover,
+.el-pagination .el-pager li:not(.disabled):not(.active):hover {
+    color: var(--primary-color);
+    background-color: var(--brand-soft-bg-faint);
+}
+
+.el-pagination button:disabled,
+.el-pagination .el-pager li.disabled {
+    color: var(--text-disabled);
+    background-color: transparent;
+}
+
+.el-pagination.is-background .btn-next,
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .el-pager li {
+    color: var(--text-secondary);
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-divider);
+}
+
+.el-pagination.is-background .btn-next:not(:disabled):hover,
+.el-pagination.is-background .btn-prev:not(:disabled):hover,
+.el-pagination.is-background .el-pager li:not(.disabled):not(.active):hover {
+    color: var(--primary-color);
+    background-color: var(--brand-soft-bg);
+}
+
+.el-pagination.is-background .el-pager li.active {
+    color: var(--text-inverse);
+    background-color: var(--btn-primary-bg);
+    border-color: var(--btn-primary-bg);
+}
+
+/* Element 弹窗、抽屉、菜单和通知都使用独立的不透明表面 */
+.el-dialog,
+.el-message-box,
+.el-drawer,
+.el-popover,
+.el-dropdown-menu,
+.el-select-dropdown,
+.el-picker-panel,
+.el-time-panel,
+.el-notification,
+.el-message,
+.el-tooltip__popper,
+.el-tooltip__popper.is-dark,
+.el-tooltip__popper.is-light,
+.mobile-user-action-sheet,
+.mobile-stats-actions-sheet,
+.mobile-history-danmaku-sheet,
+.mobile-room-detail-sheet,
+.mobile-config-sheet {
+    color: var(--text-primary);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-divider);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* Element 默认给弹窗添加所有属性的过渡，这里只保留需要的交互反馈，避免
+ * 尺寸、定位和滚动状态被无意间插入动画。实际进入/退出仍由外层过渡
+ * 类控制，这里只负责面板本身的可预测反馈 */
+.el-dialog,
+.el-message-box,
+.el-drawer {
+    transition: transform var(--duration-overlay) var(--ease-decel),
+        opacity var(--duration-overlay) var(--ease-decel),
+        box-shadow var(--duration-feedback) var(--ease-apple);
+}
+
+/* 顶部消息是短暂但高频的全局浮层，保持窄屏可读并与通知使用同一表面 */
+.el-message {
+    color: var(--text-primary) !important;
+    background: var(--surface-overlay) !important;
+    border-color: var(--border-divider) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: var(--shadow-md) !important;
+    min-width: 0 !important;
+    width: min(420px, calc(100vw - 24px));
+}
+
+.el-message__content {
+    color: var(--text-primary) !important;
+}
+
+.el-message--info {
+    background: var(--brand-soft-bg-faint) !important;
+    border-color: var(--brand-accent-border) !important;
+}
+
+.el-message--info .el-message__content,
+.el-message--info .el-message__icon {
+    color: var(--primary-color) !important;
+}
+
+.el-message--success {
+    background: var(--success-soft-bg-faint) !important;
+    border-color: var(--success-border) !important;
+}
+
+.el-message--success .el-message__content,
+.el-message--success .el-message__icon {
+    color: var(--success-color) !important;
+}
+
+.el-message--warning {
+    background: var(--warning-soft-bg-faint) !important;
+    border-color: var(--warning-border) !important;
+}
+
+.el-message--warning .el-message__content,
+.el-message--warning .el-message__icon {
+    color: var(--warning-color) !important;
+}
+
+.el-message--error {
+    background: var(--danger-soft-bg-faint) !important;
+    border-color: var(--danger-border) !important;
+}
+
+.el-message--error .el-message__content,
+.el-message--error .el-message__icon {
+    color: var(--danger-color) !important;
+}
+
+/* 加载遮罩只表示暂时阻塞，不透出旧页面的颜色和模糊 */
+.el-loading-mask {
+    background-color: var(--surface-overlay) !important;
+    background-color: color-mix(in srgb, var(--surface-content) 94%, transparent) !important;
+}
+
+.el-loading-spinner .el-loading-text,
+.el-loading-spinner i {
+    color: var(--primary-color) !important;
+}
+
+.el-loading-spinner .path {
+    stroke: var(--primary-color) !important;
+}
+
+/* 提示框默认有独立的明暗主题，内容和箭头要一起覆盖
+ * 否则业务提示就会绕过公共样式，重新显示 Element 默认的黑白配色 */
+.el-tooltip__popper,
+.el-tooltip__popper.is-dark,
+.el-tooltip__popper.is-light {
+    color: var(--text-primary) !important;
+    background: var(--bg-tertiary) !important;
+    border: 1px solid var(--border-divider) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+.el-tooltip__popper[x-placement^="top"] .popper__arrow,
+.el-tooltip__popper[x-placement^="bottom"] .popper__arrow,
+.el-tooltip__popper[x-placement^="left"] .popper__arrow,
+.el-tooltip__popper[x-placement^="right"] .popper__arrow {
+    border-color: var(--border-divider) !important;
+}
+
+.el-tooltip__popper[x-placement^="top"] .popper__arrow::after,
+.el-tooltip__popper[x-placement^="bottom"] .popper__arrow::after,
+.el-tooltip__popper[x-placement^="left"] .popper__arrow::after,
+.el-tooltip__popper[x-placement^="right"] .popper__arrow::after {
+    border-color: var(--bg-tertiary) !important;
+}
+
+/* 其他挂在 body 下的弹出层箭头也使用同一套边界和表面，避免菜单和
+ * 提示框挨在一起时出现不同颜色的箭头 */
+.el-popover[x-placement^="top"] .popper__arrow,
+.el-popover[x-placement^="bottom"] .popper__arrow,
+.el-popover[x-placement^="left"] .popper__arrow,
+.el-popover[x-placement^="right"] .popper__arrow,
+.el-dropdown-menu[x-placement^="top"] .popper__arrow,
+.el-dropdown-menu[x-placement^="bottom"] .popper__arrow,
+.el-dropdown-menu[x-placement^="left"] .popper__arrow,
+.el-dropdown-menu[x-placement^="right"] .popper__arrow,
+.el-select-dropdown[x-placement^="top"] .popper__arrow,
+.el-select-dropdown[x-placement^="bottom"] .popper__arrow,
+.el-select-dropdown[x-placement^="left"] .popper__arrow,
+.el-select-dropdown[x-placement^="right"] .popper__arrow {
+    border-color: var(--border-divider) !important;
+}
+
+.el-popover[x-placement^="top"] .popper__arrow::after,
+.el-popover[x-placement^="bottom"] .popper__arrow::after,
+.el-popover[x-placement^="left"] .popper__arrow::after,
+.el-popover[x-placement^="right"] .popper__arrow::after,
+.el-dropdown-menu[x-placement^="top"] .popper__arrow::after,
+.el-dropdown-menu[x-placement^="bottom"] .popper__arrow::after,
+.el-dropdown-menu[x-placement^="left"] .popper__arrow::after,
+.el-dropdown-menu[x-placement^="right"] .popper__arrow::after,
+.el-select-dropdown[x-placement^="top"] .popper__arrow::after,
+.el-select-dropdown[x-placement^="bottom"] .popper__arrow::after,
+.el-select-dropdown[x-placement^="left"] .popper__arrow::after,
+.el-select-dropdown[x-placement^="right"] .popper__arrow::after {
+    border-color: var(--surface-overlay) !important;
+}
+
+.el-dialog__header,
+.el-dialog__footer,
+.el-message-box__header,
+.el-message-box__btns {
+    border-color: var(--border-divider);
+}
+
+.el-dialog__title,
+.el-message-box__title,
+.el-popover__title,
+.el-notification__title {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.el-dialog__body,
+.el-message-box__message,
+.el-notification__content {
+    color: var(--text-primary);
+}
+
+.el-message-box__status.el-icon-info { color: var(--primary-color); }
+.el-message-box__status.el-icon-success { color: var(--success-color); }
+.el-message-box__status.el-icon-warning { color: var(--warning-color); }
+.el-message-box__status.el-icon-error { color: var(--danger-color); }
+
+.el-notification__content {
+    color: var(--text-secondary);
+}
+
+.el-notification__closeBtn {
+    color: var(--text-secondary);
+    transition: color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-notification__closeBtn:hover {
+    color: var(--text-primary);
+}
+
+.el-dialog__footer,
+.el-message-box__btns {
+    background: var(--surface-content);
+}
+
+/* 业务自己的详情弹窗、抽屉和操作底部弹层共用一套样式 */
+.mobile-room-action-sheet,
+.mobile-room-detail-sheet,
+.mobile-room-config-popper,
+.mobile-history-filter-popper,
+.mobile-history-filter-sheet,
+.mobile-history-detail-actions-sheet,
+.mobile-history-danmaku-sheet,
+.mobile-history-detail-dialog,
+.mobile-history-file-dialog,
+.mobile-history-form-dialog,
+.mobile-history-preview-dialog,
+.mobile-history-confirm-dialog,
+.mobile-history-danger-dialog,
+.mobile-log-sheet,
+.mobile-log-alert-sheet,
+.mobile-log-context-sheet,
+.mobile-log-detail-sheet,
+.mobile-user-action-sheet,
+.mobile-stats-actions-sheet,
+.mobile-stats-popper,
+.mobile-config-sheet,
+.notification-rule-drawer,
+.notification-mobile-channel-drawer,
+.settings-drawer,
+.workspace-status-popover,
+.mobile-workspace-popover,
+.mobile-log-popover,
+.theme-popover-panel {
+    color: var(--text-primary) !important;
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-lg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.mobile-room-sheet-backdrop,
+.mobile-room-detail-backdrop,
+.mobile-history-filter-backdrop,
+.mobile-history-danmaku-backdrop,
+.mobile-history-detail-actions-backdrop,
+.mobile-user-sheet-backdrop,
+.theme-popover-backdrop {
+    background: rgba(15, 23, 42, 0.42) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.el-dropdown-menu__item,
+.el-select-dropdown__item,
+.el-picker-panel,
+.el-time-panel {
+    color: var(--text-primary);
+}
+
+.el-dropdown-menu__item:not(.is-disabled):hover,
+.el-dropdown-menu__item:focus,
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover {
+    color: var(--primary-color);
+    background: var(--brand-soft-bg-faint);
+}
+
+.el-dropdown-menu__item.is-disabled,
+.el-select-dropdown__item.is-disabled {
+    color: var(--text-disabled);
+}
+
+/* 日期/时间选择器：面板、日期单元格和底部操作沿用同一套层级与状态色 */
+.el-picker-panel,
+.el-date-picker,
+.el-time-panel,
+.el-date-range-picker {
+    color: var(--text-primary);
+    background: var(--surface-overlay);
+    border-color: var(--border-divider);
+    box-shadow: var(--shadow-md);
+}
+
+.el-date-picker__header,
+.el-date-range-picker__header,
+.el-picker-panel__icon-btn,
+.el-date-picker__header-label {
+    color: var(--text-primary);
+}
+
+.el-picker-panel__icon-btn:hover,
+.el-date-picker__header-label:hover {
+    color: var(--primary-color);
+}
+
+.el-date-table th {
+    color: var(--text-secondary);
+    border-bottom-color: var(--border-divider);
+}
+
+.el-date-table td,
+.el-month-table td,
+.el-year-table td {
+    color: var(--text-primary);
+}
+
+.el-date-table td.available:hover,
+.el-month-table td .cell:hover,
+.el-year-table td .cell:hover {
+    color: var(--primary-color);
+    background: var(--brand-soft-bg-faint);
+    border-radius: var(--radius-sm);
+}
+
+.el-date-table td.today span,
+.el-month-table td.today .cell,
+.el-year-table td.today .cell {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.el-date-table td.current:not(.disabled) span,
+.el-month-table td.current:not(.disabled) .cell,
+.el-year-table td.current:not(.disabled) .cell {
+    color: var(--text-inverse);
+    background: var(--btn-primary-bg);
+    border-radius: var(--radius-pill);
+}
+
+.el-date-table td.in-range div,
+.el-date-table td.start-date div,
+.el-date-table td.end-date div {
+    color: var(--text-primary);
+    background: var(--brand-soft-bg);
+}
+
+.el-date-table td.disabled div,
+.el-month-table td.disabled .cell,
+.el-year-table td.disabled .cell,
+.el-time-spinner__item.disabled {
+    color: var(--text-disabled);
+    background: transparent;
+}
+
+.el-date-table td.prev-month div,
+.el-date-table td.next-month div {
+    color: var(--text-disabled);
+}
+
+.el-time-panel__content::after,
+.el-time-panel__content::before {
+    border-top-color: var(--border-divider);
+    border-bottom-color: var(--border-divider);
+}
+
+.el-time-spinner__item {
+    color: var(--text-secondary);
+    transition: color var(--duration-feedback) var(--ease-apple), background-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-time-spinner__item:hover,
+.el-time-spinner__item.active:not(.disabled) {
+    color: var(--primary-color);
+    background: var(--brand-soft-bg-faint);
+}
+
+.el-time-panel__footer {
+    border-top-color: var(--border-divider);
+}
+
+.el-time-panel__btn.confirm,
+.el-picker-panel__link-btn {
+    color: var(--primary-color);
+}
+
+.el-date-editor .el-range-input,
+.el-date-editor .el-range-separator {
+    color: var(--text-primary);
+    background: transparent;
+}
+
+html.low-effects .el-time-spinner__item {
+    transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .el-time-spinner__item { transition: none; }
+}
+
+/* 分段选择器：底槽固定，选中底板由脚本按实际选项宽度移动 */
+.ui-capsule-group {
+    position: relative;
+    isolation: isolate;
+}
+
+.ui-capsule-group::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    left: var(--capsule-x, 4px);
+    top: var(--capsule-y, 4px);
+    width: var(--capsule-width, 0px);
+    height: var(--capsule-height, 0px);
+    opacity: var(--capsule-opacity, 0);
+    border-radius: var(--radius-pill);
+    background: var(--surface-content);
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+    transition: left var(--duration-selection) var(--ease-decel),
+        top var(--duration-selection) var(--ease-decel),
+        width var(--duration-selection) var(--ease-decel),
+        height var(--duration-selection) var(--ease-decel),
+        opacity var(--duration-feedback) var(--ease-apple);
+}
+
+.ui-capsule-group > .el-radio-button,
+.ui-capsule-group > .el-radio-button .el-radio-button__inner {
+    position: relative;
+    z-index: 1;
+}
+
+.ui-capsule-group > .el-radio-button .el-radio-button__inner,
+.ui-capsule-group > .el-radio-button:first-child .el-radio-button__inner,
+.ui-capsule-group > .el-radio-button:last-child .el-radio-button__inner {
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--text-secondary);
+    transition: color var(--duration-feedback) var(--ease-apple);
+}
+
+.ui-capsule-group > .el-radio-button .el-radio-button__orig-radio:checked + .el-radio-button__inner {
+    color: var(--primary-color);
+}
+
+.ui-capsule-group > .el-radio-button .el-radio-button__orig-radio:disabled + .el-radio-button__inner {
+    color: var(--text-disabled);
+    opacity: 0.7;
+}
+
+html.low-effects .ui-capsule-group::before {
+    transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ui-capsule-group::before { transition: none; }
+}
+
+/* 页面挂载时使用标题作为焦点目标；标题不承担操作，不绘制按钮式焦点框 */
+[data-page-focus-target]:focus,
+[data-page-focus-target]:focus-visible {
+    outline: none;
+}
+
+/* 所有标签和状态点采用静态语义表达，不持续闪烁 */
+.el-tag,
+.status-chip,
+.meta-chip,
+.quick-tag,
+.private-tag,
+.filter-badge,
+.mobile-user-state,
+.danmaku-task-badge {
+    border-radius: var(--radius-pill);
+    box-shadow: none;
+}
+
+.el-tag--success,
+.status-chip.success,
+.mobile-user-state.is-success {
+    color: var(--success-color);
+    background: var(--success-soft-bg);
+    border-color: var(--success-border);
+}
+
+.el-tag--warning,
+.status-chip.warn {
+    color: var(--warning-color);
+    background: var(--warning-soft-bg);
+    border-color: var(--warning-border);
+}
+
+.el-tag--danger,
+.status-chip.danger,
+.mobile-user-state.is-danger {
+    color: var(--danger-color);
+    background: var(--danger-soft-bg);
+    border-color: var(--danger-border);
+}
+
+/* 移动端专属按钮通常带有更高优先级的主题规则，统一回落到纯蓝主操作 */
+.mobile-shell .mobile-room-command.is-primary,
+.mobile-shell .mobile-user-command.is-primary,
+.mobile-shell .mobile-room-sheet-actions button.is-primary,
+.mobile-shell .mobile-room-detail-actions button.is-primary,
+.mobile-shell .mobile-user-empty-action,
+.mobile-shell .mobile-user-sheet-actions button.is-primary,
+.mobile-shell .mobile-stats-action.is-primary,
+.mobile-shell .mobile-stats-sheet-actions button.is-primary,
+.mobile-shell .mobile-brec-save {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    border-color: var(--btn-primary-bg) !important;
+    box-shadow: none !important;
+}
+
+.mobile-shell .mobile-room-command.is-primary:hover,
+.mobile-shell .mobile-user-command.is-primary:hover,
+.mobile-shell .mobile-room-sheet-actions button.is-primary:hover,
+.mobile-shell .mobile-room-detail-actions button.is-primary:hover,
+.mobile-shell .mobile-user-empty-action:hover,
+.mobile-shell .mobile-user-sheet-actions button.is-primary:hover,
+.mobile-shell .mobile-stats-action.is-primary:hover,
+.mobile-shell .mobile-stats-sheet-actions button.is-primary:hover,
+.mobile-shell .mobile-brec-save:hover {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+/* 移动端首页状态卡和用户页首要操作沿用内容表面与单一主色
+ * 这些控件在页面专属样式中原本带有渐变/发光，统一层在动态模块样式之后生效 */
+.mobile-shell .mobile-status-card.is-workspace,
+.mobile-shell .mobile-status-card.is-workspace.is-open {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .mobile-user-hero-action {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .mobile-user-hero-action:hover,
+.mobile-shell .mobile-user-hero-action:focus-visible {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+.mobile-shell .mobile-user-hero-action:active {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+.mobile-shell .mobile-status-card.is-workspace::before,
+.mobile-shell .mobile-status-card.is-workspace::after {
+    background: none !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    animation: none !important;
+}
+
+.mobile-shell .mobile-status-card,
+.mobile-shell .mobile-release-card,
+.mobile-shell .workspace-status-panel {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.mobile-shell .mobile-status-icon {
+    background: color-mix(in srgb, var(--primary-color) 14%, var(--surface-content)) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+.mobile-shell .mobile-status-card:nth-child(2) .mobile-status-icon {
+    color: var(--success-color) !important;
+    background: var(--success-soft-bg) !important;
+}
+
+.mobile-shell .mobile-status-card:nth-child(3) .mobile-status-icon {
+    color: var(--warning-color) !important;
+    background: var(--warning-soft-bg) !important;
+}
+
+.mobile-shell .mobile-status-card.has-alert .mobile-status-icon {
+    color: var(--danger-color) !important;
+    background: var(--danger-soft-bg) !important;
+}
+
+/* 手机导航与页面卡片都是持续阅读表面，不透出底层内容 */
+.mobile-shell .app-header,
+.mobile-shell .header-nav,
+.mobile-shell .mobile-history-hero,
+.mobile-shell .mobile-history-overview,
+.mobile-shell .mobile-history-quick,
+.mobile-shell .mobile-history-toolbar,
+.mobile-shell .mobile-history-empty,
+.mobile-shell .mobile-history-pagination,
+.mobile-shell .mobile-stats-hero,
+.mobile-shell .mobile-stats-scope-card,
+.mobile-shell .mobile-stats-coverage,
+.mobile-shell .mobile-stats-panel,
+.mobile-shell .mobile-stats-kpi,
+.mobile-shell .mobile-user-hero,
+.mobile-shell .mobile-user-summary,
+.mobile-shell .mobile-user-command-row,
+.mobile-shell .mobile-brec-panel,
+.mobile-shell .mobile-user-empty,
+.mobile-shell .mobile-log-frequency,
+.mobile-shell .mobile-log-list {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.mobile-shell .header-nav {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    border-top: 1px solid var(--border-divider);
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .nav-slide-indicator {
+    background: var(--primary-color) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+.mobile-shell .mobile-history-command.is-primary,
+.mobile-shell .mobile-log-page .is-primary,
+.mobile-shell .mobile-stats-segment .is-active,
+.mobile-shell .mobile-stats-kpi.is-primary {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+    box-shadow: none !important;
+}
+
+.mobile-shell .mobile-history-command.is-primary:hover,
+.mobile-shell .mobile-log-page .is-primary:hover,
+.mobile-shell .mobile-stats-segment .is-active:hover,
+.mobile-shell .mobile-stats-kpi.is-primary:hover {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+.mobile-shell .mobile-stats-kpi.is-primary {
+    color: var(--text-primary) !important;
+    background: var(--surface-content) !important;
+    border-left: 3px solid var(--primary-color) !important;
+}
+
+.mobile-shell .mobile-stats-segment {
+    background: var(--bg-tertiary) !important;
+    background-image: none !important;
+    box-shadow: inset 0 0 0 1px var(--border-divider) !important;
+}
+
+.mobile-shell .mobile-config-backdrop,
+.mobile-shell .mobile-stats-actions-backdrop,
+.mobile-shell .mobile-log-overlay {
+    background: rgba(15, 23, 42, 0.42) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.mobile-shell .mobile-primary-action,
+.mobile-shell .mobile-notification-actions .is-primary,
+.mobile-shell .mobile-stats-action-list button.is-primary,
+.mobile-shell .mobile-history-sheet-actions .is-primary,
+.mobile-shell .mobile-log-sheet-actions .is-primary {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+    box-shadow: none !important;
+}
+
+.mobile-shell .mobile-primary-action:hover,
+.mobile-shell .mobile-notification-actions .is-primary:hover,
+.mobile-shell .mobile-stats-action-list button.is-primary:hover,
+.mobile-shell .mobile-history-sheet-actions .is-primary:hover,
+.mobile-shell .mobile-log-sheet-actions .is-primary:hover {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+.mobile-shell .mobile-full-action {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+/* 最新版本只通过边框强调，避免首页出现大范围彩色光晕 */
+.mobile-shell .mobile-release-card.is-latest {
+    box-shadow: var(--shadow-sm) !important;
+}
+
+@media (max-width: 520px) {
+    .login-card .setup-primary-row .el-col-8,
+    .login-card .setup-primary-row .el-col-16 {
+        width: 100% !important;
+    }
+
+    .login-card .setup-primary-row .el-form-item {
+        margin-bottom: 14px;
+    }
+}
+
+/* 统计页和历史页用轻边界区分层次，图表仍由 ECharts 绘制 */
+.stats-container,
+.stats-header,
+.stats-action-menu,
+.stats-title i,
+.coverage-strip,
+.coverage-pending-panel,
+.operation-progress-panel,
+.metric-card,
+.metric-card.metric-card-primary,
+.stats-panel,
+.room-overview-chart,
+.session-list-card,
+.chart-cell,
+.interaction-card,
+.interaction-detail-grid > div,
+.danmu-diagnostic-strip,
+.empty-state {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.stats-container {
+    background-color: var(--surface-page) !important;
+}
+
+.stats-container .el-radio-group {
+    background: var(--bg-tertiary) !important;
+    background-image: none !important;
+    box-shadow: inset 0 0 0 1px var(--border-divider) !important;
+}
+
+.stats-title i {
+    color: var(--primary-color) !important;
+    box-shadow: inset 0 0 0 1px var(--border-divider) !important;
+}
+
+.stats-container .metric-card,
+.stats-container .metric-card.metric-card-primary {
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.stats-container .metric-card::before,
+.stats-container .metric-card::after,
+.stats-container .stats-panel::before,
+.stats-container .stats-panel::after,
+.stats-container .operation-progress-panel::before,
+.stats-container .operation-progress-panel::after,
+.stats-container .detail-metric::before,
+.stats-container .detail-metric::after,
+.stats-container .interaction-card::before,
+.stats-container .interaction-card::after,
+.stats-container .chart-cell::before,
+.stats-container .chart-cell::after,
+.stats-container .room-overview-chart::before,
+.stats-container .room-overview-chart::after,
+.stats-container .session-list-card::before,
+.stats-container .session-list-card::after,
+.stats-container .interaction-detail-grid > div::before,
+.stats-container .interaction-detail-grid > div::after {
+    background: none !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    opacity: 0 !important;
+    transform: none !important;
+}
+
+.stats-container .metric-card:hover,
+.stats-container .stats-panel:hover,
+.stats-container .detail-metric:hover,
+.stats-container .interaction-card:hover,
+.stats-container .chart-cell:hover,
+.stats-container .room-overview-chart:hover,
+.stats-container .session-list-card:hover,
+.stats-container .interaction-detail-grid > div:hover {
+    transform: none !important;
+    box-shadow: var(--shadow-sm) !important;
+    border-color: var(--border-color) !important;
+}
+
+.history-container .el-icon-time {
+    color: var(--primary-color) !important;
+    background: none !important;
+    background-image: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+}
+
+.room-container .el-icon-video-camera.icon,
+.room-container .room-stat-value,
+.mobile-room-container .el-icon-video-camera.icon,
+.mobile-room-container .room-stat-value {
+    background: none !important;
+    background-image: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+    color: var(--primary-color) !important;
+}
+
+.room-container .room-stat-value.live,
+.mobile-room-container .room-stat-value.live {
+    color: var(--danger-color) !important;
+}
+
+.room-container .room-stat-value.recording,
+.mobile-room-container .room-stat-value.recording {
+    color: var(--success-color) !important;
+}
+
+.room-container .room-empty-icon,
+.mobile-room-container .room-empty-icon {
+    color: var(--text-secondary) !important;
+    background: var(--bg-tertiary) !important;
+    background-image: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+}
+
+/* 移动端状态标记和批量管理动作也遵守同一套实色/语义按钮规则 */
+.mobile-shell .mobile-history-select-mark.is-on {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+}
+
+.mobile-shell .mobile-room-card.is-live::before {
+    background: var(--danger-color) !important;
+    background-image: none !important;
+}
+
+.mobile-shell .mobile-room-card.is-recording::before {
+    background: var(--success-color) !important;
+    background-image: none !important;
+}
+
+.mobile-shell .mobile-history-batch-actions button.is-primary {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+    box-shadow: none !important;
+}
+
+.mobile-shell .mobile-history-batch-actions button.is-primary:hover {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+/* 配置全屏页的帮助确认和标题图标属于操作层，不使用页面渐变 */
+.room-config-dialog.is-fullscreen .header-icon-box,
+.room-config-dialog.is-fullscreen .mobile-config-help-confirm {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+    box-shadow: none !important;
+}
+
+.room-config-dialog.is-fullscreen .mobile-config-help-confirm:hover,
+.room-config-dialog.is-fullscreen .mobile-config-help-confirm:focus-visible {
+    background: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+/* 全局预览小窗的播放入口使用主色实心按钮；波形和进度仍保留为状态可视化 */
+.global-part-preview-mini,
+.part-preview-mini {
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+.global-part-preview-mini.is-collapsed .global-part-preview-mini-play,
+.part-preview-mini.is-collapsed .part-preview-mini-play {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.global-part-preview-mini.is-collapsed .global-part-preview-mini-play:hover,
+.part-preview-mini.is-collapsed .part-preview-mini-play:hover {
+    background: var(--btn-primary-bg-hover) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+    transform: scale(1.03);
+}
+
+.global-part-preview-mini .global-part-preview-mini-meta,
+.part-preview-mini .part-preview-mini-meta {
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.page-surface-history .page-title i,
+.history-container .page-title i {
+    color: var(--primary-color) !important;
+    background: none !important;
+    background-image: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+}
+
+.notification-settings-module .notification-scope-card,
+.notification-settings-module .notification-scope-card:hover,
+.notification-settings-module .notification-scope-card:focus-visible,
+.notification-settings-module .notification-scope-card.is-active {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-sm) !important;
+    transform: none !important;
+}
+
+.notification-settings-module .notification-scope-card::before {
+    display: none !important;
+    background: none !important;
+    background-image: none !important;
+}
+
+.notification-settings-module .notification-scope-card.is-active {
+    border-color: var(--primary-color) !important;
+    box-shadow: inset 0 0 0 1px var(--primary-color), var(--shadow-sm) !important;
+}
+
+.notification-settings-module .notification-scope-card-icon,
+.notification-settings-module .notification-scope-card.is-active .notification-scope-card-icon {
+    color: var(--primary-color) !important;
+    background: var(--brand-soft-bg-faint) !important;
+    background-image: none !important;
+    transform: none !important;
+}
+
+.notification-settings-module .notification-scope-card.is-active .notification-scope-card-icon {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+}
+
+.history-container .data-card::before,
+.page-surface-history .data-card::before {
+    background: var(--primary-color) !important;
+    background-image: none !important;
+}
+
+/* 页面私有高优先级状态层：实色内容面板仍保留状态边界，不让深色旧覆盖重新带回渐变和光晕 */
+.history-container .data-card,
+.history-container .data-card:hover,
+.room-container .room-card,
+.room-container .room-card:hover,
+.user-container .user-card,
+.user-container .user-card:hover,
+.app-container .version-item,
+.app-container .version-item:hover,
+.app-container .version-content-wrapper,
+.app-container .version-content-wrapper:hover {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+    transform: none !important;
+}
+
+.history-container .data-card.is-audit-failed,
+.history-container .data-card.is-audit-failed:hover {
+    border-color: var(--warning-border) !important;
+}
+
+.history-container .data-card.is-processing,
+.history-container .data-card.is-processing:hover {
+    border-color: var(--primary-color) !important;
+}
+
+.history-container .data-card.is-failed,
+.history-container .data-card.is-failed:hover {
+    border-color: var(--danger-border) !important;
+}
+
+.history-container .data-card.is-success,
+.history-container .data-card.is-success:hover {
+    border-color: var(--success-border) !important;
+}
+
+.history-container .data-card.is-audit-failed::before {
+    background: var(--warning-color) !important;
+}
+
+.history-container .data-card.is-processing::before {
+    background: var(--primary-color) !important;
+}
+
+.history-container .data-card.is-failed::before {
+    background: var(--danger-color) !important;
+}
+
+.history-container .data-card.is-success::before {
+    background: var(--success-color) !important;
+}
+
+.batch-action-bar,
+.batch-progress-float,
+.edit-upload-float {
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-lg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.room-config-dialog .option-card,
+.room-config-dialog .option-card:hover:not(:disabled),
+.room-config-dialog .option-card.is-active,
+.room-edit-form .section-header:hover {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+    transform: none !important;
+}
+
+.room-config-dialog .option-card::before {
+    display: none !important;
+    background: none !important;
+}
+
+.room-config-dialog .option-card.is-active {
+    border-color: var(--primary-color) !important;
+    box-shadow: inset 0 0 0 1px var(--primary-color), var(--shadow-sm) !important;
+}
+
+.room-config-dialog .option-card.is-active .option-card-icon {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    transform: none !important;
+}
+
+.mobile-history-detail-dialog.el-dialog.is-fullscreen,
+.mobile-history-preview-dialog.el-dialog,
+.mobile-history-form-dialog.el-dialog.is-fullscreen,
+.mobile-history-confirm-dialog.el-dialog,
+.mobile-history-file-dialog.el-dialog,
+.mobile-history-detail-dialog .mobile-history-detail-part,
+.mobile-history-detail-dialog .detail-footer,
+.mobile-history-detail-dialog .action-group-secondary,
+.mobile-history-detail-actions-sheet,
+.mobile-edit-parts-hero,
+.mobile-edit-parts-command-bar,
+.mobile-edit-parts-add-panel,
+.mobile-edit-part-card {
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.mobile-history-filter-sheet,
+.mobile-history-filter-popper,
+.mobile-history-danmaku-sheet,
+.mobile-room-action-sheet,
+.mobile-room-detail-sheet,
+.mobile-stats-mini-chart,
+.mobile-user-settings-dialog.el-dialog,
+.mobile-stats-xml-dialog.el-dialog,
+.mobile-stats-xml-issue-dialog.el-dialog,
+.mobile-log-sheet {
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.mobile-history-detail-dialog .mobile-history-detail-part,
+.mobile-edit-part-card {
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .mobile-user-card,
+.mobile-shell .mobile-user-card:hover,
+.mobile-shell .mobile-log-alert-card,
+.mobile-shell .mobile-log-backtop {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transform: none !important;
+}
+
+.mobile-shell .mobile-user-card.is-success::before,
+.mobile-shell .mobile-user-card.is-danger::before {
+    background: var(--success-color) !important;
+    background-image: none !important;
+}
+
+.mobile-shell .mobile-user-card.is-danger::before {
+    background: var(--danger-color) !important;
+}
+
+.mobile-shell .mobile-log-backtop {
+    color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.mobile-shell .mobile-log-alert-card {
+    background: var(--warning-soft-bg) !important;
+    border-color: var(--warning-border) !important;
+}
+
+.config-panel,
+.config-card,
+.brec-config-panel {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.filter-panel,
+.table-container,
+.pagination-container,
+.stats-action-menu,
+.coverage-pending-panel,
+.operation-progress-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 统一进入/切换动画，低特效和系统减少动态效果时只保留状态 */
+.module-page-host,
+.page-surface-room,
+.page-surface-history,
+.page-surface-stats,
+.log-page {
+    animation-duration: var(--duration-overlay);
+    animation-timing-function: var(--ease-decel);
+}
+
+.card-enter-active,
+.fade-slide-enter-active,
+.fade-slide-leave-active,
+.dialog-fade-enter-active,
+.dialog-fade-leave-active {
+    transition-duration: var(--duration-overlay);
+    transition-timing-function: var(--ease-decel);
+}
+
+html.low-effects .module-page-host,
+html.low-effects .page-surface-room,
+html.low-effects .page-surface-history,
+html.low-effects .page-surface-stats,
+html.low-effects .log-page,
+html.low-effects .card-enter-active,
+html.low-effects .fade-slide-enter-active,
+html.low-effects .fade-slide-leave-active,
+html.low-effects .dialog-fade-enter-active,
+html.low-effects .dialog-fade-leave-active {
+    animation: none !important;
+    transition: none !important;
+}
+
+@media (max-width: 768px) {
+    html,
+    body {
+        font-size: 14px;
+    }
+
+    button.el-button,
+    .modern-btn,
+    .mobile-room-action,
+    .mobile-room-command,
+    .mobile-user-command,
+    .mobile-user-empty-action,
+    .mobile-user-sheet-actions button,
+    .mobile-stats-action,
+    .mobile-stats-sheet-actions button,
+    .mobile-brec-save,
+    .dialog-footer-modern button,
+    .room-delete-dialog-footer button {
+        min-height: var(--touch-target-size);
+    }
+
+    .el-input__inner,
+    .el-textarea__inner,
+    .el-select .el-input__inner,
+    input:not([type="checkbox"]):not([type="radio"]),
+    textarea,
+    select {
+        min-height: var(--touch-target-size);
+    }
+
+    .el-dialog,
+    .el-message-box,
+    .el-drawer,
+    .el-message,
+    .el-popover,
+    .mobile-user-action-sheet,
+    .mobile-stats-actions-sheet,
+    .mobile-history-danmaku-sheet,
+    .mobile-room-detail-sheet,
+    .mobile-config-sheet {
+        border-radius: var(--radius-xl);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important;
+    }
+}
+
+/* 低特效模式：停掉页面进入和装饰性循环动画，保留真实任务进度、状态同步
+ * 以及按钮按下反馈。动画基类在模块样式中定义，这里统一覆盖动态页面和移动页 */
+html.low-effects .mobile-shell .mobile-status-strip,
+html.low-effects .mobile-shell .mobile-release-feed,
+html.low-effects .mobile-shell .mobile-stats-hero,
+html.low-effects .mobile-shell .mobile-stats-scope-card,
+html.low-effects .mobile-shell .mobile-stats-coverage,
+html.low-effects .mobile-shell .mobile-stats-kpi,
+html.low-effects .mobile-shell .mobile-stats-panel,
+html.low-effects .mobile-shell .mobile-history-card,
+html.low-effects .mobile-shell .mobile-log-hero,
+html.low-effects .mobile-shell .mobile-log-actions,
+html.low-effects .mobile-shell .mobile-log-stat-grid,
+html.low-effects .mobile-shell .mobile-log-frequency,
+html.low-effects .mobile-shell .mobile-log-list,
+html.low-effects .mobile-shell .mobile-user-hero,
+html.low-effects .mobile-shell .mobile-user-summary,
+html.low-effects .mobile-shell .mobile-user-command-row,
+html.low-effects .mobile-shell .mobile-user-empty,
+html.low-effects .room-header,
+html.low-effects .history-header,
+html.low-effects .stats-header,
+html.low-effects .room-card,
+html.low-effects .data-card,
+html.low-effects .history-card,
+html.low-effects .metric-card,
+html.low-effects .chart-cell,
+html.low-effects .filter-panel {
+    animation: none !important;
+}
+
+html.low-effects .mobile-shell .mobile-workspace-water,
+html.low-effects .mobile-shell .mobile-workspace-water::before,
+html.low-effects .mobile-shell .mobile-workspace-water::after,
+html.low-effects .mobile-shell .mobile-workspace-wave {
+    animation: none !important;
+}
+
+/* 页面私有残留的最后收口：内容卡片使用实色和边界表达层次，
+ * 只保留进度、波形、图表和骨架等明确承载数据的渐变。状态仍通过
+ * 语义颜色和边界保留，避免把录制、失败或告警信息隐藏在装饰效果里 */
+
+/* 房间列表、详情和状态标签。拖拽中的缩放仍保留为直接操作反馈 */
+.room-container .room-card.is-streaming,
+.room-container .room-card.is-recording,
+.room-container .room-card.is-streaming:hover,
+.room-container .room-card.is-recording:hover {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-sm) !important;
+    animation: none !important;
+}
+
+.room-container .room-card.is-streaming {
+    border-color: var(--danger-border) !important;
+}
+
+.room-container .room-card.is-recording {
+    border-color: var(--success-border) !important;
+}
+
+.room-container .room-card.is-dragging {
+    opacity: 0.55 !important;
+    transform: scale(0.98) !important;
+}
+
+.room-container .room-card::before,
+.room-container .room-card.is-streaming::before,
+.room-container .room-card.is-recording::before {
+    background: var(--primary-color) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+.room-container .room-card.is-streaming::before {
+    background: var(--danger-color) !important;
+}
+
+.room-container .room-card.is-recording::before {
+    background: var(--success-color) !important;
+}
+
+.room-container .room-card-header,
+.room-container .room-card-body,
+.room-container .room-card-footer,
+.detail-dialog-modern .detail-card,
+.detail-dialog-modern .detail-card-header,
+.detail-dialog-modern .detail-card-body,
+.detail-dialog-modern .detail-status-item {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+}
+
+.detail-dialog-modern .detail-card,
+.detail-dialog-modern .detail-status-item {
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.detail-dialog-modern .detail-card:hover,
+.detail-dialog-modern .detail-status-item:hover {
+    transform: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.detail-dialog-modern .detail-card-header {
+    background: var(--bg-tertiary) !important;
+    border-bottom-color: var(--border-divider) !important;
+}
+
+.detail-dialog-modern .detail-status-icon.streaming {
+    background: var(--danger-soft-bg) !important;
+    background-image: none !important;
+}
+
+.detail-dialog-modern .detail-status-icon.recording {
+    background: var(--success-soft-bg) !important;
+    background-image: none !important;
+}
+
+.detail-dialog-modern .detail-status-icon.upload,
+.detail-dialog-modern .detail-status-icon.danmaku {
+    background: var(--brand-soft-bg-faint) !important;
+    background-image: none !important;
+}
+
+.room-container .room-tag.live,
+.room-container .room-tag.recording,
+.room-container .room-tag.upload {
+    background-image: none !important;
+    box-shadow: none !important;
+    animation: none !important;
+}
+
+.room-container .room-tag.live {
+    background: var(--danger-soft-bg) !important;
+    border-color: var(--danger-border) !important;
+    color: var(--danger-color) !important;
+}
+
+.room-container .room-tag.recording {
+    background: var(--success-soft-bg) !important;
+    border-color: var(--success-border) !important;
+    color: var(--success-color) !important;
+}
+
+.room-container .room-tag.upload {
+    background: var(--brand-soft-bg) !important;
+    border-color: var(--brand-accent-border) !important;
+    color: var(--primary-color) !important;
+}
+
+.room-container .room-card-footer .el-button:hover,
+.room-container .room-card-footer .el-button:focus-visible {
+    transform: none !important;
+}
+
+/* 账号页：登录入口和账号状态以实色、边界和静态状态条表达 */
+.user-container .login-btn,
+.user-container .login-btn:focus-visible {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+    border-radius: var(--radius-pill) !important;
+    box-shadow: var(--shadow-sm) !important;
+    transform: none !important;
+}
+
+.user-container .login-btn:hover:not(.is-disabled):not(:disabled),
+.user-container .login-btn:focus-visible:not(.is-disabled):not(:disabled) {
+    background: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+.user-container .user-header .user-stat-item {
+    transform: none !important;
+}
+
+.user-container .user-card,
+.user-container .user-card:hover,
+.user-container .user-card.is-active,
+.user-container .user-card.is-warning,
+.user-container .user-card.is-active:hover,
+.user-container .user-card.is-warning:hover {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+    transform: none !important;
+}
+
+.user-container .user-card.is-active {
+    border-color: var(--success-border) !important;
+}
+
+.user-container .user-card.is-warning {
+    border-color: var(--danger-border) !important;
+}
+
+.user-container .user-card::before,
+.user-container .user-card.is-active::before,
+.user-container .user-card.is-warning::before {
+    background: var(--primary-color) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+.user-container .user-card.is-active::before {
+    background: var(--success-color) !important;
+}
+
+.user-container .user-card.is-warning::before {
+    background: var(--danger-color) !important;
+}
+
+.user-container .user-card-header {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+}
+
+.user-container .user-avatar,
+.user-container .user-card.is-active .user-avatar,
+.user-container .user-card.is-warning .user-avatar {
+    background: var(--primary-color) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.user-container .user-card.is-active .user-avatar {
+    background: var(--success-color) !important;
+}
+
+.user-container .user-card.is-warning .user-avatar {
+    background: var(--danger-color) !important;
+}
+
+/* 首页与独立登录页的品牌和告警保持稳定，告警仍通过颜色/边界可见 */
+.app-container,
+[data-theme="dark"] .app-container {
+    background: var(--surface-page) !important;
+    background-image: none !important;
+}
+
+.app-container .workspace-logo-trigger:hover,
+.app-container .workspace-logo-trigger.has-alert,
+.app-container .workspace-toggle:hover,
+.app-container .workspace-toggle.has-alert,
+.app-container .theme-toggle:hover,
+.app-container .theme-toggle.is-open,
+.app-container .privacy-toggle:hover,
+.app-container .privacy-toggle.is-active {
+    transform: none !important;
+    filter: none !important;
+}
+
+.app-container .workspace-logo-trigger.has-alert,
+.app-container .workspace-toggle.has-alert,
+.app-container .theme-toggle.is-open,
+.app-container .privacy-toggle.is-active {
+    animation: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.app-container .theme-toggle:hover,
+.app-container .theme-toggle.is-open,
+.app-container .privacy-toggle:hover,
+.app-container .privacy-toggle.is-active {
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.app-container .privacy-toggle.is-active {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+}
+
+.app-container .connection-alert,
+.app-container .mobile-new-badge,
+.app-container .new-badge,
+.app-container .nav-item.has-alert .alert-badge {
+    animation: none !important;
+}
+
+[data-theme="dark"] .app-container .version-item,
+[data-theme="dark"] .app-container .version-item:hover,
+[data-theme="dark"] .app-container .version-content-wrapper,
+[data-theme="dark"] .app-container .version-content-wrapper:hover {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+[data-theme="dark"] .app-container .marker-line {
+    background: var(--border-divider) !important;
+    background-image: none !important;
+}
+
+.login-page .brand-mini-title,
+.login-page .brand-mini-new,
+.login-page .login-theme-toggle:hover {
+    background-image: none !important;
+}
+
+.login-page .brand-mini-title {
+    color: var(--text-primary) !important;
+    background: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+}
+
+.login-page .brand-mini-new {
+    background: var(--danger-color) !important;
+    box-shadow: var(--shadow-sm) !important;
+    animation: none !important;
+}
+
+.login-page .login-theme-toggle:hover {
+    transform: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+/* 登录失败仍保留短促的位移动画，持续性的红色光晕改为边框语义，避免遮挡表单文字 */
+.login-page .login-card.is-error {
+    box-shadow: var(--shadow-md) !important;
+}
+
+.login-page .login-card.is-error::after {
+    display: none !important;
+    animation: none !important;
+}
+
+/* 手机账号卡片和移动房间状态沿用同一套实色契约 */
+.mobile-shell .mobile-user-card.is-open,
+.mobile-shell .mobile-user-card.is-success,
+.mobile-shell .mobile-user-card.is-danger,
+.mobile-shell .mobile-user-card.is-open:hover,
+.mobile-shell .mobile-user-card.is-success:hover,
+.mobile-shell .mobile-user-card.is-danger:hover {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-sm) !important;
+    transform: none !important;
+}
+
+.mobile-shell .mobile-user-card.is-success {
+    border-color: var(--success-border) !important;
+}
+
+.mobile-shell .mobile-user-card.is-danger {
+    border-color: var(--danger-border) !important;
+}
+
+.mobile-shell .mobile-user-card.is-success::before {
+    background: var(--success-color) !important;
+    background-image: none !important;
+}
+
+.mobile-shell .mobile-user-card.is-danger::before {
+    background: var(--danger-color) !important;
+    background-image: none !important;
+}
+
+.mobile-shell .mobile-user-card:active {
+    transform: scale(0.986) !important;
+}
+
+/* 低特效模式也取消私有状态动画，保留控件按下反馈和任务进度变化 */
+html.low-effects .room-container .room-card,
+html.low-effects .room-container .room-tag,
+html.low-effects .user-container .user-card,
+html.low-effects .app-container .connection-alert,
+html.low-effects .app-container .new-badge,
+html.low-effects .login-page .brand-mini-new,
+html.low-effects .mobile-shell .mobile-user-card {
+    animation: none !important;
+}
+
+/* 移动端详情和配置区要方便阅读和编辑，不能被页面样式加上模糊或渐变 */
+.mobile-shell .room-config-dialog.is-fullscreen .el-dialog__header,
+.mobile-shell .room-config-dialog.is-fullscreen .dialog-footer-modern,
+.mobile-shell .room-config-dialog.is-fullscreen .mobile-config-help-panel,
+.mobile-shell .room-config-dialog.is-fullscreen .mobile-config-help-copy,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-hero,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-toolbar,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-id,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-pipeline,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-notice,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-stats,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-alerts,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-upload,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-parts,
+.mobile-shell .mobile-history-detail-dialog .mobile-history-detail-part,
+.mobile-shell .mobile-history-detail-dialog .action-group-secondary,
+.mobile-shell .mobile-edit-parts-hero,
+.mobile-shell .mobile-edit-parts-command-bar,
+.mobile-shell .mobile-edit-parts-add-panel,
+.mobile-shell .mobile-edit-part-card {
+    background: var(--surface-overlay) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .room-config-dialog.is-fullscreen .mobile-config-help-layer,
+.mobile-shell .mobile-history-detail-actions-backdrop {
+    background: rgba(15, 23, 42, 0.42) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.mobile-shell .room-config-dialog.is-fullscreen .mobile-config-help-confirm,
+.mobile-shell .mobile-room-sheet-primary.is-primary {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg) !important;
+    background-image: none !important;
+    border-color: var(--btn-primary-bg) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .mobile-room-sheet-primary.is-success {
+    color: var(--text-inverse) !important;
+    background: var(--success-color) !important;
+    background-image: none !important;
+    border-color: var(--success-color) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .room-config-dialog.is-fullscreen .mobile-config-help-confirm:hover,
+.mobile-shell .room-config-dialog.is-fullscreen .mobile-config-help-confirm:focus-visible,
+.mobile-shell .mobile-room-sheet-primary.is-primary:hover {
+    color: var(--text-inverse) !important;
+    background: var(--btn-primary-bg-hover) !important;
+    border-color: var(--btn-primary-bg-hover) !important;
+}
+
+.mobile-shell .mobile-room-sheet-primary.is-success:hover {
+    color: var(--text-inverse) !important;
+    background: var(--success-dark) !important;
+    border-color: var(--success-dark) !important;
+}
+
+.mobile-shell .mobile-room-sheet-actions button,
+.mobile-shell .mobile-room-detail-actions button,
+.mobile-shell .mobile-history-detail-actions-sheet button,
+.mobile-shell .mobile-history-detail-toolbar button,
+.mobile-shell .mobile-history-detail-inline-actions button,
+.mobile-shell .mobile-history-detail-section-toggle,
+.mobile-shell .mobile-history-detail-part-actions button,
+.mobile-shell .mobile-edit-parts-command-bar button,
+.mobile-shell .mobile-edit-parts-add-panel button,
+.mobile-shell .mobile-edit-part-sort button,
+.mobile-shell .mobile-edit-part-actions button {
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+/* 详情状态图标仍用语义浅底，主操作与危险操作不依赖彩色渐变辨识 */
+.mobile-shell .mobile-history-detail-actions-sheet button.is-warning {
+    color: var(--warning-color) !important;
+    background: var(--warning-soft-bg) !important;
+    border-color: var(--warning-border) !important;
+}
+
+.mobile-shell .mobile-history-detail-actions-sheet button.is-success {
+    color: var(--success-color) !important;
+    background: var(--success-soft-bg) !important;
+    border-color: var(--success-border) !important;
+}
+
+.mobile-shell .mobile-history-detail-actions-sheet button.is-danger {
+    color: var(--danger-color) !important;
+    background: var(--danger-soft-bg) !important;
+    border-color: var(--danger-border) !important;
+}
+
+/* Element 和 Vue 的浮层可能挂在 body 下，不能只靠 .mobile-shell 才套用统一样式 */
+.room-config-dialog.is-fullscreen .el-dialog__header,
+.room-config-dialog.is-fullscreen .dialog-footer-modern,
+.room-config-dialog.is-fullscreen .mobile-config-help-panel,
+.room-config-dialog.is-fullscreen .mobile-config-help-copy,
+.mobile-history-detail-dialog .mobile-history-detail-hero,
+.mobile-history-detail-dialog .mobile-history-detail-toolbar,
+.mobile-history-detail-dialog .mobile-history-detail-id,
+.mobile-history-detail-dialog .mobile-history-detail-pipeline,
+.mobile-history-detail-dialog .mobile-history-detail-notice,
+.mobile-history-detail-dialog .mobile-history-detail-stats,
+.mobile-history-detail-dialog .mobile-history-detail-alerts,
+.mobile-history-detail-dialog .mobile-history-detail-upload,
+.mobile-history-detail-dialog .mobile-history-detail-parts,
+.mobile-history-detail-dialog .mobile-history-detail-part,
+.mobile-history-detail-dialog .action-group-secondary,
+.mobile-edit-parts-hero,
+.mobile-edit-parts-command-bar,
+.mobile-edit-parts-add-panel,
+.mobile-edit-part-card,
+.mobile-stats-hero,
+.mobile-stats-scope-card,
+.mobile-stats-progress,
+.mobile-stats-coverage,
+.mobile-stats-pending,
+.mobile-stats-kpi,
+.mobile-stats-panel,
+.mobile-stats-mini-chart,
+.room-config-dialog .cover-upload-overlay,
+.action-group-secondary {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.room-config-dialog.is-fullscreen .mobile-config-help-layer,
+.mobile-history-detail-actions-backdrop,
+.mobile-history-danmaku-backdrop,
+.mobile-history-filter-backdrop,
+.mobile-room-detail-backdrop,
+.mobile-room-sheet-backdrop,
+.mobile-stats-actions-backdrop,
+.mobile-config-backdrop,
+.mobile-log-overlay,
+.theme-popover-backdrop {
+    background: rgba(15, 23, 42, 0.42) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 旧手机页面和详情操作区可能还带有局部模糊，这里统一保证文字清楚 */
+.mobile-shell .room-header,
+.mobile-shell .history-header,
+.mobile-shell .stats-header,
+.mobile-shell .config-panel,
+.mobile-shell .changelog-header,
+.mobile-shell .version-card,
+.mobile-shell .user-card,
+.mobile-shell .log-toolbar-card,
+.mobile-shell .log-console,
+.mobile-shell .workspace-status-panel,
+.mobile-shell .mobile-stats-hero,
+.mobile-shell .mobile-stats-scope-card,
+.mobile-shell .mobile-stats-progress,
+.mobile-shell .mobile-stats-coverage,
+.mobile-shell .mobile-stats-pending,
+.mobile-shell .mobile-stats-kpi,
+.mobile-shell .mobile-stats-panel,
+.mobile-shell .mobile-stats-mini-chart,
+.action-group-secondary,
+.room-config-dialog .cover-upload-overlay {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-shell .mobile-stats-actions-backdrop,
+.mobile-shell .mobile-config-backdrop,
+.mobile-shell .mobile-log-overlay,
+.mobile-shell .mobile-history-danmaku-backdrop,
+.mobile-shell .mobile-history-filter-backdrop,
+.mobile-shell .mobile-room-detail-backdrop,
+.mobile-shell .mobile-room-sheet-backdrop,
+.mobile-shell .theme-popover-backdrop {
+    background: rgba(15, 23, 42, 0.42) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 统计页的嵌套数据面板也属于内容表面：统一使用实色、细边框和轻阴影，
+ * 图表里的画布和矢量图形由图表库绘制，这里不覆盖它们 */
+.stats-container .stats-date-range,
+.stats-container .stats-scope-line span,
+.stats-container .stats-scope-line em,
+.stats-container .publish-status-row,
+.stats-container .room-overview-chart,
+.stats-container .session-list-card,
+.stats-container .chart-cell,
+.stats-container .interaction-detail-grid > div,
+.stats-container .interaction-card,
+.stats-container .detail-metric,
+.stats-container .xml-issue-action-bar,
+.stats-container .xml-repair-tip,
+.stats-container .xml-repair-empty,
+.stats-container .stats-action-menu-note {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.stats-container .stats-date-range {
+    border-color: var(--border-divider) !important;
+}
+
+.stats-container .stats-scope-line span,
+.stats-container .stats-scope-line em {
+    box-shadow: none !important;
+}
+
+.stats-container .publish-status-row,
+.stats-container .detail-metric,
+.stats-container .interaction-card,
+.stats-container .room-overview-chart,
+.stats-container .session-list-card,
+.stats-container .chart-cell,
+.stats-container .interaction-detail-grid > div {
+    border-color: var(--border-divider) !important;
+}
+
+.stats-container .coverage-strip,
+.stats-container .coverage-strip.is-complete {
+    background: var(--warning-soft-bg-faint) !important;
+    background-image: none !important;
+}
+
+.stats-container .coverage-strip.is-complete {
+    border-color: var(--success-border) !important;
+    color: var(--success-color) !important;
+    background: var(--success-soft-bg-faint) !important;
+}
+
+.stats-container .operation-progress-panel.is-error {
+    background: var(--danger-soft-bg-faint) !important;
+    background-image: none !important;
+    border-color: var(--danger-border) !important;
+}
+
+.stats-container .danmu-diagnostic-strip,
+.stats-container .danmu-diagnostic-strip.is-missing_user_stats_rebuildable,
+.stats-container .danmu-diagnostic-strip.is-partial {
+    background: var(--brand-soft-bg-faint) !important;
+    background-image: none !important;
+}
+
+.stats-container .danmu-diagnostic-strip.is-missing_xml,
+.stats-container .danmu-diagnostic-strip.is-parse_failed,
+.stats-container .danmu-diagnostic-strip.is-missing_price,
+.stats-container .danmu-diagnostic-strip.is-api_failed,
+.stats-container .danmu-diagnostic-strip.is-estimated {
+    background: var(--warning-soft-bg-faint) !important;
+    background-image: none !important;
+}
+
+.stats-container .diagnostic-icon {
+    background: var(--brand-soft-bg) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+.stats-container .danmu-diagnostic-strip.is-missing_xml .diagnostic-icon,
+.stats-container .danmu-diagnostic-strip.is-parse_failed .diagnostic-icon,
+.stats-container .danmu-diagnostic-strip.is-missing_price .diagnostic-icon,
+.stats-container .danmu-diagnostic-strip.is-api_failed .diagnostic-icon,
+.stats-container .danmu-diagnostic-strip.is-estimated .diagnostic-icon {
+    background: var(--warning-soft-bg) !important;
+    background-image: none !important;
+}
+
+.stats-container .stats-toolbar .el-button:hover,
+.stats-container .stats-action-menu .el-button:hover {
+    transform: none !important;
+}
+
+/* 房间配置弹窗是可读性优先的编辑表面，封面图片本身保留原有预览 */
+.room-edit-dialog,
+.room-page-dialog,
+.room-config-dialog,
+.room-edit-dialog .el-dialog__header,
+.room-page-dialog .el-dialog__header,
+.room-config-dialog .el-dialog__header,
+.room-edit-dialog .el-dialog__body,
+.room-page-dialog .el-dialog__body,
+.room-config-dialog .el-dialog__body,
+.dialog-header,
+.dialog-header-modern,
+.dialog-room-info,
+.room-config-dialog .config-card,
+.room-config-dialog .card-header,
+.room-config-dialog .card-body,
+.room-edit-form .section-group,
+.room-edit-form .section-header,
+.room-edit-form .section-body,
+.room-edit-form .switch-item,
+.room-config-dialog .switch-card,
+.room-config-dialog .cover-upload-area,
+.room-config-dialog .cover-display-mini,
+.room-config-dialog .notification-migration-card,
+.room-config-dialog .notification-migration-notice,
+.room-config-dialog .notification-migration-state,
+.room-config-dialog .dialog-footer-modern,
+.room-page-dialog .dialog-footer {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.room-edit-dialog,
+.room-page-dialog,
+.room-config-dialog {
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+.dialog-header,
+.dialog-header-modern,
+.room-config-dialog .card-header,
+.room-edit-form .section-header {
+    border-bottom-color: var(--border-divider) !important;
+}
+
+.dialog-room-info,
+.room-config-dialog .card-header,
+.room-edit-form .section-header,
+.room-edit-form .switch-item,
+.room-config-dialog .switch-card,
+.room-config-dialog .cover-display-mini {
+    background: var(--bg-tertiary) !important;
+}
+
+.room-config-dialog .header-icon-box {
+    background: var(--brand-soft-bg) !important;
+    background-image: none !important;
+    box-shadow: inset 0 0 0 1px var(--brand-accent-border-light) !important;
+}
+
+.room-edit-form .section-group,
+.room-edit-form .section-group.is-expanded,
+.room-edit-form .section-group:hover,
+.room-edit-form .section-group.is-expanded:hover,
+.room-edit-form .section-header:hover,
+.room-edit-form .switch-item:hover,
+.room-config-dialog .switch-card:hover,
+.room-config-dialog .cover-upload-area:hover,
+.room-config-dialog .cover-display-mini:hover,
+.room-config-dialog .option-card:hover:not(:disabled) {
+    transform: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.room-edit-form .section-group.is-expanded {
+    border-color: var(--brand-accent-border) !important;
+}
+
+.room-edit-form .section-header:hover,
+.room-edit-form .switch-item:hover,
+.room-config-dialog .switch-card:hover,
+.room-config-dialog .cover-upload-area:hover,
+.room-config-dialog .cover-display-mini:hover {
+    background: var(--bg-tertiary) !important;
+    background-image: none !important;
+}
+
+.room-config-dialog .notification-migration-card {
+    border-color: var(--border-divider) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.room-config-dialog .notification-migration-notice {
+    border-color: var(--border-divider) !important;
+    background: var(--bg-tertiary) !important;
+}
+
+.room-config-dialog .notification-migration-state {
+    border-color: var(--border-divider) !important;
+    box-shadow: none !important;
+}
+
+.room-config-dialog .option-card.is-active {
+    background: var(--brand-soft-bg-faint) !important;
+    background-image: none !important;
+}
+
+.room-config-dialog .cover-upload-overlay {
+    background: var(--surface-content) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+/* 挂在 body 下的历史详情和更多操作面板沿用同一套边界，不再出现旧版磨砂效果 */
+.detail-dialog,
+.detail-dialog .el-dialog__header,
+.detail-dialog .el-dialog__body,
+.detail-dialog .detail-content-modern,
+.detail-dialog .detail-status-bar,
+.detail-dialog .stat-card,
+.detail-dialog .detail-progress-container,
+.detail-dialog .progress-list-modern,
+.detail-dialog .detail-footer,
+.detail-dialog .action-group-secondary,
+.detail-dialog .category-tabs-container,
+.detail-dialog .detail-bvid-box,
+.detail-dialog .detail-exception-box,
+.detail-dialog .exception-item {
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.detail-dialog .detail-content-modern,
+.detail-dialog .detail-status-bar,
+.detail-dialog .stat-card,
+.detail-dialog .detail-progress-container,
+.detail-dialog .progress-list-modern,
+.detail-dialog .detail-footer,
+.detail-dialog .action-group-secondary,
+.detail-dialog .category-tabs-container,
+.detail-dialog .detail-bvid-box,
+.detail-dialog .detail-exception-box,
+.detail-dialog .exception-item {
+    background: var(--surface-content) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.detail-dialog .detail-footer,
+.detail-dialog .action-group-secondary {
+    border-color: var(--border-divider) !important;
+}
+
+.detail-dialog .action-group-secondary,
+.detail-dialog .category-tabs-container {
+    transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stats-container .stats-toolbar .el-button,
+    .stats-container .stats-action-menu .el-button,
+    .room-edit-form .section-group,
+    .room-edit-form .section-header,
+    .room-edit-form .switch-item,
+    .room-config-dialog .switch-card,
+    .room-config-dialog .option-card,
+    .detail-dialog .action-group-secondary {
+        transition-duration: 1ms !important;
+    }
+}
+
+/* Element UI 公共基础组件：所有页面共用同一套表面、状态色和交互反馈
+ * 这些规则只改变呈现，不改变组件的值、事件或业务状态 */
+
+/* 提示条：长文本仍使用稳定的内容表面，状态由浅色语义底和图标/文字共同表达 */
+.el-alert {
+    color: var(--text-primary);
+    background-color: var(--surface-content);
+    border: 1px solid var(--border-divider);
+    border-radius: var(--radius-md);
+    transition: opacity var(--duration-feedback) var(--ease-apple),
+        border-color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-alert__content,
+.el-alert__title {
+    color: inherit;
+}
+
+.el-alert .el-alert__description {
+    color: var(--text-secondary);
+}
+
+.el-alert__closebtn {
+    color: var(--text-secondary);
+    transition: color var(--duration-feedback) var(--ease-apple), opacity var(--duration-feedback) var(--ease-apple);
+}
+
+.el-alert__closebtn:hover {
+    color: var(--text-primary);
+}
+
+.el-alert--info.is-light,
+.el-alert--info {
+    color: var(--primary-color);
+    background-color: var(--brand-soft-bg-faint);
+    border-color: var(--brand-accent-border);
+}
+
+.el-alert--info .el-alert__description,
+.el-alert--info .el-alert__closebtn {
+    color: var(--text-secondary);
+}
+
+.el-alert--success.is-light,
+.el-alert--success {
+    color: var(--success-color);
+    background-color: var(--success-soft-bg-faint);
+    border-color: var(--success-border);
+}
+
+.el-alert--success .el-alert__description,
+.el-alert--success .el-alert__closebtn {
+    color: var(--success-color);
+}
+
+.el-alert--warning.is-light,
+.el-alert--warning {
+    color: var(--warning-color);
+    background-color: var(--warning-soft-bg-faint);
+    border-color: var(--warning-border);
+}
+
+.el-alert--warning .el-alert__description,
+.el-alert--warning .el-alert__closebtn {
+    color: var(--warning-color);
+}
+
+.el-alert--error.is-light,
+.el-alert--error {
+    color: var(--danger-color);
+    background-color: var(--danger-soft-bg-faint);
+    border-color: var(--danger-border);
+}
+
+.el-alert--error .el-alert__description,
+.el-alert--error .el-alert__closebtn {
+    color: var(--danger-color);
+}
+
+.el-alert--info.is-dark,
+.el-alert--success.is-dark,
+.el-alert--warning.is-dark,
+.el-alert--error.is-dark {
+    color: var(--text-inverse);
+    border-color: transparent;
+}
+
+.el-alert--info.is-dark { background-color: var(--primary-color); }
+.el-alert--success.is-dark { background-color: var(--success-color); }
+.el-alert--warning.is-dark { background-color: var(--warning-color); }
+.el-alert--error.is-dark { background-color: var(--danger-color); }
+
+.el-alert.is-dark .el-alert__description,
+.el-alert.is-dark .el-alert__closebtn {
+    color: var(--text-inverse);
+}
+
+.el-alert__icon {
+    color: currentColor;
+}
+
+/* 数字/圆点徽标：取消默认白色描边和发光，保证贴在深浅表面上都清楚 */
+.el-badge__content {
+    color: var(--text-inverse);
+    border-color: var(--surface-content);
+    box-shadow: none;
+    font-weight: 600;
+}
+
+.el-badge__content--primary { background-color: var(--primary-color); }
+.el-badge__content--success { background-color: var(--success-color); }
+.el-badge__content--warning { background-color: var(--warning-color); }
+.el-badge__content--danger { background-color: var(--danger-color); }
+.el-badge__content--info { background-color: var(--text-secondary); }
+
+/* 二次确认框复用弹出层样式，按钮仍使用公共的主按钮、次按钮和危险按钮样式 */
+.el-popconfirm {
+    color: var(--text-primary);
+}
+
+.el-popconfirm__main {
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.el-popconfirm__icon {
+    color: var(--warning-color);
+}
+
+.el-popconfirm__action {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.el-popconfirm__action .el-button {
+    min-height: var(--control-height-compact);
+    margin-left: 0;
+}
+
+/* 进度条：轨道是中性实体层，填充色表达默认进行中状态；具体数据页可保留自己的数据渐变 */
+.el-progress {
+    color: var(--text-secondary);
+}
+
+.el-progress-bar__outer {
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+}
+
+.el-progress-bar__inner {
+    background-color: var(--primary-color);
+    border-radius: var(--radius-pill);
+    transition: width var(--duration-base) var(--ease-decel), background-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-progress__text {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.el-progress.is-success .el-progress-bar__inner { background-color: var(--success-color); }
+.el-progress.is-exception .el-progress-bar__inner { background-color: var(--danger-color); }
+.el-progress.is-warning .el-progress-bar__inner { background-color: var(--warning-color); }
+.el-progress-circle__track { stroke: var(--bg-tertiary); }
+.el-progress-circle__path { stroke: var(--primary-color); }
+.el-progress.is-success .el-progress-circle__path { stroke: var(--success-color); }
+.el-progress.is-exception .el-progress-circle__path { stroke: var(--danger-color); }
+
+/* 开关沿用 Element 的状态含义和 active-color 属性，统一轨道、圆钮、焦点和触摸反馈 */
+.el-switch {
+    color: var(--text-primary);
+    min-height: 28px;
+}
+
+.el-switch__label {
+    color: var(--text-secondary);
+    transition: color var(--duration-feedback) var(--ease-apple), opacity var(--duration-feedback) var(--ease-apple);
+}
+
+.el-switch__label.is-active {
+    color: var(--primary-color);
+}
+
+.el-switch__core {
+    border-color: var(--border-control);
+    border-radius: var(--radius-pill);
+    background-color: var(--bg-tertiary);
+    transition: border-color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-switch__core::after {
+    background-color: var(--surface-content);
+    box-shadow: var(--shadow-sm);
+    transition: left var(--duration-selection) var(--ease-spring),
+        margin-left var(--duration-selection) var(--ease-spring),
+        background-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-switch.is-checked .el-switch__core {
+    border-color: transparent;
+    background-color: var(--primary-color);
+}
+
+.el-switch:not(.is-disabled):hover .el-switch__core,
+.el-switch:focus-within .el-switch__core {
+    border-color: var(--primary-color);
+}
+
+.el-switch:focus-within .el-switch__core {
+    box-shadow: var(--brand-ring);
+}
+
+.el-switch.is-disabled {
+    opacity: 0.58;
+}
+
+/* 折叠面板：标题是可聚焦的工具条，内容保持和普通卡片相同的实体表面 */
+.el-collapse {
+    border-top-color: var(--border-divider);
+    border-bottom-color: var(--border-divider);
+}
+
+.el-collapse-item__header {
+    min-height: 44px;
+    height: auto;
+    padding: 10px 12px;
+    line-height: 1.4;
+    color: var(--text-primary);
+    background-color: var(--surface-content);
+    border-bottom-color: var(--border-divider);
+    transition: color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple),
+        border-bottom-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-collapse-item__header:hover,
+.el-collapse-item__header.focusing:focus {
+    color: var(--primary-color);
+    background-color: var(--brand-soft-bg-faint);
+}
+
+.el-collapse-item__header.focusing:focus {
+    box-shadow: var(--brand-ring);
+}
+
+.el-collapse-item__arrow {
+    color: var(--text-secondary);
+    transition: transform var(--duration-selection) var(--ease-decel), color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-collapse-item__header:hover .el-collapse-item__arrow,
+.el-collapse-item__arrow.is-active {
+    color: var(--primary-color);
+}
+
+.el-collapse-item__wrap {
+    background-color: var(--surface-content);
+    border-bottom-color: var(--border-divider);
+}
+
+.el-collapse-item__content {
+    color: var(--text-primary);
+}
+
+.el-collapse-item.is-disabled .el-collapse-item__header {
+    color: var(--text-disabled);
+    background-color: var(--surface-content);
+}
+
+/* 分割线、空态和结果页：使用中性线与次级文字，避免默认浅灰在深色模式失去层次 */
+.el-divider {
+    background-color: var(--border-divider);
+}
+
+.el-divider__text {
+    color: var(--text-secondary);
+    background-color: var(--surface-content);
+}
+
+.el-empty,
+.el-result {
+    color: var(--text-primary);
+}
+
+.el-empty__image svg {
+    fill: var(--border-color);
+}
+
+.el-empty__description p,
+.el-result__subtitle p {
+    color: var(--text-secondary);
+}
+
+.el-result__title p {
+    color: var(--text-primary);
+}
+
+.el-result__icon {
+    color: var(--primary-color);
+}
+
+.el-result .icon-success,
+.el-result__icon--success svg { fill: var(--success-color); }
+.el-result .icon-error,
+.el-result__icon--error svg { fill: var(--danger-color); }
+.el-result .icon-warning,
+.el-result__icon--warning svg { fill: var(--warning-color); }
+.el-result .icon-info,
+.el-result__icon--info svg { fill: var(--primary-color); }
+
+/* 链接和标签页的默认、悬停、禁用状态共用主色和文字层级 */
+.el-link {
+    color: var(--primary-color);
+    transition: color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-link::after,
+.el-link.is-underline:hover::after {
+    border-color: currentColor;
+}
+
+.el-link.el-link--default { color: var(--text-secondary); }
+.el-link.el-link--default:hover,
+.el-link.el-link--primary:hover { color: var(--primary-dark); }
+.el-link.el-link--primary { color: var(--primary-color); }
+.el-link.el-link--success { color: var(--success-color); }
+.el-link.el-link--warning { color: var(--warning-color); }
+.el-link.el-link--danger { color: var(--danger-color); }
+.el-link.el-link--info { color: var(--text-secondary); }
+.el-link.is-disabled,
+.el-link.is-disabled:hover { color: var(--text-disabled); }
+
+.el-tabs__nav-wrap::after {
+    background-color: var(--border-divider);
+}
+
+.el-tabs__item {
+    color: var(--text-secondary);
+    transition: color var(--duration-feedback) var(--ease-apple), background-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-tabs__item:hover,
+.el-tabs__item.is-active {
+    color: var(--primary-color);
+}
+
+.el-tabs__item.is-disabled,
+.el-tabs__item.is-disabled:hover {
+    color: var(--text-disabled);
+}
+
+.el-tabs__active-bar {
+    background-color: var(--primary-color);
+    transition: width var(--duration-selection) var(--ease-decel), transform var(--duration-selection) var(--ease-decel);
+}
+
+.el-tabs--border-card {
+    color: var(--text-primary);
+    background-color: var(--surface-content);
+    border-color: var(--border-divider);
+    box-shadow: var(--shadow-sm);
+}
+
+.el-tabs--border-card > .el-tabs__header {
+    background-color: var(--bg-tertiary);
+    border-bottom-color: var(--border-divider);
+}
+
+.el-tabs--card > .el-tabs__header {
+    border-bottom-color: var(--border-divider);
+}
+
+.el-tabs--card > .el-tabs__header .el-tabs__item {
+    color: var(--text-secondary);
+    background-color: var(--surface-content);
+    border-left-color: var(--border-divider);
+    border-top-color: var(--border-divider);
+}
+
+.el-tabs--card > .el-tabs__header .el-tabs__item.is-active {
+    color: var(--primary-color);
+    background-color: var(--surface-content);
+    border-bottom-color: var(--surface-content);
+}
+
+/* 上传区域和文件列表：可操作边界清晰，预览图片本身保留业务内容 */
+.el-upload {
+    color: var(--primary-color);
+    transition: color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-upload:hover,
+.el-upload:focus {
+    color: var(--primary-dark);
+}
+
+.el-upload--picture-card,
+.el-upload-dragger {
+    background-color: var(--surface-content);
+    border-color: var(--border-control);
+    border-radius: var(--radius-lg);
+    transition: border-color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple),
+        color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-upload--picture-card:hover,
+.el-upload:focus .el-upload-dragger,
+.el-upload-dragger:hover,
+.el-upload-dragger.is-dragover {
+    color: var(--primary-color);
+    background-color: var(--brand-soft-bg-faint);
+    border-color: var(--primary-color);
+}
+
+.el-upload-dragger.is-dragover {
+    border-style: dashed;
+}
+
+.el-upload-dragger .el-icon-upload {
+    color: var(--text-disabled);
+}
+
+.el-upload-dragger .el-upload__text {
+    color: var(--text-secondary);
+}
+
+.el-upload-dragger .el-upload__text em {
+    color: var(--primary-color);
+}
+
+.el-upload__tip {
+    color: var(--text-secondary);
+}
+
+.el-upload-list__item {
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    transition: color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple),
+        opacity var(--duration-feedback) var(--ease-apple);
+}
+
+.el-upload-list__item:hover {
+    background-color: var(--brand-soft-bg-faint);
+}
+
+.el-upload-list__item-name,
+.el-upload-list__item-name:focus,
+.el-upload-list__item-name:hover {
+    color: var(--primary-color);
+}
+
+.el-upload-list__item .el-icon-close,
+.el-upload-list__item .el-icon-close-tip {
+    color: var(--text-secondary);
+}
+
+.el-upload-list__item .el-icon-upload-success,
+.el-upload-list__item.is-success .el-upload-list__item-status-label {
+    color: var(--success-color);
+}
+
+/* 复选框、单选框、数字输入和表单错误是跨页面最常见的基础控件 */
+.el-checkbox,
+.el-radio {
+    color: var(--text-primary);
+}
+
+.el-checkbox__label,
+.el-radio__label {
+    color: inherit;
+}
+
+.el-checkbox__inner,
+.el-radio__inner {
+    background-color: var(--surface-content);
+    border-color: var(--border-control);
+    transition: border-color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple),
+        box-shadow var(--duration-feedback) var(--ease-apple);
+}
+
+.el-checkbox__inner:hover,
+.el-radio__inner:hover,
+.el-checkbox__input.is-focus .el-checkbox__inner,
+.el-radio__input.is-focus .el-radio__inner {
+    border-color: var(--primary-color);
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-checkbox__input.is-indeterminate .el-checkbox__inner,
+.el-radio__input.is-checked .el-radio__inner {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.el-checkbox__inner::after {
+    border-color: var(--text-inverse);
+}
+
+.el-radio__inner::after {
+    background-color: var(--text-inverse);
+}
+
+.el-checkbox__input.is-disabled .el-checkbox__inner,
+.el-radio__input.is-disabled .el-radio__inner {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-divider);
+}
+
+.el-checkbox__input.is-disabled + .el-checkbox__label,
+.el-radio__input.is-disabled + .el-radio__label {
+    color: var(--text-disabled);
+}
+
+.el-form-item__error {
+    color: var(--danger-color);
+}
+
+.el-input__count {
+    color: var(--text-secondary);
+    background-color: transparent;
+}
+
+.el-input-number {
+    border-radius: var(--radius-md);
+}
+
+.el-input-number__decrease,
+.el-input-number__increase {
+    color: var(--text-secondary);
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-divider);
+    transition: color var(--duration-feedback) var(--ease-apple), background-color var(--duration-feedback) var(--ease-apple);
+}
+
+.el-input-number__decrease:hover,
+.el-input-number__increase:hover {
+    color: var(--primary-color);
+    background-color: var(--brand-soft-bg-faint);
+}
+
+/* 图片占位/加载失败属于阅读状态，使用内容表面而不是默认蓝灰 */
+.el-image__placeholder,
+.el-image__error {
+    color: var(--text-secondary);
+    background-color: var(--bg-tertiary);
+}
+
+.el-card__header {
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+    border-bottom-color: var(--border-divider);
+}
+
+.el-card__body {
+    color: var(--text-primary);
+    background-color: var(--surface-content);
+}
+
+/* 低特效模式停止公共组件的装饰性过渡；值变化和加载提示仍由组件自身表达 */
+html.low-effects .el-alert,
+html.low-effects .el-switch__label,
+html.low-effects .el-switch__core,
+html.low-effects .el-switch__core::after,
+html.low-effects .el-collapse-item__header,
+html.low-effects .el-collapse-item__arrow,
+html.low-effects .el-link,
+html.low-effects .el-tabs__item,
+html.low-effects .el-tabs__active-bar,
+html.low-effects .el-upload,
+html.low-effects .el-upload--picture-card,
+html.low-effects .el-upload-dragger,
+html.low-effects .el-upload-list__item,
+html.low-effects .el-checkbox__inner,
+html.low-effects .el-radio__inner,
+html.low-effects .el-input-number__decrease,
+html.low-effects .el-input-number__increase {
+    transition: none !important;
+}

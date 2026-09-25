@@ -58,7 +58,7 @@
                                             ${mm} - 分<br/>
                                             ${ss} - 秒
                                         </div>
-                                        <i class="el-icon-question" style="cursor: pointer; color: #909399; margin-left: 4px;"></i>
+                                        <i class="el-icon-question" style="cursor: pointer; color: var(--text-secondary); margin-left: 4px;"></i>
                                     </el-tooltip>
                                 </span>
                                 <el-input v-model="room.tags" placeholder="多个标签用逗号分隔"></el-input>
@@ -121,7 +121,7 @@
                                             ${mm} - 分<br/>
                                             ${ss} - 秒
                                         </div>
-                                        <i class="el-icon-question" style="cursor: pointer; color: #909399; margin-left: 4px;"></i>
+                                        <i class="el-icon-question" style="cursor: pointer; color: var(--text-secondary); margin-left: 4px;"></i>
                                     </el-tooltip>
                                 </span>
                                 <el-input v-model="room.titleTemplate" placeholder="${uname}, ${title}, ${date}"></el-input>
@@ -152,10 +152,10 @@
                             <el-select v-model="room.line" placeholder="选择线路" style="width: 100%" popper-class="room-page-select-popper">
                                     <el-option :label="item" :value="item" v-for="item in lines">
                                         <span style="float: left">{{ item }}</span>
-                                        <span style="float: right; font-size: 12px; color: #8492a6" v-if="lineStats[item]">
+                                        <span style="float: right; font-size: 12px; color: var(--text-secondary)" v-if="lineStats[item]">
                                             <i :class="getLineStatusIcon(lineStats[item])" :style="{color: getLineStatusColor(lineStats[item])}"></i>
                                             {{ lineStats[item] }}
-                                            <span v-if="lineSpeeds[item]" style="margin-left: 5px; color: #409EFF">
+                                            <span v-if="lineSpeeds[item]" style="margin-left: 5px; color: var(--primary-color, #3578c7)">
                                                 <i class="el-icon-upload2"></i> {{ lineSpeeds[item] }}
                                             </span>
                                         </span>
@@ -178,9 +178,9 @@
                                         <div slot="content">
                                             控制后续录制是否进入自动上传/投稿流程；关闭不会删除本地录制文件，也不会撤回已经发布的稿件。
                                         </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                                     </el-tooltip>
-                                    <el-switch v-model="room.upload" active-color="#10b981"></el-switch>
+                                    <el-switch v-model="room.upload" active-color="var(--primary-color)"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">仅自己可见</span>
@@ -188,9 +188,9 @@
                                         <div slot="content">
                                             投稿时使用“仅自己可见”；已发布稿件的可见性需要在历史页或B站稿件管理中单独调整。
                                         </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                                     </el-tooltip>
-                                    <el-switch v-model="room.isOnlySelf" :active-value="1" :inactive-value="0" active-color="#10b981"></el-switch>
+                                    <el-switch v-model="room.isOnlySelf" :active-value="1" :inactive-value="0" active-color="var(--primary-color)"></el-switch>
                                 </div>
                             </div>
 
@@ -414,9 +414,9 @@
                                         <div slot="content">
                                             控制投稿后普通弹幕任务是否执行；实际发送由已登录且开启“弹幕发送权限”的用户分摊执行。
                                         </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                                     </el-tooltip>
-                                    <el-switch v-model="room.sendDm" active-color="#10b981"></el-switch>
+                                    <el-switch v-model="room.sendDm" active-color="var(--primary-color)"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">发送SC</span>
@@ -424,9 +424,9 @@
                                         <div slot="content">
                                             控制投稿后高级弹幕（SC/上舰）任务是否执行；仅由投稿账号在登录状态下发送。
                                         </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                                     </el-tooltip>
-                                    <el-switch v-model="room.sendSc" active-color="#10b981" @change="handleSendScChange"></el-switch>
+                                    <el-switch v-model="room.sendSc" active-color="var(--primary-color)" @change="handleSendScChange"></el-switch>
                                 </div>
                                 <div class="switch-card">
                                     <span class="switch-label">礼物评论</span>
@@ -434,9 +434,9 @@
                                         <div slot="content">
                                             开启后，单个礼物单价达到阈值时，会同步到视频评论区；发送仍使用投稿账号，可独立于“发送SC”开启。
                                         </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                                     </el-tooltip>
-                                    <el-switch v-model="room.sendGiftReply" active-color="#10b981"></el-switch>
+                                    <el-switch v-model="room.sendGiftReply" active-color="var(--primary-color)"></el-switch>
                                 </div>
                                 <div class="switch-card" v-if="room.sendGiftReply">
                                     <span class="switch-label">礼物阈值</span>
@@ -450,9 +450,9 @@
                                         <div slot="content">
                                             投稿完成后根据弹幕热度生成高能剪辑；需要有可解析的弹幕数据，因子越高筛选越严格。
                                         </div>
-                                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                                     </el-tooltip>
-                                    <el-switch v-model="room.highEnergyCut" active-color="#10b981"></el-switch>
+                                    <el-switch v-model="room.highEnergyCut" active-color="var(--primary-color)"></el-switch>
                                 </div>
                                 <div class="switch-card" v-if="room.highEnergyCut">
                                     <span class="switch-label">高能因子</span>

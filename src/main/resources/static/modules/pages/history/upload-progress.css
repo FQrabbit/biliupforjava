@@ -378,7 +378,11 @@
 
 .part-action-btn {
 
-    transition: all 0.2s ease;
+    transition: transform var(--duration-feedback, 140ms) var(--ease-apple, ease),
+                color var(--duration-feedback, 140ms) var(--ease-apple, ease),
+                background-color var(--duration-feedback, 140ms) var(--ease-apple, ease),
+                border-color var(--duration-feedback, 140ms) var(--ease-apple, ease),
+                box-shadow var(--duration-feedback, 140ms) var(--ease-apple, ease);
 
 }
 

@@ -170,7 +170,7 @@ body.page-active-room .room-page-dialog.is-fullscreen {
 
     padding: 16px 20px;
 
-    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
+    background: var(--bg-tertiary);
 
 }
 
@@ -332,7 +332,7 @@ body.page-active-room .room-page-dialog.is-fullscreen {
 
 [data-theme="dark"] .dialog-header {
 
-    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-tertiary) 90%, transparent) 0%, color-mix(in srgb, var(--bg-secondary) 95%, transparent) 100%);
+    background: var(--bg-tertiary);
 
 }
 

@@ -18,9 +18,9 @@
 
     background: var(--bg-primary);
 
-    backdrop-filter: blur(12px);
+    backdrop-filter: none;
 
-    -webkit-backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: none;
 
     border-radius: var(--radius-lg);
 
@@ -36,13 +36,7 @@
 
 }
 
-.room-header:hover {
-
-    box-shadow: var(--shadow-md);
-
-    transform: translateY(-2px);
-
-}
+.room-header:hover { box-shadow: var(--shadow-sm); }
 
 [data-theme="dark"] .room-header {
 
@@ -212,7 +206,7 @@
 
     background: var(--bg-secondary);
 
-    transform: translateY(-1px);
+    transform: none;
 
 }
 
@@ -320,7 +314,7 @@
 
 .room-stat-item:hover {
 
-    transform: translateY(-2px);
+    transform: none;
 
     background: var(--brand-soft-bg-subtle);
 
@@ -336,7 +330,8 @@
 
     line-height: 1.1;
 
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    background: var(--primary-color);
+    background-image: none;
 
     -webkit-background-clip: text;
 
@@ -482,7 +477,8 @@
 
     height: 4px;
 
-    background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+    background: var(--primary-color);
+    background-image: none;
 
     opacity: 0;
 
@@ -492,7 +488,7 @@
 
 .room-card:hover {
 
-    transform: translateY(-4px);
+    transform: none;
 
     box-shadow: var(--shadow-md);
 
@@ -514,15 +510,14 @@
 
     box-shadow:
 
-        var(--shadow-sm),
-
-        0 0 30px var(--danger-shadow-soft);
+        var(--shadow-sm);
 
 }
 
 .room-card.is-streaming::before {
 
-    background: linear-gradient(90deg, var(--danger-hot), var(--warning-accent));
+    background: var(--danger-color);
+    background-image: none;
 
     opacity: 1;
 
@@ -532,9 +527,7 @@
 
     box-shadow:
 
-        var(--shadow-md),
-
-        0 0 40px var(--danger-shadow);
+        var(--shadow-sm);
 
 }
 
@@ -550,7 +543,8 @@
 
     gap: 16px;
 
-    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    background: var(--surface-content);
+    background-image: none;
 
 }
 
@@ -562,7 +556,8 @@
 
     border-radius: var(--radius-md);
 
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    background: var(--primary-color);
+    background-image: none;
 
     display: flex;
 
@@ -588,9 +583,8 @@
 
 .room-card:hover .room-avatar {
 
-    transform: scale(1.05);
-
-    box-shadow: var(--brand-shadow-lg);
+    transform: none;
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -1106,15 +1100,16 @@
 
 [data-theme="dark"] .room-card {
 
-    background: var(--glass-bg);
+    background: var(--bg-tertiary);
+    background-image: none;
 
-    border-color: var(--glass-border);
+    border-color: var(--border-color);
 
 }
 
 [data-theme="dark"] .room-card:hover {
 
-    background: var(--glass-border);
+    background: var(--bg-tertiary);
 
     border-color: var(--brand-accent-border-strong);
 
@@ -1122,17 +1117,19 @@
 
 [data-theme="dark"] .room-card.is-streaming {
 
-    background: var(--danger-soft-bg);
+    background: var(--bg-tertiary);
+    background-image: none;
 
     border-color: var(--danger-border);
 
-    box-shadow: 0 0 35px var(--danger-shadow);
+    box-shadow: var(--shadow-sm);
 
 }
 
 [data-theme="dark"] .room-card-header {
 
-    background: linear-gradient(135deg, var(--glass-border) 0%, transparent 100%);
+    background: var(--bg-tertiary);
+    background-image: none;
 
 }
 
@@ -1140,7 +1137,7 @@
 
     background: var(--bg-secondary);
 
-    border-color: var(--glass-border);
+    border-color: var(--border-color);
 
 }
 

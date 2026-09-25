@@ -12,33 +12,28 @@
     background: var(--bg-primary);
 }
 
-/* ========== 工具栏卡片（玻璃态效果） ========== */
+/* ========== 工具栏：稳定实色表面 ========== */
 .log-toolbar-card {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-light);
     background: var(--bg-primary);
-    backdrop-filter: blur(var(--blur-md));
-    -webkit-backdrop-filter: blur(var(--blur-md));
-    box-shadow: var(--shadow-sm), inset 0 1px 0 var(--glass-border);
-    transition: transform var(--transition-base),
-                box-shadow var(--transition-base),
-                border-color var(--transition-base);
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--transition-fast);
 }
 
 .log-toolbar-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
     border-color: var(--brand-accent-border-light);
 }
 
 [data-theme="dark"] .log-toolbar-card {
     background: var(--bg-tertiary);
     border-color: var(--brand-accent-border-light);
-    box-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-border);
+    box-shadow: var(--shadow-sm);
 }
 
 [data-theme="dark"] .log-toolbar-card:hover {
-    box-shadow: 0 8px 24px var(--brand-soft-bg-strong), inset 0 1px 0 var(--glass-border);
+    box-shadow: var(--shadow-sm);
     border-color: var(--brand-accent-border-strong);
 }
 
@@ -170,7 +165,7 @@
     font-family: 'JetBrains Mono', Consolas, monospace;
     font-size: 13px;
     line-height: 1.6;
-    transition: var(--transition-base);
+    transition: background-color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
     box-shadow: inset 0 1px 2px var(--glass-border);
 }
 
@@ -206,7 +201,7 @@
     line-height: 16px;
     min-width: 50px;
     letter-spacing: 0.5px;
-    transition: all var(--transition-base);
+    transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), opacity var(--transition-base);
 }
 
 .log-thread {
@@ -520,7 +515,7 @@
     border: 1px solid transparent;
     cursor: pointer;
     user-select: none;
-    transition: all var(--transition-base);
+    transition: transform var(--transition-base), opacity var(--transition-base), filter var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
     font-size: 13px;
     font-weight: 600;
     background: var(--bg-secondary);
@@ -621,7 +616,9 @@
     min-height: 2px;
     border-radius: 2px 2px 0 0;
     background: var(--brand-soft-bg-strong);
-    transition: height 0.4s var(--ease-spring), filter 0.15s ease, transform 0.15s ease;
+    transition: height var(--duration-overlay) var(--ease-spring),
+        filter var(--duration-feedback) var(--ease-apple),
+        transform var(--duration-feedback) var(--ease-apple);
     cursor: crosshair;
     /* 向上扩展感应区 10px，桶较小时也容易触发 hover */
     box-sizing: content-box;
@@ -690,7 +687,7 @@
     user-select: none;
     color: var(--text-secondary);
     border: 1px solid transparent;
-    transition: all var(--transition-base);
+    transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base);
     line-height: 1.6;
 }
 
@@ -719,7 +716,7 @@
     cursor: pointer;
     user-select: none;
     border: 1px solid transparent;
-    transition: all var(--transition-base);
+    transition: color var(--transition-base), opacity var(--transition-base), transform var(--transition-base), background-color var(--transition-base), border-color var(--transition-base);
     opacity: 0.45;
     letter-spacing: 0.3px;
 }
@@ -810,7 +807,7 @@
     border-radius: var(--radius-md);
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
-    transition: all var(--transition-base);
+    transition: background-color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
     font-size: 12px;
 }
 
@@ -890,7 +887,9 @@
 /* 侧边栏滑入动画 */
 .sidebar-slide-enter-active,
 .sidebar-slide-leave-active {
-    transition: all 0.3s var(--ease-spring);
+    transition: transform var(--duration-overlay) var(--ease-spring),
+        opacity var(--duration-overlay) var(--ease-spring),
+        width var(--duration-overlay) var(--ease-spring);
 }
 
 .sidebar-slide-enter,

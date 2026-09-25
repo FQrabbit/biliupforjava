@@ -153,7 +153,7 @@
                                         :label="privacyMode ? '***' : (room.roomId + ' - ' + room.uname)"
                                         :value="room.roomId">
                                     <span style="float: left">{{ maskText(room.uname) }}</span>
-                                    <span style="float: right; color: #8492a6; font-size: 12px">{{ maskText(room.roomId) }}</span>
+                                    <span style="float: right; color: var(--text-secondary); font-size: 12px">{{ maskText(room.roomId) }}</span>
                                 </el-option>
                             </el-select>
                         </div>
@@ -168,13 +168,13 @@
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-upload2"></i> 上传状态</label>
                             <div class="select-with-icon">
-                                <i v-if="form.upload !== null && form.upload !== undefined" class="select-prefix-icon" :class="form.upload === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === true ? '#67c23a' : '#f56c6c'}"></i>
+                                <i v-if="form.upload !== null && form.upload !== undefined" class="select-prefix-icon" :class="form.upload === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.upload === true ? 'var(--success-color)' : 'var(--danger-color)'}"></i>
                                 <el-select v-model="form.upload" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.upload !== null && form.upload !== undefined}" :disabled="isMultiSelectMode" popper-class="history-page-select-popper">
                                     <el-option label="已上传" :value="true">
-                                        <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已上传
+                                        <i class="el-icon-circle-check" style="color: var(--success-color); margin-right: 6px;"></i>已上传
                                     </el-option>
                                     <el-option label="未上传" :value="false">
-                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>未上传
+                                        <i class="el-icon-circle-close" style="color: var(--danger-color); margin-right: 6px;"></i>未上传
                                     </el-option>
                                 </el-select>
                             </div>
@@ -183,13 +183,13 @@
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-video-camera"></i> 录制状态</label>
                             <div class="select-with-icon">
-                                <i v-if="form.recording !== null && form.recording !== undefined" class="select-prefix-icon" :class="form.recording === true ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === true ? '#e6a23c' : '#909399'}"></i>
+                                <i v-if="form.recording !== null && form.recording !== undefined" class="select-prefix-icon" :class="form.recording === true ? 'el-icon-video-camera' : 'el-icon-video-pause'" :style="{color: form.recording === true ? 'var(--warning-color)' : 'var(--text-secondary)'}"></i>
                                 <el-select v-model="form.recording" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.recording !== null && form.recording !== undefined}" :disabled="isMultiSelectMode" popper-class="history-page-select-popper">
                                     <el-option label="录制中" :value="true">
-                                        <i class="el-icon-video-camera" style="color: #e6a23c; margin-right: 6px;"></i>录制中
+                                        <i class="el-icon-video-camera" style="color: var(--warning-color); margin-right: 6px;"></i>录制中
                                     </el-option>
                                     <el-option label="已结束" :value="false">
-                                        <i class="el-icon-video-pause" style="color: #909399; margin-right: 6px;"></i>已结束
+                                        <i class="el-icon-video-pause" style="color: var(--text-secondary); margin-right: 6px;"></i>已结束
                                     </el-option>
                                 </el-select>
                             </div>
@@ -198,13 +198,13 @@
                         <div class="filter-item">
                             <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
                             <div class="select-with-icon">
-                                <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? '#67c23a' : '#909399'}"></i>
+                                <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? 'var(--success-color)' : 'var(--text-secondary)'}"></i>
                                 <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode || isMultiSelectMode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}" popper-class="history-page-select-popper">
                                     <el-option label="已发布" :value="true">
-                                        <i class="el-icon-circle-check" style="color: #67c23a; margin-right: 6px;"></i>已发布
+                                        <i class="el-icon-circle-check" style="color: var(--success-color); margin-right: 6px;"></i>已发布
                                     </el-option>
                                     <el-option label="未发布" :value="false">
-                                        <i class="el-icon-circle-close" style="color: #909399; margin-right: 6px;"></i>未发布
+                                        <i class="el-icon-circle-close" style="color: var(--text-secondary); margin-right: 6px;"></i>未发布
                                     </el-option>
                                 </el-select>
                             </div>
@@ -216,16 +216,16 @@
                                 <i v-if="form.code !== null && form.code !== undefined && form.code !== ''" class="select-prefix-icon" :class="getCodeIcon(form.code)" :style="{color: getCodeColor(form.code)}"></i>
                                 <el-select v-model="form.code" clearable placeholder="全部" @change="onFilterChange" size="small" :class="{'has-prefix': form.code !== null && form.code !== undefined && form.code !== ''}" :disabled="isMultiSelectMode" popper-class="history-page-select-popper">
                                     <el-option label="未审核" :value="-999">
-                                        <i class="el-icon-remove-outline" style="color: #909399; margin-right: 6px;"></i>未审核
+                                        <i class="el-icon-remove-outline" style="color: var(--text-secondary); margin-right: 6px;"></i>未审核
                                     </el-option>
                                     <el-option label="通过" :value="0">
-                                        <i class="el-icon-success" style="color: #67c23a; margin-right: 6px;"></i>通过
+                                        <i class="el-icon-success" style="color: var(--success-color); margin-right: 6px;"></i>通过
                                     </el-option>
                                     <el-option label="仅自己可见" :value="-50">
-                                        <i class="el-icon-view" style="color: #67c23a; margin-right: 6px;"></i>仅自己可见
+                                        <i class="el-icon-view" style="color: var(--success-color); margin-right: 6px;"></i>仅自己可见
                                     </el-option>
                                     <el-option label="不通过" :value="1">
-                                        <i class="el-icon-circle-close" style="color: #f56c6c; margin-right: 6px;"></i>不通过
+                                        <i class="el-icon-circle-close" style="color: var(--danger-color); margin-right: 6px;"></i>不通过
                                     </el-option>
                                 </el-select>
                             </div>
@@ -324,7 +324,7 @@
                     <div v-if="isMultiSelectMode && isSelected(item)" class="selection-overlay" aria-hidden="true">
                         <i class="el-icon-check selection-icon"></i>
                     </div>
-                    <div style="position: absolute; top: 6px; left: 10px; font-size: 11px; color: var(--text-tertiary, #909399); opacity: 0.5; pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    <div style="position: absolute; top: 6px; left: 10px; font-size: 11px; color: var(--text-secondary); opacity: 0.5; pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                         ID: {{ item.id }}
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -344,13 +344,13 @@
                                 </el-tag>
 
                                 <el-tooltip popper-class="history-page-tooltip-popper" v-if="hasTimestampJump(item)" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
-                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">时间戳跳变<span v-if="timestampJumpPartCount(item) > 0"> {{ timestampJumpPartCount(item) }}</span></span>
+                                    <span class="status-chip" style="background: var(--danger-soft-bg); color: var(--danger-color);">时间戳跳变<span v-if="timestampJumpPartCount(item) > 0"> {{ timestampJumpPartCount(item) }}</span></span>
                                 </el-tooltip>
                                 <el-tooltip popper-class="history-page-tooltip-popper" v-if="otherAbnormalPartCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatGiveUpFilesTooltip(item.giveUpPartFiles)" placement="top">
-                                    <span class="status-chip" style="background: rgba(245, 108, 108, 0.18); color: #f56c6c;">异常分P {{ otherAbnormalPartCount(item) }}</span>
+                                    <span class="status-chip" style="background: var(--danger-soft-bg); color: var(--danger-color);">异常分P {{ otherAbnormalPartCount(item) }}</span>
                                 </el-tooltip>
                                 <el-tooltip popper-class="history-page-tooltip-popper" v-if="skippedOnlyCount(item) > 0" effect="dark" content="文件低于配置阈值，已自动跳过" placement="top">
-                                    <span class="status-chip" style="background: rgba(230, 162, 60, 0.15); color: #e6a23c;">已跳过 {{ skippedOnlyCount(item) }}</span>
+                                    <span class="status-chip" style="background: var(--warning-soft-bg); color: var(--warning-color);">已跳过 {{ skippedOnlyCount(item) }}</span>
                                 </el-tooltip>
                                 <el-tooltip popper-class="history-page-tooltip-popper" v-if="uploadFlowFallbackCount(item) > 0" effect="dark" :content="privacyMode ? '***' : formatUploadFlowFallbackTooltip(item.uploadFlowFallbackReasons)" placement="top">
                                     <span class="status-chip warn">上传已回退 {{ uploadFlowFallbackCount(item) }}</span>
@@ -373,65 +373,59 @@
 
             <!-- 表格视图 -->
             <div v-else class="table-container" key="table">
+            <div class="readable-table-toolbar">
+                <span class="readable-table-hint">左侧展开可查看完整信息</span>
+                <div class="readable-table-controls">
+                    <div v-if="tableOverflowX" class="readable-table-scroll-tools">
+                        <span class="readable-table-hint">左右查看更多列</span>
+                        <button type="button" :disabled="tableAtLeft" @click="scrollOverviewTable(-1)" aria-label="表格向左滚动"><i class="el-icon-arrow-left" aria-hidden="true"></i></button>
+                        <button type="button" :disabled="tableAtRight" @click="scrollOverviewTable(1)" aria-label="表格向右滚动"><i class="el-icon-arrow-right" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="table-density-switch" :class="{ 'is-compact': tablePreferences.density === 'compact' }" role="radiogroup" aria-label="表格行密度">
+                        <label class="table-density-option">
+                            <input type="radio" name="history-table-density" value="comfortable" v-model="tablePreferences.density">
+                            <span>舒适</span>
+                        </label>
+                        <label class="table-density-option">
+                            <input type="radio" name="history-table-density" value="compact" v-model="tablePreferences.density">
+                            <span>紧凑</span>
+                        </label>
+                    </div>
+                    <el-popover placement="bottom-end" trigger="click" width="240" popper-class="readable-table-column-picker">
+                        <div class="readable-table-picker-title">显示列</div>
+                        <p class="readable-table-hint">稿件和操作列始终显示</p>
+                        <el-checkbox-group v-model="tablePreferences.columns">
+                            <el-checkbox v-for="column in tableColumnOptions" :key="column.value" :label="column.value">{{ column.label }}</el-checkbox>
+                        </el-checkbox-group>
+                        <el-button type="text" size="mini" @click="resetTablePreferences">恢复默认布局</el-button>
+                        <el-button slot="reference" size="mini" icon="el-icon-setting">显示列</el-button>
+                    </el-popover>
+                </div>
+            </div>
                 <el-table
                         v-loading="loading"
                         :data="tableData"
-                        height="calc(100vh - 280px)"
+                        class="readable-table" ref="overviewTable" :class="{ 'is-compact': tablePreferences.density === 'compact' }"
+                        row-key="id"
+                        :max-height="Math.max(180, tableMaxHeight - 64)"
                         style="width: 100%">
-                    <el-table-column label="ID" prop="id" width="60"></el-table-column>
-                    <el-table-column label="房间号" width="100">
-                        <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
-                    </el-table-column>
-                    <el-table-column label="主播" width="100">
-                        <template slot-scope="scope">{{ maskText(scope.row.roomName) }}</template>
-                    </el-table-column>
-                    <el-table-column label="BV号" width="120">
-                        <template slot-scope="scope">{{ maskText(scope.row.bvId) }}</template>
-                    </el-table-column>
-                    <el-table-column label="标题" min-width="150" show-overflow-tooltip>
-                        <template slot-scope="scope">{{ maskText(scope.row.title) }}</template>
-                    </el-table-column>
-                    <el-table-column label="文件大小" prop="fileSize" width="100">
-                        <template slot-scope="scope">
-                            <el-tag size="mini" :type="getFileSizeColorType(scope.row.fileSize)">{{ formatFileSize(scope.row.fileSize) }}</el-tag>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="时长" prop="partDuration" width="110">
-                        <template slot-scope="scope">{{ formatDuration(scope.row.partDuration) }}</template>
-                    </el-table-column>
-                    <el-table-column label="分P" prop="partCount" width="60"></el-table-column>
-                    <el-table-column label="录制中分P" prop="recordPartCount" width="80"></el-table-column>
-                    <el-table-column label="已上传分P" prop="uploadPartCount" width="80"></el-table-column>
-                    <el-table-column label="异常分P" prop="giveUpPartCount" width="80">
-                        <template slot-scope="scope">
+                    <el-table-column type="expand" width="44"><template slot-scope="scope"><div class="readable-table-details table-detail-reveal">
+                        <div><span>完整标题</span><strong>{{ maskText(scope.row.title) || '—' }}</strong></div>
+                        <div><span>记录 ID</span><strong class="readable-table-copy-line">{{ scope.row.id }}<button type="button" class="readable-table-copy" @click="copyTableValue(scope.row.id)" aria-label="复制记录 ID">复制</button></strong></div>
+                        <div><span>BV 号</span><strong class="readable-table-copy-line">{{ maskText(scope.row.bvId) || '—' }}<button v-if="scope.row.bvId" type="button" class="readable-table-copy" @click="copyTableValue(maskText(scope.row.bvId))" aria-label="复制显示的 BV 号">复制</button></strong></div>
+                        <div><span>弹幕总数 / 成功数</span><strong>{{ scope.row.msgCount }} / {{ scope.row.successMsgCount }}</strong></div>
+                    </div></template></el-table-column>
+                    <el-table-column label="稿件" min-width="260"><template slot-scope="scope"><button type="button" class="readable-table-title readable-table-title-button" @click="showDetail(scope.row)" :title="maskText(scope.row.title)">{{ maskText(scope.row.title) || '未命名稿件' }}</button><div class="readable-table-meta">ID {{ scope.row.id }} · {{ maskText(scope.row.bvId) || '暂无 BV 号' }}</div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('host')" key="host" label="主播 / 房间" width="150"><template slot-scope="scope"><div class="readable-table-title">{{ maskText(scope.row.roomName) || '—' }}</div><div class="readable-table-meta">房间 {{ maskText(scope.row.roomId) }}</div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('file')" key="file" label="文件 / 时长" width="140"><template slot-scope="scope"><div class="readable-table-number"><el-tag size="mini" :type="getFileSizeColorType(scope.row.fileSize)">{{ formatFileSize(scope.row.fileSize) }}</el-tag></div><div class="readable-table-meta readable-table-number">{{ formatDuration(scope.row.partDuration) }}</div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('parts')" key="parts" label="分P情况" width="185"><template slot-scope="scope"><div class="readable-table-number">共 {{ scope.row.partCount }} · 已上传 {{ scope.row.uploadPartCount }}</div><div class="readable-table-meta">录制中 {{ scope.row.recordPartCount }}</div><div class="readable-table-meta">异常：
                             <el-tag v-if="hasTimestampJump(scope.row)" size="mini" type="danger">时间戳跳变<span v-if="timestampJumpPartCount(scope.row) > 0"> {{ timestampJumpPartCount(scope.row) }}</span></el-tag>
                             <el-tag v-else-if="otherAbnormalPartCount(scope.row) > 0" size="mini" type="danger">{{ otherAbnormalPartCount(scope.row) }}</el-tag>
                             <el-tag v-else-if="skippedOnlyCount(scope.row) > 0" size="mini" type="warning">跳过{{ skippedOnlyCount(scope.row) }}</el-tag>
-                            <span v-else style="color: #909399;">0</span>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="弹幕" prop="msgCount" width="70"></el-table-column>
-                    <el-table-column label="成功弹幕" prop="successMsgCount" width="80"></el-table-column>
-                    <el-table-column label="状态" prop="status" width="100">
-                        <template slot-scope="scope">
-                            <span class="status-chip" :class="getStatusColor(scope.row.status)">{{ scope.row.status }}</span>
-                        </template>
-                    </el-table-column>
-
-                    <el-table-column label="是否上传" prop="upload" width="90">
-                        <template slot-scope="scope">
-                            <span class="status-chip success" v-if="scope.row.upload">是</span>
-                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>否</span>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="是否发布成功" prop="publish" width="80">
-                        <template slot-scope="scope">
-                            <span class="status-chip success" v-if="scope.row.publish">已发布</span>
-                            <span class="status-chip" style="background: rgba(144, 147, 153, 0.2); color: #909399;" v-else>未发布</span>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="是否审核通过" prop="code" width="90">
-                        <template slot-scope="scope">
+                            <span v-else style="color: var(--text-secondary);">0</span>
+                        </div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('status')" key="status" label="录制状态" width="110"><template slot-scope="scope"><span class="status-chip" :class="getStatusColor(scope.row.status)">{{ scope.row.status }}</span></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('publish')" key="publish" label="上传 / 发布 / 审核" width="170"><template slot-scope="scope"><div class="readable-table-meta">自动上传：{{ scope.row.upload ? '开启' : '关闭' }}</div><div class="readable-table-meta">发布：<span :class="{ 'readable-table-success': scope.row.publish }">{{ scope.row.publish ? '已发布' : '未发布' }}</span></div><div class="readable-table-meta">审核：
                             <el-tag size="mini" type="info" v-if="!scope.row.publish">未审核</el-tag>
                             <el-tag size="mini" type="success" v-else-if="scope.row.code == 0">通过</el-tag>
                             <el-tag size="mini" class="private-tag" effect="dark" v-else-if="scope.row.code == -50"><i class="el-icon-view"></i> 仅自己可见</el-tag>
@@ -444,13 +438,11 @@
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == 62002">稿件不可见(62002)</el-tag>
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == -100">已删除</el-tag>
                             <el-tag size="mini" type="danger" v-else>未通过</el-tag>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="开始时间" prop="startTime" width="160">
-                        <template slot-scope="scope">{{ formatDateTime(scope.row.startTime) }}</template>
-                    </el-table-column>
-                    <el-table-column label="操作" width="140" fixed="right">
+                        </div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('time')" key="time" label="开始时间" width="165"><template slot-scope="scope"><span class="readable-table-time readable-table-number">{{ formatDateTime(scope.row.startTime) }}</span></template></el-table-column>
+                    <el-table-column label="操作" width="180" fixed="right" class-name="readable-table-actions">
                         <template slot-scope="scope">
+                            <el-button @click.stop="showDetail(scope.row)" size="mini" type="text">详情</el-button>
                             <el-button @click.stop="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
                             <el-dropdown trigger="click" size="mini" @command="handleCommand($event, scope.row)">
                                 <el-button size="mini" type="text">
@@ -470,7 +462,7 @@
                                     <el-dropdown-item command="abandonHistoryMsgQueue">放弃待发送队列</el-dropdown-item>
                                     <el-dropdown-item command="deleteHistoryMsg">删除弹幕</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
-                                    <el-dropdown-item command="deleteHistory" style="color: #F56C6C;">删除</el-dropdown-item>
+                                     <el-dropdown-item command="deleteHistory" style="color: var(--danger-color);">删除</el-dropdown-item>
                                 </el-dropdown-menu>
                             </el-dropdown>
                         </template>

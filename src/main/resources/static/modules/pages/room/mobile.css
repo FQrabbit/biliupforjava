@@ -1,4 +1,4 @@
-/* Dedicated mobile room monitor experience. Loaded only when the mobile room module is opened. */
+/* 移动端直播间页面样式，打开直播间页面时才会加载 */
 
 :root {
     --mobile-room-on-accent: var(--mobile-page-on-accent, #ffffff);
@@ -35,8 +35,8 @@
     border: 1px solid var(--mobile-page-border);
     background: var(--mobile-page-surface);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-room-hero {
@@ -46,7 +46,7 @@
     gap: 14px;
     min-height: 98px;
     padding: 17px;
-    border-radius: 28px;
+    border-radius: var(--radius-xl);
 }
 
 .mobile-room-hero-copy {
@@ -94,7 +94,7 @@
     color: var(--text-secondary);
     background: color-mix(in srgb, var(--mobile-page-surface-strong) 76%, transparent);
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, border-color 180ms ease, background 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-room-hero-action.is-open,
@@ -127,7 +127,7 @@
     color: var(--text-secondary);
     background: transparent;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-room-stat span {
@@ -187,7 +187,7 @@
     font-size: 13px;
     font-weight: 780;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-room-command.is-primary,
@@ -195,8 +195,9 @@
 .mobile-room-detail-actions button.is-primary {
     border-color: transparent;
     color: var(--mobile-room-on-accent);
-    background: linear-gradient(135deg, var(--mobile-blue), var(--mobile-teal));
-    box-shadow: 0 14px 26px color-mix(in srgb, var(--mobile-blue) 20%, transparent);
+    background: var(--btn-primary-bg);
+    background-image: none;
+    box-shadow: var(--shadow-sm);
 }
 
 .mobile-room-command.is-success,
@@ -225,7 +226,10 @@
     padding: 14px;
     border-radius: 25px;
     cursor: pointer;
-    transition: transform 240ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, box-shadow 220ms ease, background 220ms ease;
+    transition: transform var(--duration-overlay) var(--ease-spring),
+        border-color var(--duration-selection) var(--ease-apple),
+        box-shadow var(--duration-selection) var(--ease-apple),
+        background-color var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-room-card::before {
@@ -237,11 +241,13 @@
 }
 
 .mobile-room-card.is-live::before {
-    background: linear-gradient(180deg, var(--mobile-coral), color-mix(in srgb, var(--mobile-coral) 44%, transparent));
+    background: var(--danger-color);
+    background-image: none;
 }
 
 .mobile-room-card.is-recording::before {
-    background: linear-gradient(180deg, var(--mobile-teal), var(--mobile-blue));
+    background: var(--success-color);
+    background-image: none;
 }
 
 .mobile-room-card.is-sorting {
@@ -476,9 +482,9 @@
     position: fixed;
     inset: 0;
     z-index: 3000;
-    background: color-mix(in srgb, var(--bg-primary) 20%, rgba(8, 12, 23, 0.42));
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(15, 23, 42, 0.42);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-room-action-sheet {
@@ -606,16 +612,16 @@
 }
 
 .mobile-room-sheet-actions button.is-danger {
-    color: var(--danger-color, #f56c6c);
-    border-color: color-mix(in srgb, var(--danger-color, #f56c6c) 28%, var(--mobile-page-border));
-    background: color-mix(in srgb, var(--danger-color, #f56c6c) 8%, var(--mobile-page-surface-strong));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 28%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 8%, var(--mobile-page-surface-strong));
 }
 
 .mobile-room-sheet-danger {
     min-height: 44px !important;
-    color: var(--danger-color, #f56c6c) !important;
-    border-color: color-mix(in srgb, var(--danger-color, #f56c6c) 26%, var(--mobile-page-border)) !important;
-    background: color-mix(in srgb, var(--danger-color, #f56c6c) 7%, var(--mobile-page-surface-strong)) !important;
+    color: var(--danger-color) !important;
+    border-color: color-mix(in srgb, var(--danger-color) 26%, var(--mobile-page-border)) !important;
+    background: color-mix(in srgb, var(--danger-color) 7%, var(--mobile-page-surface-strong)) !important;
     font-size: 13px !important;
 }
 
@@ -779,7 +785,8 @@
     gap: 9px;
     padding-top: 10px;
     border-top: 1px solid var(--mobile-page-border);
-    background: linear-gradient(180deg, transparent, var(--mobile-page-surface-strong) 18%);
+    background: var(--mobile-page-surface-strong);
+    background-image: none;
 }
 
 .mobile-room-detail-actions button {
@@ -823,8 +830,7 @@
     margin: 0 !important;
     border-radius: 0 !important;
     overflow: hidden;
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--mobile-page-surface-strong) 94%, transparent), var(--mobile-page-surface-strong));
+    background: var(--mobile-page-surface-strong);
 }
 
 body.mobile-room-edit-open .el-dialog__wrapper.mobile-room-dialog-wrapper {
@@ -931,8 +937,8 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     padding: calc(10px + var(--mobile-page-safe-top)) 12px 10px;
     border-bottom: 1px solid var(--mobile-page-border);
     background: var(--mobile-page-surface);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .room-config-dialog.is-fullscreen .dialog-header-modern {
@@ -957,7 +963,8 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     min-width: 44px;
     border-radius: 14px;
     color: var(--mobile-room-on-accent);
-    background: linear-gradient(135deg, var(--mobile-blue), var(--mobile-teal));
+    background: var(--btn-primary-bg);
+    background-image: none;
 }
 
 .room-config-dialog.is-fullscreen .dialog-title {
@@ -1004,7 +1011,7 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     font-weight: 780;
     cursor: pointer;
     touch-action: manipulation;
-    transition: transform 180ms ease, color 180ms ease, border-color 180ms ease, background 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .room-config-dialog.is-fullscreen .mobile-config-section-rail button:active {
@@ -1385,7 +1392,7 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     background: transparent;
     cursor: pointer;
     vertical-align: middle;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .room-config-dialog.is-fullscreen .mobile-config-help-trigger:active {
@@ -1410,8 +1417,8 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     place-items: center;
     padding: calc(18px + var(--mobile-page-safe-top)) 18px calc(18px + var(--mobile-page-safe-bottom));
     background: color-mix(in srgb, var(--bg-primary) 22%, rgba(8, 12, 23, 0.44));
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .room-config-dialog.is-fullscreen .mobile-config-help-panel {
@@ -1426,8 +1433,8 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     color: var(--text-primary);
     background: var(--mobile-page-surface-strong);
     box-shadow: 0 24px 60px color-mix(in srgb, var(--bg-primary) 34%, transparent);
-    backdrop-filter: blur(28px) saturate(1.32);
-    -webkit-backdrop-filter: blur(28px) saturate(1.32);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .room-config-dialog.is-fullscreen .mobile-config-help-icon {
@@ -1478,8 +1485,9 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     border: none;
     border-radius: 18px;
     color: var(--mobile-room-on-accent);
-    background: linear-gradient(135deg, var(--mobile-blue), var(--mobile-teal));
-    box-shadow: 0 14px 26px color-mix(in srgb, var(--mobile-blue) 20%, transparent);
+    background: var(--btn-primary-bg);
+    background-image: none;
+    box-shadow: var(--shadow-sm);
     font-size: 15px;
     font-weight: 820;
     cursor: pointer;
@@ -1502,8 +1510,8 @@ body.mobile-room-config-select-open .room-config-dialog.is-fullscreen .mobile-co
     border-top: 1px solid var(--mobile-page-border);
     background: var(--mobile-page-surface);
     box-shadow: 0 -18px 38px color-mix(in srgb, var(--bg-primary) 22%, transparent);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .room-config-dialog.is-fullscreen .el-dialog__footer {
@@ -1659,7 +1667,7 @@ body.mobile-input-focused .room-config-dialog.is-fullscreen .dialog-footer-moder
 
 .mobile-room-fade-enter-active,
 .mobile-room-fade-leave-active {
-    transition: opacity 240ms ease;
+    transition: opacity var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-room-fade-enter,
@@ -1669,7 +1677,8 @@ body.mobile-input-focused .room-config-dialog.is-fullscreen .dialog-footer-moder
 
 .mobile-room-sheet-enter-active,
 .mobile-room-sheet-leave-active {
-    transition: transform 320ms cubic-bezier(0.2, 0.85, 0.2, 1), opacity 220ms ease;
+    transition: transform var(--duration-overlay) var(--ease-modal),
+        opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-room-sheet-enter,
@@ -1680,7 +1689,8 @@ body.mobile-input-focused .room-config-dialog.is-fullscreen .dialog-footer-moder
 
 .mobile-room-detail-enter-active,
 .mobile-room-detail-leave-active {
-    transition: transform 360ms cubic-bezier(0.2, 0.85, 0.2, 1), opacity 240ms ease;
+    transition: transform var(--duration-overlay) var(--ease-modal),
+        opacity var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-room-detail-enter,
@@ -1691,12 +1701,13 @@ body.mobile-input-focused .room-config-dialog.is-fullscreen .dialog-footer-moder
 
 .mobile-config-help-enter-active,
 .mobile-config-help-leave-active {
-    transition: opacity 220ms ease;
+    transition: opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-config-help-enter-active .mobile-config-help-panel,
 .mobile-config-help-leave-active .mobile-config-help-panel {
-    transition: transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1), opacity 200ms ease;
+    transition: transform var(--duration-overlay) var(--ease-modal),
+        opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-config-help-enter,

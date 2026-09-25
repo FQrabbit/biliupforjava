@@ -4,9 +4,18 @@
 BiliupModuleRegistry.define('page.room', function (context) {
 return {
     template: context.template,
+    mixins: [window.BiliupTablePreferences.createMixin('room', [
+        { value: 'title', label: '标题' },
+        { value: 'status', label: '直播 / 录制' },
+        { value: 'upload', label: '自动上传' },
+        { value: 'danmaku', label: '普通弹幕' },
+        { value: 'advanced', label: '高级弹幕' },
+        { value: 'user', label: '投稿用户' }
+    ])],
     data: function () {
         return {
         moduleSurface: context.surface,
+            tableMaxHeight: Math.max(180, window.innerHeight - 260),
         componentDestroyed: false,
         pollingTimer: null,
         manualPasteDialogVisible: false,

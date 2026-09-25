@@ -1,4 +1,4 @@
-/* Dedicated mobile log page. Loaded only by /mobile/index.html. */
+/* 移动端日志页面样式，仅在移动端入口加载 */
 
 .mobile-shell .mobile-log-page {
     height: 100%;
@@ -36,14 +36,12 @@
     gap: 10px;
     padding: 16px;
     border: 1px solid var(--mobile-border);
-    border-radius: 24px;
-    background:
-        linear-gradient(135deg, color-mix(in srgb, var(--mobile-accent-1) 12%, transparent), transparent 52%),
-        var(--mobile-surface-strong);
+    border-radius: var(--radius-xl);
+    background: var(--surface-content);
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.2);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.2);
-    animation: mobileLogRise 360ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    animation: mobileLogRise var(--duration-base) var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-log-hero-copy {
@@ -94,7 +92,7 @@
     gap: 8px;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg-primary) 48%, transparent);
     cursor: pointer;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, background 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring), border-color var(--duration-selection) var(--ease-apple), background var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-status > *,
@@ -153,7 +151,7 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
-    animation: mobileLogRise 360ms 40ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileLogRise var(--duration-base) 40ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-log-actions button,
@@ -175,13 +173,25 @@
     font-weight: 800;
     box-shadow: var(--mobile-shadow-soft);
     cursor: pointer;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, background 220ms ease, color 220ms ease, box-shadow 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring), border-color var(--duration-selection) var(--ease-apple), background var(--duration-selection) var(--ease-apple), color var(--duration-selection) var(--ease-apple), box-shadow var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-actions button.is-primary,
 .mobile-shell .mobile-log-sheet-actions button.is-primary {
     border-color: transparent;
-    background: linear-gradient(135deg, var(--mobile-accent-1), var(--mobile-accent-2));
+    background: var(--btn-primary-bg);
+    background-image: none;
+    color: var(--mobile-on-accent);
+    box-shadow: var(--shadow-sm);
+}
+
+.mobile-shell .mobile-log-actions button.is-primary:hover,
+.mobile-shell .mobile-log-actions button.is-primary:focus-visible,
+.mobile-shell .mobile-log-sheet-actions button.is-primary:hover,
+.mobile-shell .mobile-log-sheet-actions button.is-primary:focus-visible {
+    background: var(--btn-primary-bg-hover);
+    background-image: none;
+    border-color: var(--btn-primary-bg-hover);
     color: var(--mobile-on-accent);
 }
 
@@ -196,7 +206,7 @@
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 8px;
-    animation: mobileLogRise 360ms 80ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileLogRise var(--duration-base) 80ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-log-stat {
@@ -214,7 +224,7 @@
     gap: 4px;
     box-shadow: var(--mobile-shadow-soft);
     cursor: pointer;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), opacity 220ms ease, border-color 220ms ease, background 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring), opacity var(--duration-selection) var(--ease-apple), border-color var(--duration-selection) var(--ease-apple), background var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-stat span {
@@ -274,9 +284,9 @@
     border-radius: 24px;
     background: var(--mobile-surface);
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.22);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.22);
-    animation: mobileLogRise 360ms 120ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    animation: mobileLogRise var(--duration-base) 120ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-log-section-head {
@@ -353,7 +363,7 @@
     display: flex;
     align-items: flex-end;
     pointer-events: none;
-    transition: height 220ms ease, transform 180ms ease, opacity 180ms ease, background 180ms ease;
+    transition: height var(--duration-selection) var(--ease-apple), transform var(--duration-feedback) var(--ease-apple), opacity var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-bar::after {
@@ -365,7 +375,7 @@
     max-height: 42px;
     border-radius: inherit;
     background: color-mix(in srgb, var(--mobile-accent-1) 42%, var(--mobile-border));
-    transition: height 220ms ease, background 180ms ease;
+    transition: height var(--duration-selection) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-bar.is-empty {
@@ -451,9 +461,7 @@
     padding: 16px;
     border: 1px solid color-mix(in srgb, var(--warning-color) 34%, var(--mobile-border));
     border-radius: 24px;
-    background:
-        linear-gradient(135deg, color-mix(in srgb, var(--warning-color) 16%, transparent), transparent 58%),
-        var(--mobile-surface-strong);
+    background: var(--mobile-surface-strong);
     box-shadow: var(--mobile-shadow-soft);
     cursor: pointer;
 }
@@ -566,7 +574,7 @@
     display: block;
     cursor: pointer;
     box-shadow: 0 10px 22px color-mix(in srgb, var(--bg-secondary) 36%, transparent);
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, background 220ms ease, box-shadow 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring), border-color var(--duration-selection) var(--ease-apple), background var(--duration-selection) var(--ease-apple), box-shadow var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-row.line-warn {
@@ -673,17 +681,16 @@
     height: 54px;
     border: 1px solid color-mix(in srgb, var(--mobile-accent-1) 34%, var(--mobile-border));
     border-radius: 20px;
-    background:
-        linear-gradient(135deg, color-mix(in srgb, var(--mobile-accent-1) 18%, transparent), color-mix(in srgb, var(--mobile-accent-2) 12%, transparent)),
-        var(--mobile-surface-strong);
+    background: var(--surface-content);
+    background-image: none;
     color: var(--mobile-accent-1);
     display: grid;
     place-items: center;
-    box-shadow: var(--mobile-shadow);
-    backdrop-filter: blur(24px) saturate(1.35);
-    -webkit-backdrop-filter: blur(24px) saturate(1.35);
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     cursor: pointer;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), opacity 180ms ease, border-color 180ms ease, background 180ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring), opacity var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-backtop i {
@@ -716,8 +723,8 @@
     inset: 0;
     z-index: 2790;
     background: color-mix(in srgb, var(--bg-secondary) 66%, transparent);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-shell .mobile-log-sheet {
@@ -732,9 +739,9 @@
     border-radius: 28px;
     background: var(--mobile-surface-strong);
     color: var(--text-primary);
-    box-shadow: var(--mobile-shadow);
-    backdrop-filter: blur(30px) saturate(1.38);
-    -webkit-backdrop-filter: blur(30px) saturate(1.38);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -794,7 +801,7 @@
     display: grid;
     place-items: center;
     cursor: pointer;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), background 220ms ease, color 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring), background var(--duration-selection) var(--ease-apple), color var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-log-search-field {
@@ -1053,7 +1060,8 @@
 
 .mobile-log-card-enter-active,
 .mobile-log-card-leave-active {
-    transition: opacity 220ms ease, transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-overlay) var(--ease-decel),
+        transform var(--duration-overlay) var(--ease-modal);
 }
 
 .mobile-log-card-enter,
@@ -1064,7 +1072,7 @@
 
 .mobile-log-fade-enter-active,
 .mobile-log-fade-leave-active {
-    transition: opacity 220ms ease;
+    transition: opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-log-fade-enter,
@@ -1074,7 +1082,8 @@
 
 .mobile-log-sheet-enter-active,
 .mobile-log-sheet-leave-active {
-    transition: transform 300ms cubic-bezier(0.2, 0.85, 0.2, 1), opacity 220ms ease;
+    transition: transform var(--duration-overlay) var(--ease-modal),
+        opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-log-sheet-enter,
@@ -1085,7 +1094,8 @@
 
 .mobile-log-backtop-enter-active,
 .mobile-log-backtop-leave-active {
-    transition: opacity 180ms ease, transform 240ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-feedback) var(--ease-apple),
+        transform var(--duration-overlay) var(--ease-modal);
 }
 
 .mobile-log-backtop-enter,

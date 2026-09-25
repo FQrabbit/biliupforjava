@@ -82,15 +82,15 @@
                             <li>使用 localhost 访问</li>
                             <li>修改浏览器 flag 允许不安全源</li>
                         </ol>
-                        <div style="margin-top: 10px; padding: 10px; background-color: #f0f9eb; border-radius: 4px;">
+                        <div style="margin-top: 10px; padding: 10px; background-color: var(--success-soft-bg-faint); border: 1px solid var(--success-border); border-radius: var(--radius-md);">
                             <div style="font-weight: bold; margin-bottom: 5px;">如何修改 Flag (方案3):</div>
-                            <div style="font-size: 12px; color: #606266; margin-bottom: 5px;">请复制下方地址到浏览器地址栏打开 (无法直接跳转):</div>
-                            <div style="background: var(--bg-tertiary, #f5f5f5); padding: 5px; border: 1px solid var(--border-color, #dcdfe6); border-radius: 3px; color: var(--primary-color, #409EFF); word-break: break-all; font-family: monospace; user-select: all;">
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">请复制下方地址到浏览器地址栏打开 (无法直接跳转):</div>
+                            <div style="background: var(--bg-tertiary); padding: 5px; border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--primary-color); word-break: break-all; font-family: monospace; user-select: all;">
                                 ${flagUrl}
                             </div>
                             <div style="font-size: 12px; margin-top: 5px; line-height: 1.5;">
                                 1. 将 <b>Insecure origins treated as secure</b> 设置为 <b>Enabled</b><br>
-                                2. 在下方输入框填入: <span style="color: #F56C6C; font-weight: bold;">${currentOrigin}</span><br>
+                                2. 在下方输入框填入: <span style="color: var(--danger-color); font-weight: bold;">${currentOrigin}</span><br>
                                 3. 点击右下角 <b>重启</b> 重启浏览器
                             </div>
                         </div>
@@ -185,6 +185,7 @@
             return id;
         },
         handleResize: function () {
+            this.tableMaxHeight = Math.max(180, window.innerHeight - 260);
             this.isMobile = this.moduleSurface === 'mobile';
         },
         resolveUser: function (id) {

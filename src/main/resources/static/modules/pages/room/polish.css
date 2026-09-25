@@ -1,4 +1,4 @@
-/* ========== 视觉体验优化 (Visual Polish) ========== */
+/* ========== 视觉体验优化 ========== */
 
 /* 2. 输入框增强边界感 */
 
@@ -78,7 +78,7 @@
 
 }
 
-/* ========== 视觉模式支持 (Dark Mode Support) ========== */
+/* ========== 深色主题样式 ========== */
 
 [data-theme='dark'] .room-config-dialog {
 
@@ -283,15 +283,15 @@
 .config-progress-panel {
     margin: 12px 0 16px;
     padding: 16px 20px;
-    border: 1px solid rgba(64, 158, 255, 0.35);
+    border: 1px solid var(--brand-accent-border);
     border-radius: var(--radius-lg);
-    background: linear-gradient(120deg, rgba(64, 158, 255, 0.14), rgba(16, 185, 129, 0.08));
+    background: var(--brand-soft-bg-faint);
     box-shadow: var(--shadow-sm);
 }
 
 .config-progress-panel.is-error {
     border-color: rgba(245, 108, 108, 0.5);
-    background: linear-gradient(120deg, rgba(245, 108, 108, 0.16), rgba(245, 108, 108, 0.06));
+    background: var(--danger-soft-bg);
 }
 
 .config-progress-head {
@@ -464,7 +464,7 @@
 }
 
 .room-delete-progress .el-progress-bar__inner {
-    transition: width 260ms ease;
+    transition: width var(--duration-overlay) var(--ease-apple);
 }
 
 .room-delete-progress-meta {

@@ -165,13 +165,13 @@
             }) : [];
             if (failed.length === 0) return;
             var html = '<div style="max-height:calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.4);overflow:auto;">'
-                + '<div style="margin-bottom:8px;color:#606266;">以下稿件处理失败：</div><ul style="margin:0;padding-left:18px;">';
+                + '<div style="margin-bottom:8px;color:var(--text-primary);">以下稿件处理失败：</div><ul style="margin:0;padding-left:18px;">';
             failed.slice(0, 20).forEach(function(item) {
                 html += '<li style="margin:4px 0;">ID ' + _this.escapeBatchHtml(item.id) + '：'
                     + _this.escapeBatchHtml(item.reason || '未知原因') + '</li>';
             });
             if (failed.length > 20) {
-                html += '<li style="color:#909399;">... 其余 ' + (failed.length - 20) + ' 项请查看日志</li>';
+                html += '<li style="color:var(--text-secondary);">... 其余 ' + (failed.length - 20) + ' 项请查看日志</li>';
             }
             html += '</ul></div>';
             this.$pageAlert(html, title || '批量操作失败详情', {
@@ -351,10 +351,10 @@
                 return '未删除';
             };
             var html = '<div style="max-height: calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.45); overflow:auto;">';
-            html += '<p style="margin:0 0 10px 0; color:#606266;">以下文件未删除成功，请手动检查（可能已被移动/删除/占用/权限不足）：</p>';
+            html += '<p style="margin:0 0 10px 0; color:var(--text-primary);">以下文件未删除成功，请手动检查（可能已被移动/删除/占用/权限不足）：</p>';
             items.forEach(function(group) {
-                html += '<div style="margin:10px 0 6px 0; font-weight:600; color:#303133;">稿件ID：' + esc(group.historyId) + '</div>';
-                html += '<ul style="margin:0; padding-left:20px; color:#606266;">';
+                html += '<div style="margin:10px 0 6px 0; font-weight:600; color:var(--text-primary);">稿件ID：' + esc(group.historyId) + '</div>';
+                html += '<ul style="margin:0; padding-left:20px; color:var(--text-primary);">';
                 (group.files || []).forEach(function(f) {
                     var line = '[' + statusLabel(f.status) + ']' + '[' + label(f.kind) + '] ' + esc(f.path);
                     if (f.reason) line += '（' + esc(f.reason) + '）';
@@ -453,12 +453,12 @@
             var msg = '<p>将把 <b>' + eligibleItems.length + '</b> 个稿件的上传开关设为“'
                 + (enable ? '开' : '关') + '”。</p>';
             if (!enable) {
-                msg += '<p style="margin-top:8px;color:#E6A23C;">正在上传或等待投稿的任务将被停止；已经完成的上传不会被删除。</p>';
+                msg += '<p style="margin-top:8px;color:var(--warning-color);">正在上传或等待投稿的任务将被停止；已经完成的上传不会被删除。</p>';
             } else {
-                msg += '<p style="margin-top:8px;color:#606266;">开启后会恢复尚未完成分P的上传调度。</p>';
+                msg += '<p style="margin-top:8px;color:var(--text-primary);">开启后会恢复尚未完成分P的上传调度。</p>';
             }
             if (skipped > 0) {
-                msg += '<p style="margin-top:8px;color:#909399;">另外 ' + skipped + ' 个稿件已是目标状态或已强制归档，将自动跳过。</p>';
+                msg += '<p style="margin-top:8px;color:var(--text-secondary);">另外 ' + skipped + ' 个稿件已是目标状态或已强制归档，将自动跳过。</p>';
             }
             this.$pageConfirm(msg, '批量' + targetText + '确认', {
                 dangerouslyUseHTMLString: true,
@@ -503,11 +503,11 @@
                 return;
             }
             var skipped = this.selectedItems.length - eligibleItems.length;
-            var msg = '<p>将强制归档 <b style="color:#E6A23C;">' + eligibleItems.length + '</b> 个稿件。</p>'
-                + '<p style="margin-top:8px;color:#E6A23C;">这会停止尚未完成的录制、上传和弹幕发送，并清理待发送队列。</p>'
-                + '<p style="margin-top:8px;color:#909399;">之后可以恢复处理标记，但已中止的任务不会自动恢复。</p>';
+            var msg = '<p>将强制归档 <b style="color:var(--warning-color);">' + eligibleItems.length + '</b> 个稿件。</p>'
+                + '<p style="margin-top:8px;color:var(--warning-color);">这会停止尚未完成的录制、上传和弹幕发送，并清理待发送队列。</p>'
+                + '<p style="margin-top:8px;color:var(--text-secondary);">之后可以恢复处理标记，但已中止的任务不会自动恢复。</p>';
             if (skipped > 0) {
-                msg += '<p style="margin-top:8px;color:#909399;">已归档的 ' + skipped + ' 个稿件将自动跳过。</p>';
+                msg += '<p style="margin-top:8px;color:var(--text-secondary);">已归档的 ' + skipped + ' 个稿件将自动跳过。</p>';
             }
             this.$pageConfirm(msg, '批量强制归档确认', {
                 dangerouslyUseHTMLString: true,
@@ -557,9 +557,9 @@
             }
 
             var targetText = isOnlySelf === 1 ? '仅自己可见' : '公开';
-            var msg = '<p>将批量把 <span style="color:#67C23A;font-weight:bold;">' + eligibleItems.length + '</span> 个稿件设置为“' + targetText + '”。</p>';
+            var msg = '<p>将批量把 <span style="color:var(--success-color);font-weight:bold;">' + eligibleItems.length + '</span> 个稿件设置为“' + targetText + '”。</p>';
             if (skippedItems.length > 0) {
-                msg += '<p style="margin-top:8px;color:#E6A23C;">其中 ' + skippedItems.length + ' 个稿件不满足切换条件，将自动跳过。</p>';
+                msg += '<p style="margin-top:8px;color:var(--warning-color);">其中 ' + skippedItems.length + ' 个稿件不满足切换条件，将自动跳过。</p>';
                 var topReasons = {};
                 skippedItems.forEach(function(item) {
                     var reason = _this.getVisibilityTargetDisabledReasonForItem(item, isOnlySelf) || '不满足切换条件';
@@ -569,7 +569,7 @@
                     return '<li>' + _this.escapeBatchHtml(reason) + '（' + topReasons[reason] + '）</li>';
                 }).join('');
                 if (reasonLines) {
-                    msg += '<ul style="margin:6px 0 0 18px;color:#909399;">' + reasonLines + '</ul>';
+                    msg += '<ul style="margin:6px 0 0 18px;color:var(--text-secondary);">' + reasonLines + '</ul>';
                 }
             }
 
@@ -623,12 +623,12 @@
                 _this.finishBatchModeAndRefresh();
 
                 if (failCount > 0) {
-                    var details = '<div style="max-height:calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.4);overflow:auto;"><div style="margin-bottom:8px;color:#606266;">以下稿件切换失败：</div><ul style="margin:0;padding-left:18px;">';
+                    var details = '<div style="max-height:calc(var(--mobile-page-viewport-height, var(--mobile-viewport-height, 100vh)) * 0.4);overflow:auto;"><div style="margin-bottom:8px;color:var(--text-primary);">以下稿件切换失败：</div><ul style="margin:0;padding-left:18px;">';
                     failList.slice(0, 20).forEach(function(f) {
                         details += '<li style="margin:4px 0;">ID ' + _this.escapeBatchHtml(f.id) + '：' + _this.escapeBatchHtml(f.msg || '') + '</li>';
                     });
                     if (failList.length > 20) {
-                        details += '<li style="color:#909399;">... 其余 ' + (failList.length - 20) + ' 项请查看日志</li>';
+                        details += '<li style="color:var(--text-secondary);">... 其余 ' + (failList.length - 20) + ' 项请查看日志</li>';
                     }
                     details += '</ul></div>';
                     _this.$pageAlert(details, '批量切换失败详情', {
@@ -718,14 +718,14 @@
                 return;
             }
             var msg = '<p>将清理 <b>' + (Number(preview.historyCount) || 0) + '</b> 个历史稿件中的待发送任务：</p>'
-                + '<ul style="margin:8px 0 0 18px;color:#606266;">'
+                + '<ul style="margin:8px 0 0 18px;color:var(--text-primary);">'
                 + '<li>普通弹幕：' + (Number(preview.ordinary) || 0) + ' 条</li>'
                 + '<li>SC/上舰弹幕：' + (Number(preview.advanced) || 0) + ' 条</li>'
                 + '<li>评论汇总：' + (Number(preview.reply) || 0) + ' 个</li>'
                 + '<li>强制归档：' + (Number(preview.forceArchived) || 0) + ' 个</li>'
                 + '</ul>';
             if (preview.limited) {
-                msg += '<p style="margin-top:8px;color:#E6A23C;">符合条件的稿件较多，本次只处理前 ' + (Number(preview.limit) || 0) + ' 个。</p>';
+                msg += '<p style="margin-top:8px;color:var(--warning-color);">符合条件的稿件较多，本次只处理前 ' + (Number(preview.limit) || 0) + ' 个。</p>';
             }
             this.$pageConfirm(msg, '清理历史待发送队列确认', {
                 dangerouslyUseHTMLString: true,

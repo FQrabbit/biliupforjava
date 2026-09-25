@@ -4,6 +4,14 @@
 BiliupModuleRegistry.define('page.history', function (context) {
 return {
     template: context.template,
+    mixins: [window.BiliupTablePreferences.createMixin('history', [
+        { value: 'host', label: '主播 / 房间' },
+        { value: 'file', label: '文件 / 时长' },
+        { value: 'parts', label: '分P情况' },
+        { value: 'status', label: '录制状态' },
+        { value: 'publish', label: '上传 / 发布 / 审核' },
+        { value: 'time', label: '开始时间' }
+    ])],
     data: function () {
         return window.HistoryPageState(context);
     },

@@ -13,10 +13,12 @@
     <link href="../css/animations/transitions.css" rel="stylesheet">
     <link href="../css/animations/effects.css" rel="stylesheet">
     <link href="../css/login.css" rel="stylesheet">
+    <link href="../css/base/design-system.css" rel="stylesheet">
+    <script src="../js/components/focus-return.js"></script>
 </head>
 <body>
 <!-- 浏览器兼容性检测兜底 -->
-<div id="browser-warning" style="display: none; position: fixed; top: 0; left: 0; width: 100%; z-index: 99999; background: #f56c6c; color: white; text-align: center; padding: 15px; font-family: sans-serif; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+<div id="browser-warning" style="display: none; position: fixed; top: 0; left: 0; width: 100%; z-index: 99999; background: var(--danger-color); color: var(--text-inverse); text-align: center; padding: 15px; font-family: sans-serif; font-size: 16px; box-shadow: var(--shadow-md);">
     ⚠️ 您的浏览器版本过低（不支持现代特性）。请使用最新版的 Chrome、Edge、Firefox 或 Safari 访问本页面，否则页面功能可能无法正常工作。
 </div>
 <script src="../js/app/browser-warning.js"></script>

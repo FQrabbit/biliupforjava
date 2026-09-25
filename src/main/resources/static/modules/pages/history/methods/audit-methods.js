@@ -38,13 +38,13 @@
                 const html62002 = [
                     '<div style="line-height:1.75;">',
                     '<div style="margin-bottom:8px;">当前稿件返回 <strong>62002（稿件不可见）</strong>。</div>',
-                    '<div style="margin-bottom:8px;color:var(--text-secondary,#a0a0a0);">这通常意味着该稿件已经无法在当前账号视角访问，常见原因包括：</div>',
-                    '<ul style="margin:0 0 8px 18px;padding:0;color:var(--text-secondary,#a0a0a0);">',
+                    '<div style="margin-bottom:8px;color:var(--text-secondary,#aab3bd);">这通常意味着该稿件已经无法在当前账号视角访问，常见原因包括：</div>',
+                    '<ul style="margin:0 0 8px 18px;padding:0;color:var(--text-secondary,#aab3bd);">',
                     '<li>UP 主在 B 站后台手动删除了稿件；</li>',
                     '<li>稿件被改为不可见（例如仅自己可见或权限变更）；</li>',
                     '<li>稿件被系统回收/下线，导致接口侧返回不可见。</li>',
                     '</ul>',
-                    '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;">说明：此提示用于排障参考，最终状态以 B 站创作中心后台为准。</div>',
+                    '<div style="color:var(--text-secondary,#aab3bd);font-size:12px;">说明：此提示用于排障参考，最终状态以 B 站创作中心后台为准。</div>',
                     '</div>'
                 ].join('');
                 this.$pageAlert(html62002, '稿件不可见说明', {
@@ -72,15 +72,15 @@
                 if (!raw) return '';
                 const safe = esc(raw);
                 if (raw.length <= threshold) {
-                    return '<div style="color:var(--text-secondary,#a0a0a0);margin-top:2px;"><strong>' + safeLabel + '：</strong>' + safe + '</div>';
+                    return '<div style="color:var(--text-secondary,#aab3bd);margin-top:2px;"><strong>' + safeLabel + '：</strong>' + safe + '</div>';
                 }
                 return ''
                     + '<details style="margin-top:4px;">'
-                    + '<summary style="cursor:pointer;list-style:none;outline:none;font-size:12px;font-weight:600;display:inline-block;background:linear-gradient(90deg,#67c23a,#409eff);-webkit-background-clip:text;background-clip:text;color:transparent;">'
+                    + '<summary style="cursor:pointer;list-style:none;outline:none;font-size:12px;font-weight:600;display:inline-block;color:var(--primary-color,#3578c7);">'
                     + '展开查看' + safeLabel + '（已折叠）'
                     + '</summary>'
-                    + '<div style="position:relative;margin-top:6px;padding:8px 10px;border-radius:6px;background:var(--brand-soft-bg-faint,rgba(64,158,255,0.06));">'
-                    + '<div style="color:var(--text-secondary,#a0a0a0);line-height:1.75;max-height:9.2em;overflow:auto;">'
+                    + '<div style="position:relative;margin-top:6px;padding:8px 10px;border-radius:6px;background:var(--brand-soft-bg-faint,var(--bg-tertiary,#f5f7fb));">'
+                    + '<div style="color:var(--text-secondary,#aab3bd);line-height:1.75;max-height:9.2em;overflow:auto;">'
                     + '<strong>' + safeLabel + '：</strong>' + safe
                     + '</div>'
                     + '<div style="position:absolute;left:10px;right:10px;bottom:8px;height:22px;background:linear-gradient(to bottom, rgba(0,0,0,0), var(--bg-primary,#18181b));pointer-events:none;"></div>'
@@ -102,16 +102,16 @@
                     matched.forEach(function(seg) {
                         const m = seg.match(/^P(\d+)\((.+)\)$/);
                         if (m) {
-                            rows.push('<div style="padding:6px 8px;border:1px solid var(--warning-border,#faad14);border-radius:6px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));color:var(--text-primary,#e8e8e8);font-size:12px;line-height:1.6;"><strong style="color:var(--warning-color,#faad14);">P' + esc(m[1]) + '</strong> <span>' + esc(m[2]) + '</span></div>');
+                            rows.push('<div style="padding:6px 8px;border:1px solid var(--warning-border,#faad14);border-radius:6px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));color:var(--text-primary,#e7ebef);font-size:12px;line-height:1.6;"><strong style="color:var(--warning-color,#faad14);">P' + esc(m[1]) + '</strong> <span>' + esc(m[2]) + '</span></div>');
                         } else {
-                            rows.push('<div style="padding:6px 8px;border:1px solid var(--warning-border,#faad14);border-radius:6px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));color:var(--text-primary,#e8e8e8);font-size:12px;line-height:1.6;">' + esc(seg) + '</div>');
+                            rows.push('<div style="padding:6px 8px;border:1px solid var(--warning-border,#faad14);border-radius:6px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));color:var(--text-primary,#e7ebef);font-size:12px;line-height:1.6;">' + esc(seg) + '</div>');
                         }
                     });
                     rows.push('</div>');
                 } else if (raw) {
                     rows.push('<div><strong>违规时段：</strong>' + esc(raw) + '</div>');
                 }
-                return '<div style="margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));border:1px solid var(--warning-border,#faad14);color:var(--text-secondary,#a0a0a0);">' + rows.join('') + '</div>';
+                return '<div style="margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--warning-soft-bg-faint,rgba(250,173,20,0.08));border:1px solid var(--warning-border,#faad14);color:var(--text-secondary,#aab3bd);">' + rows.join('') + '</div>';
             };
             const buildPictureDataBlock = function(pictures) {
                 if (!Array.isArray(pictures) || pictures.length === 0) return '';
@@ -126,7 +126,7 @@
                         + 'style="display:block;text-decoration:none;color:inherit;border:1px solid var(--border-color,#3f3f46);border-radius:6px;overflow:hidden;background:var(--bg-primary,#18181b);">'
                         + '<img src="' + esc(proxyUrl) + '" alt="' + esc(title) + '" loading="lazy" '
                         + 'style="display:block;width:100%;height:96px;object-fit:cover;background:var(--bg-tertiary,#27272a);">'
-                        + '<div style="padding:5px 7px;font-size:12px;color:var(--text-secondary,#a0a0a0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+                        + '<div style="padding:5px 7px;font-size:12px;color:var(--text-secondary,#aab3bd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
                         + esc(title)
                         + '</div>'
                         + '</a>';
@@ -134,7 +134,7 @@
                 if (rows.length === 0) return '';
                 return ''
                     + '<div style="margin-top:8px;">'
-                    + '<div style="margin-bottom:6px;color:var(--text-secondary,#a0a0a0);font-size:12px;"><strong>违规画面：</strong>点击缩略图打开原图</div>'
+                    + '<div style="margin-bottom:6px;color:var(--text-secondary,#aab3bd);font-size:12px;"><strong>违规画面：</strong>点击缩略图打开原图</div>'
                     + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:8px;">'
                     + rows.join('')
                     + '</div>'
@@ -142,17 +142,17 @@
             };
             let html = '<div style="max-height:52vh;overflow:auto;line-height:1.7;">';
             if (this.auditRejectPrimaryDetails.length > 0) {
-                html += '<div style="margin-bottom:8px;color:var(--text-secondary,#a0a0a0);font-size:12px;">' + esc(detailLabel) + '：</div>';
+                html += '<div style="margin-bottom:8px;color:var(--text-secondary,#aab3bd);font-size:12px;">' + esc(detailLabel) + '：</div>';
                 html += '<ul style="margin:0;padding-left:18px;">';
                 this.auditRejectPrimaryDetails.forEach(item => {
                     html += '<li style="margin:8px 0;">';
-                    if (item.rejectReason) html += '<div style="color:var(--text-primary,#e8e8e8);"><strong>' + (this.isAuditLocked ? '锁定原因' : '退回原因') + '：</strong>' + esc(item.rejectReason) + '</div>';
-                    if (item.modifyAdvise) html += '<div style="color:var(--text-secondary,#a0a0a0);margin-top:2px;"><strong>修改建议：</strong>' + esc(item.modifyAdvise) + '</div>';
+                    if (item.rejectReason) html += '<div style="color:var(--text-primary,#e7ebef);"><strong>' + (this.isAuditLocked ? '锁定原因' : '退回原因') + '：</strong>' + esc(item.rejectReason) + '</div>';
+                    if (item.modifyAdvise) html += '<div style="color:var(--text-secondary,#aab3bd);margin-top:2px;"><strong>修改建议：</strong>' + esc(item.modifyAdvise) + '</div>';
                     html += buildViolationTimeBlock(item.violationPosition, item.violationTime);
                     html += buildPictureDataBlock(item.pictureData);
                     html += buildFoldableText(item.problemDescriptionTitle || '规则说明', item.problemDescription || '', 120);
                     if (item.type || item.rejectReasonId) {
-                        html += '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;margin-top:2px;">';
+                        html += '<div style="color:var(--text-secondary,#aab3bd);font-size:12px;margin-top:2px;">';
                         if (item.type) html += '分类：' + esc(item.type);
                         if (item.rejectReasonId) html += (item.type ? '；' : '') + '原因ID：' + esc(item.rejectReasonId);
                         html += '</div>';
@@ -165,8 +165,8 @@
                 html += '</ul>';
             }
             if (this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0) {
-                html += '<div style="margin:4px 0 8px;color:var(--text-secondary,#a0a0a0);">' + esc(emptyText) + '</div>';
-                html += '<div style="color:var(--text-secondary,#a0a0a0);font-size:12px;">可稍后重试，或确认投稿账号登录状态是否有效。</div>';
+                html += '<div style="margin:4px 0 8px;color:var(--text-secondary,#aab3bd);">' + esc(emptyText) + '</div>';
+                html += '<div style="color:var(--text-secondary,#aab3bd);font-size:12px;">可稍后重试，或确认投稿账号登录状态是否有效。</div>';
                 var dbg = this.auditRejectReviewDebug || {};
                 var dbgAuthSource = (dbg.authSource !== undefined && dbg.authSource !== null && String(dbg.authSource).trim() !== '') ? String(dbg.authSource) : '未知';
                 var dbgVideoCode = (dbg.videoPartInfoCode !== undefined && dbg.videoPartInfoCode !== null && String(dbg.videoPartInfoCode) !== '') ? String(dbg.videoPartInfoCode) : '-';
@@ -186,8 +186,8 @@
                 var dbgAuditRaw = (dbg.auditDetailRaw !== undefined && dbg.auditDetailRaw !== null) ? String(dbg.auditDetailRaw) : '';
                 var dbgAuthBlocked = (dbg.authBlocked === true);
                 var dbgAuthBlockedReason = (dbg.authBlockedReason !== undefined && dbg.authBlockedReason !== null && String(dbg.authBlockedReason).trim() !== '') ? String(dbg.authBlockedReason) : '';
-                html += '<div style="margin-top:10px;padding:8px 10px;background:var(--bg-tertiary,#27272a);border:1px solid var(--border-color,#3f3f46);border-radius:6px;color:var(--text-secondary,#a0a0a0);font-size:12px;line-height:1.7;">';
-                html += '<div style="color:var(--text-secondary,#a0a0a0);margin-bottom:2px;">Review 调试信息</div>';
+                html += '<div style="margin-top:10px;padding:8px 10px;background:var(--bg-tertiary,#27272a);border:1px solid var(--border-color,#3f3f46);border-radius:6px;color:var(--text-secondary,#aab3bd);font-size:12px;line-height:1.7;">';
+                html += '<div style="color:var(--text-secondary,#aab3bd);margin-bottom:2px;">Review 调试信息</div>';
                 html += '<div><strong>BV号：</strong>' + esc(dbgBvid) + '，<strong>有效：</strong>' + esc(dbgHasBvid) + '</div>';
                 html += '<div><strong>鉴权来源：</strong>' + esc(dbgAuthSource) + '</div>';
                 if (dbgAuthBlocked) {
@@ -199,20 +199,20 @@
                 html += '<div><strong>分P请求地址：</strong>' + esc(dbgPartRequestUrl) + '</div>';
                 html += '<div><strong>审核详情请求地址：</strong>' + esc(dbgAuditRequestUrl) + '</div>';
                 html += '<details style="margin-top:6px;">';
-                html += '<summary style="cursor:pointer;color:var(--primary-color,#7b8fff);font-weight:600;">打开调试响应（完整返回）</summary>';
+                html += '<summary style="cursor:pointer;color:var(--primary-color,#3578c7);font-weight:600;">打开调试响应（完整返回）</summary>';
                 html += '<div style="margin-top:6px;"><strong>请求标头模板：</strong></div>';
-                html += '<pre style="margin:4px 0 8px;max-height:120px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e8e8e8);">' + esc(dbgHeaderTemplate) + '</pre>';
+                html += '<pre style="margin:4px 0 8px;max-height:120px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e7ebef);">' + esc(dbgHeaderTemplate) + '</pre>';
                 html += '<div><strong>分P接口原始响应：</strong></div>';
-                html += '<pre style="margin:4px 0 8px;max-height:180px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e8e8e8);">' + esc(dbgPartRaw || '-空-') + '</pre>';
+                html += '<pre style="margin:4px 0 8px;max-height:180px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e7ebef);">' + esc(dbgPartRaw || '-空-') + '</pre>';
                 html += '<div><strong>审核详情接口原始响应：</strong></div>';
-                html += '<pre style="margin:4px 0 0;max-height:220px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e8e8e8);">' + esc(dbgAuditRaw || '-空-') + '</pre>';
+                html += '<pre style="margin:4px 0 0;max-height:220px;overflow:auto;background:var(--bg-primary,#18181b);border:1px solid var(--border-color,#3f3f46);border-radius:4px;padding:8px;white-space:pre-wrap;word-break:break-all;color:var(--text-primary,#e7ebef);">' + esc(dbgAuditRaw || '-空-') + '</pre>';
                 html += '</details>';
                 if (dbgVideoCode === '0' && dbgAuditCode === '0' && dbgDetailCount === '0') {
                     html += '<div style="margin-top:4px;color:var(--warning-color,#faad14);"><strong>结论：</strong>接口请求成功，但平台未返回可展示的退回文案。</div>';
                 }
                 html += '</div>';
             }
-            html += '<div style="margin-top:10px;color:var(--text-secondary,#a0a0a0);font-size:12px;">说明：以上内容用于排障参考，最终审核结论以B站后台为准。</div>';
+            html += '<div style="margin-top:10px;color:var(--text-secondary,#aab3bd);font-size:12px;">说明：以上内容用于排障参考，最终审核结论以B站后台为准。</div>';
             html += '</div>';
             if (this.auditRejectPrimaryDetails.length === 0 && this.auditRejectDetails.length === 0 && (this.isAuditRejected || this.isAuditLocked)) {
                 this.$pageConfirm(html, detailTitle, {

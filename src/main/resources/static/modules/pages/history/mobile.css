@@ -1,4 +1,4 @@
-/* Dedicated mobile history experience. Loaded only when the mobile history module is opened. */
+/* 移动端历史页面样式，打开历史页面时才会加载 */
 
 :root {
     --mobile-history-on-accent: var(--mobile-page-on-accent, #ffffff);
@@ -58,8 +58,8 @@
     border: 1px solid var(--mobile-page-border);
     background: var(--mobile-page-surface);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.28);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-history-hero {
@@ -118,7 +118,7 @@
     color: var(--text-secondary);
     background: color-mix(in srgb, var(--mobile-page-surface-strong) 76%, transparent);
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, border-color 180ms ease, background 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-icon-btn.is-active,
@@ -149,7 +149,7 @@
     color: var(--text-secondary);
     background: transparent;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-mode span {
@@ -207,7 +207,7 @@
     font-weight: 780;
     cursor: pointer;
     white-space: nowrap;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease, opacity 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple), opacity var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-quick button {
@@ -243,7 +243,7 @@
 .mobile-history-sheet-actions button.is-primary {
     border-color: transparent;
     color: var(--mobile-history-on-accent);
-    background: linear-gradient(135deg, var(--mobile-blue), var(--mobile-teal));
+    background: var(--btn-primary-bg);
     box-shadow: 0 14px 26px color-mix(in srgb, var(--mobile-blue) 20%, transparent);
 }
 
@@ -297,8 +297,11 @@
     overflow: hidden;
     cursor: pointer;
     transform-origin: center top;
-    animation: mobileHistoryCardIn 360ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
-    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
+    animation: mobileHistoryCardIn var(--duration-base) var(--ease-decel) both;
+    transition: transform var(--duration-selection) var(--ease-apple),
+        border-color var(--duration-selection) var(--ease-apple),
+        box-shadow var(--duration-selection) var(--ease-apple),
+        background-color var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-history-card::before {
@@ -324,7 +327,7 @@
 }
 
 .mobile-history-card.is-danger::before {
-    background: #f56c6c;
+    background: var(--danger-color);
 }
 
 .mobile-history-card:active,
@@ -432,15 +435,15 @@
 }
 
 .mobile-history-phase.is-warning {
-    color: #e6a23c;
-    background: color-mix(in srgb, #e6a23c 13%, var(--mobile-page-surface-strong));
-    border-color: color-mix(in srgb, #e6a23c 30%, var(--mobile-page-border));
+    color: var(--warning-color);
+    background: color-mix(in srgb, var(--warning-color) 13%, var(--mobile-page-surface-strong));
+    border-color: color-mix(in srgb, var(--warning-color) 30%, var(--mobile-page-border));
 }
 
 .mobile-history-phase.is-danger {
-    color: #f56c6c;
-    background: color-mix(in srgb, #f56c6c 12%, var(--mobile-page-surface-strong));
-    border-color: color-mix(in srgb, #f56c6c 30%, var(--mobile-page-border));
+    color: var(--danger-color);
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--mobile-page-surface-strong));
+    border-color: color-mix(in srgb, var(--danger-color) 30%, var(--mobile-page-border));
 }
 
 .mobile-history-subline {
@@ -488,15 +491,15 @@
 
 .mobile-history-pipeline span.warning,
 .mobile-history-pipeline span.is-warning {
-    color: #e6a23c;
-    background: color-mix(in srgb, #e6a23c 11%, var(--mobile-page-surface-strong));
-    border-color: color-mix(in srgb, #e6a23c 24%, var(--mobile-page-border));
+    color: var(--warning-color);
+    background: color-mix(in srgb, var(--warning-color) 11%, var(--mobile-page-surface-strong));
+    border-color: color-mix(in srgb, var(--warning-color) 24%, var(--mobile-page-border));
 }
 
 .mobile-history-pipeline span.danger {
-    color: #f56c6c;
-    background: color-mix(in srgb, #f56c6c 10%, var(--mobile-page-surface-strong));
-    border-color: color-mix(in srgb, #f56c6c 24%, var(--mobile-page-border));
+    color: var(--danger-color);
+    background: color-mix(in srgb, var(--danger-color) 10%, var(--mobile-page-surface-strong));
+    border-color: color-mix(in srgb, var(--danger-color) 24%, var(--mobile-page-border));
 }
 
 .mobile-history-progress-line {
@@ -539,7 +542,7 @@
     min-width: 3px;
     border-radius: inherit;
     background: linear-gradient(90deg, var(--mobile-blue), var(--mobile-teal));
-    transition: width 260ms ease;
+    transition: width var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-history-metrics,
@@ -567,13 +570,13 @@
 
 .mobile-history-alerts .is-private,
 .mobile-history-alerts .is-warning {
-    color: #e6a23c;
-    border-color: color-mix(in srgb, #e6a23c 26%, var(--mobile-page-border));
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 26%, var(--mobile-page-border));
 }
 
 .mobile-history-alerts .is-danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 28%, var(--mobile-page-border));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 28%, var(--mobile-page-border));
 }
 
 .mobile-history-select-mark {
@@ -590,7 +593,7 @@
     background: color-mix(in srgb, var(--mobile-page-surface-strong) 70%, transparent);
     opacity: 0;
     transform: scale(0.85);
-    transition: opacity 180ms ease, transform 180ms ease, color 180ms ease, background 180ms ease;
+    transition: opacity var(--duration-feedback) var(--ease-apple), transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-list.is-multi-select-mode .mobile-history-select-mark {
@@ -601,7 +604,7 @@
 
 .mobile-history-select-mark.is-on {
     color: var(--mobile-history-on-accent);
-    background: linear-gradient(135deg, var(--mobile-blue), var(--mobile-teal));
+    background: var(--btn-primary-bg);
     border-color: transparent;
 }
 
@@ -664,13 +667,13 @@
 }
 
 .mobile-history-batch-actions button.is-warning {
-    color: #e6a23c;
-    border-color: color-mix(in srgb, #e6a23c 32%, var(--mobile-page-border));
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 32%, var(--mobile-page-border));
 }
 
 .mobile-history-batch-actions button.is-danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 32%, var(--mobile-page-border));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 32%, var(--mobile-page-border));
 }
 
 .mobile-history-batch-maintenance {
@@ -822,8 +825,8 @@
 }
 
 .mobile-history-batch-footer button.is-danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 32%, var(--mobile-page-border));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 32%, var(--mobile-page-border));
 }
 
 .mobile-history-danger-dialog .batch-delete-options .el-checkbox {
@@ -860,7 +863,7 @@
 }
 
 .queue-cleanup-warning {
-    color: #e6a23c;
+    color: var(--warning-color);
 }
 
 .mobile-history-progress {
@@ -950,8 +953,8 @@
     inset: 0;
     z-index: 3000;
     background: rgba(0, 0, 0, 0.36);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-history-filter-sheet {
@@ -1055,8 +1058,8 @@
     background: var(--mobile-page-surface-strong);
     box-shadow: var(--mobile-page-shadow);
     overflow: hidden;
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.22);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.22);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-history-filter-popper.el-select-dropdown {

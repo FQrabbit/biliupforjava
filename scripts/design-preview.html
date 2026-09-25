@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>公共组件验收</title>
+<link rel="stylesheet" href="/css/element-ui.css">
+<link rel="stylesheet" href="/css/base/variables.css">
+<link rel="stylesheet" href="/css/base/reset.css">
+<link rel="stylesheet" href="/css/base/element-override.css">
+<link rel="stylesheet" href="/css/base/shared-components.css">
+<link rel="stylesheet" href="/css/base/dark-overrides.css">
+<link rel="stylesheet" href="/css/animations/transitions.css">
+<link rel="stylesheet" href="/css/base/design-system.css">
+<style>
+html, body { min-height: 100%; height: auto; overflow: auto; }
+body { background: var(--surface-page); color: var(--text-primary); }
+main { max-width: 960px; margin: auto; padding: 24px; display: grid; gap: 20px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.el-button + .el-button { margin-left: 0; }
+.fixture-stack { display: grid; gap: 12px; }
+.fixture-component-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fixture-component-grid > * { min-width: 0; }
+.fixture-alert-stack, .fixture-progress-stack { display: grid; gap: 8px; }
+.fixture-upload .el-upload-dragger { width: 100%; height: 132px; }
+.fixture-upload .el-icon-upload { margin: 24px 0 8px; }
+@media (max-width: 640px) { .fixture-component-grid { grid-template-columns: 1fr; } }
+.fixture-stats-surface { height: auto; padding: 12px; }
+.fixture-panel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px; }
+.fixture-room-dialog, .fixture-detail-dialog { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border-divider); border-radius: var(--radius-lg); }
+.fixture-room-dialog .config-card { border: 1px solid var(--border-divider); border-radius: var(--radius-md); overflow: hidden; }
+.fixture-room-dialog .card-body { padding: 10px; }
+.fixture-detail-dialog { position: relative; min-height: 90px; }
+.fixture-detail-dialog .action-group-secondary { position: static; min-width: 0; padding: 8px; }
+</style>
+</head>
+<body>
+<main id="app">
+  <h1>公共组件验收</h1>
+  <div class="row">
+    <el-button @click="theme = theme === 'light' ? 'dark' : 'light'; apply()">切换浅深主题</el-button>
+    <el-switch v-model="low" active-text="低特效" @change="apply"></el-switch>
+  </div>
+  <el-card>
+    <h2 slot="header">操作层级与状态</h2>
+    <div class="row">
+      <el-button class="modern-btn" type="primary" @click="dialog = true">打开弹窗</el-button>
+      <el-button class="modern-btn">次要操作</el-button>
+      <el-button class="modern-btn" type="primary" plain>描边操作</el-button>
+      <el-button class="modern-btn" type="danger">危险操作</el-button>
+      <el-button class="modern-btn" disabled>不可操作</el-button>
+      <el-button class="modern-btn" type="primary" loading>处理中</el-button>
+    </div>
+  </el-card>
+  <el-card>
+    <h2 slot="header">密度与状态</h2>
+    <div class="row">
+      <div class="table-density-switch" :class="{'is-compact': density === 'compact'}">
+        <label class="table-density-option"><input type="radio" value="comfortable" v-model="density"><span>舒适</span></label>
+        <label class="table-density-option"><input type="radio" value="compact" v-model="density"><span>紧凑</span></label>
+      </div>
+      <span class="status-chip success">已完成</span><span class="status-chip warn">待处理</span><span class="status-chip danger">失败</span>
+      <el-radio-group v-model="chart">
+        <el-radio-button label="hour">时段</el-radio-button>
+        <el-radio-button label="trend">变化趋势</el-radio-button>
+        <el-radio-button label="disabled" disabled>不可选</el-radio-button>
+      </el-radio-group>
+    </div>
+  </el-card>
+  <el-card>
+    <h2 slot="header">表单可读性</h2>
+    <el-form label-position="top">
+      <el-form-item label="任务名称"><el-input v-model="name" placeholder="请输入任务名称" clearable></el-input></el-form-item>
+      <el-form-item label="说明"><el-input type="textarea" :rows="3" placeholder="多行说明"></el-input></el-form-item>
+      <el-checkbox>保留现有配置</el-checkbox>
+    </el-form>
+  </el-card>
+  <el-card>
+    <h2 slot="header">状态、反馈与基础组件</h2>
+    <div class="fixture-component-grid">
+      <div class="fixture-alert-stack">
+        <el-alert title="普通提示使用实体浅底" type="info" :closable="false" show-icon></el-alert>
+        <el-alert title="保存后会继续处理队列" type="success" :closable="false" show-icon></el-alert>
+        <el-alert title="这是一条需要留意的提示" type="warning" :closable="false" show-icon></el-alert>
+        <el-alert title="操作失败，请查看日志" type="error" :closable="false" show-icon></el-alert>
+      </div>
+      <div class="fixture-progress-stack">
+        <el-progress :percentage="progress"></el-progress>
+        <el-progress :percentage="100" status="success"></el-progress>
+        <el-progress :percentage="42" status="exception"></el-progress>
+        <div class="row">
+          <el-switch v-model="enabled" active-color="var(--primary-color)" active-text="启用"></el-switch>
+          <el-input-number v-model="number" :min="0" :max="99" controls-position="right"></el-input-number>
+        </div>
+      </div>
+      <el-collapse v-model="collapse">
+        <el-collapse-item title="可展开的高级选项" name="advanced">
+          展开内容使用同一实体表面和边界，箭头只表达展开状态。
+        </el-collapse-item>
+      </el-collapse>
+      <el-tabs v-model="tab">
+        <el-tab-pane label="概览" name="overview">标签页指示器使用主色。</el-tab-pane>
+        <el-tab-pane label="详情" name="detail">禁用、悬停和内容层次保持一致。</el-tab-pane>
+      </el-tabs>
+      <div class="row">
+        <el-badge :value="3" type="primary"><el-button>待处理</el-button></el-badge>
+        <el-link type="primary" :underline="false">帮助链接</el-link>
+        <el-popconfirm title="确认执行这个操作？" confirm-button-text="确认" cancel-button-text="取消">
+          <el-button slot="reference">确认操作</el-button>
+        </el-popconfirm>
+      </div>
+      <el-upload class="fixture-upload" drag action="/__preview-upload" :show-file-list="false">
+        <i class="el-icon-upload"></i>
+        <div class="el-upload__text">拖入文件，或<em>点击选择</em></div>
+      </el-upload>
+      <el-empty description="暂无数据"></el-empty>
+      <el-result icon="success" title="无需验证" sub-title="结果页同样使用语义颜色"></el-result>
+      <el-divider content-position="center">分割线</el-divider>
+      <div class="row">
+        <el-button @click="notify('info')">消息提示</el-button>
+        <el-button @click="notify('success')" type="primary">成功消息</el-button>
+        <el-button @click="showLoading">加载遮罩</el-button>
+      </div>
+    </div>
+  </el-card>
+  <el-card>
+    <h2 slot="header">业务嵌套面板</h2>
+    <div class="fixture-stack">
+      <div class="stats-container fixture-stats-surface">
+        <section class="stats-panel fixture-panel">
+          <div class="publish-status-row"><span>已发布</span><strong>12</strong></div>
+          <div class="detail-metric"><span class="metric-label">本月弹幕</span><strong class="metric-value is-green">1,280</strong></div>
+          <div class="diagnostic-icon"><i class="el-icon-warning-outline"></i></div>
+        </section>
+      </div>
+      <div class="room-config-dialog fixture-room-dialog">
+        <div class="dialog-header-modern"><span class="header-icon-box"><i class="el-icon-setting"></i></span>房间配置</div>
+        <div class="config-card"><div class="card-header">基础信息</div><div class="card-body"><div class="switch-card">自动录制</div></div></div>
+        <div class="notification-migration-notice">通知迁移提示</div>
+      </div>
+      <div class="detail-dialog fixture-detail-dialog">
+        <div class="detail-content-modern"><div class="detail-status-bar">状态流程</div><div class="stat-card">单场数据</div></div>
+        <div class="action-group-secondary">更多操作</div>
+      </div>
+    </div>
+  </el-card>
+  <el-dialog title="设置与确认" :visible.sync="dialog" width="520px" append-to-body>
+    <p>弹窗使用不透明表面；关闭后应返回触发按钮。</p>
+    <el-input placeholder="检查键盘焦点与手机尺寸"></el-input>
+    <span slot="footer"><el-button @click="dialog = false">取消</el-button><el-button type="primary" @click="dialog = false">确定</el-button></span>
+  </el-dialog>
+</main>
+<script src="/js/vue.min.js"></script><script src="/js/element-ui.js"></script>
+<script src="/js/theme-tokens.js"></script>
+<script src="/js/components/capsule-enhancer.js"></script>
+<script src="/js/components/focus-return.js"></script>
+<script>
+new Vue({
+  el: '#app',
+  data: {theme: 'light', low: false, density: 'comfortable', chart: 'hour', name: '', dialog: false, progress: 68, enabled: true, number: 3, collapse: [], tab: 'overview'},
+  mounted: function () { this.apply(); },
+  methods: {
+    apply: function () {
+      ThemeTokens.applyToDocument(document, this.theme, 'ocean');
+      document.documentElement.classList.toggle('low-effects', this.low);
+    },
+    notify: function (type) {
+      this.$message({ message: type === 'success' ? '操作已完成' : '这是一个提示', type: type });
+    },
+    showLoading: function () {
+      var loading = this.$loading({ fullscreen: true, text: '加载中' });
+      window.setTimeout(function () { loading.close(); }, 700);
+    }
+  }
+});
+</script>
+</body>
+</html>

@@ -50,7 +50,7 @@
     justify-content: space-between;
     gap: 18px;
     padding: 14px 16px;
-    background: rgba(230, 162, 60, 0.08);
+    background: var(--warning-soft-bg-faint);
     border-left: 3px solid var(--warning-color);
 }
 
@@ -109,12 +109,12 @@
 
 .storage-root-status.is-online {
     color: var(--success-color);
-    border-color: rgba(103, 194, 58, 0.4);
+    border-color: var(--success-border);
 }
 
 .storage-root-status.is-warning {
     color: var(--warning-color);
-    border-color: rgba(230, 162, 60, 0.45);
+    border-color: var(--warning-border-strong);
 }
 
 @media (max-width: 760px) {

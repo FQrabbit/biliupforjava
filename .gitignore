@@ -1,6 +1,9 @@
 local-dev-proxy/
 node_modules/
 
+# Local development notes
+/Doc/dev-notes/
+
 # Maven
 target/
 

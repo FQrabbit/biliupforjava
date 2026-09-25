@@ -51,7 +51,7 @@
 .module-load-placeholder i,
 .module-load-error > i {
     font-size: 28px;
-    color: var(--primary-color, #409eff);
+    color: var(--primary-color, #3578c7);
 }
 
 .module-load-error h3,
@@ -65,13 +65,13 @@
     border: 0;
     border-radius: 8px;
     padding: 0 18px;
-    background: var(--primary-color, #409eff);
+    background: var(--primary-color, #3578c7);
     color: #fff;
     cursor: pointer;
 }
 
 .module-load-error button:focus-visible {
-    outline: 3px solid color-mix(in srgb, var(--primary-color, #409eff) 35%, transparent);
+    outline: 3px solid color-mix(in srgb, var(--primary-color, #3578c7) 35%, transparent);
     outline-offset: 2px;
 }
 

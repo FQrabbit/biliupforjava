@@ -26,6 +26,9 @@ function loadPageFactory(relativePath, globals) {
         setTimeout,
         clearTimeout
     }, globals || {});
+    vm.runInNewContext(read('js/components/table-preferences.js'), context, {
+        filename: 'js/components/table-preferences.js'
+    });
     vm.runInNewContext(read(relativePath), context, { filename: relativePath });
     assert.strictEqual(typeof factory, 'function', `${relativePath} must register a factory`);
     return factory;
@@ -35,6 +38,12 @@ function loadWindowModule(relativePath, globals) {
     const windowObject = {};
     const context = Object.assign({
         window: windowObject,
+        document: {
+            hidden: false,
+            addEventListener() {},
+            removeEventListener() {},
+            documentElement: { style: { setProperty() {}, removeProperty() {} } }
+        },
         console,
         CustomEvent: function (type, options) {
             this.type = type;

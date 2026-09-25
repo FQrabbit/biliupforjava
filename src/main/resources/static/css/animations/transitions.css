@@ -23,11 +23,11 @@
     100% { transform: rotate(360deg); }
 }
 
-/* ========== 卡片交错入场动画 ========== */
+/* ========== 卡片入场：短距离，避免列表刷新产生大幅跳动 ========== */
 @keyframes card-stagger-in {
     from {
         opacity: 0;
-        transform: translateY(16px);
+        transform: translateY(4px);
     }
     to {
         opacity: 1;
@@ -37,7 +37,8 @@
 
 .room-card[data-stagger],
 .data-card[data-stagger] {
-    animation: card-stagger-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: card-stagger-in var(--duration-base) var(--ease-decel) both;
+    animation-delay: 0s !important;
 }
 
 /* ========== 骨架屏加载动画 ========== */
@@ -153,7 +154,7 @@
     border-color: var(--border-color);
 }
 
-/* ========== 统一对话框入退场动画 (Apple sheet 风格) ========== */
+/* ========== 苹果风格弹层的入场和退场动画 ========== */
 .dialog-fade-enter-active {
     animation: dialog-apple-in var(--duration-slow) var(--ease-modal) both !important;
 }
@@ -174,7 +175,7 @@
     transition: opacity var(--duration-base) var(--ease-apple) !important;
 }
 
-/* ========== Vue 过渡：fade-slide (Tab 标签页切换) ========== */
+/* ========== Vue 过渡：淡入滑动切换标签页 ========== */
 
 /* 入场：留在正常文档流，苹果减速曲线 */
 .fade-slide-enter-active {
@@ -218,7 +219,7 @@
     transform: scale(1);
 }
 
-/* ========== Vue 过渡：fade-transform (左右滑动切换) ========== */
+/* ========== Vue 过渡：淡入淡出并左右滑动 ========== */
 .fade-transform-enter-active {
     transition: opacity var(--duration-base) var(--ease-decel),
                 transform var(--duration-base) var(--ease-decel);
@@ -239,7 +240,7 @@
     transform: translateX(8px);
 }
 
-/* ========== Vue 过渡：slide-left / slide-right (翻页效果) ========== */
+/* ========== Vue 过渡：左右滑动翻页 ========== */
 .slide-left-enter-active,
 .slide-right-enter-active {
     transition: opacity var(--duration-base) var(--ease-decel),
@@ -270,15 +271,15 @@
     transform: translateX(20px);
 }
 
-/* ========== Vue 过渡：count-flip (数字翻转效果) ========== */
+/* ========== Vue 过渡：数字翻转 ========== */
 .count-flip-enter-active {
     transition: opacity var(--duration-fast) var(--ease-decel),
                 transform var(--duration-fast) var(--ease-spring);
 }
 
 .count-flip-leave-active {
-    transition: opacity 0.15s var(--ease-accel),
-                transform 0.15s var(--ease-accel);
+    transition: opacity var(--duration-feedback) var(--ease-accel),
+                transform var(--duration-feedback) var(--ease-accel);
 }
 
 .count-flip-enter {
@@ -291,7 +292,7 @@
     transform: translateY(6px) scale(0.95);
 }
 
-/* ========== 侧滑提示 (Swipe Hint) ========== */
+/* ========== 侧滑提示 ========== */
 .swipe-hint {
     background: var(--overlay-color);
     color: var(--text-inverse);
@@ -402,7 +403,7 @@ html.theme-transitioning .fade-leave-active {
     }
 }
 
-/* 呼吸动画 — 比 pulse 更柔和 */
+/* 呼吸动画，比常规脉动更柔和 */
 @keyframes breathe {
     0%, 100% {
         opacity: 0.6;
@@ -414,7 +415,7 @@ html.theme-transitioning .fade-leave-active {
     }
 }
 
-/* 反向 shimmer — 从右向左的光泽扫过 */
+/* 反向闪光，从右向左扫过 */
 @keyframes shimmer-reverse {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }

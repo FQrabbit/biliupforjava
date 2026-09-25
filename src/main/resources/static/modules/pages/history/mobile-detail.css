@@ -6,10 +6,8 @@
     margin: 0 !important;
     border: 0;
     border-radius: 0;
-    background:
-        linear-gradient(160deg, color-mix(in srgb, var(--mobile-blue) 10%, transparent), transparent 34%),
-        linear-gradient(30deg, color-mix(in srgb, var(--mobile-teal) 10%, transparent), transparent 42%),
-        var(--bg-primary);
+    background: var(--bg-primary);
+    background-image: none;
     box-shadow: none;
     overflow: hidden;
 }
@@ -66,8 +64,8 @@
     border: 1px solid var(--mobile-page-border);
     background: var(--mobile-page-surface);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-history-detail-hero {
@@ -132,7 +130,7 @@
     font-size: 13px;
     font-weight: 800;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-detail-hero button {
@@ -302,15 +300,15 @@
 
 .mobile-history-detail-pipeline .warning,
 .mobile-history-detail-pipeline .is-warning {
-    color: #e6a23c;
-    border-color: color-mix(in srgb, #e6a23c 28%, var(--mobile-page-border));
-    background: color-mix(in srgb, #e6a23c 11%, var(--mobile-page-surface-strong));
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 28%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--warning-color) 11%, var(--mobile-page-surface-strong));
 }
 
 .mobile-history-detail-pipeline .danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 28%, var(--mobile-page-border));
-    background: color-mix(in srgb, #f56c6c 10%, var(--mobile-page-surface-strong));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 28%, var(--mobile-page-border));
+    background: color-mix(in srgb, var(--danger-color) 10%, var(--mobile-page-surface-strong));
 }
 
 .mobile-history-detail-pipeline .is-clickable {
@@ -377,7 +375,7 @@
     cursor: pointer;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-history-detail-stat-button.is-danmaku {
@@ -424,13 +422,13 @@
 }
 
 .mobile-history-detail-alerts .is-warning {
-    color: #e6a23c;
-    border-color: color-mix(in srgb, #e6a23c 30%, var(--mobile-page-border));
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 30%, var(--mobile-page-border));
 }
 
 .mobile-history-detail-alerts .is-danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 30%, var(--mobile-page-border));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 30%, var(--mobile-page-border));
 }
 
 .mobile-history-detail-upload,
@@ -472,7 +470,7 @@
     min-width: 3px;
     border-radius: inherit;
     background: linear-gradient(90deg, var(--mobile-blue), var(--mobile-teal));
-    transition: width 260ms ease;
+    transition: width var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-history-detail-hint {
@@ -489,8 +487,8 @@
 }
 
 .mobile-history-detail-hint.is-warning {
-    color: #e6a23c;
-    background: color-mix(in srgb, #e6a23c 11%, var(--mobile-page-surface-strong));
+    color: var(--warning-color);
+    background: color-mix(in srgb, var(--warning-color) 11%, var(--mobile-page-surface-strong));
 }
 
 .mobile-history-upload-speed {
@@ -531,8 +529,8 @@
 
 .mobile-history-detail-inline-actions button.is-warning,
 .mobile-history-detail-part-actions button.is-warning {
-    color: #e6a23c;
-    border-color: color-mix(in srgb, #e6a23c 30%, var(--mobile-page-border));
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 30%, var(--mobile-page-border));
 }
 
 .mobile-history-detail-inline-actions button.is-success,
@@ -542,8 +540,8 @@
 }
 
 .mobile-history-detail-part-actions button.is-danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 30%, var(--mobile-page-border));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 30%, var(--mobile-page-border));
 }
 
 .mobile-history-detail-section-toggle {
@@ -625,8 +623,8 @@
     padding: 8px 12px calc(10px + var(--mobile-page-safe-bottom));
     border-top: 1px solid var(--mobile-page-border);
     background: color-mix(in srgb, var(--mobile-page-surface-strong) 92%, transparent);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-history-detail-dialog .detail-footer-actions {
@@ -667,8 +665,8 @@
     border-radius: 24px;
     background: var(--mobile-page-surface-strong);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-history-detail-dialog .action-sub-group {
@@ -714,8 +712,8 @@
     border: 1px solid var(--mobile-page-border);
     background: var(--mobile-page-surface);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-edit-parts-hero {
@@ -774,7 +772,7 @@
     font-size: 13px;
     font-weight: 820;
     cursor: pointer;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-edit-parts-hero button {
@@ -805,8 +803,8 @@
     border-radius: 22px;
     background: color-mix(in srgb, var(--mobile-page-surface-strong) 94%, transparent);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-edit-parts-command-bar > div:first-child {
@@ -849,7 +847,7 @@
     background: color-mix(in srgb, var(--mobile-page-surface) 76%, transparent);
     font-size: 13px;
     font-weight: 820;
-    transition: transform 180ms ease, color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: transform var(--duration-feedback) var(--ease-apple), color var(--duration-feedback) var(--ease-apple), background var(--duration-feedback) var(--ease-apple), border-color var(--duration-feedback) var(--ease-apple);
 }
 
 .mobile-edit-parts-command-bar button:active {
@@ -1041,13 +1039,13 @@
 }
 
 .mobile-edit-part-actions button.is-warning {
-    color: #e6a23c;
-    border-color: color-mix(in srgb, #e6a23c 32%, var(--mobile-page-border));
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 32%, var(--mobile-page-border));
 }
 
 .mobile-edit-part-actions button.is-danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 32%, var(--mobile-page-border));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 32%, var(--mobile-page-border));
 }
 
 @media (max-width: 380px) {
@@ -1086,8 +1084,8 @@
     inset: 0;
     z-index: 3000;
     background: color-mix(in srgb, var(--bg-primary) 48%, transparent);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-history-detail-actions-sheet {
@@ -1105,8 +1103,8 @@
     border-radius: 28px;
     background: var(--mobile-page-surface-strong);
     box-shadow: var(--mobile-page-shadow);
-    backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
-    -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     -webkit-overflow-scrolling: touch;
 }
 
@@ -1174,8 +1172,8 @@
 }
 
 .mobile-history-detail-actions-sheet button.is-warning {
-    color: #e6a23c;
-    border-color: color-mix(in srgb, #e6a23c 32%, var(--mobile-page-border));
+    color: var(--warning-color);
+    border-color: color-mix(in srgb, var(--warning-color) 32%, var(--mobile-page-border));
 }
 
 .mobile-history-detail-actions-sheet button.is-success {
@@ -1184,13 +1182,14 @@
 }
 
 .mobile-history-detail-actions-sheet button.is-danger {
-    color: #f56c6c;
-    border-color: color-mix(in srgb, #f56c6c 32%, var(--mobile-page-border));
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 32%, var(--mobile-page-border));
 }
 
 .mobile-history-actions-enter-active,
 .mobile-history-actions-leave-active {
-    transition: opacity 220ms ease, transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-overlay) var(--ease-decel),
+        transform var(--duration-overlay) var(--ease-modal);
 }
 
 .mobile-history-actions-enter,
@@ -1210,10 +1209,8 @@
         margin: 0 !important;
         border: 0;
         border-radius: 0;
-        background:
-            linear-gradient(160deg, color-mix(in srgb, var(--mobile-blue) 10%, transparent), transparent 34%),
-            linear-gradient(30deg, color-mix(in srgb, var(--mobile-teal) 10%, transparent), transparent 42%),
-            var(--bg-primary);
+        background: var(--bg-primary);
+        background-image: none;
         overflow: hidden;
     }
 
@@ -1234,8 +1231,8 @@
         border-radius: 28px;
         background: var(--mobile-page-surface-strong);
         box-shadow: var(--mobile-page-shadow);
-        backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
-        -webkit-backdrop-filter: blur(var(--mobile-page-blur)) saturate(1.25);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
         overflow: hidden;
     }
 
@@ -1653,7 +1650,7 @@
     .mobile-history-delete-warning i {
         flex: 0 0 auto;
         margin-top: 2px;
-        color: #e6a23c;
+        color: var(--warning-color);
         font-size: 22px;
         line-height: 1;
     }
@@ -1682,7 +1679,7 @@
 
     .mobile-history-delete-danger {
         margin-top: 8px;
-        color: #f56c6c;
+        color: var(--danger-color);
         font-size: 13px;
         line-height: 1.45;
         overflow-wrap: anywhere;

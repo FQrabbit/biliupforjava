@@ -50,15 +50,15 @@
 
 .detail-card:hover {
 
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
 
-    transform: translateY(-2px);
+    transform: none;
 
 }
 
 [data-theme="dark"] .detail-card:hover {
 
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -74,7 +74,7 @@
 
     padding: 10px 16px;
 
-    background: linear-gradient(135deg, var(--brand-soft-bg), var(--brand-soft-bg-faint));
+    background: var(--bg-tertiary);
 
     border-bottom: 1px solid var(--border-light);
 
@@ -96,7 +96,7 @@
 
 [data-theme="dark"] .detail-card-header {
 
-    background: linear-gradient(135deg, var(--brand-soft-bg-strong), var(--brand-soft-bg));
+    background: var(--bg-tertiary);
 
 }
 
@@ -280,7 +280,7 @@
 
 .detail-status-item:hover {
 
-    transform: translateY(-2px);
+    transform: none;
 
     box-shadow: var(--shadow-sm);
 
@@ -324,7 +324,7 @@
 
 .detail-status-icon.streaming {
 
-    background: linear-gradient(135deg, var(--danger-soft-bg-strong), var(--warning-soft-bg));
+    background: var(--danger-soft-bg);
 
     color: var(--danger-hot);
 
@@ -338,7 +338,7 @@
 
 .detail-status-icon.recording {
 
-    background: linear-gradient(135deg, var(--success-soft-bg-strong), var(--success-soft-bg));
+    background: var(--success-soft-bg);
 
     color: var(--success-color);
 
@@ -352,7 +352,7 @@
 
 .detail-status-icon.upload {
 
-    background: linear-gradient(135deg, var(--brand-soft-bg-strong), var(--brand-soft-bg));
+    background: var(--brand-soft-bg);
 
     color: var(--primary-color);
 
@@ -360,7 +360,7 @@
 
 .detail-status-icon.danmaku {
 
-    background: linear-gradient(135deg, var(--brand-soft-bg), var(--brand-soft-bg-faint));
+    background: var(--brand-soft-bg-faint);
 
     color: var(--primary-color);
 

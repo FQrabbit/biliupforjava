@@ -18,9 +18,9 @@
 
     background: var(--bg-primary);
 
-    backdrop-filter: blur(12px);
+    backdrop-filter: none;
 
-    -webkit-backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: none;
 
     border-radius: var(--radius-lg);
 
@@ -36,13 +36,7 @@
 
 }
 
-.user-header:hover {
-
-    box-shadow: var(--shadow-md);
-
-    transform: translateY(-2px);
-
-}
+.user-header:hover { box-shadow: var(--shadow-sm); }
 
 [data-theme="dark"] .user-header {
 
@@ -114,7 +108,7 @@
 
 .user-header:hover .user-stat-item {
 
-    transform: translateY(-2px);
+    transform: none;
 
 }
 
@@ -152,7 +146,9 @@
 
 .login-btn {
 
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark)) !important;
+    background: var(--btn-primary-bg) !important;
+
+    background-image: none !important;
 
     border: none !important;
 
@@ -160,9 +156,9 @@
 
     font-size: 15px !important;
 
-    border-radius: var(--radius-md) !important;
+    border-radius: var(--radius-pill) !important;
 
-    box-shadow: var(--brand-shadow-md);
+    box-shadow: var(--shadow-sm);
 
     transition: transform var(--transition-base), box-shadow var(--transition-base) !important;
 
@@ -170,9 +166,10 @@
 
 .login-btn:hover {
 
-    transform: translateY(-2px);
+    transform: none;
 
-    box-shadow: var(--brand-shadow-lg);
+    background: var(--btn-primary-bg-hover) !important;
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -216,9 +213,9 @@
 
 .user-card:hover {
 
-    transform: translateY(-6px);
+    transform: none;
 
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-sm);
 
     border-color: var(--primary-light);
 
@@ -226,7 +223,7 @@
 
 .user-card:active {
 
-    transform: translateY(-3px) scale(0.985);
+    transform: scale(0.985);
 
 }
 
@@ -246,7 +243,8 @@
 
     height: 4px;
 
-    background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+    background: var(--primary-color);
+    background-image: none;
 
     opacity: 0;
 
@@ -264,21 +262,16 @@
 
 .user-card.is-active {
 
-    border-color: var(--success-glow-strong);
+    border-color: var(--success-border);
 
-    box-shadow:
-
-        var(--shadow-sm),
-
-        0 0 20px var(--success-glow),
-
-        inset 0 1px 0 var(--success-soft-bg);
+    box-shadow: var(--shadow-sm);
 
 }
 
 .user-card.is-active::before {
 
-    background: linear-gradient(90deg, var(--success-color), var(--success-light));
+    background: var(--success-color);
+    background-image: none;
 
     opacity: 1;
 
@@ -288,11 +281,7 @@
 
     border-color: var(--success-border);
 
-    box-shadow:
-
-        var(--shadow-md),
-
-        0 0 30px var(--success-glow-strong);
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -300,19 +289,16 @@
 
 .user-card.is-warning {
 
-    border-color: var(--danger-shadow-strong);
+    border-color: var(--danger-border);
 
-    box-shadow:
-
-        var(--shadow-sm),
-
-        0 0 15px var(--danger-shadow-soft);
+    box-shadow: var(--shadow-sm);
 
 }
 
 .user-card.is-warning::before {
 
-    background: linear-gradient(90deg, var(--danger-color), var(--danger-light));
+    background: var(--danger-color);
+    background-image: none;
 
     opacity: 1;
 
@@ -322,11 +308,7 @@
 
     border-color: var(--danger-border);
 
-    box-shadow:
-
-        var(--shadow-md),
-
-        0 0 25px var(--danger-shadow);
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -334,9 +316,10 @@
 
 .user-card.is-warning .user-avatar {
 
-    background: linear-gradient(135deg, var(--danger-color), var(--danger-light));
+    background: var(--danger-color);
+    background-image: none;
 
-    box-shadow: 0 4px 12px var(--danger-shadow-strong);
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -344,9 +327,10 @@
 
 .user-card.is-active .user-avatar {
 
-    background: linear-gradient(135deg, var(--success-color), var(--success-light));
+    background: var(--success-color);
+    background-image: none;
 
-    box-shadow: 0 4px 12px var(--success-glow-strong);
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -362,7 +346,8 @@
 
     border-bottom: 1px solid var(--border-light);
 
-    background: linear-gradient(to bottom, var(--bg-primary), var(--bg-secondary));
+    background: var(--surface-content);
+    background-image: none;
 
 }
 
@@ -374,7 +359,8 @@
 
     border-radius: 50%;
 
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    background: var(--primary-color);
+    background-image: none;
 
     display: flex;
 
@@ -390,7 +376,7 @@
 
     flex-shrink: 0;
 
-    box-shadow: var(--brand-shadow-md);
+    box-shadow: var(--shadow-sm);
 
     overflow: hidden;
 
@@ -714,15 +700,16 @@
 
 [data-theme="dark"] .user-card {
 
-    background: var(--glass-bg);
+    background: var(--bg-tertiary);
+    background-image: none;
 
-    border-color: var(--glass-border);
+    border-color: var(--border-color);
 
 }
 
 [data-theme="dark"] .user-card:hover {
 
-    background: var(--glass-border);
+    background: var(--bg-tertiary);
 
     border-color: var(--brand-accent-border);
 
@@ -730,47 +717,45 @@
 
 [data-theme="dark"] .user-card.is-active {
 
-    background: var(--success-soft-bg-faint);
+    background: var(--bg-tertiary);
+    background-image: none;
 
     border-color: var(--success-border);
 
-    box-shadow:
-
-        0 0 25px var(--success-glow),
-
-        inset 0 1px 0 var(--success-soft-bg);
+    box-shadow: var(--shadow-sm);
 
 }
 
 [data-theme="dark"] .user-card.is-active:hover {
 
-    background: var(--success-soft-bg);
-
-    box-shadow: 0 0 35px var(--success-glow-strong);
+    background: var(--bg-tertiary);
+    box-shadow: var(--shadow-sm);
 
 }
 
 [data-theme="dark"] .user-card.is-warning {
 
-    background: var(--danger-soft-bg-faint);
+    background: var(--bg-tertiary);
+    background-image: none;
 
     border-color: var(--danger-border-strong);
 
-    box-shadow: 0 0 20px var(--danger-shadow-soft);
+    box-shadow: var(--shadow-sm);
 
 }
 
 [data-theme="dark"] .user-card.is-warning:hover {
 
-    background: var(--danger-soft-bg);
+    background: var(--bg-tertiary);
 
-    box-shadow: 0 0 30px var(--danger-shadow);
+    box-shadow: var(--shadow-sm);
 
 }
 
 [data-theme="dark"] .user-card-header {
 
-    background: linear-gradient(to bottom, var(--glass-border), transparent);
+    background: var(--bg-tertiary);
+    background-image: none;
 
 }
 
@@ -861,8 +846,8 @@
 .brec-sync-result-code {
     font-size: 12px;
     font-weight: 600;
-    color: #f56c6c;
-    border: 1px solid rgba(245, 108, 108, 0.4);
+    color: var(--danger-color);
+    border: 1px solid color-mix(in srgb, var(--danger-color) 40%, var(--border-control));
     border-radius: 8px;
     padding: 1px 7px;
 }

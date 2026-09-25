@@ -236,10 +236,55 @@
 
         <!-- 表格视图 -->
         <div v-else class="room-table-wrapper" key="table">
-        <el-table :data="filteredTableData" border style="width: 100%">
+            <div class="readable-table-toolbar">
+                <span class="readable-table-hint">左侧展开可查看完整信息</span>
+                <div class="readable-table-controls">
+                    <div v-if="tableOverflowX" class="readable-table-scroll-tools">
+                        <span class="readable-table-hint">左右查看更多列</span>
+                        <button type="button" :disabled="tableAtLeft" @click="scrollOverviewTable(-1)" aria-label="表格向左滚动"><i class="el-icon-arrow-left" aria-hidden="true"></i></button>
+                        <button type="button" :disabled="tableAtRight" @click="scrollOverviewTable(1)" aria-label="表格向右滚动"><i class="el-icon-arrow-right" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="table-density-switch" :class="{ 'is-compact': tablePreferences.density === 'compact' }" role="radiogroup" aria-label="表格行密度">
+                        <label class="table-density-option">
+                            <input type="radio" name="room-table-density" value="comfortable" v-model="tablePreferences.density">
+                            <span>舒适</span>
+                        </label>
+                        <label class="table-density-option">
+                            <input type="radio" name="room-table-density" value="compact" v-model="tablePreferences.density">
+                            <span>紧凑</span>
+                        </label>
+                    </div>
+                    <el-popover placement="bottom-end" trigger="click" width="240" popper-class="readable-table-column-picker">
+                        <div class="readable-table-picker-title">显示列</div>
+                        <p class="readable-table-hint">直播间和操作列始终显示</p>
+                        <el-checkbox-group v-model="tablePreferences.columns">
+                            <el-checkbox v-for="column in tableColumnOptions" :key="column.value" :label="column.value">{{ column.label }}</el-checkbox>
+                        </el-checkbox-group>
+                        <el-button type="text" size="mini" @click="resetTablePreferences">恢复默认布局</el-button>
+                        <el-button slot="reference" size="mini" icon="el-icon-setting">显示列</el-button>
+                    </el-popover>
+                </div>
+            </div>
+        <el-table :data="filteredTableData" class="readable-table" ref="overviewTable" :class="{ 'is-compact': tablePreferences.density === 'compact' }" row-key="id" :max-height="Math.max(180, tableMaxHeight - 64)" style="width: 100%">
             <el-table-column type="expand">
                 <template slot-scope="props">
-                    <el-form class="demo-table-expand" inline label-position="left">
+                    <el-form class="demo-table-expand readable-table-room-details table-detail-reveal" inline label-position="left">
+                        <el-form-item label="完整标题"><span>{{ maskText(props.row.title) || '—' }}</span></el-form-item>
+                        <el-form-item label="房间号"><span class="readable-table-copy-line">{{ maskText(props.row.roomId) }}<button type="button" class="readable-table-copy" @click="copyTableValue(maskText(props.row.roomId))" aria-label="复制显示的房间号">复制</button></span></el-form-item>
+                        <el-form-item label="文件后处理">
+                    <span v-if="props.row.deleteType == 0">不删除</span>
+                    <span v-if="props.row.deleteType == 1">上传完成后删除</span>
+                    <span v-if="props.row.deleteType == 2">审核通过后删除</span>
+                    <span v-if="props.row.deleteType == 3">{{props.row.deleteDay}}天后删除</span>
+                    <span v-if="props.row.deleteType == 4">上传完成后移动到{{props.row.moveDir}}</span>
+                    <span v-if="props.row.deleteType == 5">审核通过后移动到{{props.row.moveDir}}</span>
+                    <span v-if="props.row.deleteType == 6">录制结束后移动到{{props.row.moveDir}}</span>
+                    <span v-if="props.row.deleteType == 7">录制结束后复制到{{props.row.moveDir}}</span>
+                    <span v-if="props.row.deleteType == 8">{{props.row.deleteDay}}天后移动到{{props.row.moveDir}}</span>
+                    <span v-if="props.row.deleteType == 9">投稿成功后删除</span>
+                    <span v-if="props.row.deleteType == 10">投稿成功后移动到{{props.row.moveDir}}</span>
+                    <span v-if="props.row.deleteType == 11">审核通过后复制到{{props.row.moveDir}}</span>
+                </el-form-item>
                         <el-form-item label="投稿分区id">
                             <span>{{ props.row.tid }}</span>
                         </el-form-item>
@@ -283,47 +328,18 @@
                     </el-form>
                 </template>
             </el-table-column>
-            <el-table-column label="直播间" min-width="120">
-                <template slot-scope="scope">{{ maskText(scope.row.roomId) }}</template>
-            </el-table-column>
-            <el-table-column label="主播" min-width="100">
-                <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
-            </el-table-column>
-            <el-table-column label="标题" min-width="150">
-                <template slot-scope="scope">{{ maskText(scope.row.title) }}</template>
-            </el-table-column>
-            <el-table-column id="copyright" label="是否自制" prop="copyright" width="120">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.copyright==1"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="scope.row.copyright==2"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column label="直播中" prop="streaming" width="100">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.streaming"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.streaming"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column label="录制中" prop="recording" width="100">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.recording"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.recording"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column label="是否上传" prop="recording" width="120">
-                <template slot-scope="scope">
-                    <el-button circle class="el-icon-check" type="success" v-if="scope.row.upload"></el-button>
-                    <el-button circle class="el-icon-close" type="danger" v-if="!scope.row.upload"></el-button>
-                </template>
-            </el-table-column>
-            <el-table-column prop="sendDm" width="200">
+                    <el-table-column label="直播间" min-width="180"><template slot-scope="scope"><div class="readable-table-title">{{ maskText(scope.row.uname) || '—' }}</div><div class="readable-table-meta">房间 {{ maskText(scope.row.roomId) }} · {{ scope.row.copyright == 1 ? '自制' : '转载' }}</div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('title')" key="title" label="标题" min-width="240"><template slot-scope="scope"><div class="readable-table-title" :title="maskText(scope.row.title)">{{ maskText(scope.row.title) || '—' }}</div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('status')" key="status" label="直播 / 录制" width="150"><template slot-scope="scope"><div class="readable-table-tags"><el-tag size="mini" :type="scope.row.streaming ? 'success' : 'info'">{{ scope.row.streaming ? '直播中' : '未直播' }}</el-tag><el-tag size="mini" :type="scope.row.recording ? 'warning' : 'info'">{{ scope.row.recording ? '录制中' : '未录制' }}</el-tag></div></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('upload')" key="upload" label="自动上传" width="100"><template slot-scope="scope"><el-tag size="mini" :type="scope.row.upload ? 'success' : 'info'">{{ scope.row.upload ? '开启' : '关闭' }}</el-tag></template></el-table-column>
+            <el-table-column v-if="tableColumnVisible('danmaku')" key="danmaku" prop="sendDm" width="110">
                 <template slot="header" slot-scope="scope">
                     <span>普通弹幕</span>
                     <el-tooltip popper-class="room-page-popper" effect="dark" placement="top">
                         <div slot="content">
                             房间级开关；控制投稿后普通弹幕任务是否执行。此列为状态展示，需点击“编辑”在配置中修改。
                         </div>
-                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                     </el-tooltip>
                 </template>
                 <template slot-scope="scope">
@@ -332,14 +348,14 @@
                     </el-tag>
                 </template>
             </el-table-column>
-            <el-table-column prop="sendSc" width="260">
+            <el-table-column v-if="tableColumnVisible('advanced')" key="advanced" prop="sendSc" width="125">
                 <template slot="header" slot-scope="scope">
-                    <span>高级弹幕（SC/上舰）</span>
+                    <span>高级弹幕</span>
                     <el-tooltip popper-class="room-page-popper" effect="dark" placement="top">
                         <div slot="content">
                             房间级开关；控制投稿后高级弹幕（SC/上舰）任务是否执行。仅由投稿账号发送。此列为状态展示，需点击“编辑”在配置中修改。
                         </div>
-                        <i class="el-icon-question" style="margin-left: 6px; color: #909399; cursor: pointer;"></i>
+                        <i class="el-icon-question" style="margin-left: 6px; color: var(--text-secondary); cursor: pointer;"></i>
                     </el-tooltip>
                 </template>
                 <template slot-scope="scope">
@@ -348,30 +364,14 @@
                     </el-tag>
                 </template>
             </el-table-column>
-            <el-table-column label="文件后处理" prop="deleteFile" width="120">
-                <template slot-scope="scope">
-                    <span v-if="scope.row.deleteType == 0">不删除</span>
-                    <span v-if="scope.row.deleteType == 1">上传完成后删除</span>
-                    <span v-if="scope.row.deleteType == 2">审核通过后删除</span>
-                    <span v-if="scope.row.deleteType == 3">{{scope.row.deleteDay}}天后删除</span>
-                    <span v-if="scope.row.deleteType == 4">上传完成后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 5">审核通过后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 6">录制结束后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 7">录制结束后复制到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 8">{{scope.row.deleteDay}}天后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 9">投稿成功后删除</span>
-                    <span v-if="scope.row.deleteType == 10">投稿成功后移动到{{scope.row.moveDir}}</span>
-                    <span v-if="scope.row.deleteType == 11">审核通过后复制到{{scope.row.moveDir}}</span>
-                </template>
-            </el-table-column>
-            <el-table-column label="投稿用户" prop="uploadUserId" width="120">
+            <el-table-column v-if="tableColumnVisible('user')" key="user" label="投稿用户" prop="uploadUserId" width="120">
                 <template slot-scope="scope">
                     <div v-for="item in users">
                         <span type="primary" v-if="scope.row.uploadUserId == item.id">{{ maskText(item.uname) }}</span>
                     </div>
                 </template>
             </el-table-column>
-            <el-table-column label="操作" width="140" fixed="right">
+            <el-table-column label="操作" width="140" fixed="right" class-name="readable-table-actions">
                 <template slot-scope="scope">
                     <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
                     <el-dropdown trigger="click" size="mini">
@@ -381,7 +381,7 @@
                                 <el-dropdown-menu slot="dropdown" class="room-page-dropdown-popper">
                             <el-dropdown-item @click.native="handleEeditLiveMsg(scope.$index, scope.row)">弹幕规则</el-dropdown-item>
                             <el-dropdown-item divided></el-dropdown-item>
-                            <el-dropdown-item @click.native="deleteRoom(scope.row.id)" style="color: #F56C6C;">删除</el-dropdown-item>
+                        <el-dropdown-item @click.native="deleteRoom(scope.row.id)" style="color: var(--danger-color);">删除</el-dropdown-item>
                         </el-dropdown-menu>
                     </el-dropdown>
                 </template>

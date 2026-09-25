@@ -5,7 +5,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="录播姬上传插件 - 自动化直播录制上传解决方案">
-    <meta name="theme-color" content="#5b6cff">
+    <meta name="theme-color" content="#3578c7">
     <script src="js/app/url-resolver.js"></script>
     <script src="js/app/mobile-redirect.js"></script>
     <link rel="icon" href="img/icon.svg" type="image/svg+xml">
@@ -21,6 +21,7 @@
     <link href="css/animations/effects.css" rel="stylesheet">
     <link href="css/pages/home.css" rel="stylesheet">
     <link href="css/diagnostic-export.css" rel="stylesheet">
+    <link href="css/base/design-system.css" rel="stylesheet">
     <script src="js/jquery-3.3.1.min.js"></script>
     <script src="js/vue.min.js"></script>
     <script src="js/element-ui.js"></script>
@@ -41,6 +42,9 @@
     <script src="js/components/page-host.js"></script>
     <script src="js/components/shell-module-host.js"></script>
     <script src="js/components/diagnostic-export-dialog.js"></script>
+    <script src="js/components/table-preferences.js"></script>
+    <script src="js/components/capsule-enhancer.js"></script>
+    <script src="js/components/focus-return.js"></script>
 </head>
 <body>
 <div id="app" class="app-container" :class="{ 'is-operation-locked': pageOperating }">
@@ -257,13 +261,8 @@
         <div v-if="showThemePanel && !pageOperating" id="themePanel" class="theme-popover-panel" role="region" aria-label="主题外观" :style="themePanelStyle" @click.stop>
             <div class="theme-popover-title">主题外观</div>
             <div class="theme-popover-row">
-                <span class="theme-popover-label">模式</span>
-                <div class="theme-switch-container">
-                    <el-switch v-model="theme" active-value="dark" inactive-value="light" @change="applyTheme" class="theme-switch">
-                        <template slot="activeText"><i class="el-icon-moon"></i></template>
-                        <template slot="inactiveText"><i class="el-icon-sunny"></i></template>
-                    </el-switch>
-                </div>
+                <span class="theme-popover-label">深色模式</span>
+                <el-switch v-model="theme" active-value="dark" inactive-value="light" @change="applyTheme" aria-label="深色模式"></el-switch>
             </div>
             <div class="theme-popover-row">
                 <span class="theme-popover-label">配色</span>
@@ -394,7 +393,7 @@
         <el-form-item v-if="mode === 'HISTORY'" label="稿件">
             <el-select v-model="historyId" filterable remote clearable reserve-keyword popper-class="diagnostic-export-popper" placeholder="搜索标题、BV号、房间号或稿件ID" :remote-method="remoteHistorySearch" :loading="historyLoading" @change="handleHistoryChange" style="width:100%">
                 <el-option v-for="item in historyOptions" :key="item.id" :label="(item.title || '无标题') + ' · #' + item.id" :value="item.id">
-                    <span>{{ item.title || '无标题' }}</span><span style="float:right;color:#909399">#{{ item.id }}</span>
+                    <span>{{ item.title || '无标题' }}</span><span style="float:right;color:var(--text-secondary)">#{{ item.id }}</span>
                 </el-option>
             </el-select>
         </el-form-item>

@@ -215,10 +215,10 @@
         },
         getCodeColor: function(code) {
             const colorMap = {
-                '-999': '#909399',
-                0: '#67c23a',
-                '-50': '#67c23a',
-                1: '#f56c6c'
+                '-999': 'var(--text-secondary)',
+                0: 'var(--success-color)',
+                '-50': 'var(--success-color)',
+                1: 'var(--danger-color)'
             };
             return colorMap[String(code)] || '';
         },

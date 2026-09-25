@@ -1,4 +1,4 @@
-/* ========== Modern Detail Modal Styles ========== */
+/* ========== 稿件详情弹窗样式 ========== */
 
 .detail-content-modern {
 
@@ -12,7 +12,7 @@
 
     box-sizing: border-box;
 
-    transition: max-height 220ms ease, padding-bottom 220ms ease;
+    transition: max-height var(--duration-selection) var(--ease-apple), padding-bottom var(--duration-selection) var(--ease-apple);
 
 }
 
@@ -950,7 +950,9 @@
 
     cursor: pointer;
 
-    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    transition: border-color var(--duration-feedback) var(--ease-apple),
+        background-color var(--duration-feedback) var(--ease-apple),
+        transform var(--duration-feedback) var(--ease-apple);
 
 }
 
@@ -982,7 +984,7 @@
 
     margin-right: 3px;
 
-    transition: transform 0.18s ease;
+    transition: transform var(--duration-feedback) var(--ease-apple);
 
 }
 

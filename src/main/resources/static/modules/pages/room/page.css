@@ -20,11 +20,12 @@
 
     font-size: 28px;
 
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    color: var(--primary-color);
+    background: none;
 
     -webkit-background-clip: text;
 
-    -webkit-text-fill-color: transparent;
+    -webkit-text-fill-color: currentColor;
 
     background-clip: text;
 
@@ -48,7 +49,8 @@
 
 .room-stat-value.live {
 
-    background: linear-gradient(135deg, var(--danger-hot), var(--warning-accent));
+    color: var(--danger-color);
+    background: none;
 
     -webkit-background-clip: text;
 
@@ -58,7 +60,8 @@
 
 .room-stat-value.recording {
 
-    background: linear-gradient(135deg, var(--success-color), var(--success-light));
+    color: var(--success-color);
+    background: none;
 
     -webkit-background-clip: text;
 
@@ -100,7 +103,7 @@
 
 .room-card.is-sorting:hover {
 
-    transform: translateY(-2px);
+    transform: none;
 
 }
 
@@ -183,19 +186,15 @@
 
     border-color: var(--success-border);
 
-    box-shadow:
-
-        var(--shadow-sm),
-
-        0 0 30px var(--success-glow);
-
-    animation: pulse-recording 2s ease-in-out infinite;
+    box-shadow: var(--shadow-sm);
+    animation: none;
 
 }
 
 .room-card.is-recording::before {
 
-    background: linear-gradient(90deg, var(--success-color), var(--success-light));
+    background: var(--success-color);
+    background-image: none;
 
     opacity: 1;
 
@@ -203,11 +202,7 @@
 
 .room-card.is-recording:hover {
 
-    box-shadow:
-
-        var(--shadow-md),
-
-        0 0 45px var(--success-glow-strong);
+    box-shadow: var(--shadow-sm);
 
 }
 
@@ -249,7 +244,7 @@
 
 .room-tag.live {
 
-    background: linear-gradient(135deg, var(--danger-soft-bg-strong), var(--warning-soft-bg));
+    background: var(--danger-soft-bg);
 
     color: var(--danger-hot);
 
@@ -259,13 +254,13 @@
 
 .room-tag.recording {
 
-    background: linear-gradient(135deg, var(--success-soft-bg-strong), var(--success-soft-bg));
+    background: var(--success-soft-bg);
 
     color: var(--success-color);
 
     border: 1px solid var(--success-glow-strong);
 
-    animation: tag-pulse 2s ease-in-out infinite;
+    animation: none;
 
 }
 
@@ -295,7 +290,7 @@
 
 .room-card-footer .el-button:hover {
 
-    transform: translateY(-2px);
+    transform: none;
 
 }
 
@@ -335,11 +330,12 @@
 
     margin-bottom: 24px;
 
-    background: linear-gradient(135deg, var(--text-disabled), var(--text-secondary));
+    color: var(--text-secondary);
+    background: none;
 
     -webkit-background-clip: text;
 
-    -webkit-text-fill-color: transparent;
+    -webkit-text-fill-color: currentColor;
 
     background-clip: text;
 
@@ -485,7 +481,7 @@
 
     padding: 15px 20px;
 
-    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+    background: var(--bg-tertiary);
 
     color: var(--primary-color);
 
@@ -501,7 +497,7 @@
 
 .partition-header:hover {
 
-    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
+    background: var(--bg-primary);
 
 }
 
@@ -527,6 +523,6 @@
 
 [data-theme="dark"] .partition-header {
 
-    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-tertiary) 80%, transparent) 0%, color-mix(in srgb, var(--bg-primary) 90%, transparent) 100%);
+    background: var(--bg-tertiary);
 
 }

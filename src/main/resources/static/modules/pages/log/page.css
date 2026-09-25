@@ -35,7 +35,7 @@
 /* 多选模式 */
 .log-line.selection-mode {
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: background-color var(--transition-base), border-color var(--transition-base);
 }
 
 .log-line.selection-mode:hover {
@@ -73,7 +73,7 @@
     text-decoration: underline;
     cursor: pointer;
     font-weight: 500;
-    transition: all var(--transition-base);
+    transition: color var(--transition-base), opacity var(--transition-base);
 }
 
 .log-url:hover {

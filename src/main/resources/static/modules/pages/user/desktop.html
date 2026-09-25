@@ -246,32 +246,64 @@
 
         <!-- 表格视图 -->
         <div v-else class="table-wrapper" key="table">
+            <div class="readable-table-toolbar">
+                <span class="readable-table-hint">昵称和操作列始终显示</span>
+                <div class="readable-table-controls">
+                    <div v-if="tableOverflowX" class="readable-table-scroll-tools">
+                        <span class="readable-table-hint">左右查看更多列</span>
+                        <button type="button" :disabled="tableAtLeft" @click="scrollOverviewTable(-1)" aria-label="表格向左滚动"><i class="el-icon-arrow-left" aria-hidden="true"></i></button>
+                        <button type="button" :disabled="tableAtRight" @click="scrollOverviewTable(1)" aria-label="表格向右滚动"><i class="el-icon-arrow-right" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="table-density-switch" :class="{ 'is-compact': tablePreferences.density === 'compact' }" role="radiogroup" aria-label="表格行密度">
+                        <label class="table-density-option">
+                            <input type="radio" name="user-table-density" value="comfortable" v-model="tablePreferences.density">
+                            <span>舒适</span>
+                        </label>
+                        <label class="table-density-option">
+                            <input type="radio" name="user-table-density" value="compact" v-model="tablePreferences.density">
+                            <span>紧凑</span>
+                        </label>
+                    </div>
+                    <el-popover placement="bottom-end" trigger="click" width="240" popper-class="readable-table-column-picker">
+                        <div class="readable-table-picker-title">显示列</div>
+                        <p class="readable-table-hint">昵称和操作列始终显示</p>
+                        <el-checkbox-group v-model="tablePreferences.columns">
+                            <el-checkbox v-for="column in tableColumnOptions" :key="column.value" :label="column.value">{{ column.label }}</el-checkbox>
+                        </el-checkbox-group>
+                        <el-button type="text" size="mini" @click="resetTablePreferences">恢复默认布局</el-button>
+                        <el-button slot="reference" size="mini" icon="el-icon-setting">显示列</el-button>
+                    </el-popover>
+                </div>
+            </div>
             <el-table
                     v-loading="loading"
                     :data="tableData"
+                    class="readable-table" ref="overviewTable" :class="{ 'is-compact': tablePreferences.density === 'compact' }"
+                    row-key="uid"
+                    :max-height="Math.max(180, tableMaxHeight - 64)"
                     style="width: 100%">
-                <el-table-column label="用户ID" width="130">
-                    <template slot-scope="scope">{{ maskText(scope.row.uid) }}</template>
+                <el-table-column v-if="tableColumnVisible('uid')" key="uid" label="用户ID" width="175">
+                    <template slot-scope="scope"><span class="readable-table-copy-line readable-table-number">{{ maskText(scope.row.uid) }}<button type="button" class="readable-table-copy" @click="copyTableValue(maskText(scope.row.uid))" aria-label="复制显示的用户 ID">复制</button></span></template>
                 </el-table-column>
                 <el-table-column label="昵称" min-width="150">
                     <template slot-scope="scope">{{ maskText(scope.row.uname) }}</template>
                 </el-table-column>
-                <el-table-column label="登录状态" width="120">
+                <el-table-column v-if="tableColumnVisible('login')" key="login" label="登录状态" width="120">
                     <template slot-scope="scope">
                         <el-tag :type="scope.row.login ? 'success' : 'danger'" size="small">
                             {{ scope.row.login ? '已登录' : '未登录' }}
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column label="弹幕发送" width="120">
+                <el-table-column v-if="tableColumnVisible('danmaku')" key="danmaku" label="弹幕发送" width="120">
                     <template slot-scope="scope">
                         <el-tag :type="scope.row.enable ? 'success' : 'info'" size="small">
                             {{ scope.row.enable ? '已开启' : '已关闭' }}
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column label="更新时间" prop="updateTime" width="200"></el-table-column>
-                <el-table-column label="操作" width="180" fixed="right">
+                <el-table-column v-if="tableColumnVisible('time')" key="time" label="更新时间" prop="updateTime" width="200"></el-table-column>
+                <el-table-column label="操作" width="200" fixed="right" class-name="readable-table-actions">
                     <template slot-scope="scope">
                         <el-button @click="handleEdit(scope.$index, scope.row)" size="mini" icon="el-icon-edit">编辑</el-button>
                         <el-popconfirm @confirm="deleteUser(scope.row.id)" title="确定删除吗？" confirm-button-type="danger">

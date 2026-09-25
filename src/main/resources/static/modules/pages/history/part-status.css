@@ -1,4 +1,4 @@
-/* ========== SKIPPED 状态分P样式 ========== */
+/* ========== 已跳过状态分P样式 ========== */
 
 /* 已跳过分P的进度条 - 灰色禁用样式 */
 
@@ -48,7 +48,7 @@
 
 }
 
-/* 深色主题下的SKIPPED进度条样式 */
+/* 深色主题下已跳过分P的进度条样式 */
 
 [data-theme='dark'] .progress-bar-mini.skipped .el-progress-bar__outer {
 
@@ -82,7 +82,7 @@
 
 }
 
-/* ========== Detail Dialog Centering & Layout ========== */
+/* ========== 详情弹窗居中与布局 ========== */
 
 body.page-active-history .el-dialog__wrapper:has(.history-page-dialog) {
 
@@ -114,7 +114,7 @@ body.page-active-history .el-dialog__wrapper:has(.history-page-dialog) {
 
     transform: none;
 
-    transition: max-width 240ms ease, max-height 240ms ease, height 240ms ease;
+    transition: max-width var(--duration-overlay) var(--ease-apple), max-height var(--duration-overlay) var(--ease-apple), height var(--duration-overlay) var(--ease-apple);
 
 }
 
@@ -168,7 +168,7 @@ body.page-active-history .el-dialog__wrapper:has(.history-page-dialog) {
 
 }
 
-/* ========== Footer Actions Animation & Layout ========== */
+/* ========== 底部操作区动画与布局 ========== */
 
 .detail-footer {
 
@@ -232,9 +232,10 @@ body.page-active-history .el-dialog__wrapper:has(.history-page-dialog) {
 
     margin-bottom: 12px;
 
-    background: var(--bg-primary);
+    background: var(--surface-content, var(--bg-primary));
 
-    backdrop-filter: blur(10px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 
     border: 1px solid var(--border-light);
 
@@ -298,7 +299,7 @@ body.page-active-history .el-dialog__wrapper:has(.history-page-dialog) {
 
 }
 
-/* 确保 PC 端Tooltip 包装的按钮不撑满 */
+/* 确保桌面端提示框里的按钮不会被撑满 */
 
 .action-sub-group .el-tooltip,
 

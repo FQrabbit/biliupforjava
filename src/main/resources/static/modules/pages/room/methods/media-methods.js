@@ -543,11 +543,11 @@
             if (!status) return '';
             if (status.includes('ms')) {
                 var ms = parseInt(status);
-                if (ms < 200) return '#67C23A'; // 绿色
-                if (ms < 500) return '#E6A23C'; // 黄色
-                return '#F56C6C'; // 红色
+                if (ms < 200) return 'var(--success-color)'; // 绿色
+                if (ms < 500) return 'var(--warning-color)'; // 黄色
+                return 'var(--danger-color)'; // 红色
             }
-            return '#F56C6C'; // 错误
+            return 'var(--danger-color)'; // 错误
         },
         getLineStatusIcon(status) {
             if (!status) return '';

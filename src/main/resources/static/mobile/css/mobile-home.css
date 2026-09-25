@@ -1,4 +1,4 @@
-/* Mobile-first home page. Loaded only by /mobile/index.html. */
+/* 手机首页样式，仅在移动端入口加载 */
 
 .mobile-shell .changelog-container {
     min-height: 100%;
@@ -18,7 +18,7 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 9px;
-    animation: mobileHomeRise 420ms 80ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileHomeRise var(--duration-base) 80ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-status-card {
@@ -34,11 +34,13 @@
     color: var(--text-primary);
     background: var(--mobile-surface-strong);
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.24);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.24);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     text-align: center;
     cursor: pointer;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), border-color 220ms ease, box-shadow 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring),
+        border-color var(--duration-selection) var(--ease-apple),
+        box-shadow var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-status-card:active {
@@ -58,8 +60,7 @@
     align-items: flex-start;
     padding: 14px;
     border-color: color-mix(in srgb, var(--mobile-accent-1) 20%, var(--mobile-border));
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--mobile-surface-strong) 92%, var(--mobile-accent-1)), var(--mobile-surface-strong));
+    background: var(--mobile-surface-strong);
     box-shadow: var(--mobile-shadow-soft);
     text-align: left;
 }
@@ -75,9 +76,7 @@
     inset: 0;
     z-index: 1;
     border-radius: inherit;
-    background:
-        linear-gradient(112deg, color-mix(in srgb, var(--mobile-surface-strong) 34%, transparent), transparent 30%),
-        linear-gradient(180deg, color-mix(in srgb, var(--mobile-surface-strong) 14%, transparent), transparent 60%);
+    background: none;
     pointer-events: none;
 }
 
@@ -143,7 +142,7 @@
     height: 54px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--mobile-surface-strong) 22%, transparent);
-    filter: blur(1px);
+    filter: none;
     transform: rotate(14deg);
 }
 
@@ -162,7 +161,7 @@
 
 [data-theme="dark"] .mobile-shell .mobile-status-card.is-workspace {
     border-color: color-mix(in srgb, var(--mobile-accent-1) 22%, var(--mobile-border));
-    background: linear-gradient(180deg, color-mix(in srgb, var(--mobile-surface-strong) 96%, var(--bg-primary)), color-mix(in srgb, var(--mobile-surface-strong) 90%, var(--bg-primary)));
+    background: var(--mobile-surface-strong);
     box-shadow: var(--mobile-shadow-soft);
 }
 
@@ -194,8 +193,8 @@
     border-radius: 22px;
     background: var(--mobile-surface-strong);
     box-shadow: var(--mobile-shadow);
-    backdrop-filter: blur(28px) saturate(1.35);
-    -webkit-backdrop-filter: blur(28px) saturate(1.35);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-shell .mobile-workspace-popover::before {
@@ -374,7 +373,8 @@
 
 .mobile-workspace-pop-enter-active,
 .mobile-workspace-pop-leave-active {
-    transition: opacity 240ms ease, transform 280ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition: opacity var(--duration-overlay) var(--ease-apple),
+        transform var(--duration-overlay) var(--ease-modal);
 }
 
 .mobile-workspace-pop-enter,
@@ -392,20 +392,20 @@
     margin-bottom: 9px;
     border-radius: 15px;
     color: var(--mobile-on-accent);
-    background: linear-gradient(135deg, var(--mobile-accent-1), var(--mobile-accent-2));
+    background: color-mix(in srgb, var(--mobile-accent-1) 14%, var(--mobile-surface-strong));
     box-shadow: 0 10px 18px color-mix(in srgb, var(--mobile-accent-1) 16%, transparent);
 }
 
 .mobile-shell .mobile-status-card:nth-child(2) .mobile-status-icon {
-    background: linear-gradient(135deg, var(--mobile-accent-2), color-mix(in srgb, var(--mobile-accent-2) 58%, var(--mobile-surface-strong)));
+    background: var(--success-soft-bg);
 }
 
 .mobile-shell .mobile-status-card:nth-child(3) .mobile-status-icon {
-    background: linear-gradient(135deg, var(--mobile-accent-3), color-mix(in srgb, var(--mobile-accent-3) 54%, var(--mobile-surface-strong)));
+    background: var(--warning-soft-bg);
 }
 
 .mobile-shell .mobile-status-card.has-alert .mobile-status-icon {
-    background: linear-gradient(135deg, var(--danger-color), var(--danger-accent));
+    background: var(--danger-soft-bg);
 }
 
 .mobile-shell .mobile-status-card em,
@@ -433,7 +433,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    animation: mobileHomeRise 420ms 150ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileHomeRise var(--duration-base) 150ms var(--ease-decel) both;
 }
 
 .mobile-shell .mobile-section-heading {
@@ -474,7 +474,8 @@
     font-weight: 700;
     box-shadow: 0 8px 18px rgba(35, 49, 82, 0.08);
     cursor: pointer;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.12), background 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring),
+        background-color var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-section-heading button:active {
@@ -488,9 +489,11 @@
     border-radius: 22px;
     background: var(--mobile-surface-strong);
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.24);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.24);
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.08), border-color 220ms ease, box-shadow 220ms ease;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: transform var(--duration-selection) var(--ease-spring),
+        border-color var(--duration-selection) var(--ease-apple),
+        box-shadow var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .mobile-release-card.is-latest {
@@ -740,10 +743,10 @@
     }
 }
 .mobile-storage-change-banner { margin: 8px 12px 0; padding: 9px 10px; font-size: 13px; }
-.mobile-storage-change-banner button { border: 0; background: transparent; color: #409eff; font-weight: 600; }
+.mobile-storage-change-banner button { border: 0; background: transparent; color: var(--primary-color, #3578c7); font-weight: 600; }
 .storage-change-dialog--mobile .el-dialog__body { padding: 16px; }
 .storage-change-dialog--mobile .storage-change-paths { display: block; }
 .storage-change-dialog--mobile .storage-change-paths > div { margin-bottom: 8px; }
 .storage-change-dialog--mobile .storage-change-paths > i { display: none; }
-.storage-change-dialog--mobile .storage-change-option button { width: 100%; min-height: 38px; border: 1px solid #dcdfe6; border-radius: 6px; background: #fff; color: #303133; }
-.storage-change-dialog--mobile .storage-change-option.is-recommended button { border-color: #67c23a; color: #529b2e; }
+.storage-change-dialog--mobile .storage-change-option button { width: 100%; min-height: 38px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-content); color: var(--text-primary); }
+.storage-change-dialog--mobile .storage-change-option.is-recommended button { border-color: var(--success-color); color: var(--success-color); }

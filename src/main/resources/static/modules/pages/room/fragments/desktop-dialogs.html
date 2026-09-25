@@ -275,7 +275,7 @@
                             <span class="filter-item-label">重复弹幕过滤</span>
                             <span class="filter-item-desc">过滤同一场直播中的重复弹幕内容</span>
                         </div>
-                        <el-switch v-model="room.dmDistinct" active-color="#52c41a" inactive-color="#d9d9d9"></el-switch>
+                        <el-switch v-model="room.dmDistinct" active-color="var(--primary-color)" inactive-color="var(--bg-tertiary)"></el-switch>
                     </div>
                 </div>
             </div>
@@ -491,9 +491,9 @@
 
     <el-dialog :visible.sync="pasteConfirmDialogVisible" title="确认粘贴配置" width="400px" append-to-body custom-class="room-page-dialog room-paste-dialog">
         <div style="margin-bottom: 20px;">
-            <div style="color: #606266; line-height: 1.6;">
+            <div style="color: var(--text-primary); line-height: 1.6;">
                 <p>粘贴将会覆盖当前配置的大部分参数。</p>
-                <p style="color: #909399; font-size: 12px; margin-top: 10px;">
+                <p style="color: var(--text-secondary); font-size: 12px; margin-top: 10px;">
                     💡 提示：某些参数（如房间ID、直播间ID等）将被保留，不会被覆盖。
                 </p>
             </div>

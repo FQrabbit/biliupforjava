@@ -4,6 +4,7 @@
     window.HistoryPageState = function (context) {
         return {
             moduleSurface: context.surface,
+            tableMaxHeight: Math.max(180, window.innerHeight - 280),
             componentDestroyed: false,
             listRequestToken: 0,
             partListRequestToken: 0,

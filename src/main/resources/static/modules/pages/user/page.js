@@ -5,9 +5,16 @@
 BiliupModuleRegistry.define('page.user', function (context) {
 return {
     template: context.template,
+    mixins: [window.BiliupTablePreferences.createMixin('user', [
+        { value: 'uid', label: '用户ID' },
+        { value: 'login', label: '登录状态' },
+        { value: 'danmaku', label: '弹幕发送' },
+        { value: 'time', label: '更新时间' }
+    ])],
     data: function () {
         return {
             moduleSurface: context.surface,
+            tableMaxHeight: Math.max(180, window.innerHeight - 260),
             componentDestroyed: false,
             dialogFormVisible: false,
             dialogLoginVisible: false,
@@ -85,10 +92,10 @@ return {
         loginStatusColor: function () {
             switch (this.loginStatus) {
                 case 'pending': return 'var(--text-disabled)';
-                case 'scanned': return '#e6a23c';
-                case 'success': return '#67c23a';
+                case 'scanned': return 'var(--warning-color)';
+                case 'success': return 'var(--success-color)';
                 case 'expired':
-                case 'failed': return '#f56c6c';
+                case 'failed': return 'var(--danger-color)';
                 default: return 'var(--text-disabled)';
             }
         },
@@ -120,6 +127,7 @@ return {
     },
     methods: {
         handleResize: function () {
+            this.tableMaxHeight = Math.max(180, window.innerHeight - 260);
             this.isMobile = this.moduleSurface === 'mobile';
         },
         syncPageModalState: function () {

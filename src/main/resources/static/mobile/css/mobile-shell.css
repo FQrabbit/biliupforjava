@@ -1,29 +1,29 @@
-/* Dedicated mobile shell. Loaded only by /mobile/index.html. */
+/* 移动端主框架样式，仅在移动端入口加载 */
 
 :root {
     --mobile-safe-top: env(safe-area-inset-top, 0px);
     --mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
     --mobile-viewport-width: 100vw;
     --mobile-viewport-height: 100vh;
-    --mobile-surface: rgba(255, 255, 255, 0.72);
-    --mobile-surface-strong: rgba(255, 255, 255, 0.56);
-    --mobile-border: rgba(27, 42, 78, 0.12);
-    --mobile-shadow: 0 18px 48px rgba(35, 49, 82, 0.16);
-    --mobile-shadow-soft: 0 8px 24px rgba(35, 49, 82, 0.1);
-    --mobile-glass-blur: 22px;
-    --mobile-accent-1: var(--primary-color, #2577ff);
-    --mobile-accent-2: var(--success-color, #16b89f);
-    --mobile-accent-3: var(--danger-accent, #ff7a59);
+    --mobile-surface: var(--surface-content);
+    --mobile-surface-strong: var(--surface-overlay);
+    --mobile-border: var(--border-divider);
+    --mobile-shadow: var(--shadow-md);
+    --mobile-shadow-soft: var(--shadow-sm);
+    --mobile-glass-blur: 0px;
+    --mobile-accent-1: var(--primary-color, #3578c7);
+    --mobile-accent-2: var(--success-color, #167347);
+    --mobile-accent-3: var(--danger-accent, #ff8e63);
     --mobile-on-accent: var(--mobile-on-primary, #ffffff);
     --mobile-bottom-nav-clearance: calc(112px + var(--mobile-safe-bottom));
 }
 
 [data-theme="dark"] {
-    --mobile-surface: rgba(26, 28, 36, 0.72);
-    --mobile-surface-strong: rgba(30, 33, 43, 0.58);
-    --mobile-border: rgba(255, 255, 255, 0.1);
-    --mobile-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
-    --mobile-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.28);
+    --mobile-surface: var(--surface-content);
+    --mobile-surface-strong: var(--surface-overlay);
+    --mobile-border: var(--border-divider);
+    --mobile-shadow: var(--shadow-md);
+    --mobile-shadow-soft: var(--shadow-sm);
     --mobile-on-accent: var(--mobile-on-primary, #10131a);
 }
 
@@ -31,10 +31,7 @@ html,
 body {
     height: 100%;
     overflow: hidden;
-    background:
-        linear-gradient(142deg, color-mix(in srgb, var(--mobile-accent-1) 10%, transparent), transparent 38%),
-        linear-gradient(28deg, color-mix(in srgb, var(--mobile-accent-2) 12%, transparent), transparent 42%),
-        linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 54%, color-mix(in srgb, var(--mobile-accent-3) 8%, var(--bg-primary)) 100%);
+    background: var(--surface-page);
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
@@ -443,10 +440,7 @@ body > .el-color-dropdown {
 }
 
 [data-theme="dark"] body {
-    background:
-        linear-gradient(142deg, color-mix(in srgb, var(--mobile-accent-1) 16%, transparent), transparent 38%),
-        linear-gradient(28deg, color-mix(in srgb, var(--mobile-accent-2) 12%, transparent), transparent 42%),
-        linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 52%, color-mix(in srgb, var(--mobile-accent-3) 10%, var(--bg-secondary)) 100%);
+    background: var(--surface-page);
 }
 
 .mobile-shell {
@@ -463,9 +457,11 @@ body > .el-color-dropdown {
     background: var(--mobile-surface);
     border-bottom: 1px solid var(--mobile-border);
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.35);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.35);
-    transition: transform 360ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 260ms ease, box-shadow 260ms ease;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: transform var(--duration-overlay) var(--ease-modal),
+        opacity var(--duration-overlay) var(--ease-apple),
+        box-shadow var(--duration-overlay) var(--ease-apple);
 }
 
 .mobile-shell .app-header.is-compact {
@@ -547,15 +543,13 @@ body > .el-color-dropdown {
 
 .mobile-shell .privacy-toggle.is-active {
     color: var(--text-inverse);
-    background: var(--privacy-active-gradient);
+    background: var(--btn-primary-bg);
     border-color: var(--privacy-active-border);
     box-shadow: var(--privacy-active-shadow);
 }
 
 [data-theme="dark"] .mobile-shell .header-nav {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-        color-mix(in srgb, var(--mobile-surface-strong) 64%, transparent);
+    background: var(--mobile-surface-strong);
     box-shadow:
         0 8px 18px rgba(0, 0, 0, 0.24),
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -563,9 +557,7 @@ body > .el-color-dropdown {
 }
 
 [data-theme="dark"] .mobile-shell .nav-slide-indicator {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
-        color-mix(in srgb, var(--mobile-accent-1) 12%, transparent);
+    background: var(--mobile-accent-1);
     box-shadow:
         0 6px 16px rgba(0, 0, 0, 0.28),
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
@@ -573,9 +565,7 @@ body > .el-color-dropdown {
 }
 
 [data-theme="dark"] .mobile-shell .nav-item.is-active::before {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06)),
-        color-mix(in srgb, var(--mobile-accent-1) 22%, transparent);
+    background: var(--brand-soft-bg-active);
     border-color: color-mix(in srgb, var(--mobile-accent-1) 26%, rgba(255, 255, 255, 0.14));
     box-shadow:
         0 10px 22px rgba(0, 0, 0, 0.26),
@@ -598,20 +588,19 @@ body > .el-color-dropdown {
     border: 1px solid var(--mobile-border);
     border-radius: 24px;
     overflow: hidden;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-        color-mix(in srgb, var(--mobile-surface-strong) 58%, transparent);
+    background: var(--mobile-surface-strong);
     box-shadow:
         0 8px 20px rgba(35, 49, 82, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.24),
         inset 0 -1px 0 rgba(35, 49, 82, 0.04);
-    backdrop-filter: blur(48px) saturate(1.75);
-    -webkit-backdrop-filter: blur(48px) saturate(1.75);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     z-index: 2600;
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0;
-    transition: transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1), opacity 220ms ease;
+    transition: transform var(--duration-overlay) var(--ease-decel),
+        opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .nav-slide-indicator {
@@ -622,9 +611,7 @@ body > .el-color-dropdown {
     width: 0;
     border-radius: 22px;
     pointer-events: none;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.38)),
-        color-mix(in srgb, var(--mobile-accent-1) 16%, transparent);
+    background: var(--mobile-accent-1);
     box-shadow:
         0 10px 22px rgba(35, 49, 82, 0.12),
         inset 0 1px 0 rgba(255, 255, 255, 0.88),
@@ -632,10 +619,10 @@ body > .el-color-dropdown {
     opacity: 0;
     transform: translate3d(0, 0, 0);
     transition:
-        transform 560ms cubic-bezier(0.16, 1, 0.3, 1),
-        width 560ms cubic-bezier(0.16, 1, 0.3, 1),
-        left 560ms cubic-bezier(0.16, 1, 0.3, 1),
-        opacity 180ms ease;
+        transform var(--duration-selection) var(--ease-decel),
+        width var(--duration-selection) var(--ease-decel),
+        left var(--duration-selection) var(--ease-decel),
+        opacity var(--duration-feedback) var(--ease-apple);
     will-change: transform, width, left;
 }
 
@@ -667,12 +654,12 @@ body > .el-color-dropdown {
     gap: 3px;
     color: color-mix(in srgb, var(--text-secondary) 92%, transparent);
     transition:
-        transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.14),
-        background 220ms ease,
-        color 220ms ease,
-        box-shadow 220ms ease,
-        opacity 220ms ease,
-        filter 220ms ease;
+        transform var(--duration-selection) var(--ease-spring),
+        background-color var(--duration-selection) var(--ease-apple),
+        color var(--duration-selection) var(--ease-apple),
+        box-shadow var(--duration-selection) var(--ease-apple),
+        opacity var(--duration-selection) var(--ease-apple),
+        filter var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .nav-item i {
@@ -730,7 +717,9 @@ body > .el-color-dropdown {
 .mobile-shell .nav-item.is-active span:not(.alert-badge) {
     position: relative;
     z-index: 1;
-    transition: transform 220ms cubic-bezier(0.2, 0.85, 0.2, 1.14), color 220ms ease, opacity 220ms ease;
+    transition: transform var(--duration-selection) var(--ease-spring),
+        color var(--duration-selection) var(--ease-apple),
+        opacity var(--duration-selection) var(--ease-apple);
 }
 
 .mobile-shell .nav-item.is-active i {
@@ -872,8 +861,8 @@ body.mobile-page-modal-open {
     border: 1px solid var(--mobile-border);
     border-radius: 22px;
     box-shadow: var(--mobile-shadow-soft);
-    backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.25);
-    -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(1.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .mobile-shell .config-header,
@@ -1192,7 +1181,7 @@ body.mobile-page-modal-open {
 .mobile-shell .version-card,
 .mobile-shell .user-card,
 .mobile-shell .log-toolbar-card {
-    animation: mobileRise 360ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+    animation: mobileRise var(--duration-base) var(--ease-decel) both;
 }
 
 @media (max-width: 390px) {

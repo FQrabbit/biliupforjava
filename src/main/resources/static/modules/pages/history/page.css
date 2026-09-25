@@ -1,4 +1,4 @@
-/* ========== History Page Styles ========== */
+/* ========== 历史页面样式 ========== */
 
 .filter-header:focus-visible,
 .skip-header:focus-visible {
@@ -20,8 +20,8 @@
     padding: 0 24px;
     height: 64px;
     background: var(--bg-primary);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border-bottom: 1px solid var(--border-light);
     box-shadow: var(--shadow-sm);
     flex-shrink: 0;
@@ -49,9 +49,9 @@
 
     background: var(--bg-secondary);
 
-    backdrop-filter: blur(10px);
+    backdrop-filter: none;
 
-    -webkit-backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: none;
 
     border-bottom: 1px solid var(--border-light);
 
@@ -205,7 +205,7 @@
 
     cursor: pointer;
 
-    transition: var(--transition);
+    transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
 
 }
 
@@ -241,13 +241,15 @@
 
     font-size: 22px;
 
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+    color: var(--primary-color);
 
-    -webkit-background-clip: text;
+    background: none;
 
-    -webkit-text-fill-color: transparent;
+    -webkit-background-clip: initial;
 
-    background-clip: text;
+    -webkit-text-fill-color: currentColor;
+
+    background-clip: initial;
 
 }
 
@@ -301,7 +303,7 @@
 
     cursor: pointer;
 
-    transition: var(--transition);
+    transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
 
     border: none;
 
@@ -343,9 +345,9 @@
 
     background: var(--bg-primary);
 
-    backdrop-filter: blur(16px);
+    backdrop-filter: none;
 
-    -webkit-backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: none;
 
     border-radius: var(--radius-xl);
 
@@ -401,7 +403,7 @@
 
     height: 1px;
 
-    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+    background: var(--border-color);
 
     opacity: 0;
 
@@ -733,7 +735,7 @@
 
     letter-spacing: 0;
 
-    transition: var(--transition);
+    transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
 
 }
 
@@ -955,9 +957,9 @@
 
     background: var(--bg-primary);
 
-    backdrop-filter: blur(12px);
+    backdrop-filter: none;
 
-    -webkit-backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: none;
 
     border-radius: var(--radius-xl);
 
@@ -989,7 +991,7 @@
 
     height: 3px;
 
-    background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+    background: var(--primary-color);
 
     opacity: 0;
 
@@ -997,43 +999,17 @@
 
 }
 
-.data-card:hover {
+.data-card:hover { border-color: var(--primary-color); box-shadow: var(--shadow-sm); }
 
-    transform: translateY(-4px);
+.data-card:active { transform: none !important; }
 
-    box-shadow: var(--shadow-lg);
+.data-card.press-anim { transform: none !important; }
 
-    border-color: var(--primary-light);
-
-    background: var(--bg-primary);
-
-}
-
-.data-card:active {
-
-    transform: translateY(-2px) scale(0.98);
-
-}
-
-.data-card.press-anim {
-
-    transform: translateY(1px) scale(0.97) !important;
-
-}
-
-.data-card:hover.press-anim {
-
-    transform: translateY(-1px) scale(0.97) !important;
-
-}
+.data-card:hover.press-anim { transform: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
 
-    .data-card.press-anim {
-
-        transform: none !important;
-
-    }}
+    .data-card.press-anim { transform: none !important; }}
 
 .data-card:hover::before {
 
@@ -1053,9 +1029,9 @@
 
     opacity: 1;
 
-    background: linear-gradient(90deg, var(--warning-color), var(--warning-accent));
+    background: var(--warning-color);
 
-    animation: shimmer-pulse 2s infinite;
+    animation: none;
 
 }
 
@@ -1069,7 +1045,7 @@
 
     opacity: 1;
 
-    background: linear-gradient(90deg, var(--danger-color), var(--danger-light));
+    background: var(--danger-color);
 
 }
 
@@ -1083,7 +1059,7 @@
 
     opacity: 1;
 
-    background: linear-gradient(90deg, var(--success-color), var(--success-light));
+    background: var(--success-color);
 
 }
 
@@ -1175,7 +1151,7 @@
 
     color: var(--text-secondary);
 
-    transition: var(--transition);
+    transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), opacity var(--transition-base);
 
 }
 
@@ -1272,9 +1248,9 @@
 
     background: var(--bg-primary);
 
-    backdrop-filter: blur(12px);
+    backdrop-filter: none;
 
-    -webkit-backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: none;
 
     border-radius: var(--radius-xl);
 
@@ -1326,9 +1302,9 @@
 
     background: var(--bg-secondary);
 
-    backdrop-filter: blur(8px);
+    backdrop-filter: none;
 
-    -webkit-backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: none;
 
     border-radius: var(--radius-xl);
 
