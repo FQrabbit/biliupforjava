@@ -8,11 +8,99 @@
         startPolling: function () {
             var self = this;
             this.stopPolling();
+            var ticks = 0;
             this.pollingTimer = setInterval(function () {
+                if (document.hidden) return;
                 if (self.isMultiSelectMode) return;
-                // 仅在"工作中"页签或列表页刷新数据
-                self.$pageRefresh('initTable', [true]);
-            }, 30000); // 30秒一次
+                ticks++;
+                var hasActivePublish = self.tableData.some(function(item) {
+                    var tasks = item.publishTasks && item.publishTasks.length
+                        ? item.publishTasks : (item.publishDispatch ? [item.publishDispatch] : []);
+                    return tasks.some(function(task) {
+                        return task && ['READY', 'PREPARING', 'WAITING_UPLOAD', 'WAITING_ACCOUNT',
+                            'WAITING_CAPTCHA', 'SUBMITTING', 'VERIFYING', 'RETRY_WAIT', 'NEEDS_ACTION']
+                            .indexOf(task.state) >= 0;
+                    });
+                });
+                if (hasActivePublish || ticks % 6 === 0) self.refreshPublishTaskStatuses();
+                // 任务状态走轻量批量接口；每 30 秒刷新一次稿件列表以发现新任务，
+                // 并继续同步录制、上传和平台审核等独立状态
+                if (ticks % 6 === 0) self.$pageRefresh('initTable', [true]);
+            }, 5000); // 活跃投稿任务每 5 秒刷新，空闲时每 30 秒刷新
+        },
+        collectPublishTaskIds: function() {
+            var ids = [];
+            var seen = {};
+            var records = (this.tableData || []).slice();
+            if (this.currentDetail && this.currentDetail.id) records.push(this.currentDetail);
+            records.forEach(function(item) {
+                var tasks = item.publishTasks && item.publishTasks.length
+                    ? item.publishTasks : (item.publishDispatch ? [item.publishDispatch] : []);
+                tasks.forEach(function(task) {
+                    var id = Number(task && task.taskId);
+                    if (!Number.isFinite(id) || id <= 0 || seen[id]) return;
+                    seen[id] = true;
+                    ids.push(id);
+                });
+            });
+            return ids.slice(0, 500);
+        },
+        refreshPublishTaskStatuses: function() {
+            if (document.hidden || this.componentDestroyed) return;
+            if (this.publishTaskPollInFlight) {
+                this.publishTaskPollRequested = true;
+                return;
+            }
+            var taskIds = this.collectPublishTaskIds();
+            if (!taskIds.length) return;
+            var self = this;
+            this.publishTaskPollInFlight = true;
+            var finish = function() {
+                self.publishTaskPollInFlight = false;
+                if (self.publishTaskPollRequested) {
+                    self.publishTaskPollRequested = false;
+                    if (!document.hidden && !self.componentDestroyed) self.refreshPublishTaskStatuses();
+                }
+            };
+            HistoryApi.publishTaskBatchState(taskIds, function(response) {
+                if (!self.componentDestroyed && response && Array.isArray(response.tasks)) {
+                    self.applyPublishTaskStatusBatch(response.tasks);
+                }
+                finish();
+            }, finish);
+        },
+        applyPublishTaskStatusBatch: function(statuses) {
+            var byHistory = {};
+            (statuses || []).forEach(function(task) {
+                if (!task || task.historyId == null || task.taskId == null) return;
+                var key = String(task.historyId);
+                if (!byHistory[key]) byHistory[key] = {};
+                byHistory[key][String(task.taskId)] = task;
+            });
+            var self = this;
+            var applyTo = function(record) {
+                if (!record || record.id == null) return;
+                var updates = byHistory[String(record.id)];
+                if (!updates) return;
+                var oldTasks = record.publishTasks && record.publishTasks.length
+                    ? record.publishTasks : (record.publishDispatch ? [record.publishDispatch] : []);
+                var merged = [];
+                var seen = {};
+                oldTasks.forEach(function(task) {
+                    var key = String(task.taskId);
+                    var next = updates[key] || task;
+                    if (!seen[key]) merged.push(next);
+                    seen[key] = true;
+                });
+                Object.keys(updates).forEach(function(key) {
+                    if (!seen[key]) merged.push(updates[key]);
+                });
+                self.$set(record, 'publishTasks', merged);
+                var dispatch = merged.find(function(task) { return task.operation !== 'HIGH_ENERGY'; }) || merged[0] || null;
+                if (dispatch) self.$set(record, 'publishDispatch', dispatch);
+            };
+            (this.tableData || []).forEach(applyTo);
+            applyTo(this.currentDetail);
         },
         stopPolling: function () {
             if (this.pollingTimer) {

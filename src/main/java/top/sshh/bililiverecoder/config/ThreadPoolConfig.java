@@ -142,4 +142,34 @@ public class ThreadPoolConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("publishAccountExecutor")
+    public TaskExecutor publishAccountExecutor(
+            @Value("${publish.account.worker-count:8}") int workerCount) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        int workers = Math.max(1, workerCount);
+        executor.setCorePoolSize(workers);
+        executor.setMaxPoolSize(workers);
+        executor.setQueueCapacity(1000);
+        executor.setThreadNamePrefix("publish-account-");
+        executor.setWaitForTasksToCompleteOnShutdown(false);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean("highEnergyPrepareExecutor")
+    public TaskExecutor highEnergyPrepareExecutor(
+            @Value("${publish.high-energy.prepare-parallelism:1}") int parallelism) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        int workers = Math.max(1, parallelism);
+        executor.setCorePoolSize(workers);
+        executor.setMaxPoolSize(workers);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("high-energy-prepare-");
+        executor.setWaitForTasksToCompleteOnShutdown(false);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.initialize();
+        return executor;
+    }
 }

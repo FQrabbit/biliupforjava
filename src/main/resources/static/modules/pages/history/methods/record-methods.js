@@ -5,6 +5,100 @@
     'use strict';
 
     window.HistoryPageRecordMethods = {
+        requiresPublishTaskVerification: function(task) {
+            return !!task && (task.state === 'VERIFYING'
+                || task.waitReason === 'SUBMISSION_RESULT_UNKNOWN'
+                || task.waitReason === 'SUBMISSION_ID_MISMATCH'
+                || task.waitReason === 'ORIGINAL_ACCOUNT_MISSING');
+        },
+        canRetryPublishTask: function(task) {
+            return !!task && (task.state === 'NEEDS_ACTION' || task.state === 'FAILED'
+                || (task.state === 'RETRY_WAIT' && task.waitReason === 'CAPTCHA_AUTO_RETRY'));
+        },
+        getPublishTaskRetryLabel: function(task) {
+            return task && task.waitReason === 'CAPTCHA_AUTO_RETRY' ? '立即重新验证' : '重试任务';
+        },
+        canCancelPublishTask: function(task) {
+            return !!task && ['READY', 'PREPARING', 'WAITING_UPLOAD', 'WAITING_ACCOUNT',
+                'WAITING_CAPTCHA', 'RETRY_WAIT', 'NEEDS_ACTION'].indexOf(task.state) >= 0;
+        },
+        publishTaskBvid: function(task) {
+            return this.publishTaskBvids[String(task.taskId)] || '';
+        },
+        setPublishTaskBvid: function(task, value) {
+            this.$set(this.publishTaskBvids, String(task.taskId), value);
+        },
+        isPublishTaskActionLoading: function(task) {
+            return Number(this.publishTaskActionId) === Number(task.taskId);
+        },
+        confirmPublishTaskResult: function(task) {
+            var self = this;
+            var bvid = String(this.publishTaskBvid(task) || '').trim();
+            if (!bvid) {
+                this.$message.warning('请输入要核对的 BVID');
+                return;
+            }
+            this.publishTaskActionId = task.taskId;
+            HistoryApi.confirmPublishTaskBvid(task.taskId, bvid, function(data) {
+                self.publishTaskActionId = null;
+                self.$message({ message: data.message || '线上结果核对完成', type: data.success ? 'success' : 'warning' });
+                self.initTable(true);
+            }, function() {
+                self.publishTaskActionId = null;
+                self.$message.error('线上结果核对失败');
+            });
+        },
+        retryPublishTask: function(task) {
+            var self = this;
+            var unknown = this.requiresPublishTaskVerification(task);
+            var captchaRetry = task.waitReason === 'CAPTCHA_AUTO_RETRY';
+            var prompt = captchaRetry
+                ? '将立即触发一次投稿尝试以重新检查验证码；账号投稿冷却和全局限制仍会生效。'
+                : unknown
+                ? '只有在已通过线上稿件和账号检查、明确确认这次投稿没有被平台接受时，才继续重试。确认后系统会重新提交该任务。'
+                : '确认重新执行该投稿任务？';
+            this.$pageConfirm(prompt, captchaRetry ? '立即重新验证' : '重试投稿任务', {
+                confirmButtonText: captchaRetry ? '立即尝试' : '确认重试', cancelButtonText: '取消', type: 'warning'
+            }).then(function() {
+                self.publishTaskActionId = task.taskId;
+                HistoryApi.retryPublishTask(task.taskId, unknown, function(data) {
+                    self.publishTaskActionId = null;
+                    self.$message({ message: data.message || '已安排重试', type: data.accepted ? 'success' : 'warning' });
+                    self.initTable(true);
+                }, function() {
+                    self.publishTaskActionId = null;
+                    self.$message.error('重试请求失败');
+                });
+            }).catch(function() {});
+        },
+        cancelPublishTask: function(task) {
+            var self = this;
+            this.$pageConfirm('取消后，该任务不会继续投稿。确认取消此任务吗？', '取消投稿任务', {
+                confirmButtonText: '取消任务', cancelButtonText: '返回', type: 'warning'
+            }).then(function() {
+                self.publishTaskActionId = task.taskId;
+                HistoryApi.cancelPublishTask(task.taskId, function(data) {
+                    self.publishTaskActionId = null;
+                    self.$message({ message: data.message || '任务已取消', type: data.success ? 'success' : 'warning' });
+                    self.initTable(true);
+                }, function() {
+                    self.publishTaskActionId = null;
+                    self.$message.error('取消任务失败');
+                });
+            }).catch(function() {});
+        },
+        applyPublishRequestFeedback: function(id, data) {
+            if (!data || (!data.publishDispatch && !data.publishTasks)) return;
+            var row = this.tableData.find(function(item) { return Number(item.id) === Number(id); });
+            if (row) {
+                if (data.publishDispatch) this.$set(row, 'publishDispatch', data.publishDispatch);
+                if (data.publishTasks) this.$set(row, 'publishTasks', data.publishTasks);
+            }
+            if (this.currentDetail && Number(this.currentDetail.id) === Number(id)) {
+                if (data.publishDispatch) this.$set(this.currentDetail, 'publishDispatch', data.publishDispatch);
+                if (data.publishTasks) this.$set(this.currentDetail, 'publishTasks', data.publishTasks);
+            }
+        },
         handleResize: function () {
             this.tableMaxHeight = Math.max(180, window.innerHeight - 280);
             this.isMobile = this.moduleSurface === 'mobile';
@@ -310,6 +404,7 @@
                 });
                 HistoryApi.touchPublish(id, function (data) {
                         loading.close();
+                        _this.applyPublishRequestFeedback(id, data);
                         _this.$message({
                             message: data.msg,
                             type: data.type
@@ -337,6 +432,7 @@
                 });
                 HistoryApi.touchPublish(id, function (data) {
                         loading.close();
+                        _this.applyPublishRequestFeedback(id, data);
                         _this.$message({
                             message: data.msg,
                             type: data.type
@@ -364,6 +460,7 @@
                 });
                 HistoryApi.rePublish(id, function (data) {
                         loading.close();
+                        _this.applyPublishRequestFeedback(id, data);
                         _this.$message({
                             message: data.msg,
                             type: data.type

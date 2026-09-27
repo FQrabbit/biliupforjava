@@ -280,12 +280,18 @@ public class BiliApi {
     // }
 
     public static String editPublish(BiliBiliUser user, VideoEditUploadDto data) {
+        return editPublish(user, data, null);
+    }
+
+    public static String editPublish(BiliBiliUser user, VideoEditUploadDto data, Map<String, String> captcha) {
         WebCookie cookie = Cookie.parse(user.getCookies());
         String url = "https://member.bilibili.com/x/vu/web/edit?t=" + System.currentTimeMillis() + "&csrf=" + cookie.getCsrf();
         Map<String, String> headers = getCommonHeaders();
         data.setCsrf(cookie.getCsrf());
         headers.put("cookie", cookie.getCookie());
-        String body = JSON.toJSONString(data);
+        com.alibaba.fastjson.JSONObject bodyJson = com.alibaba.fastjson.JSONObject.parseObject(JSON.toJSONString(data));
+        if (captcha != null && !captcha.isEmpty()) bodyJson.putAll(captcha);
+        String body = bodyJson.toJSONString();
         return HttpClientUtil.post(url, headers, body);
     }
 

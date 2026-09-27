@@ -105,7 +105,7 @@ class RoomControllerExportTest {
     @Test
     void legacyImportProgressKeepsBytesAndRecordsInSeparateUnits() {
         String taskId = ReflectionTestUtils.invokeMethod(controller, "startConfigImportTask", "legacy-task", "导入配置", 1_000L);
-        Map<String, ?> runtimes = (Map<String, ?>) ReflectionTestUtils.getField(controller, "configTaskRuntimes");
+        Map<?, ?> runtimes = (Map<?, ?>) ReflectionTestUtils.getField(controller, "configTaskRuntimes");
         Object runtime = runtimes.get(taskId);
         AtomicLong bytesRead = (AtomicLong) ReflectionTestUtils.getField(runtime, "importBytesRead");
         bytesRead.set(500L);

@@ -337,6 +337,9 @@
                             <div class="card-status-row">
                                 <!-- 统一状态显示 -->
                                 <span class="status-chip" :class="getStatusColor(item.status)">{{ item.status }}</span>
+                                <el-tooltip v-if="getPublishFlowText(item)" popper-class="history-page-tooltip-popper" effect="dark" :content="getPublishFlowDetail(item)" placement="top">
+                                    <span class="status-chip warn">{{ getPublishFlowText(item) }}</span>
+                                </el-tooltip>
 
                                 <!-- 仅自己可见标签 -->
                                 <el-tag v-if="item.code === -50" size="mini" class="private-tag" effect="dark">
@@ -425,7 +428,7 @@
                             <span v-else style="color: var(--text-secondary);">0</span>
                         </div></template></el-table-column>
                     <el-table-column v-if="tableColumnVisible('status')" key="status" label="录制状态" width="110"><template slot-scope="scope"><span class="status-chip" :class="getStatusColor(scope.row.status)">{{ scope.row.status }}</span></template></el-table-column>
-                    <el-table-column v-if="tableColumnVisible('publish')" key="publish" label="上传 / 发布 / 审核" width="170"><template slot-scope="scope"><div class="readable-table-meta">自动上传：{{ scope.row.upload ? '开启' : '关闭' }}</div><div class="readable-table-meta">发布：<span :class="{ 'readable-table-success': scope.row.publish }">{{ scope.row.publish ? '已发布' : '未发布' }}</span></div><div class="readable-table-meta">审核：
+                    <el-table-column v-if="tableColumnVisible('publish')" key="publish" label="上传 / 投稿 / 审核" width="190"><template slot-scope="scope"><div class="readable-table-meta">自动上传：{{ scope.row.upload ? '开启' : '关闭' }}</div><div class="readable-table-meta">发布：<span :class="{ 'readable-table-success': scope.row.publish }">{{ scope.row.publish ? '已发布' : '未发布' }}</span></div><el-tooltip v-if="getPublishFlowText(scope.row)" popper-class="history-page-tooltip-popper" effect="dark" :content="getPublishFlowDetail(scope.row)" placement="top"><div class="readable-table-meta">投稿流程：{{ getPublishFlowText(scope.row) }}</div></el-tooltip><div class="readable-table-meta">审核：
                             <el-tag size="mini" type="info" v-if="!scope.row.publish">未审核</el-tag>
                             <el-tag size="mini" type="success" v-else-if="scope.row.code == 0">通过</el-tag>
                             <el-tag size="mini" class="private-tag" effect="dark" v-else-if="scope.row.code == -50"><i class="el-icon-view"></i> 仅自己可见</el-tag>

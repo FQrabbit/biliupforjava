@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.entity.PartFileLocation;
-import top.sshh.bililiverecoder.entity.StorageRoot;
 import top.sshh.bililiverecoder.repo.PartFileLocationRepository;
 
 import java.nio.charset.StandardCharsets;

@@ -5,6 +5,56 @@
     'use strict';
 
     window.HistoryPageCommonMethods = {
+        getPublishFlowText: function(item) {
+            if (!item) return '';
+            var tasks = item.publishTasks && item.publishTasks.length
+                ? item.publishTasks : (item.publishDispatch ? [item.publishDispatch] : []);
+            if (tasks.length) return tasks.map(function(task) {
+                var operationLabels = {
+                    NEW_PUBLISH: '新投稿', UPDATE: '更新稿件', REPAIR: '转码修复',
+                    EDIT_PARTS: '分P编辑', HIGH_ENERGY: '高能剪辑'
+                };
+                var prefix = operationLabels[task.operation];
+                return (prefix ? prefix + '：' : '') + (task.label || '投稿处理中');
+            }).join(' / ');
+            if (item.publishDispatch) return item.publishDispatch.label;
+            if (item.waitingForPublish && !item.publish) return '等待自动投稿';
+            return '';
+        },
+        getPublishOperationLabel: function(task) {
+            var labels = {
+                NEW_PUBLISH: '新投稿', UPDATE: '更新稿件', REPAIR: '转码修复',
+                EDIT_PARTS: '分P编辑', HIGH_ENERGY: '高能剪辑'
+            };
+            return labels[task && task.operation] || '投稿任务';
+        },
+        getPublishFlowDetail: function(item) {
+            if (!item) return '';
+            var tasks = item.publishTasks && item.publishTasks.length
+                ? item.publishTasks : (item.publishDispatch ? [item.publishDispatch] : []);
+            if (tasks.length) return tasks.map(function(dispatch) {
+                var detail = dispatch.waitReasonLabel || dispatch.resultMessage || dispatch.detail || '';
+                if (dispatch.resultMessage && dispatch.waitReasonLabel) detail += '；' + dispatch.resultMessage;
+                if (dispatch.waitReason === 'CAPTCHA_AUTO_RETRY') {
+                    detail += '；已完成 ' + Number(dispatch.captchaRetryCount || 0) + '/'
+                        + Number(dispatch.captchaRetryLimit || 3) + ' 次自动尝试';
+                } else if (dispatch.waitReason === 'PUBLISH_CAPTCHA' && Number(dispatch.captchaRetryCount || 0) > 0) {
+                    detail += '；此前已自动尝试 ' + Number(dispatch.captchaRetryCount || 0) + '/'
+                        + Number(dispatch.captchaRetryLimit || 3) + ' 次';
+                }
+                if (dispatch.queuePosition) detail += '；当前队列第 ' + dispatch.queuePosition + ' 位';
+                var earliest = dispatch.estimatedEarliestAt || dispatch.nextAttemptAt;
+                if (earliest) detail += '；预计不早于 ' + new Date(earliest).toLocaleString();
+                return detail;
+            }).filter(Boolean).join(' | ');
+            var dispatch = item.publishDispatch;
+            if (!dispatch) return item.waitingForPublish && !item.publish
+                ? '等待上传完成及稿件合并间隔，之后会进入账号投稿队列' : '';
+            var detail = dispatch.detail || '';
+            if (dispatch.position) detail += '；当前队列第 ' + dispatch.position + ' 位';
+            if (dispatch.nextAttemptAt) detail += '；预计不早于 ' + new Date(dispatch.nextAttemptAt).toLocaleString();
+            return detail;
+        },
         isHistoryComponentActive: function() {
             return !this.componentDestroyed && !this._isBeingDestroyed && !this._isDestroyed;
         },
@@ -174,6 +224,7 @@
             if (this.isActuallyRecording(item)) return '录制中';
             if (item.forceArchived && this.form.viewType === 'archived') return '已归档';
             if (item.publish) return this.getAuditStatusText(item);
+            if (item.publishDispatch) return item.publishDispatch.label;
             if (item.upload && this.getMobileUploadPercent(item) < 100) return '上传中';
             if (item.upload && !item.publish) return item.waitingForPublish ? '待投稿' : '待发布';
             if (!item.upload && (Number(item.partCount) || 0) > 0) return '待上传';
@@ -192,6 +243,7 @@
                 if (audit === 'danger') return 'is-danger';
                 return 'is-info';
             }
+            if (item.publishDispatch) return item.publishDispatch.code === 'CAPTCHA' ? 'is-warning' : 'is-upload';
             if (item.upload) return 'is-upload';
             if (item.forceArchived) return 'is-info';
             return 'is-warning';
@@ -209,7 +261,12 @@
                     });
                 }
             } else {
-                // 区域协调器在恢复时合并被推迟的列表刷新
+                if (this.isHistoryComponentActive() && typeof this.initTable === 'function') {
+                    this.$pageRefresh('initTable', [true]);
+                    if (typeof this.refreshPublishTaskStatuses === 'function') {
+                        this.refreshPublishTaskStatuses();
+                    }
+                }
             }
         },
         handlePageHide: function() {

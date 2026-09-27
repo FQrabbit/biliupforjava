@@ -36,6 +36,7 @@ public class HistoryDeletionService {
     private final PartFileLocationService partFileLocationService;
     private final StorageRootService storageRootService;
     private final RoomLiveEventXmlIssueService xmlIssueService;
+    private final PublishAccountScheduler publishAccountScheduler;
 
     public HistoryDeletionService(RecordHistoryRepository historyRepository,
                                   RecordHistoryPartRepository partRepository,
@@ -44,7 +45,8 @@ public class HistoryDeletionService {
                                   PartFileOperationService partFileOperationService,
                                   PartFileLocationService partFileLocationService,
                                   StorageRootService storageRootService,
-                                  RoomLiveEventXmlIssueService xmlIssueService) {
+                                  RoomLiveEventXmlIssueService xmlIssueService,
+                                  PublishAccountScheduler publishAccountScheduler) {
         this.historyRepository = historyRepository;
         this.partRepository = partRepository;
         this.msgRepository = msgRepository;
@@ -53,6 +55,7 @@ public class HistoryDeletionService {
         this.partFileLocationService = partFileLocationService;
         this.storageRootService = storageRootService;
         this.xmlIssueService = xmlIssueService;
+        this.publishAccountScheduler = publishAccountScheduler;
     }
 
     public DeletionResult delete(Long historyId, DeleteOptions options) {
@@ -64,6 +67,7 @@ public class HistoryDeletionService {
         }
 
         RecordHistory history = historyOptional.get();
+        publishAccountScheduler.cancelForHistory(historyId, "稿件已删除，未提交的投稿任务已取消");
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(historyId);
         msgQueueCleanupService.cleanupByHistoryId(historyId,
                 new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),

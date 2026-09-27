@@ -7,6 +7,9 @@
         },
         submit: function(data, callback, errorCallback) {
             ApiUtil.post('/captcha/submit', data, callback, errorCallback);
+        },
+        cancel: function(requestId, callback, errorCallback) {
+            ApiUtil.delete('/captcha/' + encodeURIComponent(requestId), callback, errorCallback);
         }
     };
 })(window);

@@ -45,6 +45,8 @@ class HistoryDeletionServiceTest {
     private StorageRootService storageRootService;
     @Mock
     private RoomLiveEventXmlIssueService xmlIssueService;
+    @Mock
+    private PublishAccountScheduler publishAccountScheduler;
     @InjectMocks
     private HistoryDeletionService service;
 
@@ -81,6 +83,7 @@ class HistoryDeletionServiceTest {
         assertEquals(3, result.localDeleteAttempt());
         assertEquals(3, result.localDeleteSuccess());
         assertTrue(result.notDeletedFiles().isEmpty());
+        verify(publishAccountScheduler).cancelForHistory(11L, "稿件已删除，未提交的投稿任务已取消");
         verify(partFileLocationService).resolveCompanions(21L, ".ass");
         verify(partFileLocationService).resolveCompanions(21L, ".png");
         verify(partFileLocationService).resolveCompanions(21L, ".webp");
@@ -102,6 +105,7 @@ class HistoryDeletionServiceTest {
 
         assertTrue(result.deleted());
         assertTrue(Files.exists(danmaku));
+        verify(publishAccountScheduler).cancelForHistory(11L, "稿件已删除，未提交的投稿任务已取消");
         verify(partFileOperationService, never()).deleteAllAvailable(any());
         verify(partFileLocationService, never()).resolveCompanions(any(), any());
         verify(storageRootService, never()).matchTrustedExisting(any());

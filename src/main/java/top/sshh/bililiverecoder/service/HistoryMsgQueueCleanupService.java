@@ -39,15 +39,18 @@ public class HistoryMsgQueueCleanupService {
     private final RecordHistoryPartRepository partRepository;
     private final LiveMsgRepository msgRepository;
     private final RecordRoomRepository roomRepository;
+    private final PublishAccountScheduler publishAccountScheduler;
 
     public HistoryMsgQueueCleanupService(RecordHistoryRepository historyRepository,
                                          RecordHistoryPartRepository partRepository,
                                          LiveMsgRepository msgRepository,
-                                         RecordRoomRepository roomRepository) {
+                                         RecordRoomRepository roomRepository,
+                                         PublishAccountScheduler publishAccountScheduler) {
         this.historyRepository = historyRepository;
         this.partRepository = partRepository;
         this.msgRepository = msgRepository;
         this.roomRepository = roomRepository;
+        this.publishAccountScheduler = publishAccountScheduler;
     }
 
     public CleanupOptions optionsFrom(Map<String, ?> raw) {
@@ -227,6 +230,7 @@ public class HistoryMsgQueueCleanupService {
                     history.setUpload(false);
                     history.setRecording(false);
                     history.setStreaming(false);
+                    publishAccountScheduler.cancelForHistory(history.getId(), "稿件已强制归档，未提交的投稿任务已取消");
                     changed = true;
                 }
             }

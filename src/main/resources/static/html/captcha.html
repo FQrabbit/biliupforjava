@@ -40,12 +40,20 @@
             <el-result icon="success" title="无需验证" subTitle="当前没有等待验证的上传任务"></el-result>
         </div>
         <div v-else>
+            <el-select v-if="challenges.length > 1" v-model="requestId" @change="selectChallenge" placeholder="选择待验证任务" style="width: 100%; margin-bottom: 12px;">
+                <el-option v-for="challenge in challenges" :key="challenge.requestId"
+                           :label="(challenge.accountId ? '账号 ' + challenge.accountId + ' · ' : '') + challenge.filename + ' (' + challenge.requestId.substring(0, 8) + ')'"
+                           :value="challenge.requestId"></el-option>
+            </el-select>
             <el-alert
                     title="检测到上传任务需要验证码"
                     type="warning"
-                    :description="'文件名: ' + filename"
+                    :description="'文件名: ' + filename + (selectedChallenge && selectedChallenge.accountId ? '；账号: ' + selectedChallenge.accountId : '') + (selectedChallenge && selectedChallenge.stage ? '；阶段: ' + selectedChallenge.stage : '')"
                     show-icon>
             </el-alert>
+            <div style="margin-top: 10px; text-align: right;">
+                <el-button size="mini" type="text" :disabled="submitting || !requestId" @click="cancelChallenge">取消此验证码任务</el-button>
+            </div>
 
             <!-- 新增：显示详细调试信息，方便用户判断验证类型 -->
             <el-collapse style="margin-top: 10px;">

@@ -237,6 +237,10 @@
                             <span :class="getAuditStatusClass(item)">审</span>
                             <span :class="getDanmakuStatusClass(item)">幕</span>
                         </div>
+                        <div v-if="getPublishFlowText(item)" class="mobile-history-subline" :title="getPublishFlowDetail(item)">
+                            <span>投稿流程：{{ getPublishFlowText(item) }}</span>
+                            <span v-if="item.publishDispatch && item.publishDispatch.position">队列第 {{ item.publishDispatch.position }} 位</span>
+                        </div>
                         <div class="mobile-history-progress-line">
                             <div>
                                 <span>分P进度</span>

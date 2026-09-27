@@ -9,6 +9,11 @@ import top.sshh.bililiverecoder.entity.DiagnosticExportRequest;
 import top.sshh.bililiverecoder.entity.NotificationDelivery;
 import top.sshh.bililiverecoder.entity.NotificationRule;
 import top.sshh.bililiverecoder.entity.PartFileLocation;
+import top.sshh.bililiverecoder.entity.PublishTask;
+import top.sshh.bililiverecoder.entity.PublishTaskOperation;
+import top.sshh.bililiverecoder.entity.PublishTaskSource;
+import top.sshh.bililiverecoder.entity.PublishTaskState;
+import top.sshh.bililiverecoder.entity.PublishTaskStatusDto;
 import top.sshh.bililiverecoder.entity.RoomLiveSessionStats;
 import top.sshh.bililiverecoder.entity.StorageRoot;
 import top.sshh.bililiverecoder.controller.RoomController;
@@ -18,6 +23,7 @@ import top.sshh.bililiverecoder.notification.NotificationMessage;
 import top.sshh.bililiverecoder.notification.NotificationSendResult;
 import top.sshh.bililiverecoder.service.RoomDeletionService;
 import top.sshh.bililiverecoder.service.StorageRootChangeAssessmentService;
+import top.sshh.bililiverecoder.service.CaptchaService;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,6 +50,12 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, RoomDeletionService.DeletionPreview.class);
         assertReflectionRegistered(hints, StorageRootChangeAssessmentService.Snapshot.class);
         assertReflectionRegistered(hints, StorageRootChangeAssessmentService.State.class);
+        assertReflectionRegistered(hints, PublishTask.class);
+        assertReflectionRegistered(hints, PublishTaskOperation.class);
+        assertReflectionRegistered(hints, PublishTaskSource.class);
+        assertReflectionRegistered(hints, PublishTaskState.class);
+        assertReflectionRegistered(hints, PublishTaskStatusDto.class);
+        assertReflectionRegistered(hints, CaptchaService.ChallengeStatus.class);
     }
 
     private void assertReflectionRegistered(RuntimeHints hints, Class<?> type) {

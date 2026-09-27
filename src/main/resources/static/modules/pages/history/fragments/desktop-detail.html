@@ -94,6 +94,29 @@
                 </div>
             </div>
 
+            <div class="detail-config-notice" v-if="getPublishFlowText(currentDetail)">
+                <div class="config-notice-icon"><i class="el-icon-time"></i></div>
+                <div class="config-notice-body">
+                    <div class="config-notice-title">投稿流程：{{ getPublishFlowText(currentDetail) }}</div>
+                    <div class="config-notice-text">{{ getPublishFlowDetail(currentDetail) }}</div>
+                </div>
+            </div>
+            <div v-for="task in (currentDetail.publishTasks && currentDetail.publishTasks.length ? currentDetail.publishTasks : (currentDetail.publishDispatch ? [currentDetail.publishDispatch] : []))"
+                 v-if="requiresPublishTaskVerification(task) || canRetryPublishTask(task) || canCancelPublishTask(task)"
+                 :key="'publish-task-actions-' + task.taskId" class="detail-config-notice">
+                <div class="config-notice-icon"><i class="el-icon-s-operation"></i></div>
+                <div class="config-notice-body">
+                    <div class="config-notice-title">{{ getPublishOperationLabel(task) }} · {{ task.label }}</div>
+                    <div v-if="requiresPublishTaskVerification(task)" style="display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+                        <el-input :value="publishTaskBvid(task)" @input="setPublishTaskBvid(task, $event)" size="small" placeholder="输入用于核对的 BVID" style="max-width:260px"></el-input>
+                        <el-button size="small" type="primary" :loading="isPublishTaskActionLoading(task)" @click="confirmPublishTaskResult(task)">核对线上结果</el-button>
+                    </div>
+                    <div v-if="canRetryPublishTask(task) || canCancelPublishTask(task)" style="display:flex; gap:8px; margin-top:8px;">
+                        <el-button v-if="canRetryPublishTask(task)" size="small" type="warning" :loading="isPublishTaskActionLoading(task)" @click="retryPublishTask(task)">{{ getPublishTaskRetryLabel(task) }}</el-button>
+                        <el-button v-if="canCancelPublishTask(task)" size="small" :loading="isPublishTaskActionLoading(task)" @click="cancelPublishTask(task)">取消任务</el-button>
+                    </div>
+                </div>
+            </div>
             <div class="detail-config-notice" v-if="hasUploadConfigMismatch">
                 <div class="config-notice-icon"><i class="el-icon-info"></i></div>
                 <div class="config-notice-body">

@@ -19,6 +19,7 @@ import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
+import top.sshh.bililiverecoder.service.PublishAccountScheduler;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartPathService;
 import top.sshh.bililiverecoder.service.RecordPartRecordingStateService;
@@ -47,6 +48,9 @@ public class publishJob {
 
     @Autowired
     RecordBiliPublishService publishService;
+
+    @Autowired
+    PublishAccountScheduler publishAccountScheduler;
 
     @Autowired
     RecordRoomRepository roomRepository;
@@ -352,30 +356,9 @@ public class publishJob {
             } catch (Exception ignored) {
             }
 
-            try {
-                publishService.publishRecordHistory(history);
-            } catch (Exception e) {
-                log.error("[BLR] {}", LogKvs.event("PublishJob.PublishHistory.Error")
-                        .add("historyId", history.getId())
-                        .add("roomId", history.getRoomId())
-                        .addIfNotBlank("title", history.getTitle())
-                        .addIfNotBlank("err", e.getMessage()), e);
-                history.setUploadRetryCount(history.getUploadRetryCount() + 1);
-                historyRepository.save(history);
-            }
-            
-            try {
-                log.info("[BLR] {}", LogKvs.event("PublishJob.WaitNext")
-                        .add("waitMs", 30000));
-                Thread.sleep(30000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                if (shutdownState.isShuttingDown()) {
-                    log.info("[BLR] {}", LogKvs.event("PublishJob.WaitNextInterrupted"));
-                    return;
-                }
-                log.warn("[BLR] {}", LogKvs.event("PublishJob.WaitNextInterrupted"), e);
-                return;
+            RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+            if (room != null) {
+                publishAccountScheduler.enqueue(room.getUploadUserId(), history.getId());
             }
         }
         } finally {

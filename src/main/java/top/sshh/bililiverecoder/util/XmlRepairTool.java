@@ -15,23 +15,13 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.RandomAccessFile;
-import java.io.Reader;
 import java.io.StringReader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -49,7 +39,6 @@ import java.util.stream.Stream;
  */
 public final class XmlRepairTool {
 
-    private static final Pattern ROOT_I_PATTERN = Pattern.compile("(?is)<i(?:\\s|>)");
     private static final Pattern DANMU_PATTERN = Pattern.compile("(?is)<d(?:\\s|>)");
     private static final Pattern GIFT_PATTERN = Pattern.compile("(?is)<gift(?:\\s|/?>)");
     private static final Pattern SC_PATTERN = Pattern.compile("(?is)<sc(?:\\s|/?>)");
@@ -134,60 +123,6 @@ public final class XmlRepairTool {
     private static boolean isXmlFile(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
         return name.endsWith(".xml");
-    }
-
-    private static TextChange stripBom(String text) {
-        if (!text.isEmpty() && text.charAt(0) == '\uFEFF') {
-            return new TextChange(text.substring(1), 1);
-        }
-        return new TextChange(text, 0);
-    }
-
-    private static TextChange removeIllegalXmlChars(String text) {
-        StringBuilder sb = new StringBuilder(text.length());
-        int removed = 0;
-        for (int i = 0; i < text.length(); i++) {
-            int cp = text.codePointAt(i);
-            if (Character.charCount(cp) == 2) {
-                i++;
-            }
-            if (isLegalXml10CodePoint(cp)) {
-                sb.appendCodePoint(cp);
-            } else {
-                removed++;
-            }
-        }
-        if (removed == 0) {
-            return new TextChange(text, 0);
-        }
-        return new TextChange(sb.toString(), removed);
-    }
-
-    private static boolean isLegalXml10CodePoint(int cp) {
-        return cp == 0x9
-                || cp == 0xA
-                || cp == 0xD
-                || (cp >= 0x20 && cp <= 0xD7FF)
-                || (cp >= 0xE000 && cp <= 0xFFFD)
-                || (cp >= 0x10000 && cp <= 0x10FFFF);
-    }
-
-    private static TextChange trimTrailingPartialTag(String text) {
-        String stripped = text.stripTrailing();
-        int lastLt = stripped.lastIndexOf('<');
-        int lastGt = stripped.lastIndexOf('>');
-        if (lastLt > lastGt) {
-            return new TextChange(stripped.substring(0, lastLt), stripped.length() - lastLt);
-        }
-        return new TextChange(text, 0);
-    }
-
-    private static boolean looksLikeOpenRoot(String text) {
-        return ROOT_I_PATTERN.matcher(text).find();
-    }
-
-    private static boolean hasRootEndTag(String text) {
-        return text.contains("</i>");
     }
 
     private static Validation validate(String text) {
@@ -307,9 +242,6 @@ public final class XmlRepairTool {
             }
             return new Options(help, write, replace, paths);
         }
-    }
-
-    private record TextChange(String text, int count) {
     }
 
     public record Validation(boolean valid, String message) {

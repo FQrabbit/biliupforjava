@@ -145,6 +145,12 @@ public class RecordHistory {
     private boolean waitingForPublish;
 
     @Transient
+    private PublishTaskStatusDto publishDispatch;
+
+    @Transient
+    private List<PublishTaskStatusDto> publishTasks;
+
+    @Transient
     private List<String> giveUpPartFiles;
 
     @Transient

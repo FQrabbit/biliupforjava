@@ -265,10 +265,6 @@ public class DiagnosticExportService {
         zip.closeEntry();
     }
 
-    private void streamRecords(LogArchiveService.LogFile file, Consumer<LogRecord> consumer) throws IOException {
-        streamRecords(file, consumer, null);
-    }
-
     private void streamRecords(LogArchiveService.LogFile file, Consumer<LogRecord> consumer,
                                java.util.function.LongConsumer bytesConsumer) throws IOException {
         try (var reader = archiveService.reader(file, bytesConsumer)) {

@@ -29,6 +29,7 @@ import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
+import top.sshh.bililiverecoder.service.PublishTaskService;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -77,6 +78,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     @Autowired
     private CaptchaService captchaService;
+
+    @Autowired
+    private PublishTaskService publishTaskService;
 
     @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
@@ -290,7 +294,10 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                         return;
                     }
                     if (history.isUpload()) {
-                        if (room.getUploadUserId() == null) {
+                        top.sshh.bililiverecoder.entity.PublishTask uploadTask =
+                                publishTaskService.getUploadTaskForHistory(part.getHistoryId());
+                        Long uploadAccountId = uploadTask == null ? room.getUploadUserId() : uploadTask.getAccountId();
+                        if (uploadAccountId == null) {
                             log.warn("[BLR] {}", LogKvs.event("Upload.Part.NoUploadUser")
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
@@ -299,12 +306,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                             TaskUtil.partUploadTask.remove(part.getId());
                             return;
                         } else {
-                            Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
+                            Optional<BiliBiliUser> userOptional = biliUserRepository.findById(uploadAccountId);
                             if (!userOptional.isPresent()) {
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.UploadUserMissing")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
-                                        .add("uploadUserId", room.getUploadUserId())
+                                        .add("uploadUserId", uploadAccountId)
                                         .add("partId", part.getId())
                                         .add("historyId", part.getHistoryId()));
                                 TaskUtil.partUploadTask.remove(part.getId());
@@ -315,7 +322,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.LoginInvalid")
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
-                                        .add("uploadUserId", room.getUploadUserId())
+                                        .add("uploadUserId", uploadAccountId)
                                         .add("partId", part.getId())
                                         .add("historyId", part.getHistoryId()));
                                 TaskUtil.partUploadTask.remove(part.getId());
@@ -403,33 +410,12 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("code", preUploadBean.getCode())
                                                         .add("fileName", uploadFile.getName())
                                                         .add("url", "http://localhost:" + serverPort + "/html/captcha.html"));
-                                                captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
+                                                captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail(),
+                                                        uploadAccountId, part.getHistoryId(),
+                                                        uploadTask == null ? null : uploadTask.getId(), "PART_UPLOAD");
                                                 Map<String, String> result = captchaService.waitForCaptcha();
-                                                if (result != null) {
-                                                    preParams.putAll(result);
-                                                } else {
-                                                    log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Timeout")
-                                                            .add("roomId", room.getRoomId())
-                                                            .add("uname", room.getUname())
-                                                            .add("partId", part.getId())
-                                                            .add("historyId", part.getHistoryId())
-                                                            .add("fileName", uploadFile.getName())
-                                                            .add("sleepMs", 600000));
-                                                    try {
-                                                        Thread.sleep(600000L);
-                                                    } catch (InterruptedException e) {
-                                                        log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.TimeoutSleepInterrupted")
-                                                                .add("roomId", room.getRoomId())
-                                                                .add("uname", room.getUname())
-                                                                .add("partId", part.getId())
-                                                                .add("historyId", part.getHistoryId())
-                                                                .add("fileName", uploadFile.getName())
-                                                                .add("sleepMs", 600000)
-                                                                .addIfNotBlank("err", e.getMessage())
-                                                                .add("ex", e.getClass().getSimpleName()), e);
-                                                        Thread.currentThread().interrupt();
-                                                    }
-                                                }
+                                                if (result == null) throw new IllegalStateException("分P上传验证码已过期或取消，请重新验证");
+                                                preParams.putAll(result);
                                             } else {
                                             log.warn("[BLR] {}", LogKvs.event("Upload.RateLimit.Wait")
                                                     .add("roomId", room.getRoomId())

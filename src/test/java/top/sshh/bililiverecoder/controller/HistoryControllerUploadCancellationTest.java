@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
+import top.sshh.bililiverecoder.service.PublishAccountScheduler;
 import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
@@ -32,6 +33,7 @@ class HistoryControllerUploadCancellationTest {
     private final UploadPauseService uploadPauseService = mock(UploadPauseService.class);
     private final UploadProgressTracker uploadProgressTracker = mock(UploadProgressTracker.class);
     private final HistoryMsgQueueCleanupService msgQueueCleanupService = mock(HistoryMsgQueueCleanupService.class);
+    private final PublishAccountScheduler publishAccountScheduler = mock(PublishAccountScheduler.class);
     private final HistoryController controller = new HistoryController();
     private Thread uploadThread;
 
@@ -43,6 +45,7 @@ class HistoryControllerUploadCancellationTest {
         ReflectionTestUtils.setField(controller, "uploadPauseService", uploadPauseService);
         ReflectionTestUtils.setField(controller, "uploadProgressTracker", uploadProgressTracker);
         ReflectionTestUtils.setField(controller, "msgQueueCleanupService", msgQueueCleanupService);
+        ReflectionTestUtils.setField(controller, "publishAccountScheduler", publishAccountScheduler);
     }
 
     @AfterEach

@@ -77,6 +77,20 @@
         highEnergyCutPublish: function(id, callback, errorCallback) {
             ApiUtil.get('/history/highEnergyCutPublish/' + encodeURIComponent(id), callback, errorCallback);
         },
+        publishTaskBatchState: function(taskIds, callback, errorCallback) {
+            ApiUtil.post('/publish-tasks/batch-state', { taskIds: taskIds || [] }, callback, errorCallback);
+        },
+        retryPublishTask: function(taskId, confirmedNotSubmitted, callback, errorCallback) {
+            ApiUtil.post('/publish-tasks/' + encodeURIComponent(taskId) + '/retry', {
+                confirmedNotSubmitted: !!confirmedNotSubmitted
+            }, callback, errorCallback);
+        },
+        cancelPublishTask: function(taskId, callback, errorCallback) {
+            ApiUtil.post('/publish-tasks/' + encodeURIComponent(taskId) + '/cancel', {}, callback, errorCallback);
+        },
+        confirmPublishTaskBvid: function(taskId, bvid, callback, errorCallback) {
+            ApiUtil.post('/publish-tasks/' + encodeURIComponent(taskId) + '/confirm-bvid', { bvid: bvid }, callback, errorCallback);
+        },
         progress: function(historyId, callback, errorCallback) {
             ApiUtil.get('/progress/history/' + encodeURIComponent(historyId), callback, errorCallback);
         },

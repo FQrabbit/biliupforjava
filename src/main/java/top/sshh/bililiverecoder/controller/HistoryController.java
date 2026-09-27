@@ -24,7 +24,6 @@ import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.repo.RoomLiveEventRepository;
 import top.sshh.bililiverecoder.repo.RoomLiveSessionStatsRepository;
-import top.sshh.bililiverecoder.service.impl.HighEnergyCutPublishService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.util.BiliApi;
@@ -39,6 +38,8 @@ import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.PublishAccountScheduler;
+import top.sshh.bililiverecoder.service.PublishTaskService;
 import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 
 import java.io.File;
@@ -67,6 +68,8 @@ public class HistoryController {
     @Autowired
     private RecordBiliPublishService publishService;
     @Autowired
+    private PublishAccountScheduler publishAccountScheduler;
+    @Autowired
     private LiveMsgRepository msgRepository;
     @Autowired
     private RoomLiveEventRepository roomLiveEventRepository;
@@ -74,8 +77,6 @@ public class HistoryController {
     private RoomLiveSessionStatsRepository sessionStatsRepository;
     @Autowired
     private LiveMsgService msgService;
-    @Autowired
-    private HighEnergyCutPublishService highEnergyCutPublishService;
     @Autowired
     private top.sshh.bililiverecoder.job.videoSyncJob videoSyncJob;
     @Autowired
@@ -160,6 +161,10 @@ public class HistoryController {
             populateHistoryFields(history, configMap, roomEntityCache.get(history.getRoomId()),
                     partStatsMap.get(history.getId()), msgStatsMap.get(history.getBvId()),
                     replyTaskStatsMap.get(history.getId()));
+            history.setPublishDispatch(publishAccountScheduler.status(publishAccountId(history,
+                    roomEntityCache.get(history.getRoomId())), history.getId()));
+            history.setPublishTasks(publishAccountScheduler.statuses(publishAccountId(history,
+                    roomEntityCache.get(history.getRoomId())), history.getId()));
         }
         Map<String,Object> result = new HashMap<>();
         result.put("data",list);
@@ -1226,9 +1231,9 @@ public class HistoryController {
     }
 
     @GetMapping("/touchPublish/{id}")
-    public Map<String, String> touchPublish(@PathVariable("id") Long id) {
+    public Map<String, Object> touchPublish(@PathVariable("id") Long id) {
         long totalStartNs = System.nanoTime();
-        Map<String, String> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
             result.put("msg", "请输入id");
@@ -1244,9 +1249,8 @@ public class HistoryController {
             }
             history.setUploadRetryCount(0);
             history = historyRepository.save(history);
-            publishService.asyncPublishRecordHistory(history);
-            result.put("type", "success");
-            result.put("msg", "触发发布事件成功");
+            boolean queued = publishService.asyncPublishRecordHistory(history);
+            fillPublishRequestResult(result, history, queued);
             log.info("[BLR] {}", LogKvs.event("History.TouchPublish.Success")
                     .add("historyId", id)
                     .add("roomId", history.getRoomId())
@@ -1260,9 +1264,9 @@ public class HistoryController {
     }
 
     @GetMapping("/highEnergyCutPublish/{id}")
-    public Map<String, String> HighEnergyCutPublish(@PathVariable("id") Long id) throws IOException {
+    public Map<String, Object> HighEnergyCutPublish(@PathVariable("id") Long id) throws IOException {
         long totalStartNs = System.nanoTime();
-        Map<String, String> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
             result.put("msg", "请输入id");
@@ -1276,24 +1280,19 @@ public class HistoryController {
                 result.put("msg", "稿件已强制归档，请先恢复处理");
                 return result;
             }
-            history.setUploadRetryCount(0);
-            history = historyRepository.save(history);
-            String msg = HighEnergyCutPublishService.taskRunningMsg.get(history.getId());
-            if (msg != null) {
-                result.put("type", "warning");
-                result.put("msg", "正在剪辑处理\n" + msg);
-                return result;
+            RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+            Long accountId = publishAccountId(history, room);
+            PublishTaskService.Admission admission = publishAccountScheduler.accept(accountId, history.getId(),
+                    PublishTaskOperation.HIGH_ENERGY, PublishTaskSource.MANUAL, null);
+            result.put("accepted", admission.isAccepted());
+            result.put("alreadyQueued", admission.isAlreadyQueued());
+            result.put("taskId", admission.getTask() == null ? null : admission.getTask().getId());
+            result.put("type", admission.isAccepted() ? "success" : "warning");
+            result.put("msg", admission.getMessage());
+            if (admission.getTask() != null) {
+                result.put("publishDispatch", publishAccountScheduler.statusByTaskId(admission.getTask().getId()));
+                result.put("publishTasks", publishAccountScheduler.statuses(accountId, history.getId()));
             }
-            try {
-                highEnergyCutPublishService.process(history);
-            } catch (Exception e) {
-                HighEnergyCutPublishService.taskRunningMsg.remove(history.getId());
-                result.put("type", "error");
-                result.put("msg", e.getMessage());
-                return result;
-            }
-            result.put("type", "success");
-            result.put("msg", "触发高能剪辑成功");
                 log.info("[BLR] {}", LogKvs.event("History.HighEnergyCutPublish.Success")
                     .add("historyId", id)
                     .add("roomId", history.getRoomId())
@@ -1307,9 +1306,9 @@ public class HistoryController {
     }
 
     @GetMapping("/rePublish/{id}")
-    public Map<String, String> rePublish(@PathVariable("id") Long id) {
+    public Map<String, Object> rePublish(@PathVariable("id") Long id) {
         long totalStartNs = System.nanoTime();
-        Map<String, String> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>();
         if (id == null) {
             result.put("type", "info");
             result.put("msg", "请输入id");
@@ -1325,9 +1324,8 @@ public class HistoryController {
             }
             history.setUploadRetryCount(0);
             history = historyRepository.save(history);
-            publishService.asyncRepublishRecordHistory(history);
-            result.put("type", "success");
-            result.put("msg", "触发转码修复事件成功");
+            boolean queued = publishService.asyncRepublishRecordHistory(history);
+            fillPublishRequestResult(result, history, queued);
             log.info("[BLR] {}", LogKvs.event("History.Republish.Success")
                     .add("historyId", id)
                     .add("roomId", history.getRoomId())
@@ -1337,6 +1335,33 @@ public class HistoryController {
             result.put("type", "warning");
             result.put("msg", "录制历史不存在");
             return result;
+        }
+    }
+
+    private Long publishAccountId(RecordHistory history, RecordRoom room) {
+        return history.getPublishUserId() != null ? history.getPublishUserId()
+                : room == null ? null : room.getUploadUserId();
+    }
+
+    private void fillPublishRequestResult(Map<String, Object> result, RecordHistory history, boolean queued) {
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        Long accountId = publishAccountId(history, room);
+        PublishTaskStatusDto status =
+                publishAccountScheduler.status(accountId, history.getId());
+        result.put("publishDispatch", status);
+        result.put("publishTasks", publishAccountScheduler.statuses(accountId, history.getId()));
+        if (status != null) {
+            result.put("type", "success");
+            result.put("msg", (queued ? "已加入账号投稿队列：" : "稿件已在处理中：") + status.getLabel());
+        } else if (queued) {
+            result.put("type", "success");
+            result.put("msg", "已触发投稿处理，队列状态即将刷新");
+        } else if (accountId == null) {
+            result.put("type", "warning");
+            result.put("msg", "未配置投稿账号，无法加入投稿队列");
+        } else {
+            result.put("type", "warning");
+            result.put("msg", "未能加入投稿队列，请检查运行状态并稍后重试");
         }
     }
 
@@ -1352,6 +1377,7 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            publishAccountScheduler.cancelForHistory(history.getId(), "稿件已强制归档，未提交的投稿任务已取消");
             List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             boolean changed = false;
             boolean uploadClosed = false;

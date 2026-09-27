@@ -6,6 +6,8 @@ new Vue({
     data: {
         loading: true,
         required: false,
+        challenges: [],
+        requestId: '',
         voucher: '',
         filename: '',
         extra: {},
@@ -14,6 +16,9 @@ new Vue({
         captchaSuccess: false,
         submitting: false,
         timer: null,
+        challengeVersion: 0,
+        statusRequestVersion: 0,
+        selectedChallenge: null,
         manualJson: '',
         // 自动生成的 Hook 脚本，动态插入当前服务器地址
         hookScript: `(function(){
@@ -56,6 +61,8 @@ new Vue({
         this.timer = setInterval(this.checkStatus, 5000);
     },
     beforeDestroy() {
+        this.challengeVersion++;
+        this.destroyCaptchaInstance(this.captchaObj);
         if (this.timer) clearInterval(this.timer);
     },
     methods: {
@@ -69,34 +76,65 @@ new Vue({
             this.$message.success('代码已复制到剪贴板');
         },
         checkStatus() {
-            if (this.required && !this.captchaSuccess && !this.manualJson) return; // 如果正在验证中且未手动输入，不要刷新状态
-
+            const statusVersion = ++this.statusRequestVersion;
+            const previousRequestId = this.requestId;
             CaptchaApi.status((res) => {
+                if (statusVersion !== this.statusRequestVersion) return;
                 this.loading = false;
+                this.challenges = res.challenges || [];
                 if (res.required) {
-                    if (this.voucher !== res.voucher) {
-                        this.required = true;
-                        this.voucher = res.voucher;
-                        this.filename = res.filename;
-                        this.extra = res.extra || {};
-                        this.initCaptcha();
+                    const selected = this.challenges.find(item => item.requestId === this.requestId) || this.challenges[0];
+                    if (selected && (this.requestId !== selected.requestId || this.voucher !== selected.voucher)) {
+                        this.requestId = selected.requestId;
+                        this.applyChallenge(selected);
                     }
                 } else {
+                    const previous = (res.recentChallenges || []).find(item => item.requestId === previousRequestId);
+                    if (previous && previous.state === 'EXPIRED') this.$message.warning('验证码已过期，请重新触发验证码');
+                    if (previous && previous.state === 'CANCELLED') this.$message.info('验证码任务已取消');
                     this.required = false;
+                    this.requestId = '';
                     this.voucher = '';
                     this.filename = '';
+                    this.selectedChallenge = null;
                     this.captchaSuccess = false;
                     this.captchaResult = null;
                     this.manualJson = '';
-                    if (this.captchaObj) {
-                        // 清理旧的验证码实例
-                        $('#captcha-box').empty();
-                        this.captchaObj = null;
-                    }
+                    this.destroyCaptchaInstance(this.captchaObj);
                 }
             });
         },
-        initCaptcha() {
+        selectChallenge(requestId) {
+            const selected = this.challenges.find(item => item.requestId === requestId);
+            if (selected) this.applyChallenge(selected);
+        },
+        applyChallenge(selected) {
+            this.challengeVersion++;
+            const version = this.challengeVersion;
+            const requestId = selected.requestId;
+            this.required = true;
+            this.requestId = requestId;
+            this.selectedChallenge = selected;
+            this.submitting = false;
+            this.voucher = selected.voucher;
+            this.filename = selected.filename;
+            this.extra = selected.extra || {};
+            this.captchaSuccess = false;
+            this.captchaResult = null;
+            this.manualJson = '';
+            this.destroyCaptchaInstance(this.captchaObj);
+            this.captchaObj = null;
+            this.$nextTick(() => {
+                if (version === this.challengeVersion && requestId === this.requestId) this.initCaptcha(version, requestId);
+            });
+        },
+        destroyCaptchaInstance(instance) {
+            if (instance && typeof instance.destroy === 'function') {
+                try { instance.destroy(); } catch (e) { console.debug('验证码组件清理失败', e); }
+            }
+            $('#captcha-box').empty();
+        },
+        initCaptcha(version, requestId) {
 
             console.log("Extra info:", this.extra);
 
@@ -108,9 +146,14 @@ new Vue({
                 captchaId: BILI_UPLOAD_CAPTCHA_ID,
                 product: 'popup'
             }, (captchaObj) => {
+                if (version !== this.challengeVersion || requestId !== this.requestId) {
+                    this.destroyCaptchaInstance(captchaObj);
+                    return;
+                }
                 this.captchaObj = captchaObj;
                 captchaObj.appendTo("#captcha-box");
                 captchaObj.onSuccess(() => {
+                    if (version !== this.challengeVersion || requestId !== this.requestId) return;
                     let result = captchaObj.getValidate();
                     console.log("Geetest V4 Result:", result);
 
@@ -125,6 +168,7 @@ new Vue({
                     this.captchaSuccess = true;
                 });
                 captchaObj.onError((e) => {
+                    if (version !== this.challengeVersion || requestId !== this.requestId) return;
                     console.error("Geetest V4 Error:", e);
                     this.$message.error("验证码加载失败，请尝试手动处理");
                 });
@@ -132,7 +176,7 @@ new Vue({
         },
         submitCaptcha() {
             if (!this.captchaResult) return;
-            this.doSubmit(this.captchaResult);
+            this.doSubmit(this.captchaResult, this.requestId, this.challengeVersion);
         },
         submitManual() {
             if (!this.manualJson) {
@@ -141,7 +185,7 @@ new Vue({
             }
             try {
                 let result = JSON.parse(this.manualJson);
-                this.doSubmit(result);
+                this.doSubmit(result, this.requestId, this.challengeVersion);
             } catch (e) {
                 this.$message.error('JSON格式错误');
             }
@@ -155,16 +199,38 @@ new Vue({
                 this.doSubmit({});
             });
         },
-        doSubmit(data) {
+        cancelChallenge() {
+            const requestId = this.requestId;
+            if (!requestId) return;
+            CaptchaApi.cancel(requestId, (res) => {
+                if (!res || !res.success) {
+                    this.$message.warning('验证码任务已结束或无法取消');
+                    this.checkStatus();
+                    return;
+                }
+                this.$message.success('已取消此验证码任务');
+                this.checkStatus();
+            }, () => this.$message.error('取消验证码失败'));
+        },
+        doSubmit(data, requestId, version) {
+            const targetRequestId = requestId || this.requestId;
+            const targetVersion = version === undefined ? this.challengeVersion : version;
             this.submitting = true;
-
-            CaptchaApi.submit(data, (res) => {
+            CaptchaApi.submit(Object.assign({}, data, { requestId: targetRequestId }), (res) => {
+                if (targetVersion !== this.challengeVersion) return;
+                if (!res || !res.success) {
+                    this.$message.error(res && res.message ? res.message : '验证码任务已结束，请刷新后重试');
+                    this.submitting = false;
+                    this.checkStatus();
+                    return;
+                }
                 this.$message.success('提交成功，上传将继续');
                 this.submitting = false;
                 this.required = false; // 暂时隐藏，等待下一次轮询确认
                 this.captchaSuccess = false;
                 this.manualJson = '';
             }, (xhr) => {
+                if (targetVersion !== this.challengeVersion) return;
                 this.$message.error('提交失败');
                 this.submitting = false;
             });

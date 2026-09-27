@@ -18,9 +18,17 @@ public class BiliVideoInfoResponse {
         private int videos;
         private int tid;
         private String pic;
+        private String title;
+        private Owner owner;
         private int state;
         private int duration;
         private List<BiliVideoInfoPart> pages;
+    }
+
+    @Data
+    public static class Owner {
+        private Long mid;
+        private String name;
     }
 
     @Data

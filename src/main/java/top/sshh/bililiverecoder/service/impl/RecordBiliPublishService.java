@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 import com.alibaba.fastjson.JSONObject;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.annotation.PostConstruct;
@@ -12,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 import top.sshh.bililiverecoder.job.videoSyncJob;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
+import top.sshh.bililiverecoder.service.PublishSubmissionException;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
@@ -55,10 +56,7 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Component
@@ -122,6 +120,13 @@ public class RecordBiliPublishService {
     private LiveMsgRepository msgRepository;
     @Autowired
     private CaptchaService captchaService;
+    private final ConcurrentHashMap<Long, PublishCaptchaAnswer> pendingPublishCaptchaResults = new ConcurrentHashMap<>();
+    @Autowired
+    private top.sshh.bililiverecoder.service.PublishAccountScheduler publishAccountScheduler;
+    @Autowired
+    private top.sshh.bililiverecoder.service.PublishTaskService publishTaskService;
+    @Autowired
+    private top.sshh.bililiverecoder.service.PublishAccountCooldownService publishAccountCooldownService;
     @Autowired
     private ShutdownState shutdownState;
     @Autowired
@@ -141,12 +146,18 @@ public class RecordBiliPublishService {
     @Autowired
     private RoomLiveEventXmlIssueService xmlIssueService;
 
-    @Async
-    public void asyncPublishRecordHistory(RecordHistory history) {
+    public boolean asyncPublishRecordHistory(RecordHistory history) {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
-            return;
+            return false;
         }
-        this.publishRecordHistory(history);
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        Long accountId = history.getPublishUserId() != null
+                ? history.getPublishUserId() : room == null ? null : room.getUploadUserId();
+        if (hasOnlineIdentity(history)) {
+            return publishAccountScheduler.enqueueEdit(accountId, history.getId());
+        } else {
+            return publishAccountScheduler.enqueue(accountId, history.getId());
+        }
     }
 
     // 方法用于按"${@数字}"分割字符串
@@ -198,15 +209,167 @@ public class RecordBiliPublishService {
         return map;
     }
 
-    @Async
-    public void asyncRepublishRecordHistory(RecordHistory history) {
+    public boolean asyncRepublishRecordHistory(RecordHistory history) {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
-            return;
+            return false;
         }
         if (history == null) {
-            return;
+            return false;
         }
-        editPublishedHistory(history, "republish");
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        Long accountId = history.getPublishUserId() != null
+                ? history.getPublishUserId() : room == null ? null : room.getUploadUserId();
+        return publishAccountScheduler.enqueueRepublish(accountId, history.getId());
+    }
+
+    /**
+     * 检查投稿任务需要的文件，并把尚未上传的分P加入上传队列
+     * 只要还有分P正在上传或录制，就返回等待状态
+     * 这样不会占着账号的投稿线程等待上传完成
+     */
+    public PreparationResult preparePublishTask(Long historyId, Long accountId) {
+        LocalDateTime suspendedUntil = suspendMap.get(historyId);
+        if (suspendedUntil != null) {
+            if (suspendedUntil.isAfter(LocalDateTime.now())) {
+                return PreparationResult.waitUntil("上传网关暂不可用，任务延后重试", suspendedUntil);
+            }
+            suspendMap.remove(historyId, suspendedUntil);
+        }
+        RecordHistory history = historyRepository.findById(historyId).orElse(null);
+        if (history == null) return PreparationResult.action("稿件不存在");
+        if (history.isForceArchived()) return PreparationResult.action("稿件已强制归档");
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        if (room == null) return PreparationResult.action("稿件所属房间不存在");
+        if (!history.isPublish() && !Objects.equals(room.getUploadUserId(), accountId)) {
+            return PreparationResult.action("房间投稿账号已变化，任务仍绑定受理时账号，请核对后重新创建任务");
+        }
+        Long uploadAccountId = history.isPublish() && history.getPublishUserId() != null
+                ? history.getPublishUserId() : room.getUploadUserId();
+        if (!Objects.equals(uploadAccountId, accountId)) {
+            return PreparationResult.action("任务账号与稿件原投稿账号不一致");
+        }
+        List<RecordHistoryPart> parts = filterPublishableParts(
+                partRepository.findByHistoryIdOrderByStartTimeAsc(historyId));
+        if (parts.isEmpty()) return PreparationResult.action("稿件没有可投稿的分P");
+
+        Map<Integer, BiliVideoPartInfoResponse.Video> onlineByPage = Map.of();
+        Map<String, BiliVideoPartInfoResponse.Video> onlineByTitle = Map.of();
+        if (history.isPublish() && hasOnlineIdentity(history)) {
+            BiliBiliUser originalUser = biliUserRepository.findById(accountId).orElse(null);
+            BiliVideoPartInfoResponse online = loadOnlinePartInfo(originalUser, history);
+            onlineByPage = buildOnlineVideoPageMap(online);
+            onlineByTitle = buildOnlineVideoTitleMap(online);
+        }
+
+        boolean waiting = false;
+        LocalDateTime now = LocalDateTime.now();
+        for (RecordHistoryPart part : parts) {
+            if (part == null || isSkippedPart(part)) continue;
+            BiliVideoPartInfoResponse.Video onlinePart = history.isPublish()
+                    ? resolveOnlineVideo(part, onlineByTitle, onlineByPage) : null;
+            boolean onlineFailed = history.isPublish() && isOnlineVideoFailedForEdit(onlinePart);
+            boolean replacementReady = onlineFailed && part.isUpload()
+                    && StringUtils.isNotBlank(part.getFileName())
+                    && (onlinePart == null || !part.getFileName().equals(onlinePart.getFilename()));
+            if (!part.isUpload() && isOnlineVideoUsable(onlinePart)) {
+                syncPartFromOnlineVideo(part, onlinePart);
+                continue;
+            }
+            if (part.isUpload() && StringUtils.isNotBlank(part.getFileName())
+                    && (!onlineFailed || replacementReady)) continue;
+            if (onlineFailed && !replacementReady) {
+                part.setUpload(false);
+                part.setCid(null);
+                part.setFileName(null);
+                part = partRepository.save(part);
+            }
+            if (part.isUpload()) return PreparationResult.action("分P已标记上传但缺少平台文件标识，请先修复分P");
+
+            PartFileLocationService.FileResolution resolution = partFileLocationService.resolveReadable(part.getId());
+            if (!resolution.available()) {
+                return PreparationResult.action("分P文件不可读取：" + resolution.state());
+            }
+            File file = resolution.path().toFile();
+            if (part.getEndTime() == null || part.isRecording()) {
+                waiting = true;
+                continue;
+            }
+            if (!file.isFile()) return PreparationResult.action("分P文件不存在：" + resolution.path());
+
+            part.setFilePath(normalizeFilePath(resolution.path().toString()));
+            if (part.getFileSize() <= 0) part.setFileSize(file.length());
+            if (part.getDuration() <= 0 && part.getStartTime() != null && part.getEndTime() != null) {
+                part.setDuration((int) java.time.Duration.between(part.getStartTime(), part.getEndTime()).getSeconds());
+            }
+            if (part.getEndTime().isAfter(now.plusMinutes(11))) {
+                return PreparationResult.action("分P结束时间异常，需先检查录制记录");
+            }
+            if (part.getFileSize() < 1024L * 1024L * Math.max(0, room.getFileSizeLimit())
+                    || part.getDuration() < room.getDurationLimit()) {
+                part.setUpload(false);
+                part.setUploadRetryCount(UPLOAD_RETRY_GIVE_UP);
+                part.setDeleteFailType("SKIPPED_THRESHOLD");
+                part.setDeleteFailReason("文件低于房间上传阈值，已按现有规则跳过");
+                partRepository.save(part);
+                continue;
+            }
+
+            if (uploadUserSerialScheduler.hasPendingPart(part.getId())) {
+                waiting = true;
+                continue;
+            }
+            boolean enqueued = enqueuePartUploadAsync(room, part, accountId, "publish-task");
+            if (enqueued) waiting = true;
+            else if (uploadUserSerialScheduler.hasPendingPart(part.getId())) waiting = true;
+            else return PreparationResult.waiting("上传队列暂不可用，稍后自动重试");
+        }
+        if (waiting) return PreparationResult.waiting("正在等待分P上传或录制结束");
+
+        List<RecordHistoryPart> refreshed = filterPublishableParts(
+                partRepository.findByHistoryIdOrderByStartTimeAsc(historyId));
+        boolean complete = refreshed.stream().allMatch(part -> isSkippedPart(part)
+                || (part.isUpload() && StringUtils.isNotBlank(part.getFileName())));
+        return complete ? PreparationResult.prepared()
+                : PreparationResult.waiting("正在等待分P上传完成");
+    }
+
+    public record PreparationResult(boolean ready, boolean needsAction, String message,
+                                    LocalDateTime nextAttemptAt) {
+        static PreparationResult prepared() { return new PreparationResult(true, false, "分P已就绪", null); }
+        static PreparationResult waiting(String message) {
+            return waitUntil(message, LocalDateTime.now().plusSeconds(30));
+        }
+        static PreparationResult waitUntil(String message, LocalDateTime nextAttemptAt) {
+            return new PreparationResult(false, false, message, nextAttemptAt);
+        }
+        static PreparationResult action(String message) { return new PreparationResult(false, true, message, null); }
+    }
+
+    private boolean enqueuePartUploadAsync(RecordRoom room, RecordHistoryPart part,
+                                           Long accountId, String source) {
+        if (room == null || part == null || part.getId() == null) return false;
+        Long effectiveAccountId = accountId != null ? accountId : room.getUploadUserId();
+        if (effectiveAccountId == null) return false;
+        return uploadUserSerialScheduler.submitIfPartNotPending(
+                effectiveAccountId, room.getRoomId(), part.getHistoryId(), part.getId(), source,
+                () -> {
+                    try {
+                        uploadServiceFactory.getUploadService(room.getLine()).upload(part);
+                    } catch (RuntimeException e) {
+                        boolean gatewayFailure = e.getMessage() != null
+                                && e.getMessage().startsWith("UPLOAD_GATEWAY_ERROR");
+                        LocalDateTime retryAt = LocalDateTime.now().plus(gatewayFailure
+                                ? java.time.Duration.ofMinutes(30) : java.time.Duration.ofSeconds(30));
+                        suspendMap.put(part.getHistoryId(), retryAt);
+                        publishAccountScheduler.deferUploadHistory(part.getHistoryId(),
+                                gatewayFailure ? "上传网关异常，当前稿件延后 30 分钟" : "分P上传失败，30 秒后重试",
+                                retryAt);
+                    } finally {
+                        if (!suspendMap.containsKey(part.getHistoryId())) {
+                            publishAccountScheduler.wakeHistory(part.getHistoryId());
+                        }
+                    }
+                });
     }
 
     public Map<String, Object> buildEditPartsDraft(Long historyId) {
@@ -446,12 +609,6 @@ public class RecordBiliPublishService {
 
     public Map<String, Object> submitEditParts(Long historyId, Map<String, Object> request) {
         Map<String, Object> result = new LinkedHashMap<>();
-        EditPartsTaskStatus running = editPartsTaskMap.get(historyId);
-        if (running != null && ("RUNNING".equals(running.status) || "QUEUED".equals(running.status))) {
-            result.put("accepted", false);
-            result.put("message", "已有分P编辑任务正在执行");
-            return result;
-        }
         Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
         if (historyOptional.isEmpty()) {
             result.put("accepted", false);
@@ -466,33 +623,137 @@ public class RecordBiliPublishService {
             result.put("message", auth.message);
             return result;
         }
+        top.sshh.bililiverecoder.service.PublishTaskService.Admission admission = publishAccountScheduler.accept(
+                auth.user.getId(), historyId, PublishTaskOperation.EDIT_PARTS, PublishTaskSource.MANUAL, request);
+        result.put("accepted", admission.isAccepted());
+        result.put("alreadyQueued", admission.isAlreadyQueued());
+        result.put("message", admission.getMessage());
+        if (!admission.isAccepted()) return result;
         EditPartsTaskStatus status = new EditPartsTaskStatus();
         status.status = "QUEUED";
-        status.message = "等待处理";
+        status.message = admission.getMessage();
         status.historyId = historyId;
         status.startTime = LocalDateTime.now();
         status.sessionId = request == null ? null : stringValue(request.get("sessionId"));
-        markHistoryWorkingForEdit(history, status);
-        editPartsTaskMap.put(historyId, status);
-        Thread worker = new Thread(() -> runEditPartsSubmit(historyId, request, status), "edit-parts-" + historyId);
-        worker.setDaemon(true);
-        worker.start();
-        result.put("accepted", true);
+        EditPartsTaskStatus previousStatus = editPartsTaskMap.get(historyId);
+        if (previousStatus == null || (!"QUEUED".equals(previousStatus.status)
+                && !"RUNNING".equals(previousStatus.status))) {
+            editPartsTaskMap.put(historyId, status);
+        }
+        result.put("taskId", admission.getTask() == null ? null : admission.getTask().getId());
         result.put("status", status.status);
+        if (admission.getTask() != null) {
+            result.put("publishDispatch", publishAccountScheduler.statusByTaskId(admission.getTask().getId()));
+            result.put("publishTasks", publishAccountScheduler.statuses(auth.user.getId(), historyId));
+        }
         result.put("historyCode", status.historyCode);
         result.put("historyEditPartsUploading", status.historyEditPartsUploading);
         result.put("historyStatus", status.historyStatus);
         return result;
     }
 
-    public Map<String, Object> getEditPartsTask(Long historyId) {
-        EditPartsTaskStatus status = editPartsTaskMap.get(historyId);
-        if (status == null) {
-            Map<String, Object> empty = new LinkedHashMap<>();
-            empty.put("status", "NONE");
-            return empty;
+    public PreparationResult prepareEditPartsTask(PublishTask task) {
+        if (task == null || StringUtils.isBlank(task.getRequestSnapshot())) {
+            return PreparationResult.action("分P编辑请求快照缺失，请重新提交编辑");
         }
-        return status.toMap();
+        RecordHistory history = historyRepository.findById(task.getHistoryId()).orElse(null);
+        if (history == null || history.isForceArchived()) return PreparationResult.action("稿件不存在或已强制归档");
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        if (room == null) return PreparationResult.action("稿件所属房间不存在");
+        BiliBiliUser user = biliUserRepository.findById(task.getAccountId()).orElse(null);
+        if (user == null || !user.isLogin()) return PreparationResult.action("原投稿账号登录已失效");
+
+        Map<String, Object> request = JSON.parseObject(task.getRequestSnapshot(), new TypeReference<Map<String, Object>>() {});
+        List<EditPartSubmitItem> items = parseEditPartSubmitItems(request.get("items"));
+        if (items.isEmpty()) return PreparationResult.action("分P编辑请求中没有有效的分P项");
+        boolean waiting = false;
+        int page = 1;
+        for (EditPartSubmitItem item : items) {
+            if (item.deleted) continue;
+            boolean hasReplacement = StringUtils.isNotBlank(item.filePath) || StringUtils.isNotBlank(item.fileRef);
+            boolean expectsLocal = "local".equalsIgnoreCase(item.source) || "workdir".equalsIgnoreCase(item.source);
+            if (!hasReplacement) {
+                if (expectsLocal) return PreparationResult.action("本地分P文件引用缺失，请重新选择文件");
+                page++;
+                continue;
+            }
+            RecordHistoryPart part = prepareEditUploadPart(history, room, item, page);
+            if (part == null) return PreparationResult.action("分P文件不在工作目录或已丢失：P" + page);
+            if (part.isUpload() && StringUtils.isNotBlank(part.getFileName())) {
+                page++;
+                continue;
+            }
+            if (!new File(part.getFilePath()).isFile())
+                return PreparationResult.action("分P编辑临时文件已丢失：P" + page);
+            if (uploadUserSerialScheduler.hasPendingPart(part.getId())) {
+                waiting = true;
+                page++;
+                continue;
+            }
+            boolean queued = enqueuePartUploadAsync(room, part, task.getAccountId(), "edit-parts-task");
+            if (queued || uploadUserSerialScheduler.hasPendingPart(part.getId())) waiting = true;
+            else return PreparationResult.waiting("上传队列暂不可用，稍后自动重试");
+            page++;
+        }
+        return waiting ? PreparationResult.waiting("等待替换分P上传完成") : PreparationResult.prepared();
+    }
+
+    public boolean executeQueuedEditParts(PublishTask task) {
+        if (task == null || StringUtils.isBlank(task.getRequestSnapshot())) return false;
+        Map<String, Object> request = JSON.parseObject(task.getRequestSnapshot(), new TypeReference<Map<String, Object>>() {});
+        EditPartsTaskStatus status = editPartsTaskMap.computeIfAbsent(task.getHistoryId(), id -> {
+            EditPartsTaskStatus created = new EditPartsTaskStatus();
+            created.historyId = id;
+            created.status = "QUEUED";
+            created.sessionId = stringValue(request.get("sessionId"));
+            created.startTime = task.getCreatedAt();
+            return created;
+        });
+        RecordHistory history = historyRepository.findById(task.getHistoryId()).orElse(null);
+        if (history != null) markHistoryWorkingForEdit(history, status);
+        runEditPartsSubmit(task.getId(), task.getHistoryId(), request, status);
+        return "SUCCESS".equals(status.status);
+    }
+
+    public Map<String, Object> getEditPartsTask(Long historyId) {
+        PublishTask activeTask = publishTaskService.getActiveForHistory(historyId).stream()
+                .filter(candidate -> candidate.getOperation() == PublishTaskOperation.EDIT_PARTS)
+                .findFirst().orElse(null);
+        if (activeTask != null) return toPersistedEditPartsTask(historyId, activeTask);
+        EditPartsTaskStatus status = editPartsTaskMap.get(historyId);
+        if (status != null) return status.toMap();
+        PublishTask task = publishTaskService.getLatestForHistory(historyId);
+        if (task != null && task.getOperation() == PublishTaskOperation.EDIT_PARTS) {
+            return toPersistedEditPartsTask(historyId, task);
+        }
+        Map<String, Object> empty = new LinkedHashMap<>();
+        empty.put("status", "NONE");
+        return empty;
+    }
+
+    private Map<String, Object> toPersistedEditPartsTask(Long historyId, PublishTask task) {
+        Map<String, Object> persisted = new LinkedHashMap<>();
+        String legacyStatus = switch (task.getState()) {
+            case SUBMITTING -> "RUNNING";
+            case SUCCEEDED -> "SUCCESS";
+            case FAILED, NEEDS_ACTION -> "FAILED";
+            case CANCELLED -> "CANCELLED";
+            default -> "QUEUED";
+        };
+        persisted.put("historyId", historyId);
+        persisted.put("taskId", task.getId());
+        persisted.put("status", legacyStatus);
+        persisted.put("message", task.getResultMessage());
+        persisted.put("queueState", task.getState());
+        persisted.put("waitReason", task.getWaitReason());
+        persisted.put("nextAttemptAt", task.getNextAttemptAt());
+        try {
+            Map<String, Object> snapshot = JSON.parseObject(task.getRequestSnapshot(), new TypeReference<Map<String, Object>>() {});
+            persisted.put("sessionId", snapshot == null ? null : snapshot.get("sessionId"));
+        } catch (RuntimeException ignored) {
+            persisted.put("sessionId", null);
+        }
+        return persisted;
     }
 
     public Map<String, Object> cleanupEditPartTempFiles(Long historyId, String sessionId) {
@@ -507,11 +768,50 @@ public class RecordBiliPublishService {
             result.put("message", "edit task is using this temp session");
             return result;
         }
+        if (isEditPartsSessionActive(historyId, sessionId)) {
+            result.put("deleted", false);
+            result.put("skipped", true);
+            result.put("message", "持久化的投稿任务正在引用此临时文件");
+            return result;
+        }
+        if (StringUtils.isNotBlank(sessionId)) {
+            Path sessionRoot = Paths.get(workPath, "_edit_uploads", String.valueOf(historyId),
+                    safePathSegment(sessionId)).normalize();
+            boolean uploadPending = partRepository.findByHistoryIdOrderByStartTimeAsc(historyId).stream()
+                    .filter(part -> "EDIT_PART".equals(part.getSourceType()))
+                    .filter(part -> StringUtils.isNotBlank(part.getFilePath()))
+                    .filter(part -> Paths.get(part.getFilePath()).toAbsolutePath().normalize()
+                            .startsWith(sessionRoot.toAbsolutePath().normalize()))
+                    .anyMatch(part -> uploadUserSerialScheduler.hasPendingPart(part.getId()));
+            if (uploadPending) {
+                result.put("deleted", false);
+                result.put("skipped", true);
+                result.put("message", "替换分P仍在上传，临时文件将在上传结束后按保留策略清理");
+                return result;
+            }
+        }
         Path path = StringUtils.isBlank(sessionId)
                 ? Paths.get(workPath, "_edit_uploads", String.valueOf(historyId)).normalize()
                 : Paths.get(workPath, "_edit_uploads", String.valueOf(historyId), safePathSegment(sessionId)).normalize();
         result.put("deleted", deleteDirectoryQuietly(path));
         return result;
+    }
+
+    public void cleanupTerminalEditPartsTask(PublishTask task) {
+        if (task == null || task.getOperation() != PublishTaskOperation.EDIT_PARTS
+                || StringUtils.isBlank(task.getRequestSnapshot())) return;
+        try {
+            Map<String, Object> request = JSON.parseObject(task.getRequestSnapshot(), new TypeReference<Map<String, Object>>() {});
+            String sessionId = request == null ? null : stringValue(request.get("sessionId"));
+            if (StringUtils.isBlank(sessionId)) return;
+            EditPartsTaskStatus status = editPartsTaskMap.get(task.getHistoryId());
+            if (status != null && Objects.equals(status.sessionId, sessionId)) {
+                editPartsTaskMap.remove(task.getHistoryId(), status);
+            }
+            cleanupEditPartTempFiles(task.getHistoryId(), sessionId);
+        } catch (RuntimeException e) {
+            log.warn("Unable to clean terminal edit-parts temp files taskId={}", task.getId(), e);
+        }
     }
 
     public Map<String, Object> restoreEditPartsOnlineState(Long historyId) {
@@ -629,6 +929,7 @@ public class RecordBiliPublishService {
                     .collect(Collectors.toList());
             for (Path path : paths) {
                 try {
+                    if (isPathReferencedByActiveEditTask(root, path)) continue;
                     if (Files.isRegularFile(path) && Files.getLastModifiedTime(path).toMillis() < cutoff) {
                         Files.deleteIfExists(path);
                     } else if (Files.isDirectory(path) && !path.equals(root)) {
@@ -644,7 +945,7 @@ public class RecordBiliPublishService {
         }
     }
 
-    private void runEditPartsSubmit(Long historyId, Map<String, Object> request, EditPartsTaskStatus status) {
+    private void runEditPartsSubmit(Long taskId, Long historyId, Map<String, Object> request, EditPartsTaskStatus status) {
         status.status = "RUNNING";
         status.message = "正在提交编辑";
         RecordHistory history = historyRepository.findById(historyId).orElse(null);
@@ -663,6 +964,7 @@ public class RecordBiliPublishService {
             markEditPartsTaskFailed(status, "稿件正在发布或编辑中");
             return;
         }
+        boolean finalSubmitStarted = false;
         try {
             BiliVideoPartInfoResponse partInfo = loadOnlinePartInfo(auth.user, history);
             Long aid = resolveOnlineAid(history, partInfo);
@@ -719,10 +1021,9 @@ public class RecordBiliPublishService {
                         markEditPartsTaskFailed(status, "文件不在工作目录下或文件不存在: P" + page);
                         return;
                     }
-                    uploadPartWithUserSerialBlocking(room, part);
                     part = partRepository.findById(part.getId()).orElse(part);
                     if (!part.isUpload() || StringUtils.isBlank(part.getFileName())) {
-                        markEditPartsTaskFailed(status, "分P上传未完成: P" + page);
+                        markEditPartsTaskFailed(status, "分P尚未完成上传: P" + page);
                         return;
                     }
                     dto.setFilename(part.getFileName());
@@ -761,10 +1062,24 @@ public class RecordBiliPublishService {
             }
             status.message = "正在提交编辑";
             VideoEditUploadDto dto = buildVideoEditUploadDto(history, room, aid, videos);
-            String editRes = BiliApi.editPublish(auth.user, dto);
+            Map<String, Object> persistedRequest = new LinkedHashMap<>(request);
+            List<Map<String, Object>> submittedVideos = new ArrayList<>();
+            for (SingleVideoDto video : videos) {
+                Map<String, Object> identity = new LinkedHashMap<>();
+                identity.put("title", video.getTitle());
+                identity.put("filename", video.getFilename());
+                identity.put("cid", video.getCid());
+                submittedVideos.add(identity);
+            }
+            persistedRequest.put("submittedVideos", submittedVideos);
+            publishTaskService.updateSnapshot(taskId, JSON.toJSONString(persistedRequest),
+                    "分P编辑请求内容已保存，正在提交到平台");
+            finalSubmitStarted = true;
+            String editRes = submitEditPublishWithCaptcha(auth.user, dto, history, "EDIT_PARTS_SUBMIT");
             JSONObject root = parseJsonObject(editRes);
             Integer code = root == null ? null : root.getInteger("code");
             String message = root == null ? null : root.getString("message");
+            if (code == null) throw PublishSubmissionException.unknown("编辑接口没有返回可确认的状态", null);
             status.code = code;
             status.responseMessage = message;
             status.responseSnippet = abbreviatePublishResponse(editRes, 320);
@@ -792,9 +1107,21 @@ public class RecordBiliPublishService {
                 status.message = "编辑成功";
                 status.endTime = LocalDateTime.now();
             } else {
+                if (isAccountPublishRateLimit(code, message)) {
+                    publishAccountCooldownService.recordRisk(auth.user.getId());
+                }
                 markEditPartsTaskFailed(status, StringUtils.defaultIfBlank(message, "编辑接口失败"));
             }
         } catch (Exception e) {
+            if (e instanceof PublishCaptchaPendingException) {
+                status.status = "QUEUED";
+                status.message = "等待完成分P编辑验证码";
+                return;
+            }
+            if (finalSubmitStarted) {
+                throw e instanceof PublishSubmissionException submission ? submission
+                        : PublishSubmissionException.unknown("分P编辑提交过程异常", e);
+            }
             log.error("[BLR] {}", LogKvs.event("Publish.EditParts.SubmitFailed")
                     .add("historyId", historyId)
                     .addIfNotBlank("err", e.getMessage())
@@ -817,9 +1144,11 @@ public class RecordBiliPublishService {
                     .addIfNotBlank("reason", reason));
             return false;
         }
-        Optional<BiliBiliUser> userOptional = room.getUploadUserId() == null
+        Long editAccountId = history.getPublishUserId() != null
+                ? history.getPublishUserId() : room.getUploadUserId();
+        Optional<BiliBiliUser> userOptional = editAccountId == null
                 ? Optional.empty()
-                : biliUserRepository.findById(room.getUploadUserId());
+                : biliUserRepository.findById(editAccountId);
         if (!userOptional.isPresent()) {
             log.error("[BLR] {}", LogKvs.event("Publish.UploadUserMissing")
                     .add("roomId", room.getRoomId())
@@ -863,6 +1192,7 @@ public class RecordBiliPublishService {
         }
 
         long startNs = System.nanoTime();
+        boolean finalSubmitStarted = false;
         try {
             log.info("[BLR] {}", LogKvs.event("Publish.Edit.Start")
                     .add("roomId", room.getRoomId())
@@ -887,7 +1217,10 @@ public class RecordBiliPublishService {
                     syncPartFromOnlineVideo(uploadPart, onlineVideo);
                     continue;
                 }
-                boolean needsUpload = !uploadPart.isUpload() || onlineFailed;
+                boolean replacementReady = onlineFailed && uploadPart.isUpload()
+                        && StringUtils.isNotBlank(uploadPart.getFileName())
+                        && (onlineVideo == null || !uploadPart.getFileName().equals(onlineVideo.getFilename()));
+                boolean needsUpload = !uploadPart.isUpload() || (onlineFailed && !replacementReady);
                 if (!needsUpload) {
                     continue;
                 }
@@ -907,7 +1240,7 @@ public class RecordBiliPublishService {
                             .add("xcodeState", onlineVideo.getXcodeState()));
                     continue;
                 }
-                if (onlineFailed) {
+                if (onlineFailed && !replacementReady) {
                     uploadPart.setUpload(false);
                     uploadPart.setCid(null);
                     uploadPart.setFileName(null);
@@ -937,7 +1270,8 @@ public class RecordBiliPublishService {
                         .add("historyId", history.getId())
                         .add("partId", uploadPart.getId())
                         .addIfNotBlank("reason", reason));
-                uploadPartWithUserSerialBlocking(room, uploadPart);
+                enqueuePartUploadAsync(room, uploadPart, biliBiliUser.getId(), "publish-edit");
+                editBlocked = true;
             }
             if (editBlocked) {
                 log.warn("[BLR] {}", LogKvs.event("Publish.Edit.Deferred")
@@ -977,10 +1311,13 @@ public class RecordBiliPublishService {
                 return false;
             }
             VideoEditUploadDto videoUploadDto = buildVideoEditUploadDto(history, room, aid, videosBuild.getVideos());
-            String editRes = BiliApi.editPublish(biliBiliUser, videoUploadDto);
+            finalSubmitStarted = true;
+            String editRes = submitEditPublishWithCaptcha(biliBiliUser, videoUploadDto, history,
+                    "PUBLISHED_EDIT_SUBMIT");
             JSONObject editRoot = parseJsonObject(editRes);
             Integer code = editRoot == null ? null : editRoot.getInteger("code");
             String message = editRoot == null ? null : editRoot.getString("message");
+            if (code == null) throw PublishSubmissionException.unknown("编辑接口没有返回可确认的状态", null);
             log.info("[BLR] {}", LogKvs.event("Publish.Edit.Response")
                     .add("roomId", room.getRoomId())
                     .add("uname", room.getUname())
@@ -1005,6 +1342,11 @@ public class RecordBiliPublishService {
                 syncEditHistoryStatusImmediately(history.getId());
                 return true;
             }
+            if (isAccountPublishRateLimit(code, message)) {
+                publishAccountCooldownService.recordRisk(biliBiliUser.getId());
+            }
+            return false;
+        } catch (PublishCaptchaPendingException e) {
             return false;
         } catch (PartUploadWaitTimeoutException e) {
             log.info("[BLR] {}", LogKvs.event("Publish.Edit.Deferred")
@@ -1015,6 +1357,10 @@ public class RecordBiliPublishService {
                     .addStageCostMs("total", startNs));
             return false;
         } catch (Exception e) {
+            if (finalSubmitStarted) {
+                throw e instanceof PublishSubmissionException submission ? submission
+                        : PublishSubmissionException.unknown("已发布稿件编辑提交过程异常", e);
+            }
             log.error("[BLR] {}", LogKvs.event("Publish.Edit.Error")
                     .add("historyId", history.getId())
                     .add("roomId", history.getRoomId())
@@ -1257,70 +1603,10 @@ public class RecordBiliPublishService {
                         }
                     }
                 }
-                Thread thread = TaskUtil.partUploadTask.get(uploadPart.getId());
-                if (thread != null && thread != Thread.currentThread()) {
-                    //等待线程上传完成
-                    log.info("[BLR] {}", LogKvs.event("Publish.PartUploadLock.Wait")
-                            .add("roomId", room.getRoomId())
-                            .add("uname", room.getUname())
-                            .add("historyId", history.getId())
-                            .add("partId", uploadPart.getId())
-                            .add("filePath", uploadPart.getFilePath()));
-                    synchronized (filePath) {
-                        TaskUtil.partUploadTask.remove(uploadPart.getId());
-                        log.info("[BLR] {}", LogKvs.event("Publish.PartUploadLock.Acquired")
-                                .add("roomId", room.getRoomId())
-                                .add("uname", room.getUname())
-                                .add("historyId", history.getId())
-                                .add("partId", uploadPart.getId()));
-                        //再次检查是否上传完成
-                        Optional<RecordHistoryPart> partOptional = partRepository.findById(uploadPart.getId());
-                        if (partOptional.isPresent()) {
-                            RecordHistoryPart part = partOptional.get();
-                            if (!part.isUpload() && !isSkippedPart(part)) {
-                                log.info("[BLR] {}", LogKvs.event("Publish.Part.NotUploaded")
-                                        .add("roomId", room.getRoomId())
-                                        .add("uname", room.getUname())
-                                        .add("historyId", history.getId())
-                                        .add("partId", uploadPart.getId()));
-                                uploadPartWithUserSerialBlocking(room, uploadPart);
-                                try {
-                                    log.info("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldown")
-                                            .add("historyId", history.getId())
-                                            .add("partId", uploadPart.getId())
-                                            .add("waitMs", 20000));
-                                    Thread.sleep(20000);
-                                } catch (InterruptedException e) {
-                                    log.warn("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldownInterrupted")
-                                            .add("historyId", history.getId())
-                                            .add("partId", uploadPart.getId()), e);
-                                }
-                            }
-                        }
-
-                    }
-                } else {
-                    if (isSkippedPart(uploadPart)) {
-                        continue;
-                    }
-                    log.info("[BLR] {}", LogKvs.event("Publish.Part.NotUploaded")
-                            .add("roomId", room.getRoomId())
-                            .add("uname", room.getUname())
-                            .add("historyId", history.getId())
-                            .add("partId", uploadPart.getId()));
-                    uploadPartWithUserSerialBlocking(room, uploadPart);
-                    try {
-                        log.info("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldown")
-                                .add("historyId", history.getId())
-                                .add("partId", uploadPart.getId())
-                                .add("waitMs", 20000));
-                        Thread.sleep(20000);
-                    } catch (InterruptedException e) {
-                        log.warn("[BLR] {}", LogKvs.event("Publish.Part.Uploaded.WaitCooldownInterrupted")
-                                .add("historyId", history.getId())
-                                .add("partId", uploadPart.getId()), e);
-                    }
-                }
+                // 投稿线程只提交已经上传完成的分P
+                // 尚未上传的分P由 preparePublishTask 安排上传，完成后由调度器继续处理
+                TaskUtil.publishTask.remove(history.getId());
+                return false;
 
             }
             ensureUploadCostMs = (System.nanoTime() - ensureUploadStartNs) / 1_000_000L;
@@ -1522,7 +1808,6 @@ public class RecordBiliPublishService {
                                                     .add("historyId", history.getId())
                                                     .add("retry", i + 1)
                                                     .add("error", e.getMessage()));
-                                            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
                                         }
                                     }
                                 }
@@ -1599,10 +1884,12 @@ public class RecordBiliPublishService {
                                 .addIfNotBlank("source", abbreviateForLog(videoUploadDto.getSource(), 120)));
                     }
                     String uploadRes = null;
+                    boolean publishRequestStarted = false;
                     try {
                         int timestampJumpRounds = 0;
                         while (true) {
                         webPublishStartNs = System.nanoTime();
+                        publishRequestStarted = true;
                         uploadRes = submitWebPublishWithCaptcha(biliBiliUser, videoUploadDto, room, history);
                         JSONObject publishRoot = parseJsonObject(uploadRes);
                         JSONObject publishData = publishRoot == null ? null : publishRoot.getJSONObject("data");
@@ -1619,6 +1906,10 @@ public class RecordBiliPublishService {
                                 .addIfNotBlank("respSnippet", abbreviatePublishResponse(uploadRes, 320)));
                         Integer publishCode = publishRoot == null ? null : publishRoot.getInteger("code");
                         String publishMessage = publishRoot == null ? null : publishRoot.getString("message");
+                        if (isAccountPublishRateLimit(publishCode, publishMessage)) {
+                            publishAccountCooldownService.recordRisk(biliBiliUser.getId());
+                            return false;
+                        }
                         Set<Long> timestampJumpCids = extractTimestampJumpCids(publishData);
                         boolean timestampJump = Objects.equals(publishCode, 21588)
                                 || !timestampJumpCids.isEmpty()
@@ -1698,6 +1989,12 @@ public class RecordBiliPublishService {
                                     .add("remainingPartCount", uploadParts.size()));
                             continue;
                         }
+                        if (publishCode != null && publishCode != 0) {
+                            throw PublishSubmissionException.rejected(publishCode, publishMessage);
+                        }
+                        if (publishCode == null) {
+                            throw PublishSubmissionException.unknown("投稿接口响应缺少状态码", null);
+                        }
                         if (publishData == null) {
                             log.warn("[BLR] {}", LogKvs.event("Publish.WebPublish.MissingData")
                                     .add("roomId", room.getRoomId())
@@ -1707,9 +2004,8 @@ public class RecordBiliPublishService {
                                     .add("code", publishCode)
                                     .addIfNotBlank("message", publishMessage)
                                     .addIfNotBlank("respSnippet", abbreviatePublishResponse(uploadRes, 320)));
-                            throw new RuntimeException("webPublish failed: code=" + publishCode
-                                    + ", message=" + publishMessage
-                                    + ", resp=" + abbreviatePublishResponse(uploadRes, 320));
+                            throw PublishSubmissionException.unknown("投稿接口响应缺少稿件身份："
+                                    + abbreviatePublishResponse(uploadRes, 320), null);
                         }
                         String bvid = publishData == null ? null : publishData.getString("bvid");
                         String aid = publishData == null ? null : publishData.getString("aid");
@@ -1719,7 +2015,7 @@ public class RecordBiliPublishService {
                                     .add("uname", room.getUname())
                                     .add("historyId", history.getId())
                                     .add("respLen", uploadRes == null ? 0 : uploadRes.length()));
-                            throw new RuntimeException(uploadRes);
+                            throw PublishSubmissionException.unknown("投稿接口响应缺少 BVID/AID", null);
                         }
                         history.setBvId(bvid);
                         history.setAvId(aid);
@@ -1828,6 +2124,13 @@ public class RecordBiliPublishService {
 
                         }
                     } catch (Exception e) {
+                        if (e instanceof PublishCaptchaPendingException) {
+                            return false;
+                        }
+                        if (e instanceof PublishSubmissionException submission) throw submission;
+                        if (publishRequestStarted) {
+                            throw PublishSubmissionException.unknown("普通投稿提交过程异常", e);
+                        }
                         webPublishCostMs = webPublishStartNs > 0L ? (System.nanoTime() - webPublishStartNs) / 1_000_000L : -1L;
                         history.setUploadRetryCount(history.getUploadRetryCount() + 1);
                         history = historyRepository.save(history);
@@ -1849,6 +2152,7 @@ public class RecordBiliPublishService {
             }
         }
         } catch (Exception e) {
+            if (e instanceof PublishSubmissionException submission) throw submission;
             log.error("[BLR] {}", LogKvs.event("Publish.Error")
                     .add("historyId", history.getId())
                     .add("roomId", history.getRoomId())
@@ -2281,11 +2585,17 @@ public class RecordBiliPublishService {
             ctx.message = "仅审核通过或被退回的稿件支持编辑分P";
             return ctx;
         }
-        if (room == null || room.getUploadUserId() == null) {
+        Long accountId = history.getPublishUserId() != null
+                ? history.getPublishUserId() : room == null ? null : room.getUploadUserId();
+        if (history.getPublishUserId() == null) {
+            ctx.message = "稿件未记录原投稿账号，请核对账号权限后再绑定";
+            return ctx;
+        }
+        if (room == null || accountId == null) {
             ctx.message = "投稿账号不存在";
             return ctx;
         }
-        Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
+        Optional<BiliBiliUser> userOptional = biliUserRepository.findById(accountId);
         if (userOptional.isEmpty() || !userOptional.get().isLogin()) {
             ctx.message = "投稿账号未登录";
             return ctx;
@@ -2392,13 +2702,6 @@ public class RecordBiliPublishService {
     }
 
     private RecordHistoryPart prepareEditUploadPart(RecordHistory history, RecordRoom room, EditPartSubmitItem item, int page) {
-        RecordHistoryPart part = new RecordHistoryPart();
-        part.setHistoryId(history.getId());
-        part.setRoomId(history.getRoomId());
-        part.setStartTime(history.getStartTime());
-        part.setEndTime(history.getEndTime());
-        part.setRecording(false);
-        part.setSourceType("EDIT_PART");
         String path = normalizeFilePath(StringUtils.defaultIfBlank(item.filePath, item.fileRef));
         if (StringUtils.isNotBlank(path)) {
             String realPath = resolveTrustedLocalFile(path);
@@ -2411,6 +2714,18 @@ public class RecordBiliPublishService {
             path = realPath;
         }
         File file = new File(path);
+        String resolvedPath = path;
+        RecordHistoryPart part = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()).stream()
+                .filter(existing -> "EDIT_PART".equals(existing.getSourceType())
+                        && existing.getPage() == page
+                        && Objects.equals(normalizeFilePath(existing.getFilePath()), resolvedPath))
+                .findFirst().orElseGet(RecordHistoryPart::new);
+        part.setHistoryId(history.getId());
+        part.setRoomId(history.getRoomId());
+        part.setStartTime(history.getStartTime());
+        part.setEndTime(history.getEndTime());
+        part.setRecording(false);
+        part.setSourceType("EDIT_PART");
         part.setRoomId(history.getRoomId());
         part.setHistoryId(history.getId());
         part.setPage(page);
@@ -2711,106 +3026,6 @@ public class RecordBiliPublishService {
         }
     }
 
-    private void uploadPartWithUserSerialBlocking(RecordRoom room, RecordHistoryPart part) {
-        if (room == null || room.getUploadUserId() == null) {
-            uploadServiceFactory.getUploadService(room != null ? room.getLine() : null).upload(part);
-            return;
-        }
-        CountDownLatch done = new CountDownLatch(1);
-        AtomicReference<RuntimeException> runtimeRef = new AtomicReference<>();
-        boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
-                room.getUploadUserId(),
-                room.getRoomId(),
-                part.getHistoryId(),
-                part.getId(),
-                "publish-sync",
-                () -> {
-                    try {
-                        uploadServiceFactory.getUploadService(room.getLine()).upload(part);
-                    } catch (RuntimeException e) {
-                        runtimeRef.set(e);
-                        throw e;
-                    } finally {
-                        done.countDown();
-                    }
-                }
-        );
-        if (!enqueued) {
-            log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.WaitQueued")
-                    .add("roomId", room.getRoomId())
-                    .add("historyId", part.getHistoryId())
-                    .add("partId", part.getId()));
-            waitExistingPartUpload(part);
-            return;
-        }
-        try {
-            long timeoutMinutes = 30;
-            long startTime = System.currentTimeMillis();
-            long timeoutMs = timeoutMinutes * 60 * 1000;
-            
-            while (!done.await(1, TimeUnit.SECONDS)) {
-                if (shutdownState.isShuttingDown()) {
-                    throw new RuntimeException("UPLOAD_INTERRUPTED_BY_SHUTDOWN");
-                }
-                
-                long elapsedMs = System.currentTimeMillis() - startTime;
-                if (elapsedMs > timeoutMs) {
-                    log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.Deferred")
-                            .add("historyId", part.getHistoryId())
-                            .add("partId", part.getId())
-                            .add("roomId", part.getRoomId())
-                            .add("timeoutMinutes", timeoutMinutes)
-                            .add("elapsedMs", elapsedMs));
-                    throw new PartUploadWaitTimeoutException(part.getHistoryId(), part.getId(),
-                            "UPLOAD_WAIT_TIMEOUT: 分P仍在上传，等待超过" + timeoutMinutes + "分钟，本轮投稿延后");
-                }
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("[BLR] {}", LogKvs.event("Publish.PartUpload.Interrupted")
-                    .add("historyId", part.getHistoryId())
-                    .add("partId", part.getId()), e);
-            throw new RuntimeException("UPLOAD_INTERRUPTED", e);
-        }
-        RuntimeException ex = runtimeRef.get();
-        if (ex != null) {
-            throw ex;
-        }
-    }
-
-    private void waitExistingPartUpload(RecordHistoryPart part) {
-        long timeoutMs = 30L * 60L * 1000L;
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            if (shutdownState.isShuttingDown()) {
-                throw new RuntimeException("UPLOAD_INTERRUPTED_BY_SHUTDOWN");
-            }
-            Optional<RecordHistoryPart> latestOpt = partRepository.findById(part.getId());
-            if (!latestOpt.isPresent()) {
-                return;
-            }
-            RecordHistoryPart latest = latestOpt.get();
-            if (latest.isUpload() || isSkippedPart(latest)) {
-                return;
-            }
-            if (!uploadUserSerialScheduler.hasPendingPart(latest.getId())) {
-                throw new RuntimeException("UPLOAD_QUEUE_DRAINED_BUT_NOT_UPLOADED");
-            }
-            try {
-                Thread.sleep(1000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("UPLOAD_INTERRUPTED", e);
-            }
-        }
-        log.info("[BLR] {}", LogKvs.event("Publish.PartUpload.Deferred")
-                .add("historyId", part.getHistoryId())
-                .add("partId", part.getId())
-                .add("timeoutMs", timeoutMs));
-        throw new PartUploadWaitTimeoutException(part.getHistoryId(), part.getId(),
-                "UPLOAD_WAIT_TIMEOUT: 等待队列中分P上传超过" + (timeoutMs / 60000L) + "分钟，本轮投稿延后");
-    }
-
     public DescDto template(String template, Map<String, Object> map) {
         List<DescV2Dto> resultList = new ArrayList<>();
         StringBuilder desc = new StringBuilder();
@@ -3063,75 +3278,123 @@ public class RecordBiliPublishService {
         return name;
     }
 
+    private static boolean isAccountPublishRateLimit(Integer code, String message) {
+        if (code != null && (code == -412 || code == -352 || code == -429 || code == 12002)) return true;
+        return StringUtils.contains(message, "风控")
+                || StringUtils.contains(message, "频繁")
+                || StringUtils.contains(message, "限流");
+    }
+
+    private boolean isEditPartsSessionActive(Long historyId, String sessionId) {
+        if (historyId == null || StringUtils.isBlank(sessionId)) return false;
+        return publishTaskService.getActiveForHistory(historyId).stream()
+                .filter(task -> task.getOperation() == PublishTaskOperation.EDIT_PARTS)
+                .anyMatch(task -> {
+                    try {
+                        Map<String, Object> snapshot = JSON.parseObject(task.getRequestSnapshot(), new TypeReference<Map<String, Object>>() {});
+                        return snapshot != null && sessionId.equals(stringValue(snapshot.get("sessionId")));
+                    } catch (RuntimeException e) { return false; }
+                });
+    }
+
+    private boolean isPathReferencedByActiveEditTask(Path root, Path path) {
+        try {
+            Path relative = root.relativize(path);
+            if (relative.getNameCount() < 2) return false;
+            Long historyId = Long.valueOf(relative.getName(0).toString());
+            String sessionId = relative.getName(1).toString();
+            return isEditPartsSessionActive(historyId, sessionId);
+        } catch (RuntimeException e) { return false; }
+    }
+
     private String submitWebPublishWithCaptcha(BiliBiliUser user,
                                                 VideoUploadDto videoUploadDto,
                                                 RecordRoom room,
-                                                RecordHistory history) throws InterruptedException {
-        String uploadRes = BiliApi.webPublish(user, videoUploadDto);
+                                                RecordHistory history) {
+        Long taskId = publishAccountScheduler.currentTaskId();
+        Long answerKey = taskId == null ? history.getId() : taskId;
+        PublishCaptchaAnswer pendingAnswer = pendingPublishCaptchaResults.remove(answerKey);
+        Map<String, String> captchaResult = pendingAnswer != null
+                && Objects.equals(pendingAnswer.accountId(), user.getId())
+                && "FINAL_SUBMIT".equals(pendingAnswer.stage()) ? pendingAnswer.result() : null;
+        String uploadRes;
+        try {
+            uploadRes = captchaResult == null
+                    ? BiliApi.webPublish(user, videoUploadDto)
+                    : BiliApi.webPublish(user, videoUploadDto, captchaResult);
+        } catch (RuntimeException e) {
+            throw PublishSubmissionException.unknown("普通投稿网络请求异常", e);
+        }
         log.info("[BLR] {}", LogKvs.event("Publish.WebPublish.Response")
                 .add("roomId", room.getRoomId())
                 .add("uname", room.getUname())
                 .add("historyId", history.getId())
                 .add("respLen", uploadRes == null ? 0 : uploadRes.length())
-                .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
-        if (!StringUtils.contains(uploadRes, "验证码")) {
+                .add("containsCaptcha", isPublishCaptchaResponse(uploadRes)));
+        if (!isPublishCaptchaResponse(uploadRes)) {
             return uploadRes;
         }
-        try {
-            String voucher = JsonPath.read(uploadRes, "data.v_voucher");
-            Map<String, Object> data = JsonPath.read(uploadRes, "data");
-            log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Required")
-                    .add("roomId", room.getRoomId())
-                    .add("uname", room.getUname())
-                    .add("historyId", history.getId())
-                    .addIfNotBlank("title", history.getTitle())
-                    .addUrl("captchaUrl", "http://localhost:" + serverPort + "/html/captcha.html"));
-            captchaService.setCaptchaRequired(voucher, history.getTitle(), data);
-            Map<String, String> captchaResult = captchaService.waitForCaptcha();
-            if (captchaResult != null) {
-                if (!captchaResult.containsKey("v_voucher")) {
-                    captchaResult.put("v_voucher", voucher);
-                }
-                log.info("[BLR] {}", LogKvs.event("Publish.Captcha.Submit")
-                        .add("roomId", room.getRoomId())
-                        .add("uname", room.getUname())
-                        .add("historyId", history.getId())
-                        .add("hasV4", captchaResult.containsKey("captcha_key"))
-                        .add("hasVoucher", captchaResult.containsKey("v_voucher")));
-                uploadRes = BiliApi.webPublish(user, videoUploadDto, captchaResult);
-                log.info("[BLR] {}", LogKvs.event("Publish.Captcha.PublishResponse")
-                        .add("roomId", room.getRoomId())
-                        .add("uname", room.getUname())
-                        .add("historyId", history.getId())
-                        .add("respLen", uploadRes == null ? 0 : uploadRes.length())
-                        .add("containsCaptcha", uploadRes != null && uploadRes.contains("验证码")));
-                if (StringUtils.contains(uploadRes, "验证码") || StringUtils.contains(uploadRes, "\"code\":601")) {
-                    log.error("[BLR] {}", LogKvs.event("Publish.Captcha.VerifyFailedPause")
-                            .add("roomId", room.getRoomId())
-                            .add("uname", room.getUname())
-                            .add("historyId", history.getId())
-                            .add("pauseSeconds", 300));
-                    Thread.sleep(300 * 1000L);
-                    throw new RuntimeException("验证码验证失败: " + uploadRes);
-                }
-                return uploadRes;
-            }
-            log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Timeout")
-                    .add("roomId", room.getRoomId())
-                    .add("uname", room.getUname())
-                    .add("historyId", history.getId())
-                    .add("waitSeconds", 0));
-            Thread.sleep(10 * 1000L);
-            return BiliApi.webPublish(user, videoUploadDto);
-        } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("Publish.Captcha.HandleError")
-                    .add("roomId", room.getRoomId())
-                    .add("uname", room.getUname())
-                    .add("historyId", history.getId()), e);
-            Thread.sleep(120 * 1000L);
-            return BiliApi.webPublish(user, videoUploadDto);
-        }
+        JSONObject root = parseJsonObject(uploadRes);
+        JSONObject data = root == null ? null : root.getJSONObject("data");
+        String voucher = data == null ? null : data.getString("v_voucher");
+        captchaService.deferPublish(voucher, history.getTitle(), data,
+                user.getId(), history.getId(), taskId, "FINAL_SUBMIT", result -> {
+                    Map<String, String> answer = new HashMap<>(result);
+                    if (StringUtils.isNotBlank(voucher)) answer.putIfAbsent("v_voucher", voucher);
+                    pendingPublishCaptchaResults.put(answerKey,
+                            new PublishCaptchaAnswer(user.getId(), "FINAL_SUBMIT", answer));
+                    publishAccountScheduler.enqueueAfterCaptcha(taskId, user.getId(), history.getId());
+                });
+        log.warn("[BLR] {}", LogKvs.event("Upload.Captcha.Required")
+                .add("roomId", room.getRoomId())
+                .add("uname", room.getUname())
+                .add("historyId", history.getId())
+                .addIfNotBlank("title", history.getTitle())
+                .addUrl("captchaUrl", "http://localhost:" + serverPort + "/html/captcha.html"));
+        throw new PublishCaptchaPendingException();
     }
+
+    private String submitEditPublishWithCaptcha(BiliBiliUser user, VideoEditUploadDto dto,
+                                                RecordHistory history, String stage) {
+        Long taskId = publishAccountScheduler.currentTaskId();
+        Long answerKey = taskId == null ? history.getId() : taskId;
+        PublishCaptchaAnswer pendingAnswer = pendingPublishCaptchaResults.remove(answerKey);
+        Map<String, String> captchaResult = pendingAnswer != null
+                && Objects.equals(pendingAnswer.accountId(), user.getId())
+                && Objects.equals(pendingAnswer.stage(), stage) ? pendingAnswer.result() : null;
+        String response;
+        try {
+            response = BiliApi.editPublish(user, dto, captchaResult);
+        } catch (RuntimeException e) {
+            throw PublishSubmissionException.unknown("已发布稿件编辑网络请求异常", e);
+        }
+        if (!isPublishCaptchaResponse(response)) return response;
+
+        JSONObject root = parseJsonObject(response);
+        JSONObject data = root == null ? null : root.getJSONObject("data");
+        String voucher = data == null ? null : data.getString("v_voucher");
+        Long historyId = history == null ? null : history.getId();
+        captchaService.deferPublish(voucher, history == null ? null : history.getTitle(), data,
+                user.getId(), historyId, taskId, stage, result -> {
+                    Map<String, String> answer = new HashMap<>(result);
+                    if (StringUtils.isNotBlank(voucher)) answer.putIfAbsent("v_voucher", voucher);
+                    pendingPublishCaptchaResults.put(answerKey,
+                            new PublishCaptchaAnswer(user.getId(), stage, answer));
+                    publishAccountScheduler.enqueueAfterCaptcha(taskId, user.getId(), historyId);
+                });
+        throw new PublishCaptchaPendingException();
+    }
+
+    private boolean isPublishCaptchaResponse(String response) {
+        if (StringUtils.contains(response, "验证码")) return true;
+        JSONObject root = parseJsonObject(response);
+        Integer code = root == null ? null : root.getInteger("code");
+        return Objects.equals(code, 601) || Objects.equals(code, 406);
+    }
+
+    private static final class PublishCaptchaPendingException extends RuntimeException {}
+
+    private record PublishCaptchaAnswer(Long accountId, String stage, Map<String, String> result) {}
 
     static Set<Long> extractTimestampJumpCids(JSONObject publishData) {
         if (publishData == null) {

@@ -1519,7 +1519,6 @@ public class RoomController {
             NotificationRule target = notificationRuleRepository.findByEventType(incoming.getEventType()).stream()
                     .filter(item -> roomId.equals(StringUtils.defaultIfBlank(item.getRoomId(), "*")))
                     .findFirst().orElseGet(NotificationRule::new);
-            Long oldId = incoming.getId();
             incoming.setId(target.getId());
             incoming.setChannelIds(remapChannelIds(incoming.getChannelIds(), channelIdMap));
             notificationRuleRepository.save(incoming);

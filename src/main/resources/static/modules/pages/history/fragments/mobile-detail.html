@@ -77,6 +77,26 @@
                 </div>
             </section>
 
+            <section v-if="getPublishFlowText(currentDetail)" class="mobile-history-detail-notice">
+                <i class="el-icon-time"></i>
+                <div><strong>投稿流程：{{ getPublishFlowText(currentDetail) }}</strong><span>{{ getPublishFlowDetail(currentDetail) }}</span></div>
+            </section>
+            <section v-for="task in (currentDetail.publishTasks && currentDetail.publishTasks.length ? currentDetail.publishTasks : (currentDetail.publishDispatch ? [currentDetail.publishDispatch] : []))"
+                     v-if="requiresPublishTaskVerification(task) || canRetryPublishTask(task) || canCancelPublishTask(task)"
+                     :key="'mobile-publish-task-' + task.taskId" class="mobile-history-detail-notice">
+                <i class="el-icon-s-operation"></i>
+                <div style="width:100%">
+                    <strong>{{ getPublishOperationLabel(task) }} · {{ task.label }}</strong>
+                    <div v-if="requiresPublishTaskVerification(task)" style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                        <el-input :value="publishTaskBvid(task)" @input="setPublishTaskBvid(task, $event)" size="small" placeholder="用于核对的 BVID" style="max-width:220px"></el-input>
+                        <el-button size="mini" type="primary" :loading="isPublishTaskActionLoading(task)" @click="confirmPublishTaskResult(task)">核对结果</el-button>
+                    </div>
+                    <div v-if="canRetryPublishTask(task) || canCancelPublishTask(task)" style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                        <el-button v-if="canRetryPublishTask(task)" size="mini" type="warning" :loading="isPublishTaskActionLoading(task)" @click="retryPublishTask(task)">{{ getPublishTaskRetryLabel(task) }}</el-button>
+                        <el-button v-if="canCancelPublishTask(task)" size="mini" :loading="isPublishTaskActionLoading(task)" @click="cancelPublishTask(task)">取消任务</el-button>
+                    </div>
+                </div>
+            </section>
             <section v-if="hasUploadConfigMismatch" class="mobile-history-detail-notice">
                 <i class="el-icon-info"></i>
                 <div>

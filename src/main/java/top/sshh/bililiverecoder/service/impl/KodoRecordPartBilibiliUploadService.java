@@ -24,6 +24,7 @@ import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadFairShareService;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
+import top.sshh.bililiverecoder.service.PublishTaskService;
 import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadEnums;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -63,6 +64,9 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     @Autowired
     private CaptchaService captchaService;
+
+    @Autowired
+    private PublishTaskService publishTaskService;
 
     @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
@@ -227,7 +231,10 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                         return;
                     }
                     if (history.isUpload()) {
-                        if (room.getUploadUserId() == null) {
+                        top.sshh.bililiverecoder.entity.PublishTask uploadTask =
+                                publishTaskService.getUploadTaskForHistory(part.getHistoryId());
+                        Long uploadAccountId = uploadTask == null ? room.getUploadUserId() : uploadTask.getAccountId();
+                        if (uploadAccountId == null) {
                             log.warn("[BLR] {}", LogKvs.event("Upload.Part.NoUploadUser")
                                     .add("os", OS)
                                     .add("roomId", room.getRoomId())
@@ -237,13 +244,13 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                             TaskUtil.partUploadTask.remove(part.getId());
                             return;
                         } else {
-                            Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
+                            Optional<BiliBiliUser> userOptional = biliUserRepository.findById(uploadAccountId);
                             if (!userOptional.isPresent()) {
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.UploadUserMissing")
                                         .add("os", OS)
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
-                                        .add("uploadUserId", room.getUploadUserId())
+                                        .add("uploadUserId", uploadAccountId)
                                         .add("partId", part.getId())
                                         .add("historyId", part.getHistoryId()));
                                 TaskUtil.partUploadTask.remove(part.getId());
@@ -255,7 +262,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                         .add("os", OS)
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
-                                        .add("uploadUserId", room.getUploadUserId())
+                                        .add("uploadUserId", uploadAccountId)
                                         .add("partId", part.getId())
                                         .add("historyId", part.getHistoryId()));
                                 TaskUtil.partUploadTask.remove(part.getId());
@@ -326,11 +333,12 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
                                                         .add("code", preUploadBean.getCode())
                                                         .add("fileName", uploadFile.getName())
                                                         .add("url", "http://localhost:" + serverPort + "/html/captcha.html"));
-                                                captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail());
+                                                captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail(),
+                                                        uploadAccountId, part.getHistoryId(),
+                                                        uploadTask == null ? null : uploadTask.getId(), "PART_UPLOAD");
                                                 Map<String, String> result = captchaService.waitForCaptcha();
-                                                if (result != null) {
-                                                    preParams.putAll(result);
-                                                }
+                                                if (result == null) throw new IllegalStateException("分P上传验证码已过期或取消，请重新验证");
+                                                preParams.putAll(result);
                                             } else {
                                             log.warn("[BLR] {}", LogKvs.event("Upload.RateLimit.Wait")
                                                     .add("os", OS)
