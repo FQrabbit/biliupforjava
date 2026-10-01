@@ -38,7 +38,8 @@ public class MvcConfig implements WebMvcConfigurer{
         registry.addInterceptor(loginInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
-                        "/**/recordWebHook",
+                        "/recordWebHook",
+                        "/webhook/blrec",
                         "/",
                         "/index.html",
                         "/html/**",

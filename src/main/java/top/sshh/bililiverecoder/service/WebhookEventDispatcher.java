@@ -85,8 +85,13 @@ public class WebhookEventDispatcher {
             if (!serialExecutor.tryReserve()) {
                 return false;
             }
-            scheduler.schedule(() -> serialExecutor.executeReserved(wrapped), Instant.now().plusMillis(delayMs));
-            return true;
+            try {
+                scheduler.schedule(() -> serialExecutor.executeReserved(wrapped), Instant.now().plusMillis(delayMs));
+                return true;
+            } catch (RuntimeException rejected) {
+                serialExecutor.cancelReserved();
+                return false;
+            }
         }
 
         return serialExecutor.tryExecute(wrapped);
@@ -146,7 +151,7 @@ public class WebhookEventDispatcher {
         // scheduler 由 Spring 管理，这里不主动 shutdown
     }
 
-    private static final class SerialExecutor {
+    private final class SerialExecutor {
         private final TaskExecutor executor;
         private final int maxPending;
 
@@ -154,6 +159,8 @@ public class WebhookEventDispatcher {
         private Runnable active;
 
         private int pending;
+
+        private ScheduledFuture<?> retryWake;
 
         private volatile long lastUsedAtMillis = System.currentTimeMillis();
 
@@ -192,6 +199,10 @@ public class WebhookEventDispatcher {
             }
         }
 
+        private synchronized void cancelReserved() {
+            pending = Math.max(0, pending - 1);
+        }
+
         private Runnable wrap(Runnable task) {
             return () -> {
                 try {
@@ -209,16 +220,33 @@ public class WebhookEventDispatcher {
         }
 
         private synchronized void scheduleNext() {
+            if (active != null) return;
             if ((active = tasks.poll()) != null) {
                 try {
                     executor.execute(active);
                 } catch (RejectedExecutionException rejected) {
-                    // 线程池满：把 active 放回队列头，等待后续清理；并释放 pending
+                    // 线程池满时保留任务和 pending 计数，稍后主动唤醒队列
                     tasks.addFirst(active);
                     active = null;
-                    pending = Math.max(0, pending - 1);
-                    throw rejected;
+                    scheduleRetryWake();
                 }
+            }
+        }
+
+        private synchronized void scheduleRetryWake() {
+            if (retryWake != null && !retryWake.isDone()) return;
+            try {
+                retryWake = scheduler.schedule(() -> {
+                    synchronized (SerialExecutor.this) {
+                        retryWake = null;
+                        scheduleNext();
+                    }
+                }, Instant.now().plusSeconds(1));
+            } catch (RuntimeException schedulerRejected) {
+                log.warn("[BLR] {}", LogKvs.event("Webhook.Dispatcher.RetryWakeRejected")
+                        .add("pending", pending)
+                        .add("err", schedulerRejected.getMessage())
+                        .add("ex", schedulerRejected.getClass().getSimpleName()));
             }
         }
 

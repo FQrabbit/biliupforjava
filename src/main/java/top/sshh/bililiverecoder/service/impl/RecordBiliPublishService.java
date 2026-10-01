@@ -23,6 +23,7 @@ import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 import top.sshh.bililiverecoder.job.videoSyncJob;
 import top.sshh.bililiverecoder.repo.*;
 import top.sshh.bililiverecoder.service.CaptchaService;
+import top.sshh.bililiverecoder.service.CaptchaChallengeRequiredException;
 import top.sshh.bililiverecoder.service.PublishSubmissionException;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
@@ -353,9 +354,15 @@ public class RecordBiliPublishService {
         return uploadUserSerialScheduler.submitIfPartNotPending(
                 effectiveAccountId, room.getRoomId(), part.getHistoryId(), part.getId(), source,
                 () -> {
+                    boolean captchaPaused = false;
                     try {
                         uploadServiceFactory.getUploadService(room.getLine()).upload(part);
                     } catch (RuntimeException e) {
+                        CaptchaChallengeRequiredException captcha = CaptchaChallengeRequiredException.find(e);
+                        if (captcha != null) {
+                            captchaPaused = true;
+                            throw captcha;
+                        }
                         boolean gatewayFailure = e.getMessage() != null
                                 && e.getMessage().startsWith("UPLOAD_GATEWAY_ERROR");
                         LocalDateTime retryAt = LocalDateTime.now().plus(gatewayFailure
@@ -365,7 +372,7 @@ public class RecordBiliPublishService {
                                 gatewayFailure ? "上传网关异常，当前稿件延后 30 分钟" : "分P上传失败，30 秒后重试",
                                 retryAt);
                     } finally {
-                        if (!suspendMap.containsKey(part.getHistoryId())) {
+                        if (!captchaPaused && !suspendMap.containsKey(part.getHistoryId())) {
                             publishAccountScheduler.wakeHistory(part.getHistoryId());
                         }
                     }

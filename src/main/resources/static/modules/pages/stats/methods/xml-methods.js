@@ -61,13 +61,14 @@
                 READ_FAILED: '读取失败',
                 ROOT_OFFLINE: '存储离线',
                 PATH_UNRESOLVED: '路径待确认',
+                RESOURCE_LIMIT: '超过解析上限',
                 INTERNAL_ERROR: '内部异常'
             };
             return labels[type] || '待处理';
         },
         xmlIssueTagType: function (type) {
             if (type === 'ROOT_OFFLINE') return 'info';
-            if (type === 'MISSING_UNEXPECTED' || type === 'PATH_UNRESOLVED') return 'warning';
+            if (type === 'MISSING_UNEXPECTED' || type === 'PATH_UNRESOLVED' || type === 'RESOURCE_LIMIT') return 'warning';
             return 'danger';
         },
         xmlIssueCanRepair: function (item) {

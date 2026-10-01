@@ -20,6 +20,7 @@ import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.PartFileCleanupPolicy;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
+import top.sshh.bililiverecoder.service.PublishTaskService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -70,6 +71,9 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
     private UploadUserSerialScheduler uploadUserSerialScheduler;
 
     @Autowired
+    private PublishTaskService publishTaskService;
+
+    @Autowired
     private PartFileCleanupPolicy partFileCleanupPolicy;
 
     @Autowired
@@ -97,10 +101,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                 .add("roomId", part.getRoomId())
                 .add("filePath", part.getFilePath()));
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
-        if (room == null || room.getUploadUserId() == null) {
-            this.upload(part);
-            return true;
-        }
+        if (room == null) return false;
         RecordHistoryPart finalPart = part;
         boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
                 room.getUploadUserId(),
@@ -181,6 +182,8 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                         return;
                     }
                     RecordHistory history = historyOptional.get();
+                    Long uploadAccountId = publishTaskService.resolveUploadAccountId(
+                            history.getId(), room.getUploadUserId());
                     final String historyTitle = history.getTitle();
                     File uploadFile = new File(filePath);
                     if (!uploadFile.exists()) {
@@ -206,7 +209,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                         return;
                     }
                     if (history.isUpload()) {
-                        if (room.getUploadUserId() == null) {
+                        if (uploadAccountId == null) {
                             log.warn("[BLR] {}", LogKvs.event("Upload.Part.NoUploadUser")
                                     .add("os", OS)
                                     .add("roomId", room.getRoomId())
@@ -216,13 +219,13 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                             TaskUtil.partUploadTask.remove(part.getId());
                             return;
                         } else {
-                            Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
+                            Optional<BiliBiliUser> userOptional = biliUserRepository.findById(uploadAccountId);
                             if (!userOptional.isPresent()) {
                                 log.error("[BLR] {}", LogKvs.event("Upload.Part.UploadUserMissing")
                                         .add("os", OS)
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
-                                        .add("uploadUserId", room.getUploadUserId())
+                                        .add("uploadUserId", uploadAccountId)
                                         .add("partId", part.getId())
                                         .add("historyId", part.getHistoryId()));
                                 TaskUtil.partUploadTask.remove(part.getId());
@@ -234,7 +237,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
                                         .add("os", OS)
                                         .add("roomId", room.getRoomId())
                                         .add("uname", room.getUname())
-                                        .add("uploadUserId", room.getUploadUserId())
+                                        .add("uploadUserId", uploadAccountId)
                                         .add("partId", part.getId())
                                         .add("historyId", part.getHistoryId()));
                                 TaskUtil.partUploadTask.remove(part.getId());

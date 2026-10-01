@@ -16,6 +16,7 @@ import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartUploadService;
+import top.sshh.bililiverecoder.service.PublishTaskService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.util.TaskUtil;
@@ -59,6 +60,9 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
     private UploadUserSerialScheduler uploadUserSerialScheduler;
 
     @Autowired
+    private PublishTaskService publishTaskService;
+
+    @Autowired
     private PartFileLocationService partFileLocationService;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
@@ -80,10 +84,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                 .add("roomId", part.getRoomId())
                 .add("filePath", part.getFilePath()));
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
-        if (room == null || room.getUploadUserId() == null) {
-            this.upload(part);
-            return true;
-        }
+        if (room == null) return false;
         RecordHistoryPart finalPart = part;
         boolean enqueued = uploadUserSerialScheduler.submitIfPartNotPending(
                 room.getUploadUserId(),
@@ -180,7 +181,9 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                     }
                     RecordHistory history = historyOptional.get();
                     final String historyTitle = history.getTitle();
-                    if (room.getUploadUserId() == null) {
+                    Long uploadAccountId = publishTaskService.resolveUploadAccountId(
+                            history.getId(), room.getUploadUserId());
+                    if (uploadAccountId == null) {
                         log.warn("[BLR] {}", LogKvs.event("Upload.Part.NoUploadUser")
                                 .add("os", OS)
                                 .add("roomId", room.getRoomId())
@@ -190,13 +193,13 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                         TaskUtil.partUploadTask.remove(part.getId());
                         return;
                     } else {
-                        Optional<BiliBiliUser> userOptional = biliUserRepository.findById(room.getUploadUserId());
+                        Optional<BiliBiliUser> userOptional = biliUserRepository.findById(uploadAccountId);
                         if (!userOptional.isPresent()) {
                             log.error("[BLR] {}", LogKvs.event("Upload.Part.UploadUserMissing")
                                     .add("os", OS)
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
-                                    .add("uploadUserId", room.getUploadUserId())
+                                    .add("uploadUserId", uploadAccountId)
                                     .add("partId", part.getId())
                                     .add("historyId", part.getHistoryId()));
                             TaskUtil.partUploadTask.remove(part.getId());
@@ -208,7 +211,7 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                                     .add("os", OS)
                                     .add("roomId", room.getRoomId())
                                     .add("uname", room.getUname())
-                                    .add("uploadUserId", room.getUploadUserId())
+                                    .add("uploadUserId", uploadAccountId)
                                     .add("partId", part.getId())
                                     .add("historyId", part.getHistoryId()));
                             TaskUtil.partUploadTask.remove(part.getId());
@@ -375,7 +378,10 @@ public class EditorBilibiliUploadServiceImpl implements RecordPartUploadService 
                             throw new RuntimeException(part.getFileName() + "===并发上传失败，存在异常");
                         }
                         //通知服务器上传完成
-                        userOptional = biliUserRepository.findById(room.getUploadUserId());
+                        Long retryAccountId = publishTaskService.resolveUploadAccountId(
+                                history.getId(), room.getUploadUserId());
+                        if (retryAccountId == null) throw new IllegalStateException("稿件没有可用的固定投稿账号");
+                        userOptional = biliUserRepository.findById(retryAccountId);
                         biliBiliUser = userOptional.get();
                         webCookie = Cookie.parse(biliBiliUser.getCookies());
                         Map<String, String> completeParams = new HashMap<>();

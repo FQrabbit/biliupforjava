@@ -15,7 +15,10 @@ import top.sshh.bililiverecoder.service.DanmakuSendScheduler;
 import top.sshh.bililiverecoder.service.GiftReplyCandidateService;
 import top.sshh.bililiverecoder.service.RoomLiveEventParseService;
 import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
+import top.sshh.bililiverecoder.service.PublishTaskService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
+import top.sshh.bililiverecoder.service.VideoCommentTaskService;
+import top.sshh.bililiverecoder.service.VideoVisibilityRestoreService;
 import top.sshh.bililiverecoder.service.impl.LiveMsgService;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -33,6 +36,8 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 @Component
 public class LiveMsgSendSync {
+
+    private static final int GIFT_REPLY_DATA_NOT_READY = -1;
 
     @Autowired
     private BiliUserRepository userRepository;
@@ -69,6 +74,15 @@ public class LiveMsgSendSync {
 
     @Autowired
     private HistoryMsgQueueCleanupService msgQueueCleanupService;
+
+    @Autowired
+    private VideoCommentTaskService videoCommentTaskService;
+
+    @Autowired
+    private VideoVisibilityRestoreService visibilityRestoreService;
+
+    @Autowired
+    private PublishTaskService publishTaskService;
 
     private static final Lock lock = new ReentrantLock();
     private volatile long lastReconcileAtMs = 0L;
@@ -322,6 +336,7 @@ public class LiveMsgSendSync {
                 int giftReplyCount = 0;
                 if (sendGiftReplyEnabled) {
                     giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format, pageResolver);
+                    if (giftReplyCount == GIFT_REPLY_DATA_NOT_READY) continue;
                 }
                 List<BiliReply> replies = buildVideoReplies(history,
                         buildReplyHeader(hasScReply, hasGuardReply, hasOtherHighLevelReply, giftReplyCount),
@@ -842,6 +857,7 @@ public class LiveMsgSendSync {
             return;
         }
         RecordHistory history = historyOptional.get();
+        if (history.isDeletePending()) return;
         if (!history.isPublish() || (history.getCode() != 0 && history.getCode() != -50)) {
             return;
         }
@@ -856,6 +872,7 @@ public class LiveMsgSendSync {
         if (historyId == null) {
             return;
         }
+        if (historyRepository.findById(historyId).map(RecordHistory::isDeletePending).orElse(true)) return;
         int batchSize = systemConfigService.getDanmakuDispatchBatchSize();
         Pageable page = PageRequest.of(0, batchSize);
         for (Long partId : msgRepository.findPendingHighDispatchPartIdsByHistoryId(historyId, page)) {
@@ -873,7 +890,8 @@ public class LiveMsgSendSync {
             return;
         }
         RecordHistory history = historyOptional.get();
-        if (!history.isPublish() || history.isSendReply() || (history.getCode() != 0 && history.getCode() != -50)) {
+        if (history.isDeletePending() || !history.isPublish() || history.isSendReply()
+                || (history.getCode() != 0 && history.getCode() != -50)) {
             return;
         }
         List<RecordHistoryPart> parts = partRepository.findDispatchablePartsByHistoryId(history.getId());
@@ -904,12 +922,20 @@ public class LiveMsgSendSync {
 
         BiliBiliUser user = resolveUploadUser(room, history);
         boolean isPrivateFlow = false;
+        Long visibilityRestoreTaskId = null;
         try {
             if (user != null) {
                 BiliVideoInfoResponse videoInfo = BiliApi.getVideoInfo(user, history.getBvId());
                 if (videoInfo != null && videoInfo.getData() != null && videoInfo.getData().getState() == -50) {
+                    VideoVisibilityRestoreTask restoreTask = visibilityRestoreService.ensurePreparing(
+                            history.getId(), user.getId(), history.getAvId(), 1);
+                    visibilityRestoreTaskId = restoreTask.getId();
+                    if (!"PREPARING".equals(restoreTask.getState())) return;
                     isPrivateFlow = true;
                     switchVisibility(history, user, 0, "LiveMsgSendSync.Visibility.SwitchPublic.Response");
+                    if (!visibilityRestoreService.markVideoPublic(visibilityRestoreTaskId)) {
+                        throw new IllegalStateException("视频状态恢复任务未能进入活动状态");
+                    }
                     sleepQuietly(15_000L, "privatePublicWait");
                 }
             }
@@ -924,6 +950,10 @@ public class LiveMsgSendSync {
                     new HistoryMsgQueueCleanupService.CleanupOptions(false, true, true, false),
                     false,
                     "reply-private-visibility-failed");
+            if (visibilityRestoreTaskId != null) {
+                visibilityRestoreService.requestRestore(visibilityRestoreTaskId);
+                visibilityRestoreService.restoreNow(visibilityRestoreTaskId);
+            }
             return;
         }
 
@@ -963,6 +993,12 @@ public class LiveMsgSendSync {
             int giftReplyCount = 0;
             if (sendGiftReplyEnabled) {
                 giftReplyCount = appendGiftReplyLines(replyLines, history, parts, room, format, pageResolver);
+                if (giftReplyCount == GIFT_REPLY_DATA_NOT_READY) {
+                    log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.WaitGiftXml")
+                            .add("historyId", history.getId())
+                            .add("partCount", parts.size()));
+                    return;
+                }
             }
             List<BiliReply> replies = buildVideoReplies(history,
                     buildReplyHeader(hasScReply, hasGuardReply, hasOtherHighLevelReply, giftReplyCount),
@@ -985,7 +1021,7 @@ public class LiveMsgSendSync {
                 historyRepository.save(history);
                 return;
             }
-            sendReplies(history, room, user, replies);
+            if (!sendReplies(history, room, user, replies)) return;
             history.setSendReply(true);
             historyRepository.save(history);
             log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Dispatch.Done")
@@ -993,10 +1029,12 @@ public class LiveMsgSendSync {
                     .add("replyCount", replies.size())
                     .addStageCostMs("reply", startNs));
         } finally {
-            if (isPrivateFlow && user != null) {
+            if (isPrivateFlow && user != null && visibilityRestoreTaskId != null) {
                 try {
-                    switchVisibility(history, user, 1, "LiveMsgSendSync.Visibility.SwitchPrivate.Response");
-                    sleepQuietly(5_000L, "privateSwitchBackWait");
+                    visibilityRestoreService.requestRestore(visibilityRestoreTaskId);
+                    if (visibilityRestoreService.restoreNow(visibilityRestoreTaskId)) {
+                        sleepQuietly(5_000L, "privateSwitchBackWait");
+                    }
                 } catch (Exception e) {
                     log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Visibility.SwitchPrivate.Error")
                             .addIfNotBlank("title", history.getTitle())
@@ -1010,10 +1048,10 @@ public class LiveMsgSendSync {
     }
 
     private BiliBiliUser resolveUploadUser(RecordRoom room, RecordHistory history) {
-        if (room == null || room.getUploadUserId() == null) {
-            return null;
-        }
-        Optional<BiliBiliUser> userOptional = userRepository.findById(room.getUploadUserId());
+        Long accountId = publishTaskService.resolveUploadAccountId(
+                history.getId(), room == null ? null : room.getUploadUserId());
+        if (accountId == null) return null;
+        Optional<BiliBiliUser> userOptional = userRepository.findById(accountId);
         if (userOptional.isEmpty()) {
             return null;
         }
@@ -1061,74 +1099,102 @@ public class LiveMsgSendSync {
                 .add("respLen", editRes == null ? 0 : editRes.length()));
     }
 
-    private void sendReplies(RecordHistory history, RecordRoom room, BiliBiliUser user, List<BiliReply> replies) {
-        try {
-            String replId = null;
-            for (int i = 0; i < replies.size(); i++) {
-                BiliReply reply = replies.get(i);
-                reply.setRoot(replId);
-                reply.setParent(replId);
+    private boolean sendReplies(RecordHistory history, RecordRoom room, BiliBiliUser user, List<BiliReply> replies) {
+        List<VideoCommentTask> tasks = videoCommentTaskService.prepare(history.getId(), user.getId(), replies);
+        if (tasks.size() != replies.size()) return false;
+        if (videoCommentTaskService.blocksAutomaticResume(tasks)) return false;
+        String rootRpid = null;
+        for (int i = 0; i < tasks.size(); i++) {
+            VideoCommentTask task = tasks.get(i);
+            if ("NEEDS_ACTION".equals(task.getState()) || "SUBMITTING".equals(task.getState())) return false;
+            BiliReply reply = new BiliReply();
+            reply.setType("1");
+            reply.setOid(task.getAid());
+            reply.setAction("1");
+            reply.setMessage(task.getContent());
+            if (i == 0) {
+                rootRpid = task.getRemoteRpid();
+            } else {
+                if (rootRpid == null || rootRpid.isBlank()) {
+                    videoCommentTaskService.markNeedsAction(task.getId(), "主评论编号缺失，请先核对线上评论");
+                    return false;
+                }
+                reply.setRoot(rootRpid);
+                reply.setParent(rootRpid);
+            }
+
+            if ("READY".equals(task.getState())) {
                 boolean permitAcquired = false;
                 try {
                     danmakuSendScheduler.waitForCommentSendPermit(user, history.getBvId(), i);
                     permitAcquired = true;
-                    BiliReplyResponse replyResponse;
-                    try {
-                        replyResponse = BiliApi.sendVideoReply(user, reply);
-                    } catch (RuntimeException e) {
-                        danmakuSendScheduler.markCommentFailure(user, null);
-                        throw e;
-                    }
-                    if (replyResponse.getCode() != 0) {
-                        danmakuSendScheduler.markCommentFailure(user, replyResponse.getCode());
+                    task = videoCommentTaskService.markSubmitting(task.getId());
+                    if (task == null || !"SUBMITTING".equals(task.getState())) return false;
+                    BiliReplyResponse response = BiliApi.sendVideoReply(user, reply);
+                    if (response == null || response.getCode() != 0) {
+                        Integer code = response == null ? null : response.getCode();
+                        String message = response == null ? "平台未返回结果" : response.getMessage();
+                        danmakuSendScheduler.markCommentFailure(user, code);
+                        videoCommentTaskService.markNeedsAction(task.getId(), "平台未确认评论是否接受：" + message);
                         log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Failed")
-                                .addIfNotBlank("bvid", history.getBvId())
-                                .addIfNotBlank("avId", reply.getOid())
-                                .add("code", replyResponse.getCode())
-                                .addIfNotBlank("message", replyResponse.getMessage()));
-                        throw new RuntimeException("send reply failed: " + replyResponse.getMessage());
+                                .addIfNotBlank("bvid", history.getBvId()).addIfNotBlank("avId", task.getAid())
+                                .add("code", code).addIfNotBlank("message", message));
+                        return false;
                     }
+                    String rpid = response.getData() == null ? null : response.getData().getRpid();
+                    task = videoCommentTaskService.markSent(task.getId(), rpid, i == 0 ? rpid : rootRpid);
+                    if (i == 0) rootRpid = rpid;
+                    if (rpid == null || rpid.isBlank()) {
+                        videoCommentTaskService.markNeedsAction(task.getId(), "平台已接受评论但未返回评论编号，请人工核对");
+                        return false;
+                    }
+                    sendReplyPush(room, history, user, reply);
                     log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Send.Success")
-                            .addIfNotBlank("bvid", history.getBvId())
-                            .addIfNotBlank("avId", reply.getOid())
-                            .add("index", i)
-                            .add("messageLen", reply.getMessage() == null ? 0 : reply.getMessage().length()));
-                    if (i == 0 && replyResponse.getData() != null) {
-                        replId = replyResponse.getData().getRpid();
-                        sleepQuietly(2_000L, "replyTopWait");
-                        reply.setRpid(replyResponse.getData().getRpid());
-                        reply.setAction("1");
-                        BiliReplyResponse response = BiliApi.topVideoReply(user, reply);
-                        if (response.getCode() == 404) {
-                            sleepQuietly(2_000L, "replyTopRetryWait");
-                            BiliApi.topVideoReply(user, reply);
-                        } else if (response.getCode() != 0) {
-                            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.Top.Failed")
-                                    .addIfNotBlank("bvid", history.getBvId())
-                                    .addIfNotBlank("avId", reply.getOid())
-                                    .addIfNotBlank("rpid", reply.getRpid())
-                                    .add("code", response.getCode())
-                                    .addIfNotBlank("message", response.getMessage()));
-                        }
-                    }
+                            .addIfNotBlank("bvid", history.getBvId()).addIfNotBlank("avId", task.getAid())
+                            .add("index", i).add("messageLen", task.getContent().length()));
+                } catch (RuntimeException e) {
+                    danmakuSendScheduler.markCommentFailure(user, null);
+                    videoCommentTaskService.markNeedsAction(task.getId(),
+                            "评论请求结果不明确，请核对线上评论后再处理：" + e.getMessage());
+                    sendReplyFailurePush(room, history, replies, e);
+                    return false;
                 } finally {
-                    if (permitAcquired) {
-                        danmakuSendScheduler.releaseCommentSendPermit(user);
+                    if (permitAcquired) danmakuSendScheduler.releaseCommentSendPermit(user);
+                }
+            }
+
+            task = videoCommentTaskService.findById(task.getId());
+            if (i == 0 && task != null && "SENT".equals(task.getState())) {
+                rootRpid = task.getRemoteRpid();
+                if (!"PINNED".equals(task.getPinState())) {
+                    if (rootRpid == null || rootRpid.isBlank()) {
+                        videoCommentTaskService.markNeedsAction(task.getId(), "主评论编号缺失，无法置顶");
+                        return false;
+                    }
+                    try {
+                        sleepQuietly(2_000L, "replyTopWait");
+                        task = videoCommentTaskService.markPinSubmitting(task.getId());
+                        if (task == null || !"SUBMITTING".equals(task.getPinState())) return false;
+                        reply.setRpid(rootRpid);
+                        BiliReplyResponse pin = BiliApi.topVideoReply(user, reply);
+                        if (pin != null && pin.getCode() == 404) {
+                            sleepQuietly(2_000L, "replyTopRetryWait");
+                            pin = BiliApi.topVideoReply(user, reply);
+                        }
+                        if (pin == null || pin.getCode() != 0) {
+                            videoCommentTaskService.markPinRetry(task.getId(),
+                                    pin == null ? "置顶未返回结果" : "置顶失败：" + pin.getMessage());
+                            return false;
+                        }
+                        videoCommentTaskService.markPinned(task.getId());
+                    } catch (RuntimeException e) {
+                        videoCommentTaskService.markPinRetry(task.getId(), "置顶结果不明确，将安全重试：" + e.getMessage());
+                        return false;
                     }
                 }
-                sendReplyPush(room, history, user, reply);
             }
-        } catch (Exception e) {
-            log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.Reply.BatchFailed")
-                    .addIfNotBlank("title", history.getTitle())
-                    .addIfNotBlank("bvid", history.getBvId())
-                    .addIfNotBlank("avId", history.getAvId())
-                    .add("replyCount", replies.size())
-                    .addIfNotBlank("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()), e);
-            sendReplyFailurePush(room, history, replies, e);
-            throw e;
         }
+        return true;
     }
 
     private void sendReplyPush(RecordRoom room, RecordHistory history, BiliBiliUser user, BiliReply reply) {
@@ -1217,7 +1283,10 @@ public class LiveMsgSendSync {
                 continue;
             }
             partById.put(part.getId(), part);
-            roomLiveEventParseService.parsePart(part, false);
+            RoomLiveEventParseService.ParseResult parseResult = roomLiveEventParseService.parsePart(part, false);
+            if (!parseResult.parsed() && !"up to date".equals(parseResult.reason())) {
+                return GIFT_REPLY_DATA_NOT_READY;
+            }
         }
 
         List<RoomLiveEvent> giftEvents = roomLiveEventRepository.findByHistoryIdAndTypeOrderByPartIdAscSendTimeAsc(

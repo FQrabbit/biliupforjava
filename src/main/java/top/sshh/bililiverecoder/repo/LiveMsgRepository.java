@@ -17,6 +17,34 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     List<LiveMsg> findByPartIdAndCode(Long partId, int code);
 
+    boolean existsByPartIdAndPoolAndCodeIn(Long partId, int pool, List<Integer> codes);
+
+    boolean existsByPartIdInAndCodeIn(List<Long> partIds, List<Integer> codes);
+
+    List<LiveMsg> findByPartIdInAndCodeInOrderByPartIdAscSendTimeAsc(List<Long> partIds, List<Integer> codes);
+
+    long countByPartIdInAndCodeIn(List<Long> partIds, List<Integer> codes);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("update LiveMsg m set m.code = -4 where m.id = ?1 and m.code = -1")
+    int claimPendingForSend(Long messageId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("update LiveMsg m set m.code = -2 where m.id = ?1 and m.code = -4")
+    int markSendingAsNeedsAction(Long messageId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("update LiveMsg m set m.code = -2 where m.code = -4")
+    int recoverInterruptedSendingMessages();
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("update LiveMsg m set m.code = -1 where m.id = ?1 and m.code = -2")
+    int confirmUnknownSendNotAccepted(Long messageId);
+
     int countByPartIdAndCode(Long partId, int code);
 
     @Query("SELECT DISTINCT m.partId FROM LiveMsg m WHERE m.code = ?1")
@@ -261,6 +289,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
               and m.pool = ?2
               and m.code <> 0
               and m.code <> -1
+              and m.code not in (-2, -4)
               and m.code not in ?3
               and m.partId in (
                   select p.id
@@ -292,6 +321,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
               and m.pool = ?2
               and m.code <> 0
               and m.code <> -1
+              and m.code not in (-2, -4)
               and m.partId in (
                   select p.id
                   from RecordHistoryPart p, RecordHistory h, RecordRoom r

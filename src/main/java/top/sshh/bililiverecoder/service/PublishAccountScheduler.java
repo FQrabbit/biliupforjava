@@ -459,6 +459,12 @@ public class PublishAccountScheduler {
         }
     }
 
+    public boolean hasSubmissionInFlight(Long historyId) {
+        return tasks.getActiveForHistory(historyId).stream()
+                .anyMatch(task -> task.getState() == PublishTaskState.SUBMITTING
+                        || task.getState() == PublishTaskState.VERIFYING);
+    }
+
     public void enqueueAfterCaptcha(Long accountId, Long historyId) {
         if (historyId == null || accountId == null) return;
         tasks.getActiveForHistory(historyId).stream()
@@ -903,7 +909,7 @@ public class PublishAccountScheduler {
                         return;
                     }
                     Map<String, Object> artifact = highEnergy.getObject().prepareQueuedTask(task, history);
-                    tasks.updateSnapshot(task.getId(), JSON.toJSONString(artifact), "高能剪辑产物已上传，等待账号投稿队列");
+                    tasks.updateSnapshot(task.getId(), JSON.toJSONString(artifact), "高能剪辑产物已准备，等待账号上传队列");
                     PublishTask latest = tasks.get(task.getId());
                     if (latest == null || latest.getState() != PublishTaskState.PREPARING) {
                         if (latest != null && latest.getState() == PublishTaskState.CANCELLED) {
@@ -911,8 +917,15 @@ public class PublishAccountScheduler {
                         }
                         return;
                     }
+                    if (artifact.get("uploadedFileName") == null
+                            || String.valueOf(artifact.get("uploadedFileName")).isBlank()) {
+                        highEnergy.getObject().uploadPreparedArtifact(task, history, artifact)
+                                .whenComplete((uploadedArtifact, uploadError) ->
+                                        finishHighEnergyUpload(task.getId(), task.getAccountId(), uploadedArtifact, uploadError));
+                        return;
+                    }
                     tasks.transition(task.getId(), Set.of(PublishTaskState.PREPARING), PublishTaskState.READY,
-                            null, "高能剪辑产物已准备，等待账号投稿队列", null, null);
+                            null, "高能剪辑产物已上传，等待账号投稿队列", null, null);
                 } catch (Exception e) {
                     log.error("High-energy preparation failed taskId={}", task.getId(), e);
                     PublishTask failed = tasks.transition(task.getId(), Set.of(PublishTaskState.PREPARING), PublishTaskState.NEEDS_ACTION,
@@ -936,6 +949,30 @@ public class PublishAccountScheduler {
             synchronized (runtime) { runtime.running = false; }
             timer.schedule(() -> dispatch(task.getAccountId()), 30, TimeUnit.SECONDS);
         }
+    }
+
+    private void finishHighEnergyUpload(Long taskId, Long accountId, Map<String, Object> uploadedArtifact,
+                                       Throwable uploadError) {
+        PublishTask latest = tasks.get(taskId);
+        if (latest == null) return;
+        if (latest.getState() == PublishTaskState.CANCELLED) {
+            highEnergy.getObject().completeQueuedTask(latest);
+            return;
+        }
+        if (uploadError != null) {
+            Throwable cause = uploadError instanceof java.util.concurrent.CompletionException
+                    && uploadError.getCause() != null ? uploadError.getCause() : uploadError;
+            tasks.transition(taskId, Set.of(PublishTaskState.PREPARING, PublishTaskState.WAITING_CAPTCHA),
+                    PublishTaskState.NEEDS_ACTION, "HIGH_ENERGY_UPLOAD_FAILED",
+                    "高能剪辑上传失败，需要检查后重试：" + cause.getMessage(), null, null);
+            dispatch(accountId);
+            return;
+        }
+        if (latest.getState() != PublishTaskState.PREPARING || uploadedArtifact == null) return;
+        tasks.updateSnapshot(taskId, JSON.toJSONString(uploadedArtifact), "高能剪辑产物已上传，等待账号投稿队列");
+        tasks.transition(taskId, Set.of(PublishTaskState.PREPARING), PublishTaskState.READY,
+                null, "高能剪辑产物已上传，等待账号投稿队列", null, null);
+        dispatch(accountId);
     }
 
     private void runTask(Long accountId, AccountRuntime runtime, Long taskId) {

@@ -29,7 +29,12 @@ class MvcConfigTest {
         assertFalse(matches(interceptor, "/modules/manifest.json"));
         assertFalse(matches(interceptor, "/modules/pages/stats/page.js"));
         assertFalse(matches(interceptor, "/modules/pages/history/mobile.html"));
+        assertFalse(matches(interceptor, "/recordWebHook"));
+        assertFalse(matches(interceptor, "/webhook/blrec"));
+        assertTrue(matches(interceptor, "/nested/recordWebHook"));
         assertTrue(matches(interceptor, "/system-config/list"));
+        assertTrue(matches(interceptor, "/webhook/blrec/inbox"));
+        assertTrue(matches(interceptor, "/recordWebHook/inbox"));
     }
 
     private boolean matches(MappedInterceptor interceptor, String path) {

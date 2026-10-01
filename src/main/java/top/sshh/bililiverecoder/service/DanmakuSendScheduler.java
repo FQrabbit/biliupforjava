@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service;
 
 import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.Page;
@@ -30,12 +31,16 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
 public class DanmakuSendScheduler {
+
+    private static final int MESSAGE_SUBMITTING = -4;
+    private static final int MESSAGE_NEEDS_ACTION = -2;
 
     private static final long RATE_LIMIT_PAUSE_MS = 120_000L;
     private static final long ERROR_PAUSE_MS = 5_000L;
@@ -97,6 +102,13 @@ public class DanmakuSendScheduler {
         this.liveMsgService = liveMsgService;
         this.systemConfigService = systemConfigService;
         this.msgQueueCleanupService = msgQueueCleanupService;
+    }
+
+    @PostConstruct
+    public void recoverInterruptedSends() {
+        int recovered = msgRepository.recoverInterruptedSendingMessages();
+        if (recovered > 0) log.warn("[BLR] {}", LogKvs.event("DanmakuDispatch.RecoveredUnknownSends")
+                .add("count", recovered));
     }
 
     public boolean enqueueReply(Long historyId, Runnable task) {
@@ -211,11 +223,18 @@ public class DanmakuSendScheduler {
 
     private void processHighPart(Long partId) {
         long startNs = System.nanoTime();
+        LiveMsg inFlightMessage = null;
+        boolean sendClaimed = false;
         try {
             if (LiveMsgSendSync.skipAdvancedPartIds.contains(partId)) {
                 pendingHighPartIds.remove(partId);
                 log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.SkipByManual")
                         .add("partId", partId));
+                return;
+            }
+            if (msgRepository.existsByPartIdAndPoolAndCodeIn(partId, 1,
+                    List.of(MESSAGE_NEEDS_ACTION, MESSAGE_SUBMITTING))) {
+                pendingHighPartIds.remove(partId);
                 return;
             }
             LiveMsg msg = firstPendingMessage(partId, 1);
@@ -233,6 +252,10 @@ public class DanmakuSendScheduler {
             RecordHistory history = null;
             if (part.getHistoryId() != null) {
                 history = historyRepository.findById(part.getHistoryId()).orElse(null);
+            }
+            if (history != null && history.isDeletePending()) {
+                requeueHighPart(partId, 5000L);
+                return;
             }
             if (history == null || history.isForceArchived() || history.getCode() == -4) {
                 if (history != null && history.getId() != null) {
@@ -259,8 +282,10 @@ public class DanmakuSendScheduler {
             }
             Optional<BiliBiliUser> userOptional = userRepository.findById(room.getUploadUserId());
             if (userOptional.isEmpty() || userOptional.get().getUid() == null || !userOptional.get().isLogin()) {
-                markMessageDone(msg);
-                requeueHighPart(partId, 0L);
+                requeueHighPart(partId, TimeUnit.MINUTES.toMillis(5));
+                log.warn("[BLR] {}", LogKvs.event("DanmakuDispatch.High.WaitUploadAccount")
+                        .add("partId", partId).add("historyId", part.getHistoryId())
+                        .add("accountId", room.getUploadUserId()));
                 return;
             }
             BiliBiliUser user = userOptional.get();
@@ -302,6 +327,13 @@ public class DanmakuSendScheduler {
                     switchedPublic = true;
                     sleepQuietly(15_000L, "highPrivatePublicWait");
                 }
+                if (!claimMessageForSend(msg)) {
+                    busyUserIds.remove(user.getUid());
+                    requeueHighPart(partId, BUSY_RETRY_MS);
+                    return;
+                }
+                inFlightMessage = msg;
+                sendClaimed = true;
                 code = liveMsgService.sendMsg(user, msg);
             } catch (VisibilitySwitchException e) {
                 if (!switchedPublic) {
@@ -330,6 +362,15 @@ public class DanmakuSendScheduler {
                     busyUserIds.remove(user.getUid());
                 }
             }
+            if (code == -1 || code == -2) {
+                markMessageNeedsAction(msg);
+                sendClaimed = false;
+                requeueHighPart(partId, 0L);
+                log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.Send.NeedsReview")
+                        .add("partId", partId).add("messageId", msg.getId()).add("code", code));
+                return;
+            }
+            sendClaimed = false;
             if (code != 0 && code != 36703) {
                 log.error("[BLR] {}", LogKvs.event("LiveMsgSendSync.HighLevel.Send.Failed")
                         .addIfNotBlank("uname", user.getUname())
@@ -367,7 +408,8 @@ public class DanmakuSendScheduler {
                     .add("globalWaitMs", globalDanmakuWaitMs())
                     .addStageCostMs("send", startNs));
         } catch (Exception e) {
-            requeueHighPart(partId, ERROR_PAUSE_MS);
+            if (sendClaimed) markMessageNeedsAction(inFlightMessage);
+            requeueHighPart(partId, sendClaimed ? 0L : ERROR_PAUSE_MS);
             log.error("[BLR] {}", LogKvs.event("DanmakuDispatch.High.Error")
                     .add("partId", partId)
                     .addIfNotBlank("err", e.getMessage())
@@ -418,11 +460,18 @@ public class DanmakuSendScheduler {
 
     private void processNormalPart(Long partId) {
         long startNs = System.nanoTime();
+        LiveMsg inFlightMessage = null;
+        boolean sendClaimed = false;
         try {
             if (LiveMsgSendSync.skipOrdinaryPartIds.contains(partId)) {
                 pendingNormalPartIds.remove(partId);
                 log.info("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.SkipByManual")
                         .add("partId", partId));
+                return;
+            }
+            if (msgRepository.existsByPartIdAndPoolAndCodeIn(partId, 0,
+                    List.of(MESSAGE_NEEDS_ACTION, MESSAGE_SUBMITTING))) {
+                pendingNormalPartIds.remove(partId);
                 return;
             }
             LiveMsg msg = firstPendingMessage(partId, 0);
@@ -438,6 +487,10 @@ public class DanmakuSendScheduler {
             }
             RecordHistoryPart part = partOptional.get();
             RecordHistory history = part.getHistoryId() == null ? null : historyRepository.findById(part.getHistoryId()).orElse(null);
+            if (history != null && history.isDeletePending()) {
+                requeueNormalPart(partId, 5000L);
+                return;
+            }
             if (history == null || history.isForceArchived() || history.getCode() == -4) {
                 if (history != null && history.getId() != null) {
                     msgQueueCleanupService.cleanupByHistoryId(history.getId(),
@@ -478,7 +531,23 @@ public class DanmakuSendScheduler {
             }
             int code;
             try {
+                if (!claimMessageForSend(msg)) {
+                    busyUserIds.remove(user.getUid());
+                    requeueNormalPart(partId, BUSY_RETRY_MS);
+                    return;
+                }
+                inFlightMessage = msg;
+                sendClaimed = true;
                 code = liveMsgService.sendMsg(user, msg);
+                if (code == -1 || code == -2) {
+                    markMessageNeedsAction(msg);
+                    sendClaimed = false;
+                    requeueNormalPart(partId, 0L);
+                    log.warn("[BLR] {}", LogKvs.event("LiveMsgSendSync.Normal.Send.NeedsReview")
+                            .add("partId", partId).add("messageId", msg.getId()).add("code", code));
+                    return;
+                }
+                sendClaimed = false;
                 handleNormalCode(user, msg, code);
             } finally {
                 busyUserIds.remove(user.getUid());
@@ -508,7 +577,8 @@ public class DanmakuSendScheduler {
                     .add("accountWaitMs", danmakuAccountCooldownWaitMs(user.getUid()))
                     .addStageCostMs("send", startNs));
         } catch (Exception e) {
-            requeueNormalPart(partId, ERROR_PAUSE_MS);
+            if (sendClaimed) markMessageNeedsAction(inFlightMessage);
+            requeueNormalPart(partId, sendClaimed ? 0L : ERROR_PAUSE_MS);
             log.error("[BLR] {}", LogKvs.event("DanmakuDispatch.Normal.Error")
                     .add("partId", partId)
                     .addIfNotBlank("err", e.getMessage())
@@ -577,6 +647,16 @@ public class DanmakuSendScheduler {
             return null;
         }
         return page.getContent().get(0);
+    }
+
+    private boolean claimMessageForSend(LiveMsg msg) {
+        return msg != null && msg.getId() != null && msgRepository.claimPendingForSend(msg.getId()) == 1;
+    }
+
+    private void markMessageNeedsAction(LiveMsg msg) {
+        if (msg == null || msg.getId() == null) return;
+        msgRepository.markSendingAsNeedsAction(msg.getId());
+        msg.setCode(MESSAGE_NEEDS_ACTION);
     }
 
     private void markMessageDone(LiveMsg msg) {

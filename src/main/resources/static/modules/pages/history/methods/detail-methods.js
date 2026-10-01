@@ -11,6 +11,7 @@
             this.initTable();
         },
         forceArchive: function(id) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             let _this = this;
             this.$pageConfirm('此操作将强制停止所有未完成的操作（录制、上传、弹幕发送）并将稿件归档。<br/><br/><b>请注意：此操作不可撤销，且可能会导致正在进行的数据不完整（如录制中断、弹幕缺失）。</b><br/><br/>确定要强制归档吗？', '强制归档确认', {
                 dangerouslyUseHTMLString: true,
@@ -18,6 +19,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
+                if (!_this.ensureHistoryActionAllowed(id)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在强制归档...',
@@ -39,6 +41,7 @@
             }).catch(() => {});
         },
         restoreForceArchive: function(id) {
+            if (!this.ensureHistoryActionAllowed(id, true)) return;
             let _this = this;
             this.$pageConfirm('此操作只会取消强制归档标记，不会自动恢复录制。恢复后可再按需重新开启上传或重置状态。<br/><br/>确定要恢复处理吗？', '恢复处理确认', {
                 dangerouslyUseHTMLString: true,
@@ -46,6 +49,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
+                if (!_this.ensureHistoryActionAllowed(id, true)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在恢复处理...',
@@ -68,12 +72,13 @@
         },
         getStatusColor: function(status) {
             if (!status) return '';
-            if (status === '已完成' || status === '发送弹幕中') return 'success';
-            if (status.indexOf('上传中') > -1 || status === '等待上传') return 'primary';
-            if (status === '正在录制' || status === '审核中' || status === '等待转码' || status === '转码中' || status === '已提交' || status === '定时发布' || status === '等待投稿') return 'warn';
-            if (status === '存在异常' || status === '转码失败' || status === '被锁定' || status === '被退回' || status === '已删除' || status.indexOf('稿件不可见') > -1 || status.indexOf('投稿中') > -1) return 'danger';
-            // 默认使用 info 样式 (灰色)
-            return 'info';
+            if (status === '已完成') return 'success';
+            if (status === '存在异常' || status === '上传需要处理' || status === '转码失败' || status === '被锁定' || status === '被退回' || status === '已删除' || status.indexOf('稿件不可见') > -1) return 'danger';
+            if (status.indexOf('等待上传') === 0 || status === '上传已暂停' || status === '审核中' || status === '等待转码' || status === '已提交' || status === '定时发布' || status === '等待投稿') return 'warn';
+            if (status === '上传完成') return 'success';
+            if (status.indexOf('上传中') > -1 || status.indexOf('上传进度') === 0 || status.indexOf('投稿中') > -1 || status === '正在录制'
+                    || status === '转码中' || status === '发送弹幕中' || status === '弹幕发送中' || status === '发送评论中') return 'info';
+            return '';
         },
         getAuditStatusClass: function(item) {
             if (!item.publish) return '';

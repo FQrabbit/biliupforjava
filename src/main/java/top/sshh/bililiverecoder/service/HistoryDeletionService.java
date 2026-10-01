@@ -2,12 +2,13 @@ package top.sshh.bililiverecoder.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
-import top.sshh.bililiverecoder.repo.LiveMsgRepository;
+import top.sshh.bililiverecoder.entity.HistoryDeletionTask;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
-import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.repo.LiveMsgRepository;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,108 +30,194 @@ public class HistoryDeletionService {
             ".jpg", ".jpeg", ".png", ".webp");
 
     private final RecordHistoryRepository historyRepository;
+    private final LiveMsgRepository liveMsgRepository;
     private final RecordHistoryPartRepository partRepository;
-    private final LiveMsgRepository msgRepository;
     private final HistoryMsgQueueCleanupService msgQueueCleanupService;
     private final PartFileOperationService partFileOperationService;
     private final PartFileLocationService partFileLocationService;
     private final StorageRootService storageRootService;
-    private final RoomLiveEventXmlIssueService xmlIssueService;
     private final PublishAccountScheduler publishAccountScheduler;
+    private final VideoCommentTaskService videoCommentTaskService;
+    private final VideoVisibilityRestoreService visibilityRestoreService;
+    private final StatsAggregationService statsAggregationService;
+    private final UploadUserSerialScheduler uploadUserSerialScheduler;
+    private final PartActivityCoordinator partActivityCoordinator;
+    private final HistoryDeletionTaskService deletionTasks;
+    private final HistoryDeletionDataPurger dataPurger;
 
     public HistoryDeletionService(RecordHistoryRepository historyRepository,
+                                  LiveMsgRepository liveMsgRepository,
                                   RecordHistoryPartRepository partRepository,
-                                  LiveMsgRepository msgRepository,
                                   HistoryMsgQueueCleanupService msgQueueCleanupService,
                                   PartFileOperationService partFileOperationService,
                                   PartFileLocationService partFileLocationService,
                                   StorageRootService storageRootService,
-                                  RoomLiveEventXmlIssueService xmlIssueService,
-                                  PublishAccountScheduler publishAccountScheduler) {
+                                  PublishAccountScheduler publishAccountScheduler,
+                                  VideoCommentTaskService videoCommentTaskService,
+                                  VideoVisibilityRestoreService visibilityRestoreService,
+                                  StatsAggregationService statsAggregationService,
+                                  UploadUserSerialScheduler uploadUserSerialScheduler,
+                                  PartActivityCoordinator partActivityCoordinator,
+                                  HistoryDeletionTaskService deletionTasks,
+                                  HistoryDeletionDataPurger dataPurger) {
         this.historyRepository = historyRepository;
+        this.liveMsgRepository = liveMsgRepository;
         this.partRepository = partRepository;
-        this.msgRepository = msgRepository;
         this.msgQueueCleanupService = msgQueueCleanupService;
         this.partFileOperationService = partFileOperationService;
         this.partFileLocationService = partFileLocationService;
         this.storageRootService = storageRootService;
-        this.xmlIssueService = xmlIssueService;
         this.publishAccountScheduler = publishAccountScheduler;
+        this.videoCommentTaskService = videoCommentTaskService;
+        this.visibilityRestoreService = visibilityRestoreService;
+        this.statsAggregationService = statsAggregationService;
+        this.uploadUserSerialScheduler = uploadUserSerialScheduler;
+        this.partActivityCoordinator = partActivityCoordinator;
+        this.deletionTasks = deletionTasks;
+        this.dataPurger = dataPurger;
     }
 
     public DeletionResult delete(Long historyId, DeleteOptions options) {
         long totalStartNs = System.nanoTime();
         DeleteOptions safeOptions = options == null ? DeleteOptions.databaseOnly() : options;
-        Optional<RecordHistory> historyOptional = historyRepository.findById(historyId);
-        if (historyOptional.isEmpty()) {
-            return DeletionResult.notFound(historyId);
+        HistoryDeletionTask previous = deletionTasks.findByHistoryId(historyId);
+        if (previous != null && "COMPLETED".equals(previous.getState())) {
+            return result(previous, true, 0, 0, 0, 0, List.of(), 0, 0, 0, 0, totalStartNs);
         }
-
-        RecordHistory history = historyOptional.get();
-        publishAccountScheduler.cancelForHistory(historyId, "稿件已删除，未提交的投稿任务已取消");
-        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(historyId);
-        msgQueueCleanupService.cleanupByHistoryId(historyId,
-                new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
-                false,
-                "delete");
-
-        long msgDeleteStartNs = System.nanoTime();
-        int deletedMsgCount = msgRepository.deleteByHistoryId(historyId);
-        long msgDeleteCostMs = toCostMs(msgDeleteStartNs);
-
-        List<Map<String, Object>> notDeletedFiles = new ArrayList<>();
-        MutableFileCounts fileCounts = new MutableFileCounts();
-        long localDeleteStartNs = System.nanoTime();
-        deleteLocalFiles(history, parts, safeOptions, fileCounts, notDeletedFiles);
-        long localDeleteCostMs = toCostMs(localDeleteStartNs);
-
-        long partDeleteStartNs = System.nanoTime();
-        xmlIssueService.deleteByHistoryId(historyId);
-        for (RecordHistoryPart part : parts) {
-            partFileOperationService.purgeMetadata(part.getId());
+        HistoryDeletionTask task;
+        try {
+            task = deletionTasks.accept(historyId, null, safeOptions);
+        } catch (IllegalStateException rejected) {
+            RecordHistory history = historyRepository.findById(historyId).orElse(null);
+            if (history == null) return DeletionResult.notFound(historyId);
+            return blocked(historyId, history.getRoomId(), safeOptions, null, "NEEDS_ACTION",
+                    rejected.getMessage(), totalStartNs);
         }
-        int deletedPartCount = partRepository.deleteByHistoryId(historyId);
-        long partDeleteCostMs = toCostMs(partDeleteStartNs);
+        if (task == null) {
+            HistoryDeletionTask existing = deletionTasks.findByHistoryId(historyId);
+            return existing == null ? DeletionResult.notFound(historyId)
+                    : result(existing, "COMPLETED".equals(existing.getState()), 0, 0, 0, 0,
+                    List.of(), 0, 0, 0, 0, totalStartNs);
+        }
+        return executeTask(task.getId(), totalStartNs);
+    }
 
-        long historyDeleteStartNs = System.nanoTime();
-        historyRepository.delete(history);
-        long historyDeleteCostMs = toCostMs(historyDeleteStartNs);
-        long totalCostMs = toCostMs(totalStartNs);
+    @Scheduled(fixedDelayString = "${history.deletion.retry-poll-ms:30000}", initialDelay = 10000)
+    public void resumeDueDeletions() {
+        for (Long taskId : deletionTasks.dueTaskIds(20)) executeTask(taskId, System.nanoTime());
+    }
 
-        DeletionResult result = new DeletionResult(
-                true,
-                true,
-                historyId,
-                history.getRoomId(),
-                safeOptions,
-                deletedMsgCount,
-                deletedPartCount,
-                fileCounts.attempted,
-                fileCounts.deleted,
-                notDeletedFiles,
-                msgDeleteCostMs,
-                localDeleteCostMs,
-                partDeleteCostMs,
-                historyDeleteCostMs,
-                totalCostMs);
+    public HistoryDeletionTask retry(Long taskId) {
+        HistoryDeletionTask retried = deletionTasks.retry(taskId);
+        if (retried != null) executeTask(taskId, System.nanoTime());
+        return retried;
+    }
 
-        log.info("[BLR] {}", LogKvs.event("History.Delete.Success")
-                .add("historyId", historyId)
-                .add("roomId", history.getRoomId())
-                .add("deleteVideo", safeOptions.deleteVideo())
-                .add("deleteDanmaku", safeOptions.deleteDanmaku())
-                .add("deleteCover", safeOptions.deleteCover())
-                .add("deletedMsgCount", deletedMsgCount)
-                .add("deletedPartCount", deletedPartCount)
-                .add("localDeleteAttempt", fileCounts.attempted)
-                .add("localDeleteSuccess", fileCounts.deleted)
-                .add("notDeletedCount", notDeletedFiles.size())
-                .addStageField("msgDelete", "costMs", msgDeleteCostMs)
-                .addStageField("localDelete", "costMs", localDeleteCostMs)
-                .addStageField("partDelete", "costMs", partDeleteCostMs)
-                .addStageField("historyDelete", "costMs", historyDeleteCostMs)
-                .addStageField("total", "costMs", totalCostMs));
-        return result;
+    private DeletionResult executeTask(Long taskId, long totalStartNs) {
+        HistoryDeletionTask task = deletionTasks.claim(taskId);
+        if (task == null) return taskStatusResult(taskId, totalStartNs);
+        Long historyId = task.getHistoryId();
+        RecordHistory history = historyRepository.findById(historyId).orElse(null);
+        if (history == null) {
+            if (!deletionTasks.beginExecution(taskId)) return taskStatusResult(taskId, totalStartNs);
+            HistoryDeletionDataPurger.PurgeResult purged = dataPurger.purge(taskId, historyId);
+            return result(deletionTasks.findById(taskId), true, purged.deletedMessages(), purged.deletedParts(),
+                    0, 0, List.of(), 0, 0, 0, 0, totalStartNs);
+        }
+        try {
+            if (publishAccountScheduler.hasSubmissionInFlight(historyId)) {
+                return defer(task, "投稿请求仍在提交或结果核对中，等待本次操作结束", totalStartNs);
+            }
+            if (uploadUserSerialScheduler.hasPendingHistory(historyId)
+                    || partActivityCoordinator.hasPendingHistory(historyId)) {
+                return defer(task, "稿件仍有分P在等待或执行上传，等待上传结束", totalStartNs);
+            }
+            String postPublishBlock = videoCommentTaskService.historyDeletionBlockReason(historyId);
+            if (postPublishBlock != null) return defer(task, postPublishBlock, totalStartNs);
+            String visibilityBlock = visibilityRestoreService.historyDeletionBlockReason(historyId);
+            if (visibilityBlock != null) return defer(task, visibilityBlock, totalStartNs);
+
+            DeleteOptions options = new DeleteOptions(task.isDeleteVideo(), task.isDeleteDanmaku(), task.isDeleteCover());
+            List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(historyId);
+            List<Long> partIds = parts.stream().map(RecordHistoryPart::getId).filter(java.util.Objects::nonNull).toList();
+            if (!partIds.isEmpty() && liveMsgRepository.existsByPartIdInAndCodeIn(partIds, List.of(-2, -4))) {
+                return defer(task, "稿件存在弹幕发送结果待核对或仍在发送，核对后才能删除", totalStartNs);
+            }
+
+            if (!deletionTasks.beginExecution(taskId)) return taskStatusResult(taskId, totalStartNs);
+
+            publishAccountScheduler.cancelForHistory(historyId, "稿件已删除，未提交的投稿任务已取消");
+            msgQueueCleanupService.cleanupByHistoryId(historyId,
+                    new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false), false, "delete");
+
+            long localDeleteStartNs = System.nanoTime();
+            List<Map<String, Object>> notDeletedFiles = new ArrayList<>();
+            MutableFileCounts fileCounts = new MutableFileCounts();
+            deleteLocalFiles(history, parts, options, fileCounts, notDeletedFiles);
+            long localDeleteCostMs = toCostMs(localDeleteStartNs);
+            if (!notDeletedFiles.isEmpty()) {
+                HistoryDeletionTask deferred = deletionTasks.defer(taskId,
+                        "有本地文件尚未删除，保留稿件记录并稍后重试");
+                return result(deferred, false, 0, 0, fileCounts.attempted, fileCounts.deleted,
+                        notDeletedFiles, 0, localDeleteCostMs, 0, 0, totalStartNs);
+            }
+
+            long purgeStartNs = System.nanoTime();
+            HistoryDeletionDataPurger.PurgeResult purged = dataPurger.purge(taskId, historyId);
+            long purgeCostMs = toCostMs(purgeStartNs);
+            HistoryDeletionTask completed = deletionTasks.findById(taskId);
+            return result(completed, true, purged.deletedMessages(), purged.deletedParts(),
+                    fileCounts.attempted, fileCounts.deleted, List.of(), 0, localDeleteCostMs,
+                    purgeCostMs, 0, totalStartNs);
+        } catch (Exception error) {
+            HistoryDeletionTask deferred = deletionTasks.defer(taskId,
+                    "删除过程发生异常：" + error.getClass().getSimpleName() + ": " + error.getMessage());
+            return blocked(historyId, history.getRoomId(),
+                    new DeleteOptions(task.isDeleteVideo(), task.isDeleteDanmaku(), task.isDeleteCover()),
+                    deferred == null ? task.getId() : deferred.getId(), deferred == null ? "NEEDS_ACTION" : deferred.getState(),
+                    deferred == null ? error.getMessage() : deferred.getLastError(), totalStartNs);
+        }
+    }
+
+    private DeletionResult defer(HistoryDeletionTask task, String reason, long totalStartNs) {
+        HistoryDeletionTask deferred = deletionTasks.defer(task.getId(), reason);
+        return blocked(task.getHistoryId(), task.getRoomId(),
+                new DeleteOptions(task.isDeleteVideo(), task.isDeleteDanmaku(), task.isDeleteCover()),
+                deferred == null ? task.getId() : deferred.getId(), deferred == null ? "NEEDS_ACTION" : deferred.getState(),
+                deferred == null ? reason : deferred.getLastError(), totalStartNs);
+    }
+
+    private DeletionResult taskStatusResult(Long taskId, long totalStartNs) {
+        // 任务仍在执行或等待退避时，查询其持久状态，不再重复删除
+        HistoryDeletionTask task = deletionTasks.findById(taskId);
+        return task == null ? DeletionResult.notFound(null) : result(task,
+                "COMPLETED".equals(task.getState()), 0, 0, 0, 0, List.of(), 0, 0, 0, 0, totalStartNs);
+    }
+
+    private DeletionResult blocked(Long historyId, String roomId, DeleteOptions options, Long taskId,
+                                   String state, String reason, long totalStartNs) {
+        return result(historyId, roomId, options, taskId, state, false, 0, 0, 0, 0,
+                List.of(fileFailure(null, "task", reason)), 0, 0, 0, 0, toCostMs(totalStartNs));
+    }
+
+    private DeletionResult result(HistoryDeletionTask task, boolean deleted, int deletedMessages, int deletedParts,
+                                  int fileAttempts, int filesDeleted, List<Map<String, Object>> failures,
+                                  long msgCostMs, long localCostMs, long partCostMs, long historyCostMs,
+                                  long totalStartNs) {
+        if (task == null) return DeletionResult.notFound(null);
+        return result(task.getHistoryId(), task.getRoomId(),
+                new DeleteOptions(task.isDeleteVideo(), task.isDeleteDanmaku(), task.isDeleteCover()),
+                task.getId(), task.getState(), deleted, deletedMessages, deletedParts, fileAttempts, filesDeleted,
+                failures, msgCostMs, localCostMs, partCostMs, historyCostMs, toCostMs(totalStartNs));
+    }
+
+    private DeletionResult result(Long historyId, String roomId, DeleteOptions options, Long taskId, String state,
+                                  boolean deleted, int deletedMessages, int deletedParts, int fileAttempts,
+                                  int filesDeleted, List<Map<String, Object>> failures, long msgCostMs,
+                                  long localCostMs, long partCostMs, long historyCostMs, long totalCostMs) {
+        return new DeletionResult(true, deleted, historyId, roomId, options, deletedMessages, deletedParts,
+                fileAttempts, filesDeleted, failures, msgCostMs, localCostMs, partCostMs, historyCostMs,
+                totalCostMs, taskId, state);
     }
 
     private void deleteLocalFiles(RecordHistory history,
@@ -156,9 +243,12 @@ public class HistoryDeletionService {
             }
 
             if (options.deleteDanmaku()) {
-                trustedLocalFile(part.getDanmakuFilePath()).ifPresent(path ->
-                        deletePath(path, "danmaku", counts, failures));
-                deleteCompanions(part.getId(), DANMAKU_SUFFIXES, "danmaku", counts, failures);
+                statsAggregationService.withStatsWriteLock(() -> {
+                    trustedLocalFile(part.getDanmakuFilePath()).ifPresent(path ->
+                            deletePath(path, "danmaku", counts, failures));
+                    deleteCompanions(part.getId(), DANMAKU_SUFFIXES, "danmaku", counts, failures);
+                    return null;
+                });
             }
             if (options.deleteCover()) {
                 deleteCompanions(part.getId(), COVER_SUFFIXES, "cover", counts, failures);
@@ -264,11 +354,13 @@ public class HistoryDeletionService {
                                  long localDeleteCostMs,
                                  long partDeleteCostMs,
                                  long historyDeleteCostMs,
-                                 long totalCostMs) {
+                                 long totalCostMs,
+                                 Long deletionTaskId,
+                                 String deletionTaskState) {
 
         private static DeletionResult notFound(Long historyId) {
             return new DeletionResult(false, false, historyId, null, DeleteOptions.databaseOnly(),
-                    0, 0, 0, 0, List.of(), 0, 0, 0, 0, 0);
+                    0, 0, 0, 0, List.of(), 0, 0, 0, 0, 0, null, null);
         }
 
         public Map<String, Object> toMap() {
@@ -287,6 +379,8 @@ public class HistoryDeletionService {
             data.put("historyDeleteCostMs", historyDeleteCostMs);
             data.put("totalCostMs", totalCostMs);
             data.put("notDeletedFiles", notDeletedFiles);
+            data.put("deletionTaskId", deletionTaskId);
+            data.put("deletionTaskState", deletionTaskState);
             return data;
         }
     }

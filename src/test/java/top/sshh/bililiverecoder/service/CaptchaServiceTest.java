@@ -99,4 +99,23 @@ class CaptchaServiceTest {
         assertEquals("B", b.get(2, TimeUnit.SECONDS).get("token"));
         assertTrue(service.pendingChallenges().isEmpty());
     }
+
+    @Test
+    void uploadAnswerResumesOnlyAfterChallengeAndIsConsumedOnce() {
+        CaptchaService service = new CaptchaService();
+        String requestId = service.setCaptchaRequiredForPart("voucher", "part.mp4", Map.of(),
+                10L, 22L, 31L, 41L, "PART_UPLOAD");
+        AtomicReference<Map<String, String>> answer = new AtomicReference<>();
+        assertTrue(service.whenSubmitted(requestId, () -> answer.set(service.consumeSubmittedAnswer(
+                10L, 22L, 31L, 41L, "PART_UPLOAD"))));
+
+        assertTrue(service.submitCaptcha(requestId, Map.of("token", "passed")));
+        assertEquals("passed", answer.get().get("token"));
+        assertEquals(Map.of(), service.consumeSubmittedAnswer(10L, 22L, 31L, 41L, "PART_UPLOAD"));
+        assertEquals("CONSUMED", service.challengeStatus(requestId).state());
+
+        String otherPart = service.setCaptchaRequiredForPart("voucher-2", "other.mp4", Map.of(),
+                10L, 22L, 31L, 42L, "PART_UPLOAD");
+        assertNotEquals(requestId, otherPart);
+    }
 }

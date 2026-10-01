@@ -21,7 +21,7 @@
                                 size="small"
                                 type="success"
                                 plain
-                                :disabled="!canOperateVisibilitySwitch"
+                                :disabled="(!canOperateVisibilitySwitch) || !!getHistoryActionDisabledReason(history)"
                                 @click="setHistoryVisibility(0)">
                                 设为公开
                             </el-button>
@@ -33,7 +33,7 @@
                                 size="small"
                                 type="warning"
                                 plain
-                                :disabled="!canOperateVisibilitySwitch"
+                                :disabled="(!canOperateVisibilitySwitch) || !!getHistoryActionDisabledReason(history)"
                                 @click="setHistoryVisibility(1)">
                                 设为仅自己可见
                             </el-button>
@@ -47,7 +47,7 @@
         </el-form>
         <div class="dialog-footer" slot="footer">
             <el-button class="modern-btn" @click="editDialogFormVisible = false">取 消</el-button>
-            <el-button class="modern-btn" @click="updateHistory()" type="primary">保 存</el-button>
+            <el-button class="modern-btn" @click="updateHistory()" type="primary" :disabled="!!getHistoryActionDisabledReason(history)">保 存</el-button>
         </div>
     </el-dialog>
 
@@ -171,7 +171,7 @@
         </div>
         <div slot="footer" class="dialog-footer">
             <el-button @click="bindFileDialogVisible = false">取 消</el-button>
-            <el-button type="primary" :disabled="!selectedCandidateFile" @click="submitBindFile">确 定</el-button>
+            <el-button type="primary" :disabled="(!selectedCandidateFile) || !!getHistoryActionDisabledReason(currentDetail)" @click="submitBindFile">确 定</el-button>
         </div>
     </el-dialog>
 

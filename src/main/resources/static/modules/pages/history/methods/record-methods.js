@@ -32,6 +32,7 @@
             return Number(this.publishTaskActionId) === Number(task.taskId);
         },
         confirmPublishTaskResult: function(task) {
+            if (!task || !this.ensureHistoryActionAllowed(task.historyId)) return;
             var self = this;
             var bvid = String(this.publishTaskBvid(task) || '').trim();
             if (!bvid) {
@@ -49,6 +50,7 @@
             });
         },
         retryPublishTask: function(task) {
+            if (!task || this.isPublishTaskActionLoading(task) || !this.ensureHistoryActionAllowed(task.historyId)) return;
             var self = this;
             var unknown = this.requiresPublishTaskVerification(task);
             var captchaRetry = task.waitReason === 'CAPTCHA_AUTO_RETRY';
@@ -60,9 +62,11 @@
             this.$pageConfirm(prompt, captchaRetry ? '立即重新验证' : '重试投稿任务', {
                 confirmButtonText: captchaRetry ? '立即尝试' : '确认重试', cancelButtonText: '取消', type: 'warning'
             }).then(function() {
+                if (!self.ensureHistoryActionAllowed(task.historyId)) return;
                 self.publishTaskActionId = task.taskId;
                 HistoryApi.retryPublishTask(task.taskId, unknown, function(data) {
                     self.publishTaskActionId = null;
+                    if (data.task) self.applyPublishTaskStatusBatch([data.task]);
                     self.$message({ message: data.message || '已安排重试', type: data.accepted ? 'success' : 'warning' });
                     self.initTable(true);
                 }, function() {
@@ -127,6 +131,7 @@
             }
         },
         handleEdit: function (index, row) {
+            if (!this.ensureHistoryActionAllowed(row)) return;
             this.history = JSON.parse(JSON.stringify(row));
             this.editDialogFormVisible = true;
         },
@@ -209,6 +214,7 @@
                 });
         },
         updateHistory: function () {
+            if (!this.ensureHistoryActionAllowed(this.history)) return;
             let _this = this;
             const loading = _this.$pageLoading({
                 lock: true,
@@ -242,6 +248,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(function () {
+                if (!_this.ensureHistoryActionAllowed(_this.history)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在切换可见性...',
@@ -315,6 +322,7 @@
             }).catch(() => {});
         },
         uploadEditPart: function () {
+            if (!this.ensureHistoryActionAllowed(this.history)) return;
             let _this = this;
             const loading = _this.$pageLoading({
                 lock: true,
@@ -335,6 +343,7 @@
                 });
         },
         updatePartStatus: function (id) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             let _this = this;
             this.$pageConfirm('此操作将强制结束当前正在录制的分P状态。请仅在录制卡死或状态异常时使用。<br/><br/>确定要强制结束录制吗？', '结束录制确认', {
                 dangerouslyUseHTMLString: true,
@@ -342,6 +351,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
+                if (!_this.ensureHistoryActionAllowed(id)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在结束录制状态...',
@@ -362,6 +372,7 @@
             }).catch(() => {});
         },
         updatePublishStatus: function (id) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             let _this = this;
             this.$pageConfirm('此操作将把该记录及其所有分P重置为【未上传、未发布】的初始状态，并清除BVID关联。系统将重新开始上传流程。<br/><br/>确定要重置状态吗？', '重置状态确认', {
                 dangerouslyUseHTMLString: true,
@@ -369,6 +380,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
+                if (!_this.ensureHistoryActionAllowed(id)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在重置发布状态...',
@@ -389,62 +401,35 @@
             }).catch(() => {});
         },
         retryPublishOnly: function (id) {
-            let _this = this;
-            this.$pageConfirm('此操作不会重新上传任何分P，只会重新进入投稿流程。适用于已经上传完成但投稿卡住的旧稿件。<br/><br/>确定要重试发布吗？', '重试发布确认', {
-                dangerouslyUseHTMLString: true,
-                confirmButtonText: '重试',
-                cancelButtonText: '取消',
-                type: 'warning'
-            }).then(() => {
-                const loading = _this.$pageLoading({
-                    lock: true,
-                    text: '正在重试发布...',
-                    spinner: 'el-icon-loading',
-                    background: 'rgba(0, 0, 0, 0.7)'
-                });
-                HistoryApi.touchPublish(id, function (data) {
-                        loading.close();
-                        _this.applyPublishRequestFeedback(id, data);
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }, function() {
-                        loading.close();
-                        _this.$message.error('操作失败');
-                    });
-            }).catch(() => {});
+            this.touchPublish(id);
         },
         touchPublish: function (id) {
-            let _this = this;
-            this.$pageConfirm('此操作将手动触发视频发布流程。通常用于自动发布失败后的手动重试。<br/><br/>确定要触发发布吗？', '触发发布确认', {
-                dangerouslyUseHTMLString: true,
-                confirmButtonText: '发布',
-                cancelButtonText: '取消',
-                type: 'warning'
-            }).then(() => {
-                const loading = _this.$pageLoading({
-                    lock: true,
-                    text: '正在触发发布...',
-                    spinner: 'el-icon-loading',
-                    background: 'rgba(0, 0, 0, 0.7)'
+            var self = this;
+            var item = this.findHistoryForAction(id);
+            var reason = this.getHistoryPublishDisabledReason(item);
+            if (reason) { this.$message.warning(reason); return; }
+            var task = this.getMainPublishTask(item);
+            if (task) { this.retryPublishTask(task); return; }
+            this.$pageConfirm('受理后按账号队列顺序处理，仍需等待分P上传、账号冷却、验证码及全局限制。是否加入投稿队列？', '加入投稿队列', {
+                confirmButtonText: '加入队列', cancelButtonText: '取消', type: 'info'
+            }).then(function() {
+                var current = self.findHistoryForAction(id);
+                var disabled = self.getHistoryPublishDisabledReason(current);
+                if (disabled) { self.$message.warning(disabled); return; }
+                self.$set(self.publishRequestIds, String(id), true);
+                HistoryApi.touchPublish(id, function(data) {
+                    self.$delete(self.publishRequestIds, String(id));
+                    self.applyPublishRequestFeedback(id, data);
+                    self.$message({ message: data.msg || '请求已处理', type: data.type || 'info' });
+                    self.initTable(true);
+                }, function(xhr) {
+                    self.$delete(self.publishRequestIds, String(id));
+                    self.$message.error(xhr && xhr.responseJSON && xhr.responseJSON.message || '投稿请求失败，请检查任务状态后再重试');
                 });
-                HistoryApi.touchPublish(id, function (data) {
-                        loading.close();
-                        _this.applyPublishRequestFeedback(id, data);
-                        _this.$message({
-                            message: data.msg,
-                            type: data.type
-                        });
-                        _this.initTable();
-                    }, function() {
-                        loading.close();
-                        _this.$message.error('操作失败');
-                    });
-            }).catch(() => {});
+            }).catch(function() {});
         },
         rePublish: function (id) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             let _this = this;
             this.$pageConfirm('此操作将重新上传那些因转码失败（如时间戳跳变）而未成功的视频分P。适用于部分分P上传失败的情况。<br/><br/>确定要执行转码修复吗？', '转码修复确认', {
                 dangerouslyUseHTMLString: true,
@@ -452,6 +437,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
+                if (!_this.ensureHistoryActionAllowed(id)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在执行转码修复...',
@@ -473,6 +459,7 @@
             }).catch(() => {});
         },
         highEnergyCutPublish: function (id) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             let _this = this;
             this.$pageConfirm('此操作将根据弹幕数据生成高能剪辑片段并尝试发布。<br/><br/>确定要生成高能片段吗？', '高能片段确认', {
                 dangerouslyUseHTMLString: true,
@@ -480,6 +467,7 @@
                 cancelButtonText: '取消',
                 type: 'success'
             }).then(() => {
+                if (!_this.ensureHistoryActionAllowed(id)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在生成高能片段...',
@@ -529,6 +517,12 @@
                             type: 'warning'
                         });
                     }
+                    if (data && data.data && data.data.deletionTaskId) {
+                        if (_this.currentDetail && Number(_this.currentDetail.id) === Number(_this.singleDeleteId)) {
+                            _this.currentDetail.deletePending = !data.data.deleted;
+                        }
+                        _this.refreshDeletionTaskStatus && _this.refreshDeletionTaskStatus(_this.singleDeleteId);
+                    }
                     _this.initTable();
                 }, function() {
                     loading.close();
@@ -536,6 +530,7 @@
                 });
         },
         deleteHistoryMsg: function (id) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             let _this = this;
             this.$pageConfirm('此操作将清空数据库中该记录关联的所有弹幕数据（不会删除本地弹幕文件）。<br/><br/>确定要删除弹幕吗？', '删除弹幕确认', {
                 dangerouslyUseHTMLString: true,
@@ -545,6 +540,7 @@
                 cancelButtonClass: 'el-button--success',
                 type: 'warning'
             }).then(() => {
+                if (!_this.ensureHistoryActionAllowed(id)) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在删除弹幕数据...',
@@ -565,12 +561,14 @@
             }).catch(() => {});
         },
         reloadHistoryMsg: function (id) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             this.currentReloadId = id;
             this.reloadOptions.restartOrdinary = false;
             this.reloadOptions.restartAdvanced = false;
             this.reloadDialogVisible = true;
         },
         abandonHistoryMsgQueue: function (id, row) {
+            if (!this.ensureHistoryActionAllowed(id)) return;
             const target = row || this.currentDetail || {};
             const pendingOrdinary = Number(target.pendingNormalMsgCount) || 0;
             const pendingAdvanced = Number(target.pendingHighMsgCount) || 0;
@@ -586,6 +584,7 @@
             this.abandonQueueDialogVisible = true;
         },
         handleAbandonQueueConfirm: function() {
+            if (this.abandonQueueMode !== 'batch' && !this.ensureHistoryActionAllowed(this.currentAbandonQueueId)) return;
             let _this = this;
             if (!this.abandonQueueOptions.ordinary && !this.abandonQueueOptions.advanced && !this.abandonQueueOptions.reply && !this.abandonQueueOptions.forceArchive) {
                 this.$message.info('请选择要放弃的队列');
@@ -599,6 +598,7 @@
                 confirmButtonClass: 'el-button--warning',
                 type: 'warning'
             }).then(() => {
+                if (_this.abandonQueueMode !== 'batch' && !_this.ensureHistoryActionAllowed(_this.currentAbandonQueueId)) return;
                 _this.abandonQueueDialogVisible = false;
                 const loading = _this.$pageLoading({
                     lock: true,
@@ -628,7 +628,7 @@
                         _this.$message.error('请求失败');
                     };
                 if (_this.abandonQueueMode === 'batch') {
-                    payload.ids = (_this.selectedItems || []).map(function(item) { return item.id; });
+                    payload.ids = (_this.selectedItems || []).filter(function(item) { return !_this.getHistoryActionDisabledReason(item); }).map(function(item) { return item.id; });
                     HistoryApi.abandonMsgQueueBatch(payload, onSuccess, onError);
                 } else {
                     HistoryApi.abandonMsgQueue(_this.currentAbandonQueueId, payload, onSuccess, onError);
@@ -636,8 +636,10 @@
             }).catch(() => {});
         },
         handleReloadConfirm: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentReloadId)) return;
             let _this = this;
             let doReload = function() {
+                if (!_this.ensureHistoryActionAllowed(_this.currentReloadId)) return;
                 _this.reloadDialogVisible = false;
                 const loading = _this.$pageLoading({
                     lock: true,

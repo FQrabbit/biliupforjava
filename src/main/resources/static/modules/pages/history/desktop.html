@@ -196,15 +196,15 @@
                         </div>
 
                         <div class="filter-item">
-                            <label class="filter-label"><i class="el-icon-s-release"></i> 发布状态</label>
+                            <label class="filter-label"><i class="el-icon-s-release"></i> 投稿状态</label>
                             <div class="select-with-icon">
                                 <i v-if="form.publish !== null && form.publish !== undefined" class="select-prefix-icon" :class="form.publish === true ? 'el-icon-circle-check' : 'el-icon-circle-close'" :style="{color: form.publish === true ? 'var(--success-color)' : 'var(--text-secondary)'}"></i>
                                 <el-select v-model="form.publish" clearable placeholder="全部" @change="onFilterChange" size="small" :disabled="isPublishLockedByCode || isMultiSelectMode" :class="{'has-prefix': form.publish !== null && form.publish !== undefined}" popper-class="history-page-select-popper">
-                                    <el-option label="已发布" :value="true">
-                                        <i class="el-icon-circle-check" style="color: var(--success-color); margin-right: 6px;"></i>已发布
+                                    <el-option label="已投稿" :value="true">
+                                        <i class="el-icon-circle-check" style="color: var(--success-color); margin-right: 6px;"></i>已投稿
                                     </el-option>
-                                    <el-option label="未发布" :value="false">
-                                        <i class="el-icon-circle-close" style="color: var(--text-secondary); margin-right: 6px;"></i>未发布
+                                    <el-option label="未投稿" :value="false">
+                                        <i class="el-icon-circle-close" style="color: var(--text-secondary); margin-right: 6px;"></i>未投稿
                                     </el-option>
                                 </el-select>
                             </div>
@@ -336,9 +336,9 @@
                             </div>
                             <div class="card-status-row">
                                 <!-- 统一状态显示 -->
-                                <span class="status-chip" :class="getStatusColor(item.status)">{{ item.status }}</span>
+                                <span class="status-chip" :class="getStatusColor(getHistoryDisplayStatus(item))">{{ getHistoryDisplayStatus(item) }}</span>
                                 <el-tooltip v-if="getPublishFlowText(item)" popper-class="history-page-tooltip-popper" effect="dark" :content="getPublishFlowDetail(item)" placement="top">
-                                    <span class="status-chip warn">{{ getPublishFlowText(item) }}</span>
+                                    <span class="status-chip" :class="getPublishFlowClass(item)">{{ getPublishFlowText(item) }}</span>
                                 </el-tooltip>
 
                                 <!-- 仅自己可见标签 -->
@@ -427,8 +427,8 @@
                             <el-tag v-else-if="skippedOnlyCount(scope.row) > 0" size="mini" type="warning">跳过{{ skippedOnlyCount(scope.row) }}</el-tag>
                             <span v-else style="color: var(--text-secondary);">0</span>
                         </div></template></el-table-column>
-                    <el-table-column v-if="tableColumnVisible('status')" key="status" label="录制状态" width="110"><template slot-scope="scope"><span class="status-chip" :class="getStatusColor(scope.row.status)">{{ scope.row.status }}</span></template></el-table-column>
-                    <el-table-column v-if="tableColumnVisible('publish')" key="publish" label="上传 / 投稿 / 审核" width="190"><template slot-scope="scope"><div class="readable-table-meta">自动上传：{{ scope.row.upload ? '开启' : '关闭' }}</div><div class="readable-table-meta">发布：<span :class="{ 'readable-table-success': scope.row.publish }">{{ scope.row.publish ? '已发布' : '未发布' }}</span></div><el-tooltip v-if="getPublishFlowText(scope.row)" popper-class="history-page-tooltip-popper" effect="dark" :content="getPublishFlowDetail(scope.row)" placement="top"><div class="readable-table-meta">投稿流程：{{ getPublishFlowText(scope.row) }}</div></el-tooltip><div class="readable-table-meta">审核：
+                    <el-table-column v-if="tableColumnVisible('status')" key="status" label="处理状态" width="110"><template slot-scope="scope"><span class="status-chip" :class="getStatusColor(getHistoryDisplayStatus(scope.row))">{{ getHistoryDisplayStatus(scope.row) }}</span></template></el-table-column>
+                    <el-table-column v-if="tableColumnVisible('publish')" key="publish" label="上传 / 投稿 / 审核" width="190"><template slot-scope="scope"><div class="readable-table-meta">自动上传：{{ scope.row.upload ? '开启' : '关闭' }}</div><div class="readable-table-meta">投稿：<span :class="{ 'readable-table-success': scope.row.publish }">{{ scope.row.publish ? '已投稿' : '未投稿' }}</span></div><el-tooltip v-if="getPublishFlowText(scope.row)" popper-class="history-page-tooltip-popper" effect="dark" :content="getPublishFlowDetail(scope.row)" placement="top"><div class="readable-table-meta"><span class="status-chip" :class="getPublishFlowClass(scope.row)">{{ getPublishFlowText(scope.row) }}</span></div></el-tooltip><div class="readable-table-meta">审核：
                             <el-tag size="mini" type="info" v-if="!scope.row.publish">未审核</el-tag>
                             <el-tag size="mini" type="success" v-else-if="scope.row.code == 0">通过</el-tag>
                             <el-tag size="mini" class="private-tag" effect="dark" v-else-if="scope.row.code == -50"><i class="el-icon-view"></i> 仅自己可见</el-tag>
@@ -441,12 +441,12 @@
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == 62002">稿件不可见(62002)</el-tag>
                             <el-tag size="mini" type="danger" v-else-if="scope.row.code == -100">已删除</el-tag>
                             <el-tag size="mini" type="danger" v-else>未通过</el-tag>
-                        </div></template></el-table-column>
+                        </div><div v-if="scope.row.deletionState" class="readable-table-meta" style="margin-top:4px"><el-tag size="mini" type="warning">{{ getDeletionTaskStateText({ state: scope.row.deletionState, deletionStarted: scope.row.deletionStarted }) }}</el-tag><span v-if="scope.row.deletionWaitReason">{{ scope.row.deletionWaitReason }}</span><el-button v-if="scope.row.deletionCanCancel" type="text" size="mini" :loading="Number(deletionTaskActionId) === Number(scope.row.deletionTaskId)" @click.stop="cancelHistoryDeletion(scope.row)">取消删除</el-button></div></template></el-table-column>
                     <el-table-column v-if="tableColumnVisible('time')" key="time" label="开始时间" width="165"><template slot-scope="scope"><span class="readable-table-time readable-table-number">{{ formatDateTime(scope.row.startTime) }}</span></template></el-table-column>
                     <el-table-column label="操作" width="180" fixed="right" class-name="readable-table-actions">
                         <template slot-scope="scope">
                             <el-button @click.stop="showDetail(scope.row)" size="mini" type="text">详情</el-button>
-                            <el-button @click.stop="handleEdit(scope.$index, scope.row)" size="mini" type="text">编辑</el-button>
+                            <el-button @click.stop="handleEdit(scope.$index, scope.row)" size="mini" type="text" :disabled="!!getHistoryActionDisabledReason(scope.row)">编辑</el-button>
                             <el-dropdown trigger="click" size="mini" @command="handleCommand($event, scope.row)">
                                 <el-button size="mini" type="text">
                                     更多<i class="el-icon-arrow-down el-icon--right"></i>
@@ -454,16 +454,16 @@
                                 <el-dropdown-menu slot="dropdown" class="history-page-dropdown-popper">
                                     <el-dropdown-item command="exportDiagnostic" icon="el-icon-download">导出诊断包</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
-                                    <el-dropdown-item command="rePublish">转码失败修复</el-dropdown-item>
-                                    <el-dropdown-item command="highEnergyCutPublish">发布高能片段</el-dropdown-item>
+                                    <el-dropdown-item command="rePublish" :disabled="!!getHistoryActionDisabledReason(scope.row)">转码失败修复</el-dropdown-item>
+                                    <el-dropdown-item command="highEnergyCutPublish" :disabled="!!getHistoryActionDisabledReason(scope.row)">发布高能片段</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
-                                    <el-dropdown-item command="updatePartStatus">结束分p录制状态</el-dropdown-item>
-                                    <el-dropdown-item command="touchPublish">触发发布事件</el-dropdown-item>
-                                    <el-dropdown-item command="updatePublishStatus">重置为未上传发布</el-dropdown-item>
+                                    <el-dropdown-item command="updatePartStatus" :disabled="!!getHistoryActionDisabledReason(scope.row)">结束分p录制状态</el-dropdown-item>
+                                    <el-dropdown-item v-if="!scope.row.publish || getMainPublishTask(scope.row)" command="touchPublish" :disabled="!!getHistoryPublishDisabledReason(scope.row)">{{ getHistoryPublishActionText(scope.row) }}</el-dropdown-item>
+                                    <el-dropdown-item command="updatePublishStatus" :disabled="!!getHistoryActionDisabledReason(scope.row)">重置为未上传发布</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
-                                    <el-dropdown-item command="reloadHistoryMsg">重新加载弹幕</el-dropdown-item>
-                                    <el-dropdown-item command="abandonHistoryMsgQueue">放弃待发送队列</el-dropdown-item>
-                                    <el-dropdown-item command="deleteHistoryMsg">删除弹幕</el-dropdown-item>
+                                    <el-dropdown-item command="reloadHistoryMsg" :disabled="!!getHistoryActionDisabledReason(scope.row)">重新加载弹幕</el-dropdown-item>
+                                    <el-dropdown-item command="abandonHistoryMsgQueue" :disabled="!!getHistoryActionDisabledReason(scope.row)">放弃待发送队列</el-dropdown-item>
+                                    <el-dropdown-item command="deleteHistoryMsg" :disabled="!!getHistoryActionDisabledReason(scope.row)">删除弹幕</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
                                      <el-dropdown-item command="deleteHistory" style="color: var(--danger-color);">删除</el-dropdown-item>
                                 </el-dropdown-menu>

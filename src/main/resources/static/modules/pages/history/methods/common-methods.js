@@ -5,20 +5,139 @@
     'use strict';
 
     window.HistoryPageCommonMethods = {
-        getPublishFlowText: function(item) {
+        findHistoryForAction: function(id) {
+            var records = [this.currentDetail].concat(this.tableData || [], [this.history]);
+            return records.find(function(item) { return item && Number(item.id) === Number(id); }) || null;
+        },
+        isHistoryDeletionPending: function(item) {
+            return !!item && (!!item.deletePending || (!!item.deletionState
+                && ['CANCELLED', 'COMPLETED'].indexOf(item.deletionState) < 0));
+        },
+        getHistoryActionDisabledReason: function(item) {
+            if (item && item.id) item = this.findHistoryForAction(item.id) || item;
+            if (this.isHistoryDeletionPending(item)) return '稿件正在等待或执行删除，可取消尚未执行的删除后继续操作';
+            if (item && item.forceArchived) return '稿件已强制归档，请先恢复处理';
+            return '';
+        },
+        ensureHistoryActionAllowed: function(id, allowArchived) {
+            var item = typeof id === 'object' ? id : this.findHistoryForAction(id);
+            var reason = allowArchived && !this.isHistoryDeletionPending(item) ? '' : this.getHistoryActionDisabledReason(item);
+            if (!reason) return true;
+            this.$message.warning(reason);
+            return false;
+        },
+        getMainPublishTask: function(item) {
+            var tasks = this.getPublishFlowTasks(item, true).filter(function(task) {
+                return task.operation !== 'HIGH_ENERGY' && task.state !== 'SUCCEEDED' && task.state !== 'CANCELLED';
+            });
+            return tasks.length ? tasks[tasks.length - 1] : null;
+        },
+        getHistoryPublishActionText: function(item) {
+            if (this.isHistoryDeletionPending(item)) return '等待删除';
+            if (this.isHistoryPublishRequesting(item)) return '正在受理';
+            var task = this.getMainPublishTask(item);
+            if (task && this.requiresPublishTaskVerification(task)) return '结果待核对';
+            if (task && task.state === 'SUBMITTING') return '正在投稿';
+            if (task && task.state === 'WAITING_CAPTCHA') return '等待验证码';
+            if (task && this.canRetryPublishTask(task)) return '重试投稿';
+            return task ? '已在投稿队列' : '加入投稿队列';
+        },
+        isHistoryPublishRequesting: function(item) {
+            if (!item) return false;
+            var task = this.getMainPublishTask(item);
+            return !!(this.publishRequestIds && this.publishRequestIds[String(item.id)])
+                || !!(task && this.publishTaskActionId && Number(task.taskId) === Number(this.publishTaskActionId));
+        },
+        getHistoryPublishDisabledReason: function(item) {
+            var reason = this.getHistoryActionDisabledReason(item);
+            if (reason) return reason;
+            if (this.isHistoryPublishRequesting(item)) return '请求正在受理，请稍候';
+            var task = this.getMainPublishTask(item);
+            if (task && this.requiresPublishTaskVerification(task)) return '请在投稿任务中核对线上结果，避免重复投稿';
+            if (task && !this.canRetryPublishTask(task)) return '任务已受理，进度及等待原因见投稿任务';
+            if (item && item.publish && !task) return '稿件已投稿，修改分P请使用编辑分P';
+            return '';
+        },
+        getPublishTaskDetailText: function(task) {
+            return this.getPublishFlowDetail({ publishTasks: [task] }, true);
+        },
+        getHistoryVisibilityText: function(item) {
+            if (!item || !item.publish) return '尚未投稿';
+            if (Number(item.code) === 0) return '公开';
+            if (Number(item.code) === -50) return '仅自己可见';
+            return '待平台确认';
+        },
+        getDetailUploadSummary: function() {
+            var total = this.getEffectiveTotalParts();
+            var uploaded = this.getEffectiveUploadedParts();
+            var done = this.getEffectiveDoneParts();
+            var items = this.getEffectiveProgressItems();
+            var count = uploaded + '/' + total;
+            if (items.some(function(part) { return part.state === 'FAILED' || part.state === 'ISSUE'; })) {
+                return { text: '上传需要处理', detail: '已上传 ' + count, tone: 'danger' };
+            }
+            if (total > 0 && done >= total) {
+                return { text: uploaded ? '上传完成' : '分P已跳过', detail: '已上传 ' + count + (done > uploaded ? '，跳过 ' + (done - uploaded) : ''), tone: uploaded ? 'success' : '' };
+            }
+            if (items.some(function(part) { return part.state === 'UPLOADING'; })) {
+                return { text: '上传中 ' + count, detail: '实际上传进度见下方分P', tone: 'info' };
+            }
+            if (this.currentDetail.uploadPaused) return { text: '上传已暂停', detail: '已上传 ' + count, tone: 'warn' };
+            if (items.some(function(part) { return part.state === 'RETRY_WAIT'; })) {
+                return { text: '等待上传重试', detail: '已上传 ' + count, tone: 'warn' };
+            }
+            return { text: uploaded ? '等待上传 ' + count : '未开始', detail: '已上传 ' + count, tone: uploaded ? 'warn' : '' };
+        },
+        getHistoryDisplayStatus: function(item) {
             if (!item) return '';
+            if (item.upload && !item.publish && !this.isActuallyRecording(item)
+                    && (!item.status || item.status.indexOf('上传中') === 0 || item.status === '等待上传')) {
+                if (this.currentDetail && Number(this.currentDetail.id) === Number(item.id)) return this.getDetailUploadSummary().text;
+                // 列表没有实时上传数据时，只展示数量，避免把上传开关当作上传进度
+                return '上传进度 ' + (Number(item.uploadPartCount) || 0) + '/' + (Number(item.partCount) || 0);
+            }
+            return item.status || '';
+        },
+        getPublishFlowTasks: function(item, includeCompleted) {
+            if (!item) return [];
             var tasks = item.publishTasks && item.publishTasks.length
                 ? item.publishTasks : (item.publishDispatch ? [item.publishDispatch] : []);
+            if (includeCompleted === true) return tasks;
+            if (includeCompleted === 'active' || includeCompleted === 'completed') return tasks.filter(function(task) {
+                var completed = task.state === 'SUCCEEDED' || task.state === 'CANCELLED';
+                return includeCompleted === 'completed' ? completed : !completed;
+            });
+            return tasks.filter(function(task) {
+                if (task.state !== 'SUCCEEDED') return true;
+                // 剪辑是独立产物，完成提示不能和原稿件合并
+                if (task.operation === 'HIGH_ENERGY') return true;
+                if (task.operation === 'NEW_PUBLISH') return !item.publish;
+                return ['UPDATE', 'REPAIR', 'EDIT_PARTS'].indexOf(task.operation) < 0;
+            });
+        },
+        getPublishFlowText: function(item, includeCompleted) {
+            if (!item) return '';
+            var self = this;
+            var tasks = this.getPublishFlowTasks(item, includeCompleted);
             if (tasks.length) return tasks.map(function(task) {
-                var operationLabels = {
-                    NEW_PUBLISH: '新投稿', UPDATE: '更新稿件', REPAIR: '转码修复',
-                    EDIT_PARTS: '分P编辑', HIGH_ENERGY: '高能剪辑'
-                };
-                var prefix = operationLabels[task.operation];
+                var prefix = task.operation && (includeCompleted === true || task.operation !== 'NEW_PUBLISH')
+                    ? self.getPublishOperationLabel(task) : '';
                 return (prefix ? prefix + '：' : '') + (task.label || '投稿处理中');
             }).join(' / ');
-            if (item.publishDispatch) return item.publishDispatch.label;
+            if ((item.publishTasks && item.publishTasks.length) || item.publishDispatch) return '';
             if (item.waitingForPublish && !item.publish) return '等待自动投稿';
+            return '';
+        },
+        getPublishFlowClass: function(item, includeCompleted) {
+            var tasks = this.getPublishFlowTasks(item, includeCompleted);
+            if (tasks.some(function(task) { return task.state === 'FAILED' || task.state === 'NEEDS_ACTION'; })) return 'danger';
+            if (tasks.some(function(task) {
+                return ['WAITING_UPLOAD', 'WAITING_ACCOUNT', 'WAITING_CAPTCHA', 'RETRY_WAIT', 'VERIFYING'].indexOf(task.state) >= 0;
+            })) return 'warn';
+            if (tasks.some(function(task) {
+                return ['READY', 'PREPARING', 'SUBMITTING'].indexOf(task.state) >= 0;
+            })) return 'info';
+            if (tasks.length && tasks.every(function(task) { return task.state === 'SUCCEEDED'; })) return 'success';
             return '';
         },
         getPublishOperationLabel: function(task) {
@@ -28,10 +147,9 @@
             };
             return labels[task && task.operation] || '投稿任务';
         },
-        getPublishFlowDetail: function(item) {
+        getPublishFlowDetail: function(item, includeCompleted) {
             if (!item) return '';
-            var tasks = item.publishTasks && item.publishTasks.length
-                ? item.publishTasks : (item.publishDispatch ? [item.publishDispatch] : []);
+            var tasks = this.getPublishFlowTasks(item, includeCompleted);
             if (tasks.length) return tasks.map(function(dispatch) {
                 var detail = dispatch.waitReasonLabel || dispatch.resultMessage || dispatch.detail || '';
                 if (dispatch.resultMessage && dispatch.waitReasonLabel) detail += '；' + dispatch.resultMessage;
@@ -42,18 +160,15 @@
                     detail += '；此前已自动尝试 ' + Number(dispatch.captchaRetryCount || 0) + '/'
                         + Number(dispatch.captchaRetryLimit || 3) + ' 次';
                 }
-                if (dispatch.queuePosition) detail += '；当前队列第 ' + dispatch.queuePosition + ' 位';
+                var position = dispatch.queuePosition || dispatch.position;
+                if (position) detail += '；当前队列第 ' + position + ' 位';
                 var earliest = dispatch.estimatedEarliestAt || dispatch.nextAttemptAt;
                 if (earliest) detail += '；预计不早于 ' + new Date(earliest).toLocaleString();
                 return detail;
             }).filter(Boolean).join(' | ');
-            var dispatch = item.publishDispatch;
-            if (!dispatch) return item.waitingForPublish && !item.publish
+            if ((item.publishTasks && item.publishTasks.length) || item.publishDispatch) return '';
+            return item.waitingForPublish && !item.publish
                 ? '等待上传完成及稿件合并间隔，之后会进入账号投稿队列' : '';
-            var detail = dispatch.detail || '';
-            if (dispatch.position) detail += '；当前队列第 ' + dispatch.position + ' 位';
-            if (dispatch.nextAttemptAt) detail += '；预计不早于 ' + new Date(dispatch.nextAttemptAt).toLocaleString();
-            return detail;
         },
         isHistoryComponentActive: function() {
             return !this.componentDestroyed && !this._isBeingDestroyed && !this._isDestroyed;
@@ -172,7 +287,7 @@
             if (this.form.roomId) parts.push('房间');
             if (this.form.bvId) parts.push('BV');
             if (this.form.upload !== null && this.form.upload !== undefined) parts.push(this.form.upload ? '已上传' : '未上传');
-            if (this.form.publish !== null && this.form.publish !== undefined) parts.push(this.form.publish ? '已发布' : '未发布');
+            if (this.form.publish !== null && this.form.publish !== undefined) parts.push(this.form.publish ? '已投稿' : '未投稿');
             if (this.form.code !== undefined && this.form.code !== null && this.form.code !== '') parts.push('审核');
             if (this.form.from || this.form.to) parts.push('时间');
             if (parts.length === 0) return '筛选';
@@ -218,20 +333,25 @@
         },
         getMobileHistoryPhaseText: function(item) {
             if (!item) return '未知';
+            if (this.isHistoryDeletionPending(item)) return this.getDeletionTaskStateText({ state: item.deletionState, deletionStarted: item.deletionStarted });
+            var flow = this.getPublishFlowText(item, 'active');
+            if (this.getPublishFlowTasks(item, 'active').length) return flow;
             if (item.editPartsUploading) return '分P上传中';
             if (this.hasTimestampJump(item)) return '时间戳跳变';
             if (this.abnormalPartCount(item) > 0) return '异常';
             if (this.isActuallyRecording(item)) return '录制中';
             if (item.forceArchived && this.form.viewType === 'archived') return '已归档';
             if (item.publish) return this.getAuditStatusText(item);
-            if (item.publishDispatch) return item.publishDispatch.label;
-            if (item.upload && this.getMobileUploadPercent(item) < 100) return '上传中';
-            if (item.upload && !item.publish) return item.waitingForPublish ? '待投稿' : '待发布';
+            if (item.upload && !item.publish) return this.getHistoryDisplayStatus(item);
             if (!item.upload && (Number(item.partCount) || 0) > 0) return '待上传';
             return item.status || '准备中';
         },
         getMobileHistoryPhaseClass: function(item) {
             if (!item) return 'is-info';
+            if (this.isHistoryDeletionPending(item)) return item.deletionState === 'NEEDS_ACTION' ? 'is-danger' : 'is-warning';
+            if (this.getPublishFlowTasks(item, 'active').length) {
+                return { danger: 'is-danger', warn: 'is-warning', info: 'is-upload', success: 'is-success' }[this.getPublishFlowClass(item, 'active')] || 'is-info';
+            }
             if (item.editPartsUploading) return 'is-upload';
             if (this.hasTimestampJump(item)) return 'is-danger';
             if (this.abnormalPartCount(item) > 0) return 'is-danger';
@@ -243,7 +363,6 @@
                 if (audit === 'danger') return 'is-danger';
                 return 'is-info';
             }
-            if (item.publishDispatch) return item.publishDispatch.code === 'CAPTCHA' ? 'is-warning' : 'is-upload';
             if (item.upload) return 'is-upload';
             if (item.forceArchived) return 'is-info';
             return 'is-warning';
@@ -265,6 +384,10 @@
                     this.$pageRefresh('initTable', [true]);
                     if (typeof this.refreshPublishTaskStatuses === 'function') {
                         this.refreshPublishTaskStatuses();
+                    }
+                    if (this.detailDialogVisible && this.currentDetail && this.currentDetail.id
+                            && typeof this.refreshPostPublishStatus === 'function') {
+                        this.refreshPostPublishStatus(this.currentDetail.id);
                     }
                 }
             }

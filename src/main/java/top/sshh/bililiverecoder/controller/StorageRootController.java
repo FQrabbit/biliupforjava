@@ -8,6 +8,7 @@ import top.sshh.bililiverecoder.entity.StorageRoot;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.StorageRootChangeAssessmentService;
 import top.sshh.bililiverecoder.service.StorageRootService;
+import top.sshh.bililiverecoder.service.RecordPartPathService;
 import top.sshh.bililiverecoder.util.ContainerUtils;
 
 import java.nio.file.Files;
@@ -24,16 +25,19 @@ public class StorageRootController {
     private final PartFileOperationService operationService;
     private final StorageRootChangeAssessmentService assessmentService;
     private final Environment environment;
+    private final RecordPartPathService recordPartPathService;
 
     @Autowired
     public StorageRootController(StorageRootService rootService,
                                  PartFileOperationService operationService,
                                  StorageRootChangeAssessmentService assessmentService,
-                                 Environment environment) {
+                                 Environment environment,
+                                 RecordPartPathService recordPartPathService) {
         this.rootService = rootService;
         this.operationService = operationService;
         this.assessmentService = assessmentService;
         this.environment = environment;
+        this.recordPartPathService = recordPartPathService;
     }
 
     /** 兼容轻量控制器测试使用的构造方法 */
@@ -42,11 +46,45 @@ public class StorageRootController {
         this.operationService = operationService;
         this.assessmentService = null;
         this.environment = null;
+        this.recordPartPathService = null;
     }
 
     @GetMapping
     public List<StorageRoot> list() {
         return rootService.findAll();
+    }
+
+    @PostMapping("/webhook-path-check")
+    public Map<String, Object> checkWebhookPath(@RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String incomingPath = request == null ? null : String.valueOf(request.get("path"));
+        result.put("incomingPath", incomingPath == null || "null".equals(incomingPath) ? "" : incomingPath);
+        try {
+            if (recordPartPathService == null) throw new IllegalStateException("路径检查服务不可用");
+            String resolvedValue = recordPartPathService.resolveWebhookPath(incomingPath);
+            Path resolved = Path.of(resolvedValue);
+            StorageRootService.RootMatch match = rootService.matchTrustedRoot(resolved)
+                    .orElseThrow(() -> new IllegalArgumentException("解析后的路径不属于已配置存储目录"));
+            boolean exists = Files.exists(resolved);
+            result.put("success", true);
+            result.put("accepted", true);
+            result.put("resolvedPath", resolvedValue);
+            result.put("matchedRootId", match.root().getId());
+            result.put("matchedRootType", match.root().getRootType());
+            result.put("matchedRootPath", match.root().getPath());
+            result.put("exists", exists);
+            result.put("regularFile", exists && Files.isRegularFile(resolved));
+            result.put("readable", exists && Files.isReadable(resolved));
+            result.put("message", exists && Files.isRegularFile(resolved) && Files.isReadable(resolved)
+                    ? "路径可被接收，文件存在且可读"
+                    : "路径位于已配置存储目录中；请确认文件已完成写入且本项目有读取权限");
+        } catch (Exception error) {
+            result.put("success", false);
+            result.put("accepted", false);
+            result.put("message", error.getMessage() == null ? "路径检查失败" : error.getMessage());
+            result.put("suggestion", "检查录播端发送的路径、存储目录配置，以及 Docker、NAS 或共享目录的挂载映射");
+        }
+        return result;
     }
 
     @GetMapping("/work-path-change")

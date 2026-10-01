@@ -30,6 +30,11 @@
                 </div>
             </div>
 
+            <div class="history-detail-config-summary">
+                <span>自动上传：{{ currentDetail.upload ? '开启' : '关闭' }}</span>
+                <span>{{ getDetailUploadSummary().detail }}</span>
+                <span>可见性：{{ getHistoryVisibilityText(currentDetail) }}</span>
+            </div>
             <!-- 状态栏 -->
             <div class="detail-status-bar">
                 <div class="status-item-modern" :class="{'active': isActuallyRecording(currentDetail), 'warning': isActuallyRecording(currentDetail)}">
@@ -42,20 +47,20 @@
                         </div>
                     </div>
                 </div>
-                <div class="status-connector" :class="{'active': currentDetail.upload}"></div>
-                <div class="status-item-modern" :class="{'active': currentDetail.upload}">
+                <div class="status-connector" :class="{ active: getDetailUploadSummary().tone === 'success' }"></div>
+                <div class="status-item-modern" :class="{ active: getDetailUploadSummary().tone === 'success', warning: getDetailUploadSummary().tone === 'warn', danger: getDetailUploadSummary().tone === 'danger', processing: getDetailUploadSummary().tone === 'info' }">
                     <div class="status-icon"><i class="el-icon-upload2"></i></div>
                     <div class="status-info">
                         <div class="status-label">上传状态</div>
-                        <div class="status-value">{{ currentDetail.upload ? '上传:开' : '上传:否' }}</div>
+                        <div class="status-value">{{ getDetailUploadSummary().text }}</div>
                     </div>
                 </div>
                 <div class="status-connector" :class="{'active': currentDetail.publish}"></div>
                 <div class="status-item-modern" :class="{'active': currentDetail.publish}">
                     <div class="status-icon"><i class="el-icon-s-release"></i></div>
                     <div class="status-info">
-                        <div class="status-label">发布状态</div>
-                        <div class="status-value">{{ currentDetail.publish ? '已发布' : '未发布' }}</div>
+                        <div class="status-label">投稿状态</div>
+                        <div class="status-value">{{ currentDetail.publish ? '已投稿' : '未投稿' }}</div>
                     </div>
                 </div>
                 <div class="status-connector" :class="getAuditStatusClass(currentDetail)"></div>
@@ -71,7 +76,7 @@
                         <div class="status-info">
                             <div class="status-label">审核状态</div>
                             <div class="status-value">
-                                {{ getAuditStatusText(currentDetail) }}
+                                {{ currentDetail.code == -50 ? '通过' : getAuditStatusText(currentDetail) }}
                                 <span class="status-badge-mini" v-if="auditStatusActionText">{{ auditStatusActionText }}</span>
                             </div>
                         </div>
@@ -81,7 +86,7 @@
                     <div class="status-icon"><i class="el-icon-s-check"></i></div>
                     <div class="status-info">
                         <div class="status-label">审核状态</div>
-                        <div class="status-value">{{ getAuditStatusText(currentDetail) }}</div>
+                        <div class="status-value">{{ currentDetail.code == -50 ? '通过' : getAuditStatusText(currentDetail) }}</div>
                     </div>
                 </div>
                 <div class="status-connector" :class="getDanmakuStatusClass(currentDetail)"></div>
@@ -94,29 +99,82 @@
                 </div>
             </div>
 
-            <div class="detail-config-notice" v-if="getPublishFlowText(currentDetail)">
-                <div class="config-notice-icon"><i class="el-icon-time"></i></div>
+            <div v-if="deletionTaskStatus && deletionTaskStatus.found" class="detail-config-notice" role="status">
+                <div class="config-notice-icon"><i class="el-icon-delete"></i></div>
                 <div class="config-notice-body">
-                    <div class="config-notice-title">投稿流程：{{ getPublishFlowText(currentDetail) }}</div>
-                    <div class="config-notice-text">{{ getPublishFlowDetail(currentDetail) }}</div>
+                    <div class="config-notice-title">删除状态：{{ getDeletionTaskStateText(deletionTaskStatus) }}</div>
+                    <div class="config-notice-text">{{ deletionTaskStatus.lastError || deletionTaskStatus.cancelReason || '稿件暂停接收新操作，等待删除流程完成' }}</div>
+                    <el-button v-if="deletionTaskStatus.canCancel" size="small" type="warning"
+                               :loading="Number(deletionTaskActionId) === Number(deletionTaskStatus.taskId)"
+                               @click="cancelHistoryDeletion(deletionTaskStatus)">取消删除并恢复队列</el-button>
                 </div>
             </div>
-            <div v-for="task in (currentDetail.publishTasks && currentDetail.publishTasks.length ? currentDetail.publishTasks : (currentDetail.publishDispatch ? [currentDetail.publishDispatch] : []))"
-                 v-if="requiresPublishTaskVerification(task) || canRetryPublishTask(task) || canCancelPublishTask(task)"
-                 :key="'publish-task-actions-' + task.taskId" class="detail-config-notice">
+            <div v-for="task in getPublishFlowTasks(currentDetail, 'active')" :key="'publish-task-' + task.taskId"
+                 class="detail-config-notice" :class="getPublishFlowClass({ publishTasks: [task] }, 'active')" role="status">
                 <div class="config-notice-icon"><i class="el-icon-s-operation"></i></div>
                 <div class="config-notice-body">
                     <div class="config-notice-title">{{ getPublishOperationLabel(task) }} · {{ task.label }}</div>
-                    <div v-if="requiresPublishTaskVerification(task)" style="display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+                    <div class="config-notice-text">{{ getPublishTaskDetailText(task) }}</div>
+                    <div v-if="requiresPublishTaskVerification(task)" class="history-task-actions">
                         <el-input :value="publishTaskBvid(task)" @input="setPublishTaskBvid(task, $event)" size="small" placeholder="输入用于核对的 BVID" style="max-width:260px"></el-input>
-                        <el-button size="small" type="primary" :loading="isPublishTaskActionLoading(task)" @click="confirmPublishTaskResult(task)">核对线上结果</el-button>
+                        <el-button size="small" type="primary" :loading="isPublishTaskActionLoading(task)" :disabled="!!getHistoryActionDisabledReason(currentDetail)" @click="confirmPublishTaskResult(task)">核对线上结果</el-button>
                     </div>
-                    <div v-if="canRetryPublishTask(task) || canCancelPublishTask(task)" style="display:flex; gap:8px; margin-top:8px;">
-                        <el-button v-if="canRetryPublishTask(task)" size="small" type="warning" :loading="isPublishTaskActionLoading(task)" @click="retryPublishTask(task)">{{ getPublishTaskRetryLabel(task) }}</el-button>
+                    <div v-if="canRetryPublishTask(task) || canCancelPublishTask(task)" class="history-task-actions">
+                        <el-button v-if="canRetryPublishTask(task)" size="small" type="warning" :loading="isPublishTaskActionLoading(task)" :disabled="!!getHistoryActionDisabledReason(currentDetail)" @click="retryPublishTask(task)">{{ getPublishTaskRetryLabel(task) }}</el-button>
                         <el-button v-if="canCancelPublishTask(task)" size="small" :loading="isPublishTaskActionLoading(task)" @click="cancelPublishTask(task)">取消任务</el-button>
                     </div>
                 </div>
             </div>
+            <div v-if="!getPublishFlowTasks(currentDetail, 'active').length && getPublishFlowText(currentDetail, 'active')" class="detail-config-notice info" role="status">
+                <i class="el-icon-time"></i>
+                <div>{{ getPublishFlowText(currentDetail, 'active') }}<p>{{ getPublishFlowDetail(currentDetail, 'active') }}</p></div>
+            </div>
+            <div v-if="hasPostPublishPending()"
+                 class="detail-config-notice" :class="getPostPublishNoticeClass()" role="status">
+                <div class="config-notice-icon"><i class="el-icon-chat-line-round"></i></div>
+                <div class="config-notice-body" style="width:100%">
+                    <div class="config-notice-title">评论与视频状态恢复</div>
+                    <div v-for="comment in getPostPublishComments(false)" :key="'post-comment-' + comment.taskId"
+                         style="padding:10px 0; border-top:1px solid var(--border-light)">
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                            <strong>评论 {{ comment.sequence + 1 }} · {{ getCommentTaskStateText(comment) }}</strong>
+                            <el-tag v-if="getCommentTaskPinStateText(comment)" size="mini" effect="plain">{{ getCommentTaskPinStateText(comment) }}</el-tag>
+                        </div>
+                        <div style="margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere">{{ comment.content }}</div>
+                        <div v-if="comment.errorMessage" style="margin-top:5px; color:var(--danger-color)">{{ comment.errorMessage }}</div>
+                        <el-button v-if="comment.state === 'NEEDS_ACTION'" size="mini" type="warning"
+                                   :disabled="Number(commentTaskActionId) === Number(comment.taskId) || !!getHistoryActionDisabledReason(currentDetail)"
+                                   :loading="Number(commentTaskActionId) === Number(comment.taskId)"
+                                   @click="retryUnconfirmedComment(comment)">核对未发送后重试</el-button>
+                    </div>
+                    <div v-if="getPostPublishVisibility(false)" style="padding-top:8px; border-top:1px solid var(--border-light)">
+                        <strong>视频可见状态：{{ getVisibilityRestoreStateText(postPublishStatus.visibilityRestore) }}</strong>
+                        <div v-if="postPublishStatus.visibilityRestore.nextAttemptAt" style="margin-top:4px">
+                            下次恢复：{{ formatDateTime(postPublishStatus.visibilityRestore.nextAttemptAt) }}
+                        </div>
+                        <div v-if="postPublishStatus.visibilityRestore.errorMessage" style="margin-top:4px; color:var(--danger-color)">
+                            {{ postPublishStatus.visibilityRestore.errorMessage }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <details v-if="hasCompletedProcessingRecords()" :key="'processing-records-' + currentDetail.id" class="history-processing-records">
+                <summary>处理记录</summary>
+                <div class="history-processing-records-body">
+                    <div v-for="task in getPublishFlowTasks(currentDetail, 'completed')" :key="'completed-publish-' + task.taskId" class="history-processing-record">
+                        <strong>{{ getPublishOperationLabel(task) }} · {{ task.label }}</strong>
+                        <p v-if="task.resultMessage || task.detail">{{ task.resultMessage || task.detail }}</p>
+                    </div>
+                    <div v-for="comment in getPostPublishComments(true)" :key="'completed-comment-' + comment.taskId" class="history-processing-record">
+                        <strong>评论 {{ comment.sequence + 1 }} · {{ getCommentTaskStateText(comment) }}</strong>
+                        <span v-if="getCommentTaskPinStateText(comment)"> · {{ getCommentTaskPinStateText(comment) }}</span>
+                        <p>{{ comment.content }}</p>
+                    </div>
+                    <div v-if="getPostPublishVisibility(true)" class="history-processing-record">
+                        <strong>视频可见状态：{{ getVisibilityRestoreStateText(getPostPublishVisibility(true)) }}</strong>
+                    </div>
+                </div>
+            </details>
             <div class="detail-config-notice" v-if="hasUploadConfigMismatch">
                 <div class="config-notice-icon"><i class="el-icon-info"></i></div>
                 <div class="config-notice-body">
@@ -345,12 +403,12 @@
             <div class="detail-section-title detail-section-title--actions" style="margin-top: 20px;">
                 <span>上传进度</span>
                 <span class="detail-title-actions" v-if="currentDetail && currentDetail.id">
-                    <el-button v-if="canShowHistoryPauseButton" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="uploadPauseLoading" :disabled="isHistoryUploadPauseSettling()" @click="pauseHistoryUpload">暂停上传</el-button>
-                    <el-button v-if="canShowHistoryResumeButton" size="mini" type="success" plain icon="el-icon-video-play" :loading="uploadPauseLoading" :disabled="isHistoryUploadPauseSettling()" @click="resumeHistoryUpload">继续上传</el-button>
-                    <template v-if="canEditPublishedParts()">
-                    <el-button v-if="!editPartsEditing" size="mini" type="primary" plain icon="el-icon-edit" @click="startEditParts">编辑分P</el-button>
+                    <el-button v-if="canShowHistoryPauseButton" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="uploadPauseLoading" :disabled="(isHistoryUploadPauseSettling()) || !!getHistoryActionDisabledReason(currentDetail)" @click="pauseHistoryUpload">暂停上传</el-button>
+                    <el-button v-if="canShowHistoryResumeButton" size="mini" type="success" plain icon="el-icon-video-play" :loading="uploadPauseLoading" :disabled="(isHistoryUploadPauseSettling()) || !!getHistoryActionDisabledReason(currentDetail)" @click="resumeHistoryUpload">继续上传</el-button>
+                    <template v-if="canEditPublishedParts() || editPartsEditing">
+                    <el-button v-if="!editPartsEditing" size="mini" type="primary" plain icon="el-icon-edit" @click="startEditParts" :disabled="!!getHistoryActionDisabledReason(currentDetail)">编辑分P</el-button>
                     <template v-else>
-                        <el-button size="mini" type="success" plain icon="el-icon-check" :loading="editPartsSaving" @click="confirmSaveEditParts">保存</el-button>
+                        <el-button size="mini" type="success" plain icon="el-icon-check" :loading="editPartsSaving" @click="confirmSaveEditParts" :disabled="!!getHistoryActionDisabledReason(currentDetail)">保存</el-button>
                         <el-button size="mini" plain icon="el-icon-close" :disabled="editPartsSaving" @click="cancelEditParts">取消</el-button>
                     </template>
                     </template>
@@ -363,7 +421,7 @@
                         <div class="edit-parts-hint">保存前不会修改线上稿件。保存时会刷新线上分P后提交完整列表。</div>
                         <div class="edit-parts-actions">
                             <el-button size="mini" type="primary" plain icon="el-icon-folder-add" @click="openEditPartFileDialog(null, 'add')">从工作目录添加</el-button>
-                            <el-upload
+                            <el-upload :disabled="!!getHistoryActionDisabledReason(currentDetail)"
                                     :action="'/history/' + currentDetail.id + '/edit-parts/local-upload'"
                                     :data="{ sessionId: editPartsSessionId }"
                                     :http-request="uploadAddLocalEditPart"
@@ -395,7 +453,7 @@
                             </div>
                             <div class="edit-part-row-actions">
                                 <el-button size="mini" plain icon="el-icon-folder-opened" :disabled="p.deleted" @click="openEditPartFileDialog(idx, 'replace')">工作目录替换</el-button>
-                                <el-upload
+                                <el-upload :disabled="!!getHistoryActionDisabledReason(currentDetail)"
                                         :action="'/history/' + currentDetail.id + '/edit-parts/local-upload'"
                                         :data="{ sessionId: editPartsSessionId }"
                                         :http-request="function(option){ uploadReplaceLocalEditPart(idx, option); }"
@@ -490,13 +548,13 @@
                             <span v-else class="filepath-text">***</span>
                         </div>
                         <div v-if="p.actions && p.actions.length > 0" class="progress-filepath-mini part-actions">
-                            <el-button v-if="p.actions.indexOf('PAUSE_UPLOAD') !== -1" class="part-action-btn part-action-btn--pause" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="pausePartUpload(p)">暂停</el-button>
-                            <el-button v-if="p.actions.indexOf('RESUME_UPLOAD') !== -1" class="part-action-btn part-action-btn--resume" size="mini" type="success" plain icon="el-icon-video-play" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="isPartUploadPauseSettling(p.partId)" @click.stop="resumePartUpload(p)">继续</el-button>
-                            <el-button v-if="p.actions.indexOf('EDIT_PARTS') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain icon="el-icon-edit" @click.stop="openEditPartsFromPart">编辑分P</el-button>
-                            <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)">补全文件</el-button>
-                            <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)">跳过此分P</el-button>
-                            <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)">重试扫描</el-button>
-                            <el-button v-if="p.actions.indexOf('RETRY_FILE_PROCESS') !== -1" class="part-action-btn" size="mini" type="danger" plain icon="el-icon-refresh" :loading="!!p.fileOperationRetrying" @click.stop="retryFileProcess(p)">重试文件处理</el-button>
+                            <el-button v-if="p.actions.indexOf('PAUSE_UPLOAD') !== -1" class="part-action-btn part-action-btn--pause" size="mini" type="warning" plain icon="el-icon-video-pause" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="(isPartUploadPauseSettling(p.partId)) || !!getHistoryActionDisabledReason(currentDetail)" @click.stop="pausePartUpload(p)">暂停</el-button>
+                            <el-button v-if="p.actions.indexOf('RESUME_UPLOAD') !== -1" class="part-action-btn part-action-btn--resume" size="mini" type="success" plain icon="el-icon-video-play" :loading="!!uploadPartPauseLoading[p.partId]" :disabled="(isPartUploadPauseSettling(p.partId)) || !!getHistoryActionDisabledReason(currentDetail)" @click.stop="resumePartUpload(p)">继续</el-button>
+                            <el-button v-if="p.actions.indexOf('EDIT_PARTS') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain icon="el-icon-edit" @click.stop="openEditPartsFromPart" :disabled="!!getHistoryActionDisabledReason(currentDetail)">编辑分P</el-button>
+                            <el-button v-if="p.actions.indexOf('BIND_FILE') !== -1" class="part-action-btn part-action-btn--bind" size="mini" type="primary" plain @click.stop="openBindFileDialog(p)" :disabled="!!getHistoryActionDisabledReason(currentDetail)">补全文件</el-button>
+                            <el-button v-if="p.actions.indexOf('MARK_FINISHED') !== -1" class="part-action-btn part-action-btn--finish" size="mini" type="warning" plain @click.stop="confirmMarkFinished(p)" :disabled="!!getHistoryActionDisabledReason(currentDetail)">跳过此分P</el-button>
+                            <el-button v-if="p.actions.indexOf('RESCAN') !== -1" class="part-action-btn part-action-btn--rescan" size="mini" type="info" plain @click.stop="rescanPart(p)" :disabled="!!getHistoryActionDisabledReason(currentDetail)">重试扫描</el-button>
+                            <el-button v-if="p.actions.indexOf('RETRY_FILE_PROCESS') !== -1" class="part-action-btn" size="mini" type="danger" plain icon="el-icon-refresh" :loading="!!p.fileOperationRetrying" @click.stop="retryFileProcess(p)" :disabled="!!getHistoryActionDisabledReason(currentDetail)">重试文件处理</el-button>
                         </div>
                     </div>
                 </div>
@@ -508,9 +566,9 @@
             <div class="detail-footer-actions" v-if="currentDetail.id">
                 <!-- 常用操作 -->
                 <div class="action-group-primary">
-                    <el-button class="modern-btn" @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit" :disabled="currentDetail.forceArchived">编辑</el-button>
+                    <el-button class="modern-btn" @click="handleEdit(0, currentDetail)" size="small" type="primary" plain icon="el-icon-edit" :disabled="(currentDetail.forceArchived) || !!getHistoryActionDisabledReason(currentDetail)">编辑</el-button>
                     <el-button class="modern-btn" @click="refreshStatus(currentDetail.id)" size="small" type="primary" plain icon="el-icon-refresh">刷新状态</el-button>
-                    <el-button v-if="currentDetail.waitingForPublish && !currentDetail.forceArchived" class="modern-btn breathing" @click="touchPublish(currentDetail.id)" size="small" type="warning" plain icon="el-icon-s-release">立即投稿</el-button>
+                    <el-button v-if="!currentDetail.publish || getMainPublishTask(currentDetail)" class="modern-btn" @click="touchPublish(currentDetail.id)" size="small" type="primary" plain icon="el-icon-s-release" :loading="isHistoryPublishRequesting(currentDetail)" :disabled="!!getHistoryPublishDisabledReason(currentDetail)" :title="getHistoryPublishDisabledReason(currentDetail)">{{ getHistoryPublishActionText(currentDetail) }}</el-button>
                 </div>
 
                 <!-- 更多操作开关 -->
@@ -527,24 +585,22 @@
                 <transition name="actions-slide">
                     <div class="action-group-secondary" v-show="showMoreActions">
                         <div class="action-sub-group">
-                            <span class="action-group-label">发布管理</span>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh">转码修复</el-button>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">高能片段</el-button>
-                            <el-button v-if="!currentDetail.forceArchived && currentDetail.upload && !currentDetail.publish && allEffectivePartsUploaded" class="modern-btn" @click="retryPublishOnly(currentDetail.id)" size="mini" type="primary" plain icon="el-icon-refresh">重试发布</el-button>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="touchPublish(currentDetail.id)" size="mini" plain icon="el-icon-s-promotion">触发发布</el-button>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left">重置状态</el-button>
-                            <el-button v-if="currentDetail.forceArchived" class="modern-btn" @click="restoreForceArchive(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play">恢复处理</el-button>
+                            <span class="action-group-label">投稿管理</span>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh" :disabled="!!getHistoryActionDisabledReason(currentDetail)">转码修复</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play" :disabled="!!getHistoryActionDisabledReason(currentDetail)">高能片段</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left" :disabled="!!getHistoryActionDisabledReason(currentDetail)">重置状态</el-button>
+                            <el-button v-if="currentDetail.forceArchived" class="modern-btn" @click="restoreForceArchive(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play" :disabled="isHistoryDeletionPending(currentDetail)">恢复处理</el-button>
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
                             <span class="action-group-label">录制与数据</span>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause">结束录制</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause" :disabled="!!getHistoryActionDisabledReason(currentDetail)">结束录制</el-button>
                             <el-tooltip popper-class="history-page-tooltip-popper" v-if="!currentDetail.forceArchived" effect="dark" content="强制停止所有未完成操作并归档（适用于卡住的任务）" placement="top">
-                                <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button">强制归档</el-button>
+                                <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button" :disabled="!!getHistoryActionDisabledReason(currentDetail)">强制归档</el-button>
                             </el-tooltip>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round">重载弹幕</el-button>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="abandonHistoryMsgQueue(currentDetail.id, currentDetail)" size="mini" type="warning" plain icon="el-icon-remove-outline">放弃发送</el-button>
-                            <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete">删除弹幕</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round" :disabled="!!getHistoryActionDisabledReason(currentDetail)">重载弹幕</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="abandonHistoryMsgQueue(currentDetail.id, currentDetail)" size="mini" type="warning" plain icon="el-icon-remove-outline" :disabled="!!getHistoryActionDisabledReason(currentDetail)">放弃发送</el-button>
+                            <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete" :disabled="!!getHistoryActionDisabledReason(currentDetail)">删除弹幕</el-button>
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
@@ -553,7 +609,7 @@
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
-                            <el-button class="modern-btn" @click="deleteHistory(currentDetail.id)" size="mini" type="danger" icon="el-icon-delete">删除记录</el-button>
+                            <el-button class="modern-btn" @click="deleteHistory(currentDetail.id)" size="mini" type="danger" icon="el-icon-delete" :disabled="isHistoryDeletionPending(currentDetail)">删除记录</el-button>
                         </div>
                     </div>
                 </transition>

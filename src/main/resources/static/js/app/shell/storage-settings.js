@@ -8,7 +8,10 @@
             storageRoots: [],
                 workPathChange: { pending: false, changeId: '', configuredPath: '', activeRoot: null, h2Warning: '', assessment: null },
                 storageLoading: false,
-                storageResolving: false
+                storageResolving: false,
+                webhookPathInput: '',
+                webhookPathCheck: null,
+                webhookPathChecking: false
             };
         },
         mounted: function () {
@@ -32,6 +35,24 @@
                     self.workPathChange = data || { pending: false, changeId: '', configuredPath: '', activeRoot: null, h2Warning: '', assessment: null };
                     done();
                 }, done);
+            },
+            checkWebhookPath: function () {
+                var self = this;
+                if (self.webhookPathChecking || !String(self.webhookPathInput || '').trim()) return;
+                self.webhookPathChecking = true;
+                self.webhookPathCheck = null;
+                window.StorageApi.checkWebhookPath(String(self.webhookPathInput).trim(), function (result) {
+                    self.webhookPathChecking = false;
+                    self.webhookPathCheck = result || null;
+                }, function (error) {
+                    self.webhookPathChecking = false;
+                    self.webhookPathCheck = error && error.responseJSON || {
+                        success: false,
+                        accepted: false,
+                        message: '路径检查请求失败，请确认已登录后重试',
+                        suggestion: '检查本项目地址和网络连接'
+                    };
+                });
             },
             resolveWorkPathChange: function (mode) {
                 var self = this;

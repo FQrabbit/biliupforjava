@@ -2,15 +2,23 @@ package top.sshh.bililiverecoder.repo;
 
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import top.sshh.bililiverecoder.entity.RecordHistory;
+
+import jakarta.persistence.LockModeType;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface RecordHistoryRepository extends CrudRepository<RecordHistory, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select h from RecordHistory h where h.id = :id")
+    java.util.Optional<RecordHistory> findByIdForUpdate(@Param("id") Long id);
 
     List<RecordHistory> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 

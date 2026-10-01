@@ -143,6 +143,25 @@ public class ThreadPoolConfig {
         return executor;
     }
 
+    @Bean("uploadExecutor")
+    public ThreadPoolTaskExecutor uploadExecutor(
+            @Value("${record.upload.core-pool-size:8}") int corePoolSize,
+            @Value("${record.upload.max-pool-size:16}") int maxPoolSize,
+            @Value("${record.upload.queue-capacity:2000}") int queueCapacity,
+            @Value("${record.upload.await-termination-seconds:15}") int awaitTerminationSeconds
+    ) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(Math.max(1, corePoolSize));
+        executor.setMaxPoolSize(Math.max(executor.getCorePoolSize(), maxPoolSize));
+        executor.setQueueCapacity(Math.max(0, queueCapacity));
+        executor.setThreadNamePrefix("upload-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(Math.max(0, awaitTerminationSeconds));
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.initialize();
+        return executor;
+    }
+
     @Bean("publishAccountExecutor")
     public TaskExecutor publishAccountExecutor(
             @Value("${publish.account.worker-count:8}") int workerCount) {

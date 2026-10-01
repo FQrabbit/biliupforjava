@@ -104,6 +104,8 @@
         },
         handleCommand: function(command, row) {
             this.showMoreActions = false;
+            if (command !== 'exportDiagnostic' && command !== 'deleteHistory'
+                    && !this.ensureHistoryActionAllowed(row)) return;
             switch(command) {
                 case 'exportDiagnostic': this.openDiagnosticExport(row); break;
                 case 'rePublish': this.rePublish(row.id); break;
@@ -224,6 +226,7 @@
         },
         showDetail: function(item) {
             // 先清空再赋值，避免 Element Dialog 复用导致的短暂残影
+            this.resetPostPublishStatus();
             this.currentDetail = {};
             this.detailDialogVisible = true;
             this.stopProgressPolling();
@@ -243,6 +246,7 @@
                 this.updateDetailFooterOffset();
                 if (this.currentDetail && this.currentDetail.id) {
                     this.startProgressPolling(this.currentDetail.id);
+                    this.refreshPostPublishStatus(this.currentDetail.id);
                     // 获取所有分P信息
                     var _this = this;
                     _this.fetchPartList(_this.currentDetail.id, function () {});
@@ -399,7 +403,8 @@
         },
         getEffectiveDoneParts: function() {
             if (!Array.isArray(this.currentDetailParts) || this.currentDetailParts.length === 0) {
-                return Math.max(Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0, 0);
+                var uploaded = Math.max(Number(this.currentDetail && this.currentDetail.uploadPartCount) || 0, 0);
+                return Math.min(this.getEffectiveTotalParts(), uploaded + this.skippedOnlyCount(this.currentDetail));
             }
             var done = 0;
             for (var i = 0; i < this.effectiveDetailParts.length; i++) {
@@ -453,6 +458,7 @@
             this.cancelAuditStatusLoadingRequest();
             this.cancelEditParts(true);
             this.historyUploadProgress = null;
+            this.resetPostPublishStatus();
             this.currentDetail = {};
             this.currentDetailParts = [];
             this.showAllParts = false;

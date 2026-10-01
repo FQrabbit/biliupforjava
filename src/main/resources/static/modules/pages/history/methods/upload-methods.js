@@ -35,6 +35,7 @@
             return Date.now() < (Number(this.uploadPartPauseSettlingUntil[partId]) || 0);
         },
         pauseHistoryUpload: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading || _this.isHistoryUploadPauseSettling()) return;
             _this.uploadPauseLoading = true;
@@ -56,6 +57,7 @@
             });
         },
         resumeHistoryUpload: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!_this.currentDetail || !_this.currentDetail.id || _this.uploadPauseLoading || _this.isHistoryUploadPauseSettling()) return;
             _this.uploadPauseLoading = true;
@@ -72,6 +74,7 @@
             });
         },
         pausePartUpload: function(p) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!p || !p.partId || _this.isPartUploadPauseSettling(p.partId)) return;
             _this.$set(_this.uploadPartPauseLoading, p.partId, true);
@@ -89,6 +92,7 @@
             });
         },
         resumePartUpload: function(p) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!p || !p.partId || _this.isPartUploadPauseSettling(p.partId)) return;
             _this.$set(_this.uploadPartPauseLoading, p.partId, true);
@@ -106,6 +110,7 @@
             });
         },
         openBindFileDialog: function(p) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             if (this.currentDetail && (this.currentDetail.publish || this.currentDetail.avId || this.currentDetail.bvId)) {
                 this.openEditPartsFromPart();
                 return;
@@ -128,6 +133,7 @@
             });
         },
         submitBindFile: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!_this.bindTargetPart || !_this.bindTargetPart.partId) return;
             if (!_this.selectedCandidateFile) return;
@@ -148,6 +154,7 @@
             });
         },
         confirmMarkFinished: function(p) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!p || !p.partId) return;
             _this.$pageConfirm('确定要跳过此分P吗？该分P不会自动上传，稿件将继续推进投稿流程。', '确认跳过', {
@@ -155,6 +162,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(function() {
+                if (!_this.ensureHistoryActionAllowed(_this.currentDetail)) return;
                 PartApi.markFinished(p.partId, function(resp) {
                     _this.$message({ message: (resp && resp.msg) ? resp.msg : '操作成功', type: (resp && resp.type) ? resp.type : 'success' });
                     _this.fetchPartList(_this.currentDetail.id, function () {});
@@ -164,6 +172,7 @@
             }).catch(function() {});
         },
         rescanPart: function(p) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!p || !p.partId) return;
             PartApi.rescan(p.partId, function(resp) {
@@ -197,6 +206,7 @@
             return 'is-unknown';
         },
         retryFileProcess: function(p) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             var _this = this;
             if (!p || !p.fileOperationKey || p.fileOperationRetrying) return;
             _this.$set(p, 'fileOperationRetrying', true);

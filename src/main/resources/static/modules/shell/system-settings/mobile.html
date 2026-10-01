@@ -184,6 +184,20 @@
                     <i class="el-icon-folder-opened"></i>
                     <span>存储目录</span>
                 </div>
+                <div style="padding:12px; border-bottom:1px solid var(--mobile-page-border)">
+                    <strong>录播 Webhook 路径接入检查</strong>
+                    <p>粘贴录播端发送的视频路径，检查存储目录和挂载映射；不会创建稿件或修改文件</p>
+                    <el-input v-model="webhookPathInput" size="small" placeholder="录播端发送的完整路径"></el-input>
+                    <button type="button" :disabled="webhookPathChecking || !webhookPathInput" @click="checkWebhookPath">{{ webhookPathChecking ? '正在检查…' : '检查路径' }}</button>
+                    <div v-if="webhookPathCheck" role="status" style="margin-top:8px">
+                        <strong>{{ webhookPathCheck.accepted ? '路径已接入' : '路径未接入' }}</strong>
+                        <p>{{ webhookPathCheck.message }}</p>
+                        <p v-if="webhookPathCheck.resolvedPath">解析路径：{{ webhookPathCheck.resolvedPath }}</p>
+                        <p v-if="webhookPathCheck.matchedRootPath">匹配目录：{{ webhookPathCheck.matchedRootPath }}</p>
+                        <p v-if="webhookPathCheck.accepted">文件存在：{{ webhookPathCheck.exists ? '是' : '否' }}；可读：{{ webhookPathCheck.readable ? '是' : '否' }}</p>
+                        <p v-if="webhookPathCheck.suggestion">{{ webhookPathCheck.suggestion }}</p>
+                    </div>
+                </div>
                 <div v-if="workPathChange && workPathChange.pending" class="mobile-storage-warning" role="alert">
                     <strong>工作目录变更待确认</strong>
                     <p>新目录：{{ workPathChange.configuredPath || '-' }}</p>

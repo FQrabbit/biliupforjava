@@ -153,7 +153,8 @@ public class RoomLiveEventXmlIssueService {
         long internal = countActive(issues, RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR);
         result.put("attentionCount", issues.size() - ignored);
         result.put("missingCount", missing);
-        result.put("parseFailedCount", invalid + readFailed + internal);
+        result.put("parseFailedCount", invalid + readFailed + internal
+                + countActive(issues, RoomLiveEventXmlIssue.IssueType.RESOURCE_LIMIT));
         result.put("storageOfflineCount", offline);
         result.put("pathUnresolvedCount", unresolved);
         result.put("ignoredCount", ignored);
@@ -419,7 +420,7 @@ public class RoomLiveEventXmlIssueService {
     private boolean isParseFailure(RoomLiveEventXmlIssue issue) {
         if (issue == null || issue.getIssueType() == null) return false;
         return switch (issue.getIssueType()) {
-            case INVALID_XML, READ_FAILED, INTERNAL_ERROR -> true;
+            case INVALID_XML, READ_FAILED, RESOURCE_LIMIT, INTERNAL_ERROR -> true;
             default -> false;
         };
     }
@@ -445,6 +446,7 @@ public class RoomLiveEventXmlIssueService {
             case READ_FAILED -> "检查文件权限或占用情况后重新检查";
             case ROOT_OFFLINE -> "恢复或重新映射存储目录后，系统会自动重新检查一次";
             case PATH_UNRESOLVED -> "检查存储目录映射和历史文件路径后重新检查";
+            case RESOURCE_LIMIT -> "文件超过当前解析资源上限，现有统计已保留；可调整解析上限后重新检查";
             case INTERNAL_ERROR -> "查看错误详情并重新检查，持续出现请保留日志反馈";
         };
     }

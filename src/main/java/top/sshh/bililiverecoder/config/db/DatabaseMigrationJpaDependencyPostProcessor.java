@@ -23,11 +23,15 @@ public class DatabaseMigrationJpaDependencyPostProcessor implements BeanFactoryP
                     "无法建立数据库迁移与 JPA 的启动依赖");
         }
         BeanDefinition definition = beanFactory.getBeanDefinition(ENTITY_MANAGER_FACTORY);
+        addDependency(definition, MIGRATION_INITIALIZER);
+    }
+
+    private static void addDependency(BeanDefinition definition, String dependency) {
         String[] existing = definition.getDependsOn();
-        if (existing != null && Arrays.stream(existing).anyMatch(MIGRATION_INITIALIZER::equals)) return;
+        if (existing != null && Arrays.stream(existing).anyMatch(dependency::equals)) return;
         List<String> dependencies = new ArrayList<>();
         if (existing != null) dependencies.addAll(Arrays.asList(existing));
-        dependencies.add(MIGRATION_INITIALIZER);
+        dependencies.add(dependency);
         definition.setDependsOn(dependencies.toArray(String[]::new));
     }
 }

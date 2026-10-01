@@ -8,8 +8,8 @@ import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.service.impl.*;
 import top.sshh.bililiverecoder.util.LogKvs;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -34,8 +34,8 @@ public class RecordEventFactory {
     @Autowired
     private RecordEventEmptyService recordEventEmptyService;
 
-    private final Map<String, BlrecRoomInfo> blrecRoomInfoMap = new HashMap<>();
-    private final Map<String, BlrecUserInfo> blrecUserInfoMap = new HashMap<>();
+    private final Map<String, BlrecRoomInfo> blrecRoomInfoMap = new ConcurrentHashMap<>();
+    private final Map<String, BlrecUserInfo> blrecUserInfoMap = new ConcurrentHashMap<>();
 
 
     public RecordEventService getEventService(String eventType) {
@@ -52,6 +52,13 @@ public class RecordEventFactory {
             case RecordEventType.VideoPostprocessingCompletedEvent -> recordEventFilePostService;
             default -> recordEventEmptyService;
         };
+    }
+
+    public boolean isUnsupportedEvent(RecordEventDTO eventDTO) {
+        if (eventDTO == null) return false;
+        String eventType = StringUtils.isNotBlank(eventDTO.getEventType())
+                ? eventDTO.getEventType() : eventDTO.getData() == null ? null : eventDTO.getType();
+        return StringUtils.isNotBlank(eventType) && getEventService(eventType) == recordEventEmptyService;
     }
 
     public void processing(RecordEventDTO eventDTO) {
@@ -75,12 +82,16 @@ public class RecordEventFactory {
                     eventData.setRoomId(roomId);
                 }
                 if (roomInfo != null) {
-                    blrecRoomInfoMap.put(roomInfo.getRoomId(), roomInfo);
+                    if (StringUtils.isNotBlank(roomInfo.getRoomId())) {
+                        blrecRoomInfoMap.put(roomInfo.getRoomId(), roomInfo);
+                    }
                 } else {
                     roomInfo = blrecRoomInfoMap.get(roomId);
                 }
                 if (userInfo != null) {
-                    blrecUserInfoMap.put(userInfo.getUid(), userInfo);
+                    if (StringUtils.isNotBlank(userInfo.getUid())) {
+                        blrecUserInfoMap.put(userInfo.getUid(), userInfo);
+                    }
                 } else if (roomInfo != null) {
                     userInfo = blrecUserInfoMap.get(roomInfo.getUid());
                 }
@@ -105,9 +116,13 @@ public class RecordEventFactory {
                     .add("type", eventDTO.getType())
                     .add("hasData", eventDTO.getData() != null)
                     .add("hasEventData", eventDTO.getEventData() != null));
-            return;
+            throw new IllegalArgumentException("Webhook 缺少可识别的事件类型");
         }
         RecordEventService eventService = this.getEventService(eventType);
+        if (eventService == recordEventEmptyService) {
+            log.info("[BLR] {}", LogKvs.event("Webhook.EventIgnored").add("type", eventType));
+            return;
+        }
         eventService.processing(eventDTO);
     }
 }

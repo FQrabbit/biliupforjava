@@ -115,6 +115,7 @@ public class StatsAggregationService {
                         .add("missing", parseSummary.count(RoomLiveEventXmlIssue.IssueType.MISSING_UNEXPECTED))
                         .add("invalid", parseSummary.count(RoomLiveEventXmlIssue.IssueType.INVALID_XML))
                         .add("readFailed", parseSummary.count(RoomLiveEventXmlIssue.IssueType.READ_FAILED))
+                        .add("resourceLimit", parseSummary.count(RoomLiveEventXmlIssue.IssueType.RESOURCE_LIMIT))
                         .add("offline", parseSummary.count(RoomLiveEventXmlIssue.IssueType.ROOT_OFFLINE))
                         .add("unresolved", parseSummary.count(RoomLiveEventXmlIssue.IssueType.PATH_UNRESOLVED))
                         .add("internal", parseSummary.count(RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR)));
@@ -414,6 +415,7 @@ public class StatsAggregationService {
             result.put("missing", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.MISSING_UNEXPECTED, 0));
             result.put("invalid", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.INVALID_XML, 0));
             result.put("readFailed", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.READ_FAILED, 0));
+            result.put("resourceLimit", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.RESOURCE_LIMIT, 0));
             result.put("offline", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.ROOT_OFFLINE, 0));
             result.put("unresolved", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.PATH_UNRESOLVED, 0));
             result.put("internal", unresolved.getOrDefault(RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR, 0));

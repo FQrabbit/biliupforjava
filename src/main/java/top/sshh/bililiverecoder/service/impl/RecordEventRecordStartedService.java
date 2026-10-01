@@ -37,7 +37,7 @@ public class RecordEventRecordStartedService implements RecordEventService {
             log.error("[BLR] {}", LogKvs.event("RecordStarted.InvalidPayload")
                     .add("eventId", event.getEventId())
                     .add("reason", "RoomId is null or blank"));
-            return;
+            throw new IllegalArgumentException("录制开始事件缺少房间号");
         }
 
         synchronized (roomId.intern()) {

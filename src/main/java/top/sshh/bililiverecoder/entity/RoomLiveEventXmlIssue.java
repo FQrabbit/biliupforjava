@@ -26,6 +26,7 @@ public class RoomLiveEventXmlIssue {
         READ_FAILED,
         ROOT_OFFLINE,
         PATH_UNRESOLVED,
+        RESOURCE_LIMIT,
         INTERNAL_ERROR
     }
 

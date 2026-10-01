@@ -71,6 +71,24 @@ public class RecordHistory {
     @Column(name = "force_archived", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean forceArchived;
 
+    @Column(name = "delete_pending", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private boolean deletePending;
+
+    @Transient
+    private Long deletionTaskId;
+
+    @Transient
+    private String deletionState;
+
+    @Transient
+    private String deletionWaitReason;
+
+    @Transient
+    private boolean deletionCanCancel;
+
+    @Transient
+    private boolean deletionStarted;
+
     @Column(name = "publish_user_id")
     private Long publishUserId;
 

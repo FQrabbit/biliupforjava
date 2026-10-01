@@ -9,6 +9,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import top.sshh.bililiverecoder.entity.RecordEventDTO;
@@ -39,11 +40,12 @@ public class DatabaseMaintenanceService {
 
     private static final String ENDPOINT_RECORD_WEBHOOK = "/recordWebHook";
     private static final String ENDPOINT_BLREC_WEBHOOK = "/webhook/blrec";
+    private static final int BLREC_DISPATCH_LOCK_COUNT = 256;
+    private static final Object[] BLREC_DISPATCH_LOCKS = createBlrecDispatchLocks();
 
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
     private final WebhookEventDispatcher webhookEventDispatcher;
-    private final RecordEventFactory recordEventFactory;
     private final ApplicationContext applicationContext;
     private final TaskExecutor taskExecutor;
     private final DatabaseMaintenanceState maintenanceState;
@@ -55,19 +57,18 @@ public class DatabaseMaintenanceService {
     private long waitWebhookIdleMillis;
 
     private final AtomicBoolean compactRunning = new AtomicBoolean(false);
+    private final Object webhookSpoolReplayLock = new Object();
     private volatile MaintenanceSnapshot snapshot = new MaintenanceSnapshot("IDLE", null, null, null, 0, 0, 0, null);
 
     public DatabaseMaintenanceService(DataSource dataSource,
                                       JdbcTemplate jdbcTemplate,
                                       WebhookEventDispatcher webhookEventDispatcher,
-                                      RecordEventFactory recordEventFactory,
                                       ApplicationContext applicationContext,
                                       DatabaseMaintenanceState maintenanceState,
                                       @org.springframework.beans.factory.annotation.Qualifier("myAsyncPool") TaskExecutor taskExecutor) {
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
         this.webhookEventDispatcher = webhookEventDispatcher;
-        this.recordEventFactory = recordEventFactory;
         this.applicationContext = applicationContext;
         this.maintenanceState = maintenanceState;
         this.taskExecutor = taskExecutor;
@@ -117,30 +118,46 @@ public class DatabaseMaintenanceService {
     }
 
     public boolean spoolRecordWebhookIfMaintenance(String payload, String lockKey, long delayMs) {
-        if (!maintenanceState.isMaintenanceActive()) {
-            return false;
+        synchronized (webhookSpoolReplayLock) {
+            if (!maintenanceState.isMaintenanceActive() && countSpoolFiles() == 0) return false;
+            spoolWebhook(ENDPOINT_RECORD_WEBHOOK, lockKey, delayMs, payload);
+            return true;
         }
-        spoolWebhook(ENDPOINT_RECORD_WEBHOOK, lockKey, delayMs, payload);
-        return true;
     }
 
     public boolean spoolBlrecWebhookIfMaintenance(String payload, String lockKey) {
-        if (!maintenanceState.isMaintenanceActive()) {
-            return false;
+        synchronized (webhookSpoolReplayLock) {
+            if (!maintenanceState.isMaintenanceActive() && countSpoolFiles() == 0) return false;
+            spoolWebhook(ENDPOINT_BLREC_WEBHOOK, lockKey, 0L, payload);
+            return true;
         }
-        spoolWebhook(ENDPOINT_BLREC_WEBHOOK, lockKey, 0L, payload);
-        return true;
     }
 
-    public void dispatchBlrecEvent(String roomId, BlrecEventDTO event) {
+    public boolean dispatchBlrecEvent(String roomId, BlrecEventDTO event) {
         if (event == null || event.getType() == null || event.getData() == null) {
-            return;
+            return false;
         }
-        synchronized (roomId.intern()) {
+        synchronized (blrecDispatchLock(roomId)) {
             String serviceName = "blrec" + event.getType() + "Service";
+            if (!applicationContext.containsBean(serviceName)) {
+                log.info("[BLR] {}", LogKvs.event("Webhook.EventIgnored")
+                        .add("source", "blrec").add("eventType", event.getType()).add("roomId", roomId));
+                return false;
+            }
             BlrecEventService service = applicationContext.getBean(serviceName, BlrecEventService.class);
             service.processing(event);
+            return true;
         }
+    }
+
+    private Object blrecDispatchLock(String roomId) {
+        return BLREC_DISPATCH_LOCKS[Math.floorMod(roomId == null ? 0 : roomId.hashCode(), BLREC_DISPATCH_LOCK_COUNT)];
+    }
+
+    private static Object[] createBlrecDispatchLocks() {
+        Object[] locks = new Object[BLREC_DISPATCH_LOCK_COUNT];
+        for (int i = 0; i < locks.length; i++) locks[i] = new Object();
+        return locks;
     }
 
     private void runCompactMaintenance() {
@@ -162,18 +179,23 @@ public class DatabaseMaintenanceService {
             verifyReconnect();
 
             snapshot = new MaintenanceSnapshot("REPLAY_WEBHOOK", startedAt, null, "正在按顺序回放维护期间收到的 webhook", countSpoolFiles(), replayed, failed, backupPath);
-            ReplayResult replayResult = replaySpooledWebhooks();
+            ReplayResult replayResult;
+            synchronized (webhookSpoolReplayLock) {
+                maintenanceState.setMaintenanceActive(false);
+                replayResult = replaySpooledWebhooks();
+            }
             replayed = replayResult.replayed();
             failed = replayResult.failed();
 
-            maintenanceState.setMaintenanceActive(false);
             snapshot = new MaintenanceSnapshot("DONE", startedAt, LocalDateTime.now(), "数据库压缩完成", countSpoolFiles(), replayed, failed, backupPath);
             log.info("[BLR] {}", LogKvs.event("Database.Compact.Success")
                     .add("backupPath", backupPath)
                     .add("replayed", replayed)
                     .add("failed", failed));
         } catch (Exception e) {
-            maintenanceState.setMaintenanceActive(false);
+            synchronized (webhookSpoolReplayLock) {
+                maintenanceState.setMaintenanceActive(false);
+            }
             snapshot = new MaintenanceSnapshot("FAILED", startedAt, LocalDateTime.now(), "数据库压缩失败：" + e.getMessage(), countSpoolFiles(), replayed, failed, backupPath);
             log.error("[BLR] {}", LogKvs.event("Database.Compact.Failed")
                     .add("err", e.getMessage())
@@ -283,54 +305,102 @@ public class DatabaseMaintenanceService {
         }
     }
 
-    private ReplayResult replaySpooledWebhooks() throws IOException {
-        int replayed = 0;
-        int failed = 0;
-        for (Path file : listSpoolFiles()) {
-            try {
-                JSONObject item = JSON.parseObject(Files.readString(file, StandardCharsets.UTF_8));
-                String endpoint = item.getString("endpoint");
-                String payload = new String(Base64.getDecoder().decode(item.getString("payloadBase64")), StandardCharsets.UTF_8);
-                String lockKey = item.getString("lockKey");
-                long delayMs = item.getLongValue("delayMs");
-                if (ENDPOINT_RECORD_WEBHOOK.equals(endpoint)) {
-                    RecordEventDTO event = JSON.parseObject(payload, RecordEventDTO.class);
-                    webhookEventDispatcher.submit(lockKey, delayMs, () -> recordEventFactory.processing(event));
-                } else if (ENDPOINT_BLREC_WEBHOOK.equals(endpoint)) {
-                    BlrecEventDTO event = JSON.parseObject(payload, BlrecEventDTO.class);
-                    String roomId = resolveBlrecRoomId(event);
-                    webhookEventDispatcher.submit(lockKey == null ? "blrec:" + roomId : lockKey, delayMs, () -> dispatchBlrecEvent(roomId, event));
-                } else {
-                    throw new IllegalArgumentException("Unknown webhook endpoint: " + endpoint);
-                }
-                Files.deleteIfExists(file);
-                replayed++;
-            } catch (Exception e) {
-                failed++;
-                Path failedFile = file.resolveSibling(file.getFileName() + ".failed");
-                try {
-                    Files.move(file, failedFile);
-                } catch (Exception ignored) {
-                }
-                log.error("[BLR] {}", LogKvs.event("Database.Compact.WebhookReplayFailed")
-                        .add("file", file.getFileName())
-                        .add("err", e.getMessage())
-                        .add("ex", e.getClass().getSimpleName()), e);
+    @Scheduled(fixedDelayString = "${record.webhook.spool-replay-ms:30000}",
+            initialDelayString = "${record.webhook.spool-replay-initial-delay-ms:5000}")
+    public void recoverSpooledWebhooks() {
+        if (maintenanceState.isMaintenanceActive() || compactRunning.get()) return;
+        try {
+            ReplayResult result = replaySpooledWebhooks();
+            if (result.replayed() > 0) {
+                MaintenanceSnapshot current = snapshot;
+                snapshot = new MaintenanceSnapshot(current.phase(), current.startedAt(), current.finishedAt(),
+                        current.message(), countSpoolFiles(), current.replayed() + result.replayed(),
+                        current.failed() + result.failed(), current.backupPath());
             }
+        } catch (Exception error) {
+            log.error("[BLR] {}", LogKvs.event("Database.Compact.WebhookSpoolRecoveryFailed")
+                    .addIfNotBlank("err", error.getMessage()).add("ex", error.getClass().getSimpleName()), error);
         }
-        return new ReplayResult(replayed, failed);
     }
 
-    private String resolveBlrecRoomId(BlrecEventDTO event) {
-        if (event != null && event.getData() != null) {
-            if (event.getData().getRoomInfo() != null && event.getData().getRoomInfo().getRoomId() != null) {
-                return String.valueOf(event.getData().getRoomInfo().getRoomId());
+    private ReplayResult replaySpooledWebhooks() throws IOException {
+        synchronized (webhookSpoolReplayLock) {
+            int replayed = 0;
+            int failed = 0;
+            RecordWebhookInboxService inboxService = applicationContext.getBean(RecordWebhookInboxService.class);
+            for (Path file : listSpoolFiles()) {
+                String endpoint;
+                String payload;
+                String lockKey;
+                long delayMs;
+                String source;
+                String eventType;
+                String upstreamEventId;
+                try {
+                    JSONObject item = JSON.parseObject(Files.readString(file, StandardCharsets.UTF_8));
+                    endpoint = item.getString("endpoint");
+                    payload = new String(Base64.getDecoder().decode(item.getString("payloadBase64")), StandardCharsets.UTF_8);
+                    lockKey = item.getString("lockKey");
+                    delayMs = item.getLongValue("delayMs");
+                    if (ENDPOINT_RECORD_WEBHOOK.equals(endpoint)) {
+                        RecordEventDTO event = JSON.parseObject(payload, RecordEventDTO.class);
+                        if (event == null) throw new IllegalArgumentException("record webhook 暂存事件为空");
+                        source = recordEventSource(event);
+                        eventType = recordEventType(event);
+                        upstreamEventId = recordEventId(event);
+                    } else if (ENDPOINT_BLREC_WEBHOOK.equals(endpoint)) {
+                        BlrecEventDTO event = JSON.parseObject(payload, BlrecEventDTO.class);
+                        if (event == null) throw new IllegalArgumentException("blrec webhook 暂存事件为空");
+                        source = "blrec-native";
+                        eventType = event.getType();
+                        upstreamEventId = event.getId();
+                    } else {
+                        throw new IllegalArgumentException("Unknown webhook endpoint: " + endpoint);
+                    }
+                } catch (Exception invalidSpool) {
+                    failed++;
+                    moveFailedSpool(file);
+                    log.error("[BLR] {}", LogKvs.event("Database.Compact.WebhookReplayInvalid")
+                            .add("file", file.getFileName()).addIfNotBlank("err", invalidSpool.getMessage())
+                            .add("ex", invalidSpool.getClass().getSimpleName()), invalidSpool);
+                    continue;
+                }
+                try {
+                    inboxService.accept(payload, lockKey, delayMs, source, eventType, upstreamEventId);
+                    Files.deleteIfExists(file);
+                    replayed++;
+                } catch (Exception error) {
+                    failed++;
+                    log.error("[BLR] {}", LogKvs.event("Database.Compact.WebhookReplayFailed")
+                            .add("file", file.getFileName()).addIfNotBlank("err", error.getMessage())
+                            .add("ex", error.getClass().getSimpleName()), error);
+                    break;
+                }
             }
-            if (event.getData().getRoomId() != null) {
-                return String.valueOf(event.getData().getRoomId());
-            }
+            return new ReplayResult(replayed, failed);
         }
-        throw new IllegalArgumentException("blrec roomId is missing");
+    }
+
+    private void moveFailedSpool(Path file) {
+        try {
+            Files.move(file, file.resolveSibling(file.getFileName() + ".failed"));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String recordEventType(RecordEventDTO event) {
+        return event.getEventType() == null || event.getEventType().isBlank()
+                ? event.getType() : event.getEventType();
+    }
+
+    private String recordEventSource(RecordEventDTO event) {
+        if (event.getData() != null || event.getType() != null) return "blrec";
+        if (event.getEventData() != null || event.getEventType() != null) return "brec";
+        return "unknown";
+    }
+
+    private String recordEventId(RecordEventDTO event) {
+        return event.getEventId() == null || event.getEventId().isBlank() ? event.getId() : event.getEventId();
     }
 
     private Path spoolDir() {

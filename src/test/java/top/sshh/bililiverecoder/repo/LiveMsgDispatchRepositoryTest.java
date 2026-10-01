@@ -123,6 +123,35 @@ class LiveMsgDispatchRepositoryTest {
         assertEquals(1, liveMsgRepository.countByPartIdAndCode(disabledPartId, 36714));
     }
 
+    @Test
+    void interruptedSendBecomesManualReviewAndRequiresExplicitConfirmation() {
+        Long partId = createDispatchCase("room-uncertain", true, true, true, 0, 0, -1, 1L);
+        entityManager.flush();
+        Long messageId = liveMsgRepository.findByPartIdAndCode(partId, -1).get(0).getId();
+        entityManager.clear();
+
+        assertEquals(1, liveMsgRepository.claimPendingForSend(messageId));
+        assertEquals(1, liveMsgRepository.recoverInterruptedSendingMessages());
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(partId, -2));
+        assertEquals(1, liveMsgRepository.confirmUnknownSendNotAccepted(messageId));
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(partId, -1));
+    }
+
+    @Test
+    void evenForceRetryDoesNotResendUnknownSubmissionResults() {
+        Long unknownPartId = createDispatchCase("room-force-unknown", true, true, true, 0, 0, -2, 1L);
+        Long failedPartId = createDispatchCase("room-force-known-failure", true, true, true, 0, 0, 36705, 1L);
+        entityManager.flush();
+        entityManager.clear();
+
+        int updated = liveMsgRepository.forceRetryDispatchableFailedByPartIdsAndPool(
+                List.of(unknownPartId, failedPartId), 0);
+
+        assertEquals(1, updated);
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(unknownPartId, -2));
+        assertEquals(1, liveMsgRepository.countByPartIdAndCode(failedPartId, -1));
+    }
+
     private Long createDispatchCase(String roomId,
                                     boolean sendDm,
                                     boolean sendSc,

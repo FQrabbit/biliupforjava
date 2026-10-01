@@ -22,7 +22,7 @@ import java.util.Optional;
 public class HistoryMsgRetryService {
 
     private static final int IN_BATCH_SIZE = 500;
-    private static final List<Integer> NON_RETRYABLE_CODES = List.of(36701, 36702, 36714);
+    private static final List<Integer> NON_RETRYABLE_CODES = List.of(-2, -4, 36701, 36702, 36714);
 
     private final RecordHistoryRepository historyRepository;
     private final RecordHistoryPartRepository partRepository;
@@ -76,6 +76,8 @@ public class HistoryMsgRetryService {
         }
 
         int totalFailed = countFailed(partIds, 0) + countFailed(partIds, 1);
+        int needsReview = (int) Math.min(Integer.MAX_VALUE,
+                msgRepository.countByPartIdInAndCodeIn(partIds, List.of(-2, -4)));
         if (totalFailed <= 0) {
             int bvidFailed = countFailedByBvid(history.getBvId());
             RetryResult result = RetryResult.warning(buildNoRetryableMessage(displayedFailed, bvidFailed, force));
@@ -105,6 +107,7 @@ public class HistoryMsgRetryService {
         result.advanced = advanced;
         result.retried = retried;
         result.skipped = skipped;
+        result.needsReview = needsReview;
 
         if (retried > 0) {
             result.success = true;
@@ -117,6 +120,9 @@ public class HistoryMsgRetryService {
                 result.msg = skipped > 0
                         ? String.format("已将 %d 条可重试弹幕重新加入队列，跳过 %d 条暂不可重试项", retried, skipped)
                         : String.format("已将 %d 条可重试弹幕重新加入队列", retried);
+            }
+            if (needsReview > 0) {
+                result.msg += "；另有 " + needsReview + " 条发送结果待核对，系统不会自动重发，请先查询线上弹幕后逐条确认未发送再重新入队";
             }
             log.info("[BLR] {}", LogKvs.event("History.MsgRetry.Done")
                     .add("historyId", historyId)
@@ -132,6 +138,9 @@ public class HistoryMsgRetryService {
             result.msg = force
                     ? "当前未成功弹幕无法强制重新入队，可能是稿件、房间开关、分P/CID 状态不满足发送条件，或发送记录已被清理"
                     : "当前未成功弹幕暂不可自动重试，可能是内容/时间非法，或稿件、房间、分P状态不满足发送条件";
+            if (needsReview > 0) {
+                result.msg += "；其中 " + needsReview + " 条发送结果待核对，系统不会自动重发，请先查询线上弹幕后逐条确认未发送再重新入队";
+            }
             log.info("[BLR] {}", LogKvs.event("History.MsgRetry.None")
                     .add("historyId", historyId)
                     .addIfNotBlank("bvid", history.getBvId())
@@ -198,6 +207,7 @@ public class HistoryMsgRetryService {
         public int skipped;
         public int ordinary;
         public int advanced;
+        public int needsReview;
 
         public static RetryResult warning(String msg) {
             RetryResult result = new RetryResult();
@@ -227,6 +237,7 @@ public class HistoryMsgRetryService {
             map.put("skipped", skipped);
             map.put("ordinary", ordinary);
             map.put("advanced", advanced);
+            map.put("needsReview", needsReview);
             return map;
         }
     }

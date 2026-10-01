@@ -2,6 +2,7 @@ package top.sshh.bililiverecoder.service;
 
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
@@ -25,6 +26,9 @@ public class RecordPartPathService {
 
     private Path workRoot;
 
+    @Autowired
+    private StorageRootService storageRootService;
+
     @PostConstruct
     public void init() {
         workRoot = Path.of(workPath).toAbsolutePath().normalize();
@@ -32,11 +36,28 @@ public class RecordPartPathService {
 
     public String resolveWebhookPath(String incomingPath) {
         if (StringUtils.isBlank(incomingPath)) {
-            return "";
+            throw new IllegalArgumentException("Webhook 缺少视频路径");
         }
-        Path candidate = Path.of(incomingPath.replace('\\', '/'));
-        Path resolved = candidate.isAbsolute() ? candidate : workRoot.resolve(candidate);
-        return displayPath(resolved);
+        if (incomingPath.length() > 4096 || incomingPath.indexOf('\0') >= 0
+                || incomingPath.matches("^[a-zA-Z][a-zA-Z0-9+.-]*://.*")) {
+            throw new IllegalArgumentException("Webhook 视频路径格式无效");
+        }
+        Path candidate;
+        try {
+            candidate = Path.of(incomingPath.replace('\\', '/'));
+        } catch (Exception error) {
+            throw new IllegalArgumentException("Webhook 视频路径格式无效", error);
+        }
+        Path resolved = candidate.isAbsolute()
+                ? candidate.toAbsolutePath().normalize()
+                : workRoot.resolve(candidate).normalize();
+        if (!candidate.isAbsolute() && !StorageRootService.isUnder(workRoot, resolved)) {
+            throw new IllegalArgumentException("相对视频路径不能离开录制工作目录");
+        }
+        StorageRootService.RootMatch match = storageRootService.matchTrustedRoot(resolved)
+                .orElseThrow(() -> new IllegalArgumentException("视频路径不在已配置的存储目录中"));
+        Path checked = storageRootService.resolve(match.root(), match.relativePath());
+        return displayPath(checked);
     }
 
     public String identityKey(String path) {

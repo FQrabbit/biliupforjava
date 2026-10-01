@@ -94,7 +94,8 @@
         "/modules/pages/history/methods/edit-parts-methods.js",
         "/modules/pages/history/methods/preview-methods.js",
         "/modules/pages/history/methods/upload-methods.js",
-        "/modules/pages/history/methods/record-methods.js"
+        "/modules/pages/history/methods/record-methods.js",
+        "/modules/pages/history/methods/post-publish-methods.js"
       ],
       "entry": "/modules/pages/history/page.js"
     },

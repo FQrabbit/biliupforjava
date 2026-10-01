@@ -14,6 +14,11 @@ import top.sshh.bililiverecoder.entity.PublishTaskOperation;
 import top.sshh.bililiverecoder.entity.PublishTaskSource;
 import top.sshh.bililiverecoder.entity.PublishTaskState;
 import top.sshh.bililiverecoder.entity.PublishTaskStatusDto;
+import top.sshh.bililiverecoder.entity.RecordWebhookInboxStatusDto;
+import top.sshh.bililiverecoder.entity.VideoCommentTaskStatusDto;
+import top.sshh.bililiverecoder.entity.VideoVisibilityRestoreStatusDto;
+import top.sshh.bililiverecoder.entity.HistoryPostPublishStatusDto;
+import top.sshh.bililiverecoder.entity.HistoryDeletionTask;
 import top.sshh.bililiverecoder.entity.RoomLiveSessionStats;
 import top.sshh.bililiverecoder.entity.StorageRoot;
 import top.sshh.bililiverecoder.controller.RoomController;
@@ -55,6 +60,12 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, PublishTaskSource.class);
         assertReflectionRegistered(hints, PublishTaskState.class);
         assertReflectionRegistered(hints, PublishTaskStatusDto.class);
+        assertReflectionRegistered(hints, RecordWebhookInboxStatusDto.class);
+        assertReflectionRegistered(hints, VideoCommentTaskStatusDto.class);
+        assertReflectionRegistered(hints, VideoVisibilityRestoreStatusDto.class);
+        assertReflectionRegistered(hints, HistoryPostPublishStatusDto.class);
+        assertReflectionRegistered(hints, HistoryDeletionTask.class);
+        assertReflectionRegistered(hints, StorageRoot.RootType.class);
         assertReflectionRegistered(hints, CaptchaService.ChallengeStatus.class);
     }
 

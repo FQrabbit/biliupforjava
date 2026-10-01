@@ -46,6 +46,7 @@ import top.sshh.bililiverecoder.util.bili.upload.pojo.PreUploadBean;
 import top.sshh.bililiverecoder.service.CaptchaService;
 import top.sshh.bililiverecoder.service.PublishAccountScheduler;
 import top.sshh.bililiverecoder.service.PublishTaskService;
+import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
 import top.sshh.bililiverecoder.service.PublishAccountCooldownService;
 
 import java.io.File;
@@ -61,6 +62,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -108,6 +111,14 @@ public class HighEnergyCutPublishService {
     private PublishTaskService publishTaskService;
 
     @Autowired
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
+
+    private final Map<Long, CompletableFuture<Map<String, Object>>> activeQueuedUploads = new ConcurrentHashMap<>();
+    private final Object queuedUploadLifecycleLock = new Object();
+    private final Set<Long> cleanupRequested = ConcurrentHashMap.newKeySet();
+    private final Set<Long> cleanupStarted = ConcurrentHashMap.newKeySet();
+
+    @Autowired
     private PublishAccountCooldownService publishAccountCooldownService;
     @Autowired
     private LiveMsgRepository liveMsgRepository;
@@ -149,16 +160,85 @@ public class HighEnergyCutPublishService {
 
     public Map<String, Object> prepareQueuedTask(PublishTask task, RecordHistory history) throws IOException {
         if (task == null || history == null || task.getAccountId() == null) throw new IOException("task or history unavailable");
-        String fileName = prepareAndUpload(history, task.getAccountId(), task.getId());
-        Path outputFile = storageRootService.activeWorkRoot()
-                .map(root -> Path.of(root.getPath(), "_high_energy_cut", String.valueOf(history.getId()), "output.mp4"))
-                .orElseThrow(() -> new IOException("active work storage root missing"));
-        Map<String, Object> metadata = readArtifactManifest(outputFile.getParent().resolve("prepared-artifact.json"));
-        metadata.put("uploadedFileName", fileName);
-        return metadata;
+        Path outputFile = prepareArtifact(history, task.getAccountId(), task.getId());
+        return readArtifactManifest(outputFile.getParent().resolve("prepared-artifact.json"));
     }
 
-    private String prepareAndUpload(RecordHistory history, Long accountId, Long taskId) throws IOException {
+    public CompletableFuture<Map<String, Object>> uploadPreparedArtifact(PublishTask task, RecordHistory history,
+                                                                          Map<String, Object> artifact) {
+        if (task == null || task.getId() == null || history == null || artifact == null) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("高能剪辑稿件或产物信息缺失"));
+        }
+        String outputPath = stringValue(artifact.get("outputPath"));
+        if (StringUtils.isBlank(outputPath)) {
+            return CompletableFuture.failedFuture(new IllegalStateException("高能剪辑产物路径缺失"));
+        }
+        RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+        if (room == null) return CompletableFuture.failedFuture(new IllegalStateException("稿件所属房间不存在"));
+        CompletableFuture<Map<String, Object>> result = new CompletableFuture<>();
+        synchronized (queuedUploadLifecycleLock) {
+            PublishTask current = publishTaskService == null ? null : publishTaskService.get(task.getId());
+            if (current == null || current.getState() != PublishTaskState.PREPARING) {
+                return CompletableFuture.failedFuture(new IllegalStateException("高能剪辑任务已取消或不再等待上传"));
+            }
+            if (activeQueuedUploads.putIfAbsent(task.getId(), result) != null) {
+                return CompletableFuture.failedFuture(new IllegalStateException("高能剪辑上传任务已经在队列中"));
+            }
+        }
+        result.whenComplete((uploaded, error) -> {
+            boolean shouldCleanup;
+            synchronized (queuedUploadLifecycleLock) {
+                activeQueuedUploads.remove(task.getId(), result);
+                shouldCleanup = cleanupRequested.remove(task.getId());
+            }
+            if (shouldCleanup) {
+                cleanupQueuedArtifact(task);
+            }
+        });
+        try {
+            uploadUserSerialScheduler.submitForFixedAccount(task.getAccountId(), history.getId(), task.getId(),
+                            "HIGH_ENERGY_UPLOAD_CAPTCHA",
+                            () -> uploadDirect(room, outputPath, history.getId(), task.getAccountId(), task.getId()))
+                    .whenComplete((fileName, uploadError) -> {
+                        if (uploadError != null) {
+                            result.completeExceptionally(unwrapCompletionException(uploadError));
+                            return;
+                        }
+                        if (StringUtils.isBlank(fileName)) {
+                            result.completeExceptionally(new IllegalStateException("高能剪辑上传返回空文件名"));
+                            return;
+                        }
+                        Map<String, Object> manifest;
+                        try {
+                            manifest = readArtifactManifest(Path.of(outputPath).getParent()
+                                    .resolve("prepared-artifact.json"));
+                            manifest.put("uploadedFileName", fileName);
+                            manifest.put("uploadedAt", LocalDateTime.now().toString());
+                            Files.writeString(Path.of(outputPath).getParent().resolve("prepared-artifact.json"),
+                                    JSON.toJSONString(manifest));
+                        } catch (IOException error) {
+                            log.warn("高能剪辑上传成功，但产物清单暂时无法更新 taskId={}", task.getId(), error);
+                            manifest = new HashMap<>(artifact);
+                            manifest.put("uploadedFileName", fileName);
+                            manifest.put("uploadedAt", LocalDateTime.now().toString());
+                        }
+                        result.complete(manifest);
+                    });
+        } catch (RuntimeException error) {
+            result.completeExceptionally(error);
+        }
+        return result;
+    }
+
+    private Throwable unwrapCompletionException(Throwable error) {
+        Throwable current = error;
+        while (current instanceof CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private Path prepareArtifact(RecordHistory history, Long accountId, Long taskId) throws IOException {
         List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         if (room == null) throw new IOException("room missing");
@@ -181,8 +261,7 @@ public class HighEnergyCutPublishService {
             String existingHash = Files.isRegularFile(outputFile) ? sha256(outputFile) : null;
             boolean reusableOutput = existingHash != null && existingHash.equals(manifest.get("outputSha256"))
                     && accountId.toString().equals(String.valueOf(manifest.get("accountId")));
-            String uploadedFileName = reusableOutput ? stringValue(manifest.get("uploadedFileName")) : null;
-            if (StringUtils.isNotBlank(uploadedFileName)) return uploadedFileName;
+            if (reusableOutput) return outputFile;
             if (!reusableOutput) {
                 Files.walk(outputPath).sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
                 Files.createDirectories(outputPath);
@@ -302,13 +381,7 @@ public class HighEnergyCutPublishService {
             manifest.put("generatedAt", LocalDateTime.now().toString());
             Files.writeString(manifestFile, JSON.toJSONString(manifest));
             ensurePreparationActive(taskId);
-            taskRunningMsg.put(history.getId(), "开始上传");
-            String upload = upload(room, outputFile.toString(), history.getId(), accountId, taskId);
-            if (StringUtils.isBlank(upload)) throw new IOException("high-energy upload returned empty filename");
-            manifest.put("uploadedFileName", upload);
-            manifest.put("uploadedAt", LocalDateTime.now().toString());
-            Files.writeString(manifestFile, JSON.toJSONString(manifest));
-            return upload;
+            return outputFile;
         } catch (Exception e) {
             log.error("[BLR] {}", LogKvs.event("HighEnergyCut.Process.Failed")
                     .add("historyId", history.getId())
@@ -401,19 +474,50 @@ public class HighEnergyCutPublishService {
     public void completeQueuedTask(PublishTask task) {
         if (task == null || task.getOperation() != PublishTaskOperation.HIGH_ENERGY
                 || task.getHistoryId() == null) return;
+        Long taskId = task.getId();
+        if (taskId == null) return;
+        CompletableFuture<?> activeUpload;
+        synchronized (queuedUploadLifecycleLock) {
+            activeUpload = activeQueuedUploads.get(taskId);
+            if (activeUpload != null && !activeUpload.isDone()) cleanupRequested.add(taskId);
+        }
+        if (activeUpload != null && !activeUpload.isDone()) {
+            if (uploadUserSerialScheduler != null) {
+                uploadUserSerialScheduler.cancelWaitingFixedUpload(taskId);
+            }
+            synchronized (queuedUploadLifecycleLock) {
+                activeUpload = activeQueuedUploads.get(taskId);
+                if (activeUpload != null && !activeUpload.isDone()) return;
+                if (!cleanupRequested.remove(taskId)) return;
+            }
+        }
+        cleanupQueuedArtifact(task);
+    }
+
+    private void cleanupQueuedArtifact(PublishTask task) {
+        if (task == null || task.getId() == null || !cleanupStarted.add(task.getId())) return;
         try {
             Path activeRoot = storageRootService.activeWorkRoot()
                     .map(root -> Path.of(root.getPath()).toAbsolutePath().normalize()).orElse(null);
-            if (activeRoot == null) return;
+            if (activeRoot == null) {
+                cleanupStarted.remove(task.getId());
+                return;
+            }
             Path allowedRoot = activeRoot.resolve("_high_energy_cut").normalize();
             Path directory = allowedRoot.resolve(String.valueOf(task.getHistoryId())).normalize();
-            if (!directory.startsWith(allowedRoot)) return;
+            if (!directory.startsWith(allowedRoot)) {
+                cleanupStarted.remove(task.getId());
+                return;
+            }
             if (StringUtils.isNotBlank(task.getRequestSnapshot())) {
                 Map<String, Object> snapshot = JSON.parseObject(task.getRequestSnapshot(), new TypeReference<Map<String, Object>>() {});
                 String rawOutput = snapshot == null ? null : stringValue(snapshot.get("outputPath"));
                 Path expected = directory.resolve("output.mp4").normalize();
                 if (StringUtils.isNotBlank(rawOutput)
-                        && !Path.of(rawOutput).toAbsolutePath().normalize().equals(expected)) return;
+                        && !Path.of(rawOutput).toAbsolutePath().normalize().equals(expected)) {
+                    cleanupStarted.remove(task.getId());
+                    return;
+                }
             }
             try (Stream<Path> paths = Files.walk(directory)) {
                 paths.sorted(Comparator.reverseOrder()).forEach(path -> {
@@ -421,7 +525,10 @@ public class HighEnergyCutPublishService {
                 });
             }
         } catch (Exception e) {
+            cleanupStarted.remove(task.getId());
             log.warn("Unable to clean accepted high-energy artifact taskId={}", task.getId(), e);
+        } finally {
+            cleanupStarted.remove(task.getId());
         }
     }
 
@@ -486,6 +593,19 @@ public class HighEnergyCutPublishService {
     }
 
     private String upload(RecordRoom room, String filePath, Long historyId, Long accountId, Long taskId) {
+        try {
+            return uploadUserSerialScheduler.submitForFixedAccount(
+                    accountId, () -> uploadDirect(room, filePath, historyId, accountId, taskId)).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("等待账号上传队列时被中断", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            throw new IllegalStateException("高能剪辑上传失败：" + cause.getMessage(), cause);
+        }
+    }
+
+    private String uploadDirect(RecordRoom room, String filePath, Long historyId, Long accountId, Long taskId) {
 
         UploadEnums uploadEnums = UploadEnums.find(room.getLine());
         Optional<BiliBiliUser> userOptional = accountId == null
@@ -520,6 +640,7 @@ public class HighEnergyCutPublishService {
         long chunkNum = (long)Math.ceil((double)fileSize / chunkSize);
         PreUploadRequest preuploadRequest = new PreUploadRequest(webCookie, preParams);
         preuploadRequest.setLineQuery(uploadEnums.getLineQuery());
+        preParams.putAll(captchaService.consumeSubmittedAnswer(accountId, historyId, taskId, "HIGH_ENERGY_UPLOAD"));
         PreUploadBean preUploadBean;
         LineUploadBean uploadBean = null;
         boolean configuredMultipartEnabled = isBrowserMultipartEnabled();
@@ -563,11 +684,9 @@ public class HighEnergyCutPublishService {
                                 .add("fileName", uploadFile.getName())
                                 .add("code", preUploadBean.getCode())
                                 .addUrl("captchaUrl", "http://localhost:" + serverPort + "/html/captcha.html"));
-                        captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail(),
+                        String requestId = captchaService.setCaptchaRequired(voucher, uploadFile.getName(), preUploadBean.getDetail(),
                                 accountId, historyId, taskId, "HIGH_ENERGY_UPLOAD");
-                        Map<String, String> result = captchaService.waitForCaptcha();
-                        if (result == null) throw new IllegalStateException("高能剪辑上传验证码已过期或取消，请重新验证");
-                        preParams.putAll(result);
+                        throw new top.sshh.bililiverecoder.service.CaptchaChallengeRequiredException(requestId);
                     } else {
                         log.warn("[BLR] {}", LogKvs.event("Upload.RateLimit.Wait")
                                 .add("roomId", room.getRoomId())

@@ -364,8 +364,8 @@
 
 /* ========== 已跳过分P 提示框 ========== */
 .detail-skip-box {
-    background: var(--warning-soft-bg-faint);
-    border: 1px solid var(--warning-border);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 12px 16px;
     margin-bottom: 12px;
@@ -374,7 +374,7 @@
 .detail-skip-box .skip-header {
     font-size: 13px;
     font-weight: 600;
-    color: var(--warning-color);
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -408,6 +408,6 @@
 }
 
 .dark-mode .detail-skip-box {
-    background: var(--warning-soft-bg-faint);
-    border-color: var(--warning-border);
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
 }

@@ -60,7 +60,10 @@ public class RecordEventFileOpenService implements RecordEventService {
         String roomId = eventData.getRoomId();
         if (roomId == null || roomId.isBlank()) {
             log.error("[BLR] {}", LogKvs.event("Webhook.InvalidPayload").add("reason", "RoomId is null or blank"));
-            return;
+            throw new IllegalArgumentException("文件开始事件缺少房间号");
+        }
+        if (eventData.getRelativePath() == null || eventData.getRelativePath().isBlank()) {
+            throw new IllegalArgumentException("文件开始事件缺少视频路径");
         }
 
         synchronized (roomId.intern()) {
@@ -240,6 +243,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                         .add("sessionId", eventData.getSessionId())
                         .add("err", e.getMessage())
                         .add("ex", e.getClass().getSimpleName()), e);
+                throw new IllegalStateException("处理录制文件开始事件失败", e);
             }
         }
     }

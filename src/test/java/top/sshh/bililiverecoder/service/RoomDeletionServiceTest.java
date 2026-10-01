@@ -286,6 +286,6 @@ class RoomDeletionServiceTest {
                                                                         List<Map<String, Object>> failures) {
         return new HistoryDeletionService.DeletionResult(
                 true, true, id, "123", HistoryDeletionService.DeleteOptions.databaseOnly(),
-                0, deletedParts, 0, 0, failures, 0, 0, 0, 0, 0);
+                0, deletedParts, 0, 0, failures, 0, 0, 0, 0, 0, null, null);
     }
 }

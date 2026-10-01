@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -90,6 +91,40 @@ class PublishAccountSchedulerTest {
     }
 
     @Test
+    void highEnergyUploadWaitDoesNotHoldPreparationWorker() throws Exception {
+        try (Fixture fixture = new Fixture(1, 1)) {
+            CountDownLatch preparationsStarted = new CountDownLatch(2);
+            CountDownLatch uploadsQueued = new CountDownLatch(2);
+            Map<Long, CompletableFuture<Map<String, Object>>> pendingUploads = new ConcurrentHashMap<>();
+            when(fixture.highEnergy.prepareQueuedTask(any(PublishTask.class), any(RecordHistory.class)))
+                    .thenAnswer(invocation -> {
+                        preparationsStarted.countDown();
+                        return Map.of("outputPath", "prepared.mp4");
+                    });
+            doAnswer(invocation -> {
+                PublishTask task = invocation.getArgument(0);
+                CompletableFuture<Map<String, Object>> waiting = new CompletableFuture<>();
+                pendingUploads.put(task.getId(), waiting);
+                uploadsQueued.countDown();
+                return waiting;
+            }).when(fixture.highEnergy).uploadPreparedArtifact(any(PublishTask.class),
+                    any(RecordHistory.class), org.mockito.ArgumentMatchers.<String, Object>anyMap());
+
+            RecordHistory first = fixture.addHistory(1L, 10L);
+            RecordHistory second = fixture.addHistory(2L, 20L);
+            fixture.scheduler.accept(10L, first.getId(), PublishTaskOperation.HIGH_ENERGY,
+                    PublishTaskSource.MANUAL, null);
+            fixture.scheduler.accept(20L, second.getId(), PublishTaskOperation.HIGH_ENERGY,
+                    PublishTaskSource.MANUAL, null);
+
+            assertTrue(preparationsStarted.await(2, TimeUnit.SECONDS));
+            assertTrue(uploadsQueued.await(2, TimeUnit.SECONDS));
+            assertTrue(pendingUploads.size() == 2);
+            assertTrue(pendingUploads.values().stream().noneMatch(CompletableFuture::isDone));
+        }
+    }
+
+    @Test
     void submissionsForSameAccountAreSerialized() throws Exception {
         try (Fixture fixture = new Fixture(2)) {
             RecordHistory first = fixture.addHistory(1L, 10L);
@@ -117,26 +152,38 @@ class PublishAccountSchedulerTest {
 
     private static final class Fixture implements AutoCloseable {
         private final ThreadPoolTaskExecutor executor;
+        private final ThreadPoolTaskExecutor highEnergyExecutor;
         private final RecordHistoryRepository histories = mock(RecordHistoryRepository.class);
         private final RecordRoomRepository rooms = mock(RecordRoomRepository.class);
         private final BiliUserRepository users = mock(BiliUserRepository.class);
         private final RecordBiliPublishService publisher = mock(RecordBiliPublishService.class);
+        private final HighEnergyCutPublishService highEnergy = mock(HighEnergyCutPublishService.class);
         private final CaptchaService captchas = mock(CaptchaService.class);
         private final PublishTaskService tasks = taskStore();
         private final PublishAccountScheduler scheduler;
         private final Map<Long, RecordHistory> historyData = new ConcurrentHashMap<>();
         private final Map<String, RecordRoom> roomData = new ConcurrentHashMap<>();
 
-        @SuppressWarnings("unchecked")
         Fixture(int workers) {
+            this(workers, workers);
+        }
+
+        @SuppressWarnings("unchecked")
+        Fixture(int workers, int highEnergyWorkers) {
             executor = new ThreadPoolTaskExecutor();
             executor.setCorePoolSize(workers);
             executor.setMaxPoolSize(workers);
             executor.setQueueCapacity(64);
             executor.initialize();
+            highEnergyExecutor = new ThreadPoolTaskExecutor();
+            highEnergyExecutor.setCorePoolSize(highEnergyWorkers);
+            highEnergyExecutor.setMaxPoolSize(highEnergyWorkers);
+            highEnergyExecutor.setQueueCapacity(64);
+            highEnergyExecutor.initialize();
             ObjectProvider<RecordBiliPublishService> publisherProvider = mock(ObjectProvider.class);
             when(publisherProvider.getObject()).thenReturn(publisher);
             ObjectProvider<HighEnergyCutPublishService> highEnergyProvider = mock(ObjectProvider.class);
+            when(highEnergyProvider.getObject()).thenReturn(highEnergy);
             PublishAccountCooldownService cooldowns = mock(PublishAccountCooldownService.class);
             when(cooldowns.waitMs(anyLong())).thenReturn(0L);
             when(histories.findById(anyLong())).thenAnswer(invocation ->
@@ -151,7 +198,7 @@ class PublishAccountSchedulerTest {
             });
             when(publisher.preparePublishTask(anyLong(), anyLong()))
                     .thenReturn(new RecordBiliPublishService.PreparationResult(true, false, "已就绪", null));
-            scheduler = new PublishAccountScheduler(executor, executor, publisherProvider, highEnergyProvider,
+            scheduler = new PublishAccountScheduler(executor, highEnergyExecutor, publisherProvider, highEnergyProvider,
                     histories, mock(RecordHistoryPartRepository.class), rooms, users, tasks,
                     cooldowns, captchas, mock(ShutdownState.class));
         }
@@ -172,6 +219,7 @@ class PublishAccountSchedulerTest {
         public void close() {
             scheduler.shutdown();
             executor.shutdown();
+            highEnergyExecutor.shutdown();
         }
 
         private static PublishTaskService taskStore() {

@@ -17,13 +17,13 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.LogKvs;
+import top.sshh.bililiverecoder.util.UploadProgressTracker;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -40,7 +40,8 @@ public class PartFileOperationService {
     private final PartFileLocationService locationService;
     private final StorageRootService rootService;
     private final PartFileStorageAdapter storage;
-    private final Map<Long, Object> partLocks = new ConcurrentHashMap<>();
+    private static final int PART_LOCK_COUNT = 256;
+    private final Object[] partLocks = createPartLocks();
 
     @Autowired(required = false)
     private ArchiveReviewStatusService archiveReviewStatusService;
@@ -50,6 +51,14 @@ public class PartFileOperationService {
     private RecordHistoryRepository historyRepository;
     @Autowired(required = false)
     private RecordRoomRepository roomRepository;
+    @Autowired(required = false)
+    private PublishTaskService publishTaskService;
+    @Autowired(required = false)
+    private UploadUserSerialScheduler uploadUserSerialScheduler;
+    @Autowired(required = false)
+    private PartActivityCoordinator partActivityCoordinator;
+    @Autowired(required = false)
+    private UploadProgressTracker uploadProgressTracker;
 
     public PartFileOperationService(PartFileOperationRepository operationRepository,
                                     PartFileLocationRepository locationRepository,
@@ -92,7 +101,28 @@ public class PartFileOperationService {
     }
 
     public List<String> deleteAllAvailable(Long partId) {
+        if (partActivityCoordinator != null) {
+            PartActivityCoordinator.OperationLease lease = partActivityCoordinator.tryBeginFileOperation(partId);
+            if (lease == null) return List.of("该分P仍在上传或执行文件操作，暂不能清理文件");
+            try (lease) {
+                return deleteAllAvailableUnderLease(partId);
+            }
+        }
+        return deleteAllAvailableUnderLease(partId);
+    }
+
+    private List<String> deleteAllAvailableUnderLease(Long partId) {
         List<String> failures = new ArrayList<>();
+        String activeTaskReason = activePublishTaskReason(partId);
+        if (activeTaskReason != null) {
+            failures.add(activeTaskReason);
+            return failures;
+        }
+        String activeUploadReason = activeUploadReason(partId);
+        if (activeUploadReason != null) {
+            failures.add(activeUploadReason);
+            return failures;
+        }
         for (PartFileLocation location : locationService.findLocations(partId)) {
             if (location.getState() != PartFileLocation.LocationState.AVAILABLE) continue;
             StorageRoot root = rootService.findById(location.getStorageRootId()).orElse(null);
@@ -146,48 +176,44 @@ public class PartFileOperationService {
                                      PartFileOperation.OperationSource operationSource,
                                      ArchiveReviewStatusService.ReviewCheckResult review) {
         if (partId == null) throw new IllegalArgumentException("partId missing");
-        Object lock = partLocks.computeIfAbsent(partId, ignored -> new Object());
+        Object lock = partLock(partId);
         synchronized (lock) {
-            try {
-                Optional<PartFileOperation> active = operationRepository
-                        .findFirstByPartIdAndStatusInOrderByCreatedAtDesc(partId, ACTIVE);
-                if (active.isPresent()) return active.get();
+            Optional<PartFileOperation> active = operationRepository
+                    .findFirstByPartIdAndStatusInOrderByCreatedAtDesc(partId, ACTIVE);
+            if (active.isPresent()) return active.get();
 
-                StorageRoot targetRoot = targetRootPath == null || targetRootPath.isBlank()
-                        ? null : rootService.getOrCreateArchiveRoot(targetRootPath);
-                PartFileLocationService.FileResolution source = locationService.resolveReadable(partId);
-                Optional<PartFileOperation> previous = operationRepository
-                        .findFirstByPartIdAndOperationTypeOrderByCreatedAtDesc(partId, type);
-                PartFileLocation requestSource = source.location();
-                if (previous.filter(operation -> isSameCompletedRequest(operation, targetRoot, requestSource)).isPresent()) {
-                    return previous.get();
-                }
-
-                PartFileOperation operation = new PartFileOperation();
-                operation.setPartId(partId);
-                operation.setOperationType(type);
-                operation.setOperationSource(operationSource);
-                operation.setSourceLocationId(source.location() == null ? null : source.location().getId());
-                if (targetRoot != null) {
-                    operation.setTargetRootId(targetRoot.getId());
-                    if (source.location() != null) {
-                        operation.setTargetRelativePath(source.location().getRelativePath());
-                    }
-                }
-                operation = operationRepository.save(operation);
-                if (rootService.hasPendingWorkPathChange()) {
-                    return pending(operation, "work path change is pending confirmation");
-                }
-                if (source.state() == PartFileLocationService.LocalFileState.ROOT_OFFLINE) {
-                    return pending(operation, "storage root offline");
-                }
-                if (!source.available()) {
-                    return fail(operation, null, source.message());
-                }
-                return execute(operation, review);
-            } finally {
-                partLocks.remove(partId, lock);
+            StorageRoot targetRoot = targetRootPath == null || targetRootPath.isBlank()
+                    ? null : rootService.getOrCreateArchiveRoot(targetRootPath);
+            PartFileLocationService.FileResolution source = locationService.resolveReadable(partId);
+            Optional<PartFileOperation> previous = operationRepository
+                    .findFirstByPartIdAndOperationTypeOrderByCreatedAtDesc(partId, type);
+            PartFileLocation requestSource = source.location();
+            if (previous.filter(operation -> isSameCompletedRequest(operation, targetRoot, requestSource)).isPresent()) {
+                return previous.get();
             }
+
+            PartFileOperation operation = new PartFileOperation();
+            operation.setPartId(partId);
+            operation.setOperationType(type);
+            operation.setOperationSource(operationSource);
+            operation.setSourceLocationId(source.location() == null ? null : source.location().getId());
+            if (targetRoot != null) {
+                operation.setTargetRootId(targetRoot.getId());
+                if (source.location() != null) {
+                    operation.setTargetRelativePath(source.location().getRelativePath());
+                }
+            }
+            operation = operationRepository.save(operation);
+            if (rootService.hasPendingWorkPathChange()) {
+                return pending(operation, "work path change is pending confirmation");
+            }
+            if (source.state() == PartFileLocationService.LocalFileState.ROOT_OFFLINE) {
+                return pending(operation, "storage root offline");
+            }
+            if (!source.available()) {
+                return fail(operation, null, source.message());
+            }
+            return execute(operation, review);
         }
     }
 
@@ -221,20 +247,38 @@ public class PartFileOperationService {
     private PartFileOperation executeLocked(PartFileOperation operation,
                                             ArchiveReviewStatusService.ReviewCheckResult review) {
         Long partId = operation.getPartId();
-        Object lock = partLocks.computeIfAbsent(partId, ignored -> new Object());
+        Object lock = partLock(partId);
         synchronized (lock) {
-            try {
-                return execute(operation, review);
-            } finally {
-                partLocks.remove(partId, lock);
-            }
+            return execute(operation, review);
         }
+    }
+
+    private Object partLock(Long partId) {
+        return partLocks[Math.floorMod(partId.hashCode(), PART_LOCK_COUNT)];
+    }
+
+    private static Object[] createPartLocks() {
+        Object[] locks = new Object[PART_LOCK_COUNT];
+        Arrays.setAll(locks, ignored -> new Object());
+        return locks;
     }
 
     private PartFileOperation execute(PartFileOperation operation,
                                       ArchiveReviewStatusService.ReviewCheckResult review) {
         operation = operationRepository.findById(operation.getId()).orElseThrow();
         if (COMPLETE.contains(operation.getStatus())) return operation;
+        if (partActivityCoordinator != null) {
+            PartActivityCoordinator.OperationLease lease = partActivityCoordinator.tryBeginFileOperation(operation.getPartId());
+            if (lease == null) return pending(operation, "分P仍有上传任务，文件操作已等待上传结束");
+            try (lease) {
+                return executeWithLease(operation, review);
+            }
+        }
+        return executeWithLease(operation, review);
+    }
+
+    private PartFileOperation executeWithLease(PartFileOperation operation,
+                                                ArchiveReviewStatusService.ReviewCheckResult review) {
         boolean recoveringRunningOperation = operation.getStatus() == PartFileOperation.OperationStatus.RUNNING;
         operation.setStatus(PartFileOperation.OperationStatus.RUNNING);
         operation.setStartedAt(LocalDateTime.now());
@@ -255,6 +299,10 @@ public class PartFileOperationService {
     private PartFileOperation executeDelete(PartFileOperation operation,
                                             boolean recoveringRunningOperation,
                                             ArchiveReviewStatusService.ReviewCheckResult review) throws IOException {
+        String activeUploadReason = activeUploadReason(operation.getPartId());
+        if (activeUploadReason != null) return pending(operation, activeUploadReason);
+        String activeTaskReason = activePublishTaskReason(operation.getPartId());
+        if (activeTaskReason != null) return pending(operation, activeTaskReason);
         PartFileLocation source = locationService.findLocation(operation.getSourceLocationId()).orElse(null);
         if (source == null) return fail(operation, null, "source file location missing");
         if (source.getState() == PartFileLocation.LocationState.DELETED_BY_POLICY) {
@@ -280,6 +328,8 @@ public class PartFileOperationService {
 
     private PartFileOperation executeTransfer(PartFileOperation operation,
                                               ArchiveReviewStatusService.ReviewCheckResult review) throws IOException {
+        String activeUploadReason = activeUploadReason(operation.getPartId());
+        if (activeUploadReason != null) return pending(operation, activeUploadReason);
         StorageRoot targetRoot = rootService.findById(operation.getTargetRootId())
                 .orElseThrow(() -> new IOException("target storage root missing"));
         rootService.markOnline(targetRoot);
@@ -334,6 +384,8 @@ public class PartFileOperationService {
 
         expectedSize = storage.size(sourcePath.path());
         if (operation.getOperationType() == PartFileOperation.OperationType.MOVE) {
+            String activeTaskReason = activePublishTaskReason(operation.getPartId());
+            if (activeTaskReason != null) return pending(operation, activeTaskReason);
             PartFileOperation blocked = blockDestructiveOperation(operation, review);
             if (blocked != null) return blocked;
         }
@@ -361,6 +413,8 @@ public class PartFileOperationService {
                                                       ArchiveReviewStatusService.ReviewCheckResult review) throws IOException {
         if (operation.getOperationType() == PartFileOperation.OperationType.MOVE
                 && sourcePath != null && storage.isRegularFile(sourcePath.path())) {
+            String activeTaskReason = activePublishTaskReason(operation.getPartId());
+            if (activeTaskReason != null) return pending(operation, activeTaskReason);
             PartFileOperation blocked = blockDestructiveOperation(operation, review);
             if (blocked != null) return blocked;
             List<String> warnings = transferCompanions(sourcePath.path(), targetVideo, operation.getOperationType());
@@ -375,6 +429,31 @@ public class PartFileOperationService {
             locationService.completeCopy(target, targetVideo);
         }
         return succeed(operation, false, null);
+    }
+
+    private String activePublishTaskReason(Long partId) {
+        if (publishTaskService == null || partRepository == null || partId == null) return null;
+        RecordHistoryPart part = partRepository.findById(partId).orElse(null);
+        if (part == null || part.getHistoryId() == null) return null;
+        boolean active = publishTaskService.getActiveForHistory(part.getHistoryId()).stream()
+                .anyMatch(task -> task.getState().isActive());
+        return active ? "投稿任务仍在准备、上传或等待处理中，文件暂不清理" : null;
+    }
+
+    private String activeUploadReason(Long partId) {
+        if (uploadUserSerialScheduler != null
+                && uploadUserSerialScheduler.hasPendingPartOutsideCurrentExecution(partId)) {
+            return "分P 仍在账号上传队列中，暂不能移动或删除文件";
+        }
+        boolean currentUpload = uploadUserSerialScheduler != null
+                && uploadUserSerialScheduler.isCurrentPartExecution(partId);
+        if (!currentUpload && uploadProgressTracker != null) {
+            UploadProgressTracker.Progress progress = uploadProgressTracker.getByPartId(partId);
+            if (progress != null && progress.isActive()) {
+                return "分P 正在上传或等待上传重试，暂不能移动或删除文件";
+            }
+        }
+        return null;
     }
 
     private PartFileOperation blockDestructiveOperation(

@@ -7,6 +7,7 @@
     window.HistoryPageEditPartsMethods = {
         canEditPublishedParts: function() {
             if (!this.currentDetail || !this.currentDetail.publish) return false;
+            if (this.getHistoryActionDisabledReason(this.currentDetail)) return false;
             if (this.currentDetail.editPartsUploading) return false;
             const hasOnlineId = !!(this.currentDetail.avId || this.currentDetail.bvId);
             const code = Number(this.currentDetail.code);
@@ -30,6 +31,7 @@
             this.startEditParts();
         },
         startEditParts: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             if (!this.currentDetail || !this.currentDetail.id) return;
             const _this = this;
             _this.showMoreActions = false;
@@ -147,6 +149,7 @@
             this.$set(this.editPartsDraft[index], 'deleted', false);
         },
         openEditPartFileDialog: function(index, mode) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             this.editPartTargetIndex = index;
             this.editPartFileDialogMode = mode || 'add';
             this.selectedEditCandidateFile = '';
@@ -166,6 +169,7 @@
             });
         },
         applyEditCandidateFile: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             if (!this.selectedEditCandidateFile) return;
             const file = (this.editCandidateFiles || []).find(f => f.filePath === this.selectedEditCandidateFile) || {};
             const item = {
@@ -198,6 +202,10 @@
             this.enqueueEditPartUpload(option, 'replace', index);
         },
         enqueueEditPartUpload: function(option, mode, index) {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) {
+                if (option && typeof option.onError === 'function') option.onError(new Error('稿件当前不能接收新操作'));
+                return;
+            }
             const file = option && option.file;
             if (!file) {
                 if (option && option.onError) option.onError(new Error('no_file'));
@@ -570,6 +578,7 @@
             this.$message({ message: '本地文件上传失败', type: 'warning' });
         },
         confirmSaveEditParts: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             if (this.hasActiveEditPartUploads && this.hasActiveEditPartUploads()) {
                 this.$message({ message: '本地分P仍在上传，请等待上传完成或终止后再保存', type: 'warning' });
                 return;
@@ -599,6 +608,7 @@
             this.$pageConfirm(msg, '确认保存', { type: 'warning' }).then(() => this.saveEditParts()).catch(function(){});
         },
         saveEditParts: function() {
+            if (!this.ensureHistoryActionAllowed(this.currentDetail)) return;
             const _this = this;
             _this.editPartsSaving = true;
             const items = _this.editPartsDraft.map(function(p) {

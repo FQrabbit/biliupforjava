@@ -5,6 +5,9 @@
         list: function(callback, errorCallback) {
             ApiUtil.get('/storage-roots', callback, errorCallback);
         },
+        checkWebhookPath: function(path, callback, errorCallback) {
+            ApiUtil.post('/storage-roots/webhook-path-check', { path: path }, callback, errorCallback);
+        },
         workPathChange: function(callback, errorCallback) {
             ApiUtil.get('/storage-roots/work-path-change', callback, errorCallback);
         },

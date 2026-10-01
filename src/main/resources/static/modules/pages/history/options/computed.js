@@ -43,20 +43,20 @@
         },
         selectedUploadEnableCount: function() {
             if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
-            return this.selectedItems.filter(function(item) {
-                return item && !item.forceArchived && (!item.upload || item.uploadPaused);
+            return this.selectedItems.filter(item => {
+                return item && !this.getHistoryActionDisabledReason(item) && !item.forceArchived && (!item.upload || item.uploadPaused);
             }).length;
         },
         selectedUploadDisableCount: function() {
             if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
-            return this.selectedItems.filter(function(item) {
-                return item && item.upload;
+            return this.selectedItems.filter(item => {
+                return item && !this.getHistoryActionDisabledReason(item) && item.upload;
             }).length;
         },
         selectedForceArchiveEligibleCount: function() {
             if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
-            return this.selectedItems.filter(function(item) {
-                return item && !item.forceArchived;
+            return this.selectedItems.filter(item => {
+                return item && !this.getHistoryActionDisabledReason(item) && !item.forceArchived;
             }).length;
         },
         batchVisibilityPercent: function() {

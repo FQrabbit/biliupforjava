@@ -14,6 +14,8 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 import top.sshh.bililiverecoder.entity.*;
@@ -32,8 +34,11 @@ import top.sshh.bililiverecoder.util.TaskUtil;
 import top.sshh.bililiverecoder.util.UploadProgressTracker;
 import top.sshh.bililiverecoder.service.GiftReplyCandidateService;
 import top.sshh.bililiverecoder.service.HistoryDeletionService;
+import top.sshh.bililiverecoder.service.HistoryDeletionTaskService;
 import top.sshh.bililiverecoder.service.HistoryMsgQueueCleanupService;
 import top.sshh.bililiverecoder.service.HistoryMsgRetryService;
+import top.sshh.bililiverecoder.service.VideoCommentTaskService;
+import top.sshh.bililiverecoder.service.VideoVisibilityRestoreService;
 import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.UploadPauseService;
 import top.sshh.bililiverecoder.service.StorageRootService;
@@ -99,6 +104,15 @@ public class HistoryController {
     private PartFileLocationService partFileLocationService;
     @Autowired
     private HistoryDeletionService historyDeletionService;
+
+    @Autowired
+    private HistoryDeletionTaskService historyDeletionTaskService;
+
+    @Autowired
+    private VideoCommentTaskService videoCommentTaskService;
+
+    @Autowired
+    private VideoVisibilityRestoreService visibilityRestoreService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -153,10 +167,20 @@ public class HistoryController {
         Map<Long, PartListStats> partStatsMap = buildPagePartStats(list);
         Map<String, MsgListStats> msgStatsMap = buildPageMsgStats(list, sessionStatsMap);
         Map<Long, ReplyTaskStats> replyTaskStatsMap = buildPageReplyTaskStats(list, roomEntityCache);
+        Map<Long, HistoryDeletionTask> deletionTaskByHistory = historyDeletionTaskService.findByHistoryIds(
+                list.stream().map(RecordHistory::getId).filter(Objects::nonNull).toList());
         
         // 同步执行数据库查询操作，避免并行流中的 EntityManager 会话问题
         for (RecordHistory history : list) {
             history.setRoomName(roomCache.get(history.getRoomId()));
+            HistoryDeletionTask deletionTask = deletionTaskByHistory.get(history.getId());
+            if (deletionTask != null) {
+                history.setDeletionTaskId(deletionTask.getId());
+                history.setDeletionState(deletionTask.getState());
+                history.setDeletionWaitReason(deletionTask.getLastError());
+                history.setDeletionCanCancel(historyDeletionTaskService.canCancel(deletionTask));
+                history.setDeletionStarted(deletionTask.isDeletionStarted());
+            }
             // 使用统一方法填充额外字段（分P统计、放弃分P、弹幕统计等）
             populateHistoryFields(history, configMap, roomEntityCache.get(history.getRoomId()),
                     partStatsMap.get(history.getId()), msgStatsMap.get(history.getBvId()),
@@ -266,6 +290,30 @@ public class HistoryController {
 
         result.put("items", items);
         return result;
+    }
+
+    @GetMapping("/{id}/post-publish-status")
+    public HistoryPostPublishStatusDto postPublishStatus(@PathVariable("id") Long id) {
+        List<VideoCommentTaskStatusDto> comments = videoCommentTaskService.findByHistoryId(id).stream()
+                .map(VideoCommentTaskStatusDto::from).toList();
+        VideoVisibilityRestoreTask visibility = visibilityRestoreService.findByHistoryId(id);
+        return new HistoryPostPublishStatusDto(id, comments,
+                visibility == null ? null : VideoVisibilityRestoreStatusDto.from(visibility));
+    }
+
+    @PostMapping("/{id}/comment-tasks/{taskId}/retry")
+    public ResponseEntity<Map<String, Object>> retryUnconfirmedComment(
+            @PathVariable("id") Long id, @PathVariable("taskId") Long taskId,
+            @RequestParam(defaultValue = "false") boolean confirmedNotSent) {
+        if (!confirmedNotSent) {
+            return ResponseEntity.badRequest().body(Map.of("success", false,
+                    "message", "请先核对线上评论，并确认该条评论确实未发送"));
+        }
+        boolean retried = videoCommentTaskService.confirmNotSentAndRetry(id, taskId);
+        if (retried) liveMsgSendSync.enqueueHistoryDispatch(id);
+        return ResponseEntity.status(retried ? HttpStatus.OK : HttpStatus.CONFLICT)
+                .body(Map.of("success", retried,
+                        "message", retried ? "评论已重新排队" : "评论任务不存在或当前状态不能重试"));
     }
 
     @PostMapping("/{id}/upload/pause")
@@ -679,7 +727,7 @@ public class HistoryController {
         }
     }
 
-    @GetMapping("/delete/{id}")
+    @PostMapping("/delete/{id}")
     public Map<String, Object> delete(@PathVariable("id") Long id,
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteVideo,
                                       @RequestParam(required = false, defaultValue = "false") boolean deleteDanmaku,
@@ -698,7 +746,16 @@ public class HistoryController {
             return result;
         }
         result.put("data", deletion.toMap());
-        if (deletion.notDeletedFiles().isEmpty()) {
+        if (!deletion.deleted() && deletion.deletionTaskId() != null) {
+            result.put("type", "warning");
+            result.put("msg", "NEEDS_ACTION".equals(deletion.deletionTaskState())
+                    ? "删除任务需要处理，请查看稿件详情中的删除状态和原因"
+                    : "稿件已进入等待删除，等待中的投稿和上传等操作结束后会继续处理");
+        } else if (!deletion.deleted()) {
+            result.put("type", "warning");
+            Object reason = deletion.notDeletedFiles().isEmpty() ? null : deletion.notDeletedFiles().get(0).get("reason");
+            result.put("msg", reason == null ? "删除未能开始，请检查稿件状态" : String.valueOf(reason));
+        } else if (deletion.notDeletedFiles().isEmpty()) {
             result.put("type", "success");
             result.put("msg", "录制历史删除成功");
         } else {
@@ -706,6 +763,57 @@ public class HistoryController {
             result.put("msg", "录制历史删除成功（有 " + deletion.notDeletedFiles().size() + " 个本地文件未删除）");
         }
         return result;
+    }
+
+    @GetMapping("/{id}/deletion-task")
+    public Map<String, Object> deletionTaskStatus(@PathVariable("id") Long id) {
+        top.sshh.bililiverecoder.entity.HistoryDeletionTask task = historyDeletionTaskService.findByHistoryId(id);
+        if (task == null) return Map.of("found", false);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("found", true);
+        data.put("taskId", task.getId());
+        data.put("historyId", task.getHistoryId());
+        data.put("state", task.getState());
+        data.put("attemptCount", task.getAttemptCount());
+        data.put("nextAttemptAt", task.getNextAttemptAt());
+        data.put("lastError", task.getLastError());
+        data.put("deletionStarted", task.isDeletionStarted());
+        data.put("canCancel", historyDeletionTaskService.canCancel(task));
+        data.put("cancelReason", historyDeletionTaskService.canCancel(task)
+                ? "" : task.isDeletionStarted() ? "删除已经开始，不能取消" : "当前任务状态不能取消");
+        return data;
+    }
+
+    @PostMapping("/deletion-task/{taskId}/cancel")
+    public ResponseEntity<Map<String, Object>> cancelDeletionTask(@PathVariable Long taskId) {
+        HistoryDeletionTaskService.CancelResult result = historyDeletionTaskService.cancel(taskId);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", result.success());
+        body.put("alreadyCancelled", result.alreadyCancelled());
+        body.put("message", result.message());
+        if (result.task() != null) {
+            body.put("taskId", result.task().getId());
+            body.put("historyId", result.task().getHistoryId());
+            body.put("state", result.task().getState());
+        }
+        if (result.success() && !result.alreadyCancelled() && result.task() != null) {
+            liveMsgSendSync.enqueueHistoryDispatch(result.task().getHistoryId());
+            publishAccountScheduler.wakeHistory(result.task().getHistoryId());
+        }
+        return ResponseEntity.status(result.success() ? HttpStatus.OK : HttpStatus.CONFLICT).body(body);
+    }
+
+    @PostMapping("/deletion-task/{taskId}/retry")
+    public ResponseEntity<Map<String, Object>> retryDeletionTask(@PathVariable Long taskId) {
+        top.sshh.bililiverecoder.entity.HistoryDeletionTask task = historyDeletionService.retry(taskId);
+        if (task == null) return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("success", false, "message", "删除任务不存在或当前状态不能重试"));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", true);
+        body.put("taskId", task.getId());
+        top.sshh.bililiverecoder.entity.HistoryDeletionTask current = historyDeletionTaskService.findById(taskId);
+        body.put("state", current == null ? task.getState() : current.getState());
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/batch/upload")
@@ -971,6 +1079,59 @@ public class HistoryController {
             liveMsgSendSync.enqueueHistoryDispatch(id);
         }
         return retry == null ? HistoryMsgRetryService.RetryResult.warning("强制重试请求失败").toMap() : retry.toMap();
+    }
+
+    @GetMapping("/{historyId}/danmaku/unknown-results")
+    public Map<String, Object> unknownDanmakuResults(@PathVariable Long historyId) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        List<Long> partIds = partRepository.findByHistoryId(historyId).stream()
+                .map(RecordHistoryPart::getId).filter(Objects::nonNull).toList();
+        List<Map<String, Object>> messages = partIds.isEmpty() ? List.of()
+                : msgRepository.findByPartIdInAndCodeInOrderByPartIdAscSendTimeAsc(partIds, List.of(-2, -4))
+                .stream().map(message -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", message.getId());
+                    item.put("partId", message.getPartId());
+                    item.put("bvid", message.getBvid());
+                    item.put("cid", message.getCid());
+                    item.put("pool", message.getPool());
+                    item.put("context", message.getContext());
+                    item.put("sendTime", message.getSendTime());
+                    item.put("state", message.getCode() == -4 ? "SENDING" : "NEEDS_ACTION");
+                    return item;
+                }).toList();
+        response.put("historyId", historyId);
+        response.put("messages", messages);
+        response.put("count", messages.size());
+        response.put("message", "待核对的发送结果不会自动重发；请先确认平台未接收，才能单条重新入队");
+        return response;
+    }
+
+    @PostMapping("/{historyId}/danmaku/{messageId}/retry-unknown")
+    public Map<String, Object> retryUnknownDanmaku(@PathVariable Long historyId,
+                                                    @PathVariable Long messageId,
+                                                    @RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        if (!Boolean.TRUE.equals(request == null ? null : request.get("confirmedNotSent"))) {
+            response.put("success", false);
+            response.put("msg", "请先在线上确认该条弹幕未发送，再明确确认重新入队");
+            return response;
+        }
+        LiveMsg message = msgRepository.findById(messageId).orElse(null);
+        RecordHistoryPart part = message == null || message.getPartId() == null
+                ? null : partRepository.findById(message.getPartId()).orElse(null);
+        if (message == null || part == null || !historyId.equals(part.getHistoryId())
+                || message.getCode() != -2) {
+            response.put("success", false);
+            response.put("msg", "该弹幕不存在、已改变状态或不属于当前稿件");
+            return response;
+        }
+        int updated = msgRepository.confirmUnknownSendNotAccepted(messageId);
+        response.put("success", updated == 1);
+        response.put("messageId", messageId);
+        response.put("msg", updated == 1 ? "已重新加入弹幕队列" : "发送状态已改变，请刷新后再试");
+        if (updated == 1) liveMsgSendSync.enqueueHistoryDispatch(historyId);
+        return response;
     }
 
     @PostMapping("/abandonMsgQueue/batch")
@@ -1377,6 +1538,22 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            VideoVisibilityRestoreService.ForceArchiveGuard visibilityGuard = visibilityRestoreService == null
+                    ? null : visibilityRestoreService.tryAcquireForceArchiveGuard(history.getId());
+            if (visibilityGuard != null && visibilityGuard.blockReason() != null) {
+                result.put("type", "warning");
+                result.put("msg", visibilityGuard.blockReason());
+                return result;
+            }
+            try (visibilityGuard) {
+            VideoCommentTaskService.ForceArchiveGuard archiveGuard = videoCommentTaskService == null
+                    ? null : videoCommentTaskService.tryAcquireForceArchiveGuard(history.getId());
+            try (archiveGuard) {
+                if (archiveGuard != null && archiveGuard.blockReason() != null) {
+                    result.put("type", "warning");
+                    result.put("msg", archiveGuard.blockReason());
+                    return result;
+                }
             publishAccountScheduler.cancelForHistory(history.getId(), "稿件已强制归档，未提交的投稿任务已取消");
             List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             boolean changed = false;
@@ -1468,6 +1645,8 @@ public class HistoryController {
                 result.put("msg", "该稿件不满足强制归档条件（可能已归档）");
             }
             return result;
+            }
+            }
         } else {
             result.put("type", "warning");
             result.put("msg", "录制历史不存在");

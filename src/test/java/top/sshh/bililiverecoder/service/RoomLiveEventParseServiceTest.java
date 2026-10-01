@@ -70,6 +70,10 @@ class RoomLiveEventParseServiceTest {
                 "RoomLiveEvent.Parse.ReadFailed",
                 "XML 弹幕礼物文件读取失败",
                 false);
+        assertLogPolicy(RoomLiveEventXmlIssue.IssueType.RESOURCE_LIMIT,
+                "RoomLiveEvent.Parse.ResourceLimit",
+                "XML 文件超过当前解析资源上限，现有统计已保留",
+                false);
         assertLogPolicy(RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR,
                 "RoomLiveEvent.Parse.InternalError",
                 "处理 XML 弹幕礼物数据时发生程序内部错误",

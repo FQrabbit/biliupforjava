@@ -17,7 +17,7 @@
         remove: function(id, data, callback, errorCallback) {
             $.ajax({
                 url: '/history/delete/' + encodeURIComponent(id),
-                type: 'get',
+                type: 'post',
                 data: data,
                 dataType: 'json',
                 success: callback,
@@ -38,6 +38,15 @@
         },
         forceRetryFailedDanmaku: function(id, data, callback, errorCallback) {
             ApiUtil.post('/history/' + encodeURIComponent(id) + '/danmaku/forceRetryFailed', data || {}, callback, errorCallback);
+        },
+        unknownDanmakuResults: function(id, callback, errorCallback) {
+            ApiUtil.get('/history/' + encodeURIComponent(id) + '/danmaku/unknown-results', callback, errorCallback);
+        },
+        retryUnknownDanmaku: function(historyId, messageId, confirmedNotSent, callback, errorCallback) {
+            ApiUtil.post('/history/' + encodeURIComponent(historyId) + '/danmaku/'
+                + encodeURIComponent(messageId) + '/retry-unknown', {
+                    confirmedNotSent: !!confirmedNotSent
+                }, callback, errorCallback);
         },
         previewMsgQueueCleanup: function(data, callback, errorCallback) {
             ApiUtil.post('/history/msgQueueCleanup/preview', data, callback, errorCallback);
@@ -79,6 +88,19 @@
         },
         publishTaskBatchState: function(taskIds, callback, errorCallback) {
             ApiUtil.post('/publish-tasks/batch-state', { taskIds: taskIds || [] }, callback, errorCallback);
+        },
+        postPublishStatus: function(historyId, callback, errorCallback) {
+            ApiUtil.get('/history/' + encodeURIComponent(historyId) + '/post-publish-status', callback, errorCallback);
+        },
+        deletionTaskStatus: function(historyId, callback, errorCallback) {
+            ApiUtil.get('/history/' + encodeURIComponent(historyId) + '/deletion-task', callback, errorCallback);
+        },
+        cancelDeletionTask: function(taskId, callback, errorCallback) {
+            ApiUtil.post('/history/deletion-task/' + encodeURIComponent(taskId) + '/cancel', {}, callback, errorCallback);
+        },
+        retryCommentTask: function(historyId, taskId, callback, errorCallback) {
+            ApiUtil.post('/history/' + encodeURIComponent(historyId) + '/comment-tasks/'
+                + encodeURIComponent(taskId) + '/retry?confirmedNotSent=true', {}, callback, errorCallback);
         },
         retryPublishTask: function(taskId, confirmedNotSubmitted, callback, errorCallback) {
             ApiUtil.post('/publish-tasks/' + encodeURIComponent(taskId) + '/retry', {

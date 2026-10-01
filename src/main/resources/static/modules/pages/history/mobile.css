@@ -427,7 +427,16 @@
     border-color: color-mix(in srgb, var(--mobile-coral) 28%, var(--mobile-page-border));
 }
 
-.mobile-history-phase.is-upload,
+.mobile-history-phase.is-upload {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-primary));
+}
+
+.mobile-history-pipeline .processing {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-primary));
+}
+
 .mobile-history-phase.is-success {
     color: var(--mobile-teal);
     background: color-mix(in srgb, var(--mobile-teal) 12%, var(--mobile-page-surface-strong));

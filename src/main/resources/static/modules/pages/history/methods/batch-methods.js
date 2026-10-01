@@ -82,7 +82,9 @@
         },
         getVisibilityDisabledReasonForItem: function(item) {
             if (!item || !item.id) return '请先选择有效稿件';
-            if (!item.publish) return '稿件未发布，不能切换可见性';
+            var disabled = this.getHistoryActionDisabledReason(item);
+            if (disabled) return disabled;
+            if (!item.publish) return '稿件尚未投稿，不能切换可见性';
             const code = Number(item.code);
             if (code !== 0 && code !== -50) return '仅审核通过（公开/仅自己可见）时可切换';
             if (item.recording) return '稿件仍在录制中';
@@ -398,25 +400,41 @@
             var promises = selected.map(function(item) {
                 return new Promise(function(resolve) {
                     HistoryApi.remove(item.id, options, function(res) {
-                        var ok = res && typeof res.msg === 'string' && res.msg.indexOf('删除成功') > -1;
+                        var result = res && res.data || {};
+                        var deleted = result.deleted === true;
+                        var taskState = result.deletionTaskState;
+                        var queued = !!result.deletionTaskId && !deleted
+                            && (taskState === 'PENDING' || taskState === 'RUNNING' || taskState === 'RETRY_WAIT');
+                        var needsAction = !!result.deletionTaskId && taskState === 'NEEDS_ACTION';
                         var files = res && res.data && Array.isArray(res.data.notDeletedFiles) ? res.data.notDeletedFiles : [];
-                        resolve({ id: item.id, deleted: ok, type: res && res.type, msg: res && res.msg, notDeletedFiles: files });
+                        resolve({ id: item.id, deleted: deleted, queued: queued, needsAction: needsAction,
+                            type: res && res.type, msg: res && res.msg, notDeletedFiles: files });
                     }, function() {
-                        resolve({ id: item.id, deleted: false, type: 'error', msg: '请求失败', notDeletedFiles: [] });
+                        resolve({ id: item.id, deleted: false, queued: false, needsAction: false,
+                            type: 'error', msg: '请求失败', notDeletedFiles: [] });
                     });
                 });
             });
 
             Promise.all(promises).then(function(results) {
                 var successCount = results.filter(function(r) { return r.deleted; }).length;
-                var failCount = results.length - successCount;
+                var queuedCount = results.filter(function(r) { return r.queued; }).length;
+                var needsActionCount = results.filter(function(r) { return r.needsAction; }).length;
+                var failCount = results.length - successCount - queuedCount - needsActionCount;
                 var notDeletedGrouped = results
                     .filter(function(r) { return r.deleted && r.notDeletedFiles && r.notDeletedFiles.length > 0; })
                     .map(function(r) { return { historyId: r.id, files: r.notDeletedFiles }; });
-                if (failCount === 0) {
+                if (failCount === 0 && queuedCount === 0 && needsActionCount === 0) {
                     _this.$message.success('成功删除 ' + successCount + ' 个稿件');
+                } else if (failCount === 0) {
+                    _this.$message({
+                        message: '批量删除已处理：立即完成 ' + successCount + ' 个，等待删除 ' + queuedCount
+                            + ' 个，需要处理 ' + needsActionCount + ' 个',
+                        type: needsActionCount > 0 ? 'warning' : 'info'
+                    });
                 } else {
-                    _this.$message.warning('删除完成：成功 ' + successCount + ' 个，失败 ' + failCount + ' 个');
+                    _this.$message.warning('批量删除完成：已删除 ' + successCount + ' 个，等待删除 ' + queuedCount
+                        + ' 个，需要处理 ' + needsActionCount + ' 个，失败 ' + failCount + ' 个');
                 }
                 _this.finishBatchModeAndRefresh();
                 if (notDeletedGrouped.length > 0) {
@@ -441,7 +459,7 @@
             }
             var enable = upload === true;
             var eligibleItems = this.selectedItems.filter(function(item) {
-                if (!item) return false;
+                if (!item || _this.getHistoryActionDisabledReason(item)) return false;
                 return enable ? (!item.forceArchived && (!item.upload || item.uploadPaused)) : !!item.upload;
             });
             if (eligibleItems.length === 0) {
@@ -458,7 +476,7 @@
                 msg += '<p style="margin-top:8px;color:var(--text-primary);">开启后会恢复尚未完成分P的上传调度。</p>';
             }
             if (skipped > 0) {
-                msg += '<p style="margin-top:8px;color:var(--text-secondary);">另外 ' + skipped + ' 个稿件已是目标状态或已强制归档，将自动跳过。</p>';
+                msg += '<p style="margin-top:8px;color:var(--text-secondary);">另外 ' + skipped + ' 个稿件已是目标状态、已归档或等待删除，将自动跳过。</p>';
             }
             this.$pageConfirm(msg, '批量' + targetText + '确认', {
                 dangerouslyUseHTMLString: true,
@@ -467,9 +485,11 @@
                 confirmButtonClass: enable ? 'el-button--primary' : 'el-button--warning',
                 type: enable ? 'info' : 'warning'
             }).then(function() {
-                _this.beginBatchOperation('批量' + targetText, targetText, _this.selectedItems.length);
+                var currentTargets = eligibleItems.filter(function(item) { return !_this.getHistoryActionDisabledReason(item); });
+                if (!currentTargets.length) { _this.$message.info('所选稿件当前不能修改，请检查删除或归档状态'); return; }
+                _this.beginBatchOperation('批量' + targetText, targetText, currentTargets.length);
                 HistoryApi.updateUploadBatch({
-                    ids: _this.selectedItems.map(function(item) { return item.id; }),
+                    ids: currentTargets.map(function(item) { return item.id; }),
                     upload: enable
                 }, function(data) {
                     _this.batchVisibilityDone = Number(data && data.requested) || _this.batchVisibilityTotal;
@@ -496,10 +516,10 @@
                 return;
             }
             var eligibleItems = this.selectedItems.filter(function(item) {
-                return item && !item.forceArchived;
+                return item && !_this.getHistoryActionDisabledReason(item);
             });
             if (eligibleItems.length === 0) {
-                this.$message.info('所选稿件均已强制归档');
+                this.$message.info('所选稿件已归档或正在等待删除');
                 return;
             }
             var skipped = this.selectedItems.length - eligibleItems.length;
@@ -507,7 +527,7 @@
                 + '<p style="margin-top:8px;color:var(--warning-color);">这会停止尚未完成的录制、上传和弹幕发送，并清理待发送队列。</p>'
                 + '<p style="margin-top:8px;color:var(--text-secondary);">之后可以恢复处理标记，但已中止的任务不会自动恢复。</p>';
             if (skipped > 0) {
-                msg += '<p style="margin-top:8px;color:var(--text-secondary);">已归档的 ' + skipped + ' 个稿件将自动跳过。</p>';
+                msg += '<p style="margin-top:8px;color:var(--text-secondary);">已归档或等待删除的 ' + skipped + ' 个稿件将自动跳过。</p>';
             }
             this.$pageConfirm(msg, '批量强制归档确认', {
                 dangerouslyUseHTMLString: true,
@@ -516,9 +536,11 @@
                 confirmButtonClass: 'el-button--warning',
                 type: 'warning'
             }).then(function() {
-                _this.beginBatchOperation('批量强制归档', '强制归档', _this.selectedItems.length);
+                var currentTargets = eligibleItems.filter(function(item) { return !_this.getHistoryActionDisabledReason(item); });
+                if (!currentTargets.length) { _this.$message.info('所选稿件当前不能修改，请检查删除或归档状态'); return; }
+                _this.beginBatchOperation('批量强制归档', '强制归档', currentTargets.length);
                 HistoryApi.forceArchiveBatch({
-                    ids: _this.selectedItems.map(function(item) { return item.id; })
+                    ids: currentTargets.map(function(item) { return item.id; })
                 }, function(data) {
                     _this.batchVisibilityDone = Number(data && data.requested) || _this.batchVisibilityTotal;
                     _this.batchVisibilitySuccess = Number(data && data.archived) || 0;

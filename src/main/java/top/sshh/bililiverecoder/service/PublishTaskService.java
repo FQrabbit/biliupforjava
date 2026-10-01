@@ -57,8 +57,9 @@ public class PublishTaskService {
         }
         Object lock = historyLocks[Math.floorMod(historyId.hashCode(), historyLocks.length)];
         synchronized (lock) {
-            RecordHistory history = histories.findById(historyId).orElse(null);
+            RecordHistory history = histories.findByIdForUpdate(historyId).orElse(null);
             if (history == null) return Admission.rejected("稿件不存在");
+            if (history.isDeletePending()) return Admission.rejected("稿件正在删除，不能再创建投稿任务");
             if (history.isForceArchived()) return Admission.rejected("稿件已强制归档");
             if (operation == PublishTaskOperation.NEW_PUBLISH && history.isPublish()) {
                 return Admission.rejected("该稿件已有发布记录，请使用稿件更新或分P编辑任务");
@@ -156,9 +157,26 @@ public class PublishTaskService {
     public PublishTask getUploadTaskForHistory(Long historyId) {
         return getActiveForHistory(historyId).stream()
                 .filter(task -> task.getOperation() != PublishTaskOperation.HIGH_ENERGY)
-                .filter(task -> task.getState() == PublishTaskState.PREPARING
-                        || task.getState() == PublishTaskState.WAITING_UPLOAD)
                 .findFirst().orElse(null);
+    }
+
+    /**
+     * 找出这份稿件固定使用的上传账号
+     */
+    @Transactional(readOnly = true)
+    public Long resolveUploadAccountId(Long historyId, Long configuredAccountId) {
+        if (historyId == null) return configuredAccountId;
+        RecordHistory history = histories.findById(historyId).orElse(null);
+        if (history == null) return configuredAccountId;
+        if (history.isDeletePending()) return null;
+        if (history.isPublish() && history.getPublishUserId() != null) {
+            return history.getPublishUserId();
+        }
+        PublishTask task = getUploadTaskForHistory(historyId);
+        if (task != null && task.getAccountId() != null) return task.getAccountId();
+        // 已发布稿件不能因为房间换绑账号而转交给新账号
+        if (history.isPublish()) return null;
+        return configuredAccountId;
     }
 
     @Transactional(readOnly = true)

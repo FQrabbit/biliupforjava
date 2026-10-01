@@ -174,9 +174,9 @@
     max-width: 100%;
     font-size: 11px;
     line-height: 1;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
 }
 
 .mobile-history-detail-toolbar button.is-emphasis {
@@ -282,13 +282,13 @@
 
 .mobile-history-detail-pipeline strong {
     max-width: 100%;
-    color: var(--text-primary);
+    color: inherit;
     font-size: 12px;
     line-height: 1.1;
     font-weight: 840;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
 }
 
 .mobile-history-detail-pipeline .is-on,
@@ -345,12 +345,70 @@
     font-weight: 830;
 }
 
+.mobile-history-detail-notice.warn {
+    border-color: var(--warning-border);
+    background: var(--warning-soft-bg-faint);
+}
+
+.mobile-history-detail-notice.warn i,
+.mobile-history-detail-notice.warn > div > strong {
+    color: var(--warning-color);
+}
+
+.mobile-history-detail-notice.danger {
+    border-color: var(--danger-border-soft);
+    background: var(--danger-soft-bg-faint);
+}
+
+.mobile-history-detail-notice.danger i,
+.mobile-history-detail-notice.danger > div > strong {
+    color: var(--danger-color);
+}
+
 .mobile-history-detail-stats {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     padding: 8px;
     border-radius: 24px;
+}
+
+.mobile-history-detail-pipeline .is-processing,
+.mobile-history-detail-pipeline .processing {
+    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--border-color));
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary));
+}
+
+.mobile-history-detail-pipeline .is-danger {
+    border-color: var(--danger-border-soft);
+    color: var(--danger-color);
+    background: var(--danger-soft-bg-faint);
+}
+
+.mobile-history-detail-notice .config-notice-icon {
+    width: auto;
+    height: auto;
+}
+
+.mobile-history-detail-notice .config-notice-body {
+    min-width: 0;
+}
+
+.mobile-history-detail-notice .config-notice-title {
+    color: var(--text-primary);
+}
+
+.mobile-history-detail-notice.info .config-notice-title {
+    color: var(--primary-color);
+}
+
+.mobile-history-detail-notice.warn .config-notice-title {
+    color: var(--warning-color);
+}
+
+.mobile-history-detail-notice.danger .config-notice-title {
+    color: var(--danger-color);
 }
 
 .mobile-history-detail-stats div,

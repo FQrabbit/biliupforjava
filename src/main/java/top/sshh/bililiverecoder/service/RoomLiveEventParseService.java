@@ -10,6 +10,8 @@ import org.dom4j.ElementHandler;
 import org.dom4j.ElementPath;
 import org.dom4j.io.SAXReader;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import top.sshh.bililiverecoder.entity.*;
@@ -18,6 +20,11 @@ import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -27,7 +34,6 @@ import java.util.*;
 public class RoomLiveEventParseService {
 
     public static final int PARSER_VERSION = 2;
-    private static final int BATCH_SIZE = 500;
     private static final int PART_PARSE_LOCK_COUNT = 256;
 
     private final Object[] partParseLocks = createPartParseLocks();
@@ -37,7 +43,7 @@ public class RoomLiveEventParseService {
     @Autowired
     private RecordHistoryPartRepository partRepository;
     @Autowired
-    private RoomLiveEventRepository eventRepository;
+    private RoomLiveEventParseCommitService parseCommitService;
     @Autowired
     private RoomLiveEventParseStateRepository parseStateRepository;
     @Autowired
@@ -53,6 +59,14 @@ public class RoomLiveEventParseService {
     private PartFileLocationService partFileLocationService;
     @Autowired
     private RoomLiveEventXmlIssueService xmlIssueService;
+    @Value("${record.work-path:.}")
+    private String workPath = ".";
+    @Value("${record.xml.max-danmu-user-stats:250000}")
+    private int maxDanmuUserStats = 250000;
+    @Value("${record.xml.max-gift-catalog-types:20000}")
+    private int maxGiftCatalogTypes = 20000;
+    @Value("${record.xml.commit-batch-size:500}")
+    private int commitBatchSize = 500;
 
     public Map<String, Object> parseHistory(Long historyId, boolean force) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -186,24 +200,22 @@ public class RoomLiveEventParseService {
         LocalDateTime liveStart = history != null && history.getStartTime() != null ? history.getStartTime() : part.getStartTime();
         LocalDateTime now = LocalDateTime.now();
         EventCounter counter = new EventCounter();
-        List<RoomLiveEvent> batch = new ArrayList<>(BATCH_SIZE);
         Map<DanmuUserKey, RoomLiveDanmuUserStats> danmuUsers = new LinkedHashMap<>();
         Map<Integer, RoomLiveEvent> giftCatalogCandidates = new HashMap<>();
         long parseStartNs = System.nanoTime();
 
-        try (FileInputStream stream = new FileInputStream(xmlFile)) {
+        try (FileInputStream stream = new FileInputStream(xmlFile);
+             EventSpool batch = new EventSpool(createEventSpoolPath())) {
             giftCatalogService.syncRoomGiftCatalog(part.getRoomId(), false);
-            eventRepository.deleteByPartId(part.getId());
-            danmuUserStatsRepository.deleteByPartId(part.getId());
             SAXReader saxReader = new SAXReader(new DocumentFactory());
             try {
-                saxReader.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", false);
+                saxReader.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+                saxReader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+                saxReader.setFeature("http://xml.org/sax/features/external-general-entities", false);
+                saxReader.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+                saxReader.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
             } catch (Exception e) {
-                log.warn("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.DisableSecureFailed")
-                        .add("partId", part.getId())
-                        .add("filePath", xmlFile.getPath())
-                        .add("err", e.getMessage())
-                        .add("ex", e.getClass().getSimpleName()));
+                throw new IllegalStateException("无法启用 XML 安全解析限制", e);
             }
 
             saxReader.addHandler("/i/d", eventHandler(path -> {
@@ -221,6 +233,10 @@ public class RoomLiveEventParseService {
                 event.setGiftCount(defaultLong(parseLong(attr(element, "giftcount")), 1L));
                 enrichGift(event, attr(element, "raw"));
                 if (event.getGiftId() != null) {
+                    if (!giftCatalogCandidates.containsKey(event.getGiftId())
+                            && giftCatalogCandidates.size() >= Math.max(1, maxGiftCatalogTypes)) {
+                        throw new XmlResourceLimitException("礼物种类数量超过解析上限");
+                    }
                     giftCatalogCandidates.put(event.getGiftId(), event);
                 }
                 addEvent(batch, event, counter);
@@ -251,11 +267,6 @@ public class RoomLiveEventParseService {
             }));
 
             saxReader.read(stream);
-            flush(batch);
-            flushDanmuUsers(danmuUsers);
-            for (RoomLiveEvent event : giftCatalogCandidates.values()) {
-                upsertGiftCatalog(event);
-            }
 
             state.setXmlLastModified(lastModified);
             state.setXmlSize(size);
@@ -268,7 +279,19 @@ public class RoomLiveEventParseService {
             state.setErrorMessage(null);
             state.setParsedAt(now);
             state.setParserVersion(PARSER_VERSION);
-            parseStateRepository.save(state);
+            batch.flush();
+            parseCommitService.replacePartDataFromSpool(part.getId(), batch.path(),
+                    new ArrayList<>(danmuUsers.values()), state, commitBatchSize);
+            for (RoomLiveEvent event : giftCatalogCandidates.values()) {
+                try {
+                    upsertGiftCatalog(event);
+                } catch (Exception catalogError) {
+                    log.warn("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.GiftCatalogUpdateFailed")
+                            .add("partId", part.getId())
+                            .add("giftId", event.getGiftId())
+                            .addIfNotBlank("err", catalogError.getMessage()));
+                }
+            }
             xmlIssueService.clear(part.getId());
 
             log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.Saved")
@@ -337,6 +360,9 @@ public class RoomLiveEventParseService {
     }
 
     private RoomLiveEventXmlIssue.IssueType issueTypeFor(Exception error) {
+        if (hasCause(error, XmlResourceLimitException.class)) {
+            return RoomLiveEventXmlIssue.IssueType.RESOURCE_LIMIT;
+        }
         if (error instanceof org.dom4j.DocumentException) {
             return RoomLiveEventXmlIssue.IssueType.INVALID_XML;
         }
@@ -346,12 +372,25 @@ public class RoomLiveEventParseService {
         return RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR;
     }
 
+    private static boolean hasCause(Throwable error, Class<? extends Throwable> expected) {
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Throwable current = error;
+        while (current != null && visited.add(current)) {
+            if (expected.isInstance(current)) return true;
+            current = current.getCause();
+        }
+        return false;
+    }
+
     static String parseFailureEvent(RoomLiveEventXmlIssue.IssueType issueType) {
         if (issueType == RoomLiveEventXmlIssue.IssueType.INVALID_XML) {
             return "RoomLiveEvent.Parse.InvalidXml";
         }
         if (issueType == RoomLiveEventXmlIssue.IssueType.READ_FAILED) {
             return "RoomLiveEvent.Parse.ReadFailed";
+        }
+        if (issueType == RoomLiveEventXmlIssue.IssueType.RESOURCE_LIMIT) {
+            return "RoomLiveEvent.Parse.ResourceLimit";
         }
         return "RoomLiveEvent.Parse.InternalError";
     }
@@ -370,6 +409,41 @@ public class RoomLiveEventParseService {
 
     private static int lockIndex(Long partId) {
         return Math.floorMod(partId.hashCode(), PART_PARSE_LOCK_COUNT);
+    }
+
+    private Path createEventSpoolPath() throws IOException {
+        Path workRoot = Path.of(workPath == null || workPath.isBlank() ? "." : workPath)
+                .toAbsolutePath().normalize();
+        Files.createDirectories(workRoot);
+        return Files.createTempFile(workRoot, ".blr-room-events-", ".jsonl");
+    }
+
+    @Scheduled(fixedDelay = 3_600_000L, initialDelay = 60_000L)
+    public void cleanupStaleEventSpools() {
+        Path workRoot;
+        try {
+            workRoot = Path.of(workPath == null || workPath.isBlank() ? "." : workPath)
+                    .toAbsolutePath().normalize();
+            if (!Files.isDirectory(workRoot)) return;
+            long cutoff = System.currentTimeMillis() - java.time.Duration.ofHours(24).toMillis();
+            try (var files = Files.list(workRoot)) {
+                files.filter(path -> path.getFileName().toString().startsWith(".blr-room-events-"))
+                        .filter(path -> {
+                            try { return Files.getLastModifiedTime(path).toMillis() < cutoff; }
+                            catch (IOException ignored) { return false; }
+                        })
+                        .forEach(path -> {
+                            try { Files.deleteIfExists(path); }
+                            catch (IOException error) {
+                                log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SpoolCleanupFailed")
+                                        .add("filePath", path).addIfNotBlank("err", error.getMessage()));
+                            }
+                        });
+            }
+        } catch (Exception error) {
+            log.debug("[BLR] {}", LogKvs.event("RoomLiveEvent.Parse.SpoolCleanupFailed")
+                    .add("workPath", workPath).addIfNotBlank("err", error.getMessage()));
+        }
     }
 
     public int backfillMatureHistories(LocalDateTime endBefore, int limit) {
@@ -434,22 +508,12 @@ public class RoomLiveEventParseService {
         return event;
     }
 
-    private void addEvent(List<RoomLiveEvent> batch, RoomLiveEvent event, EventCounter counter) {
+    private void addEvent(EventSpool batch, RoomLiveEvent event, EventCounter counter) {
         if (event.getSendTime() != null && event.getSendTime() < 0) {
             return;
         }
         batch.add(event);
         counter.total++;
-        if (batch.size() >= BATCH_SIZE) {
-            flush(batch);
-        }
-    }
-
-    private void flush(List<RoomLiveEvent> batch) {
-        if (!batch.isEmpty()) {
-            eventRepository.saveAll(batch);
-            batch.clear();
-        }
     }
 
     private void addDanmuUserStats(Map<DanmuUserKey, RoomLiveDanmuUserStats> danmuUsers,
@@ -463,6 +527,9 @@ public class RoomLiveEventParseService {
             return;
         }
         DanmuUserKey key = new DanmuUserKey(uid, uname == null ? "" : uname);
+        if (!danmuUsers.containsKey(key) && danmuUsers.size() >= Math.max(1, maxDanmuUserStats)) {
+            throw new XmlResourceLimitException("不同弹幕用户数量超过解析上限");
+        }
         RoomLiveDanmuUserStats stats = danmuUsers.computeIfAbsent(key, ignored -> {
             RoomLiveDanmuUserStats value = new RoomLiveDanmuUserStats();
             value.setHistoryId(part.getHistoryId());
@@ -476,13 +543,6 @@ public class RoomLiveEventParseService {
             return value;
         });
         stats.setDanmuCount(stats.getDanmuCount() + 1);
-    }
-
-    private void flushDanmuUsers(Map<DanmuUserKey, RoomLiveDanmuUserStats> danmuUsers) {
-        if (!danmuUsers.isEmpty()) {
-            danmuUserStatsRepository.saveAll(danmuUsers.values());
-            danmuUsers.clear();
-        }
     }
 
     private Long danmuUid(Element element) {
@@ -639,6 +699,53 @@ public class RoomLiveEventParseService {
     }
 
     private record DanmuUserKey(Long uid, String uname) {
+    }
+
+    private static final class EventSpool implements AutoCloseable {
+        private final Path path;
+        private final BufferedWriter writer;
+
+        private EventSpool(Path path) throws IOException {
+            this.path = path;
+            try {
+                this.writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8);
+            } catch (IOException error) {
+                Files.deleteIfExists(path);
+                throw error;
+            }
+        }
+
+        private void add(RoomLiveEvent event) {
+            try {
+                writer.write(JSON.toJSONString(event));
+                writer.newLine();
+            } catch (IOException error) {
+                throw new IllegalStateException("写入 XML 解析暂存文件失败", error);
+            }
+        }
+
+        private void flush() throws IOException {
+            writer.flush();
+        }
+
+        private Path path() {
+            return path;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                writer.close();
+            } finally {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static final class XmlResourceLimitException extends RuntimeException {
+        private XmlResourceLimitException(String message) {
+            super(message);
+        }
     }
 
     public record ParseResult(boolean parsed, int count, String reason, RoomLiveEventXmlIssue.IssueType issueType) {

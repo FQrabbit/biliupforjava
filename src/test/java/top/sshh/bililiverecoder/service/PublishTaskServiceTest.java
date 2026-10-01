@@ -42,6 +42,7 @@ class PublishTaskServiceTest {
         history.setId(1L);
         history.setPublish(false);
         when(histories.findById(1L)).thenReturn(Optional.of(history));
+        when(histories.findByIdForUpdate(1L)).thenReturn(Optional.of(history));
         BiliBiliUser account = new BiliBiliUser();
         account.setId(10L);
         account.setLogin(true);
@@ -110,6 +111,29 @@ class PublishTaskServiceTest {
         assertFalse(result.isAccepted());
         assertTrue(result.getMessage().contains("原投稿账号"));
         assertTrue(stored.isEmpty());
+    }
+
+    @Test
+    void uploadAccountStaysBoundToAcceptedTaskOrOriginalPublishedAccount() {
+        PublishTask accepted = new PublishTask();
+        accepted.setId(500L);
+        accepted.setHistoryId(1L);
+        accepted.setAccountId(10L);
+        accepted.setOperation(PublishTaskOperation.NEW_PUBLISH);
+        accepted.setSource(PublishTaskSource.MANUAL);
+        accepted.setState(PublishTaskState.READY);
+        stored.add(accepted);
+
+        assertEquals(10L, service.resolveUploadAccountId(1L, 99L));
+
+        RecordHistory history = histories.findById(1L).orElseThrow();
+        history.setPublish(true);
+        history.setPublishUserId(77L);
+        assertEquals(77L, service.resolveUploadAccountId(1L, 99L));
+
+        stored.clear();
+        history.setPublishUserId(null);
+        assertEquals(null, service.resolveUploadAccountId(1L, 99L));
     }
 
     @Test

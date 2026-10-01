@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 @Service
 public class CaptchaService {
     public record ChallengeStatus(String requestId, String voucher, String filename,
-                                  Map<String, Object> extra, Long accountId, Long historyId,
+                                  Map<String, Object> extra, Long accountId, Long historyId, Long partId,
                                   String state, long expiresAtEpochMs, Long taskId, String stage) {}
 
     private static final class Challenge {
@@ -29,6 +29,7 @@ public class CaptchaService {
         final Consumer<Map<String, String>> onSubmit;
         final AtomicBoolean callbackRunning = new AtomicBoolean();
         final AtomicBoolean callbackCompleted = new AtomicBoolean();
+        final List<Runnable> submittedListeners = new ArrayList<>();
         volatile Map<String, String> result;
         volatile String state = "PENDING";
 
@@ -51,20 +52,27 @@ public class CaptchaService {
         setCaptchaRequired(voucher, filename, extraInfo, accountId, historyId, null, "UPLOAD");
     }
 
-    public synchronized void setCaptchaRequired(String voucher, String filename, Map<String, Object> extraInfo,
+    public synchronized String setCaptchaRequired(String voucher, String filename, Map<String, Object> extraInfo,
                                    Long accountId, Long historyId, Long taskId, String stage) {
-        Challenge existing = findActive(accountId, historyId, taskId, stage);
+        return setCaptchaRequiredForPart(voucher, filename, extraInfo, accountId, historyId, taskId, null, stage);
+    }
+
+    public synchronized String setCaptchaRequiredForPart(String voucher, String filename,
+                                   Map<String, Object> extraInfo, Long accountId, Long historyId,
+                                   Long taskId, Long partId, String stage) {
+        Challenge existing = findActive(accountId, historyId, taskId, partId, stage);
         if (existing != null) {
             currentRequestId.set(existing.status.requestId());
-            return;
+            return existing.status.requestId();
         }
         String requestId = UUID.randomUUID().toString();
         long expiresAt = System.currentTimeMillis() + CHALLENGE_TTL_MS;
         Challenge challenge = new Challenge(new ChallengeStatus(requestId, voucher, filename,
-                extraInfo == null ? Map.of() : new HashMap<>(extraInfo), accountId, historyId,
+                extraInfo == null ? Map.of() : new HashMap<>(extraInfo), accountId, historyId, partId,
                 "PENDING", expiresAt, taskId, stage), null);
         challenges.put(requestId, challenge);
         currentRequestId.set(requestId);
+        return requestId;
     }
 
     public String deferPublish(String voucher, String filename, Map<String, Object> extraInfo,
@@ -75,12 +83,12 @@ public class CaptchaService {
     public synchronized String deferPublish(String voucher, String filename, Map<String, Object> extraInfo,
                                Long accountId, Long historyId, Long taskId, String stage,
                                Consumer<Map<String, String>> onSubmit) {
-        Challenge existing = findActive(accountId, historyId, taskId, stage);
+        Challenge existing = findActive(accountId, historyId, taskId, null, stage);
         if (existing != null) return existing.status.requestId();
         String requestId = UUID.randomUUID().toString();
         long expiresAt = System.currentTimeMillis() + CHALLENGE_TTL_MS;
         challenges.put(requestId, new Challenge(new ChallengeStatus(requestId, voucher, filename,
-                extraInfo == null ? Map.of() : new HashMap<>(extraInfo), accountId, historyId,
+                extraInfo == null ? Map.of() : new HashMap<>(extraInfo), accountId, historyId, null,
                 "PENDING", expiresAt, taskId, stage), onSubmit));
         return requestId;
     }
@@ -196,10 +204,51 @@ public class CaptchaService {
         return null;
     }
 
+    public Map<String, String> consumeSubmittedAnswer(Long accountId, Long historyId, Long taskId, String stage) {
+        return consumeSubmittedAnswer(accountId, historyId, taskId, null, stage);
+    }
+
+    public Map<String, String> consumeSubmittedAnswer(Long accountId, Long historyId,
+                                                       Long taskId, Long partId, String stage) {
+        expireChallenges();
+        Challenge challenge = challenges.values().stream()
+                .filter(item -> java.util.Objects.equals(accountId, item.status.accountId())
+                        && java.util.Objects.equals(historyId, item.status.historyId())
+                        && java.util.Objects.equals(taskId, item.status.taskId())
+                        && java.util.Objects.equals(partId, item.status.partId())
+                        && java.util.Objects.equals(stage, item.status.stage())
+                        && "SUBMITTED".equals(item.state))
+                .max(Comparator.comparingLong(item -> item.status.expiresAtEpochMs())).orElse(null);
+        if (challenge == null) return Map.of();
+        synchronized (challenge) {
+            if (!"SUBMITTED".equals(challenge.state) || challenge.result == null) return Map.of();
+            Map<String, String> answer = new HashMap<>(challenge.result);
+            challenge.result = null;
+            challenge.state = "CONSUMED";
+            return answer;
+        }
+    }
+
+    public boolean whenSubmitted(String requestId, Runnable continuation) {
+        if (requestId == null || continuation == null) return false;
+        Challenge challenge = challenges.get(requestId);
+        if (challenge == null) return false;
+        boolean runNow;
+        synchronized (challenge) {
+            if (challenge.state.equals("CANCELLED") || challenge.state.equals("EXPIRED")
+                    || challenge.state.equals("CONSUMED")) return false;
+            runNow = challenge.state.equals("SUBMITTED") && challenge.result != null;
+            if (!runNow) challenge.submittedListeners.add(continuation);
+        }
+        if (runNow) continuation.run();
+        return true;
+    }
+
     public boolean submitCaptcha(String requestId, Map<String, String> result) {
         expireChallenges();
         Challenge challenge = challenges.get(requestId);
         if (challenge == null) return false;
+        List<Runnable> listeners = List.of();
         synchronized (challenge) {
             if (challenge.state.equals("CONSUMED")) return true;
             if (challenge.state.equals("CANCELLED") || challenge.state.equals("EXPIRED")) return false;
@@ -207,6 +256,17 @@ public class CaptchaService {
                 challenge.result = new HashMap<>(result == null ? Map.of() : result);
                 challenge.state = "SUBMITTED";
                 challenge.latch.countDown();
+                if (challenge.onSubmit == null && !challenge.submittedListeners.isEmpty()) {
+                    listeners = new ArrayList<>(challenge.submittedListeners);
+                    challenge.submittedListeners.clear();
+                }
+            }
+        }
+        for (Runnable listener : listeners) {
+            try {
+                listener.run();
+            } catch (RuntimeException error) {
+                log.error("Captcha continuation failed requestId={}", requestId, error);
             }
         }
         if (challenge.onSubmit == null || challenge.callbackCompleted.get()) return true;
@@ -256,14 +316,15 @@ public class CaptchaService {
                 .map(challenge -> challenge.status.requestId()).toList().forEach(this::cancel);
     }
 
-    private Challenge findActive(Long accountId, Long historyId, Long taskId, String stage) {
-        if (accountId == null && historyId == null && taskId == null) return null;
+    private Challenge findActive(Long accountId, Long historyId, Long taskId, Long partId, String stage) {
+        if (accountId == null && historyId == null && taskId == null && partId == null) return null;
         expireChallenges();
         return challenges.values().stream()
                 .filter(CaptchaService::isActive)
                 .filter(challenge -> java.util.Objects.equals(accountId, challenge.status.accountId())
                         && java.util.Objects.equals(historyId, challenge.status.historyId())
                         && java.util.Objects.equals(taskId, challenge.status.taskId())
+                        && java.util.Objects.equals(partId, challenge.status.partId())
                         && java.util.Objects.equals(stage, challenge.status.stage()))
                 .findFirst().orElse(null);
     }
@@ -295,7 +356,7 @@ public class CaptchaService {
     private static ChallengeStatus status(Challenge challenge) {
         ChallengeStatus original = challenge.status;
         return new ChallengeStatus(original.requestId(), original.voucher(), original.filename(), original.extra(),
-                original.accountId(), original.historyId(), challenge.state, original.expiresAtEpochMs(),
+                original.accountId(), original.historyId(), original.partId(), challenge.state, original.expiresAtEpochMs(),
                 original.taskId(), original.stage());
     }
 }

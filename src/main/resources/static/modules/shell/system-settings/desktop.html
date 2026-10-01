@@ -155,6 +155,22 @@
                 </el-tab-pane>
                 <el-tab-pane label="存储目录" name="storage">
                     <div class="storage-root-panel" v-loading="storageLoading">
+                        <div class="storage-path-check" style="padding:12px; margin-bottom:12px; border:1px solid var(--border-light); border-radius:8px">
+                            <strong>录播 Webhook 路径接入检查</strong>
+                            <p class="readable-table-meta">粘贴录播端发送的视频路径，检查本项目能否在已配置存储目录中找到它；此操作不会创建稿件或修改文件</p>
+                            <div style="display:flex; gap:8px; align-items:center">
+                                <el-input v-model="webhookPathInput" size="small" placeholder="粘贴录播端发送的完整路径"></el-input>
+                                <el-button size="small" type="primary" :loading="webhookPathChecking" :disabled="!webhookPathInput" @click="checkWebhookPath">检查路径</el-button>
+                            </div>
+                            <div v-if="webhookPathCheck" role="status" style="margin-top:8px">
+                                <el-tag size="mini" :type="webhookPathCheck.accepted ? 'success' : 'danger'">{{ webhookPathCheck.accepted ? '路径已接入' : '路径未接入' }}</el-tag>
+                                <div style="margin-top:6px">{{ webhookPathCheck.message }}</div>
+                                <div v-if="webhookPathCheck.resolvedPath" class="readable-table-meta">解析路径：{{ webhookPathCheck.resolvedPath }}</div>
+                                <div v-if="webhookPathCheck.matchedRootPath" class="readable-table-meta">匹配目录：{{ webhookPathCheck.matchedRootPath }}</div>
+                                <div v-if="webhookPathCheck.accepted" class="readable-table-meta">文件存在：{{ webhookPathCheck.exists ? '是' : '否' }}；普通文件：{{ webhookPathCheck.regularFile ? '是' : '否' }}；可读：{{ webhookPathCheck.readable ? '是' : '否' }}</div>
+                                <div v-if="webhookPathCheck.suggestion" style="margin-top:4px; color:var(--warning-color)">{{ webhookPathCheck.suggestion }}</div>
+                            </div>
+                        </div>
                         <div v-if="workPathChange && workPathChange.pending" class="storage-change-warning" role="alert">
                             <div>
                                 <strong><i class="el-icon-warning-outline"></i> 工作目录变更待确认</strong>

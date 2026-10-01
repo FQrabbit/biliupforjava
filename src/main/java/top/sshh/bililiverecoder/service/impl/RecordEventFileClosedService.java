@@ -173,7 +173,9 @@ public class RecordEventFileClosedService implements RecordEventService {
                 fileSize = eventData.getFileSize();
             }
             LocalDateTime startTime = part.getStartTime();
-            LocalDateTime endTime = LocalDateTime.now();
+            LocalDateTime endTime = eventData.getFileCloseTime() == null
+                    ? LocalDateTime.now()
+                    : LocalDateTime.ofInstant(eventData.getFileCloseTime().toInstant(), ZoneId.of("Asia/Shanghai"));
             long durationSeconds = 0L;
             if (startTime != null) {
                 try {
@@ -199,7 +201,8 @@ public class RecordEventFileClosedService implements RecordEventService {
             part = historyPartRepository.save(part);
             partFileLocationService.registerPrimary(part);
 
-            history.setFileSize(history.getFileSize() + part.getFileSize());
+            history.setFileSize(historyPartRepository.findByHistoryId(history.getId()).stream()
+                    .mapToLong(RecordHistoryPart::getFileSize).sum());
             history.setTitle(eventData.getTitle());
             // FileClosed 只代表一个分P完成，不能以 payload 中可能已过期的
             // recording/streaming 标志复活已由 SessionEnded 关闭的历史稿件
@@ -207,7 +210,9 @@ public class RecordEventFileClosedService implements RecordEventService {
                 history.setSessionId(sessionId);
             }
             history.setUpdateTime(LocalDateTime.now());
-            history.setEndTime(LocalDateTime.now());
+            if (history.getEndTime() == null || history.getEndTime().isBefore(endTime)) {
+                history.setEndTime(endTime);
+            }
             history = historyRepository.save(history);
             statsAggregationService.refreshHistoryStatsAsync(history.getId());
             if (!vidleFile.exists()) {

@@ -13,6 +13,9 @@
                 if (document.hidden) return;
                 if (self.isMultiSelectMode) return;
                 ticks++;
+                if (self.detailDialogVisible && self.currentDetail && self.currentDetail.id) {
+                    self.refreshPostPublishStatus(self.currentDetail.id);
+                }
                 var hasActivePublish = self.tableData.some(function(item) {
                     var tasks = item.publishTasks && item.publishTasks.length
                         ? item.publishTasks : (item.publishDispatch ? [item.publishDispatch] : []);
@@ -394,27 +397,28 @@
                 if (p.state === 'FAILED') return 'exception';
             }
 
-            const percent = this.calcOverallUploadPercent();
-            if (percent >= 90) return 'success';
-            if (percent >= 50) return 'warning';
+            if (this.getEffectiveDoneParts() >= total && this.getEffectiveUploadedParts() > 0) return 'success';
+            if (items.some(function(part) { return part.state === 'RETRY_WAIT' || part.state === 'PAUSED'; })) return 'warning';
             return null;
         },
         calcOverallUploadText: function() {
             const total = this.getEffectiveTotalParts();
-            const uploaded = this.getEffectiveDoneParts();
+            const uploaded = this.getEffectiveUploadedParts();
+            const done = this.getEffectiveDoneParts();
+            const skipped = Math.max(done - uploaded, 0);
+            const summary = '已上传：' + uploaded + '/' + total + (skipped ? '，已跳过：' + skipped : '');
             const active = this.getEffectiveActivePartCount();
-            const pending = Math.max(total - uploaded - active, 0);
+            const pending = Math.max(total - done - active, 0);
             if (total <= 0) {
                 return active > 0 ? ('上传中：' + active + ' 个分P') : '当前无上传中的分P';
             }
             if (active > 0) {
-                return ''
-                    + '已上传：' + uploaded + '/' + total + '，上传中：' + active + '，待上传：' + pending;
+                return summary + '，上传中：' + active + '，待上传：' + pending;
             }
-            if (uploaded >= total) {
-                return '已上传：' + uploaded + '/' + total + '（全部完成）';
+            if (done >= total) {
+                return summary + '（处理完成）';
             }
-            return '已上传：' + uploaded + '/' + total + '，当前无上传中的分P';
+            return summary + '，当前无上传中的分P';
         },
         progressTagType: function(state) {
             if (state === 'PAUSED') return 'warning';
@@ -444,9 +448,6 @@
             if (state === 'ISSUE') return 'exception';
             if (state === 'SKIPPED') return null;
 
-            const p = Math.min(Math.max(Number(percent) || 0, 0), 100);
-            if (p >= 90) return 'success';
-            if (p >= 50) return 'warning';
             return null;
         }
     };

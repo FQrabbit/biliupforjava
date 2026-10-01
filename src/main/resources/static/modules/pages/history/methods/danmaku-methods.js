@@ -13,12 +13,12 @@
             if (code === -50) return 'success';
             const pending = this.getDanmakuQueueCount(item);
             if (pending <= 0 && (item.roomSendSc !== true || item.sendReply)) return 'success';
-            return 'warning';
+            return 'processing';
         },
         getDanmakuStatusText: function(item) {
-            if (!item || !item.publish) return '待发布';
+            if (!item || !item.publish) return '待投稿';
             const code = Number(item.code);
-            if (code !== 0 && code !== -50) return '待发布';
+            if (code !== 0 && code !== -50) return [-1, -9, -30, -40].indexOf(code) >= 0 ? '待审核' : '暂停发送';
             // 仅自己可见稿件不会进入普通弹幕发送流程，直接判定完成
             if (code === -50) return '已完成';
             const pending = this.getDanmakuQueueCount(item);

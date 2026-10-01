@@ -8,8 +8,8 @@ return {
         { value: 'host', label: '主播 / 房间' },
         { value: 'file', label: '文件 / 时长' },
         { value: 'parts', label: '分P情况' },
-        { value: 'status', label: '录制状态' },
-        { value: 'publish', label: '上传 / 发布 / 审核' },
+        { value: 'status', label: '处理状态' },
+        { value: 'publish', label: '上传 / 投稿 / 审核' },
         { value: 'time', label: '开始时间' }
     ])],
     data: function () {
@@ -38,7 +38,8 @@ return {
         window.HistoryPageEditPartsMethods || {},
         window.HistoryPagePreviewMethods || {},
         window.HistoryPageUploadMethods || {},
-        window.HistoryPageRecordMethods || {}
+        window.HistoryPageRecordMethods || {},
+        window.HistoryPagePostPublishMethods || {}
     ),
     created: function created() {
         // setPageReady 由 initTable 成功回调中的 setConnectionStatus(false) 触发

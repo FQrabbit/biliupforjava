@@ -18,6 +18,7 @@ import top.sshh.bililiverecoder.repo.PartFileOperationRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.util.UploadProgressTracker;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -40,6 +41,8 @@ class PartFileOperationReviewGuardTest {
     @Mock private RecordHistoryPartRepository partRepository;
     @Mock private RecordHistoryRepository historyRepository;
     @Mock private RecordRoomRepository roomRepository;
+    @Mock private UploadUserSerialScheduler uploadScheduler;
+    @Mock private UploadProgressTracker uploadProgressTracker;
 
     private PartFileOperationService service;
 
@@ -51,6 +54,8 @@ class PartFileOperationReviewGuardTest {
         ReflectionTestUtils.setField(service, "partRepository", partRepository);
         ReflectionTestUtils.setField(service, "historyRepository", historyRepository);
         ReflectionTestUtils.setField(service, "roomRepository", roomRepository);
+        ReflectionTestUtils.setField(service, "uploadUserSerialScheduler", uploadScheduler);
+        ReflectionTestUtils.setField(service, "uploadProgressTracker", uploadProgressTracker);
     }
 
     @ParameterizedTest
@@ -115,5 +120,16 @@ class PartFileOperationReviewGuardTest {
         assertTrue(operation.getErrorMessage().contains("审核保护阻止执行"));
         verify(storage, never()).delete(any());
         verify(reviewService).checkForCleanup(history, room, round);
+    }
+
+    @org.junit.jupiter.api.Test
+    void bulkDeleteIsBlockedWhilePartWaitsInUploadQueue() {
+        when(uploadScheduler.hasPendingPartOutsideCurrentExecution(2L)).thenReturn(true);
+
+        List<String> failures = service.deleteAllAvailable(2L);
+
+        assertEquals(1, failures.size());
+        assertTrue(failures.get(0).contains("仍在账号上传队列中"));
+        verify(locationService, never()).findLocations(2L);
     }
 }

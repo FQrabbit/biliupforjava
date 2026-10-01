@@ -1,10 +1,16 @@
 package top.sshh.bililiverecoder.controller;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import top.sshh.bililiverecoder.entity.PartFileOperation;
 import top.sshh.bililiverecoder.entity.StorageRoot;
 import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.StorageRootService;
+import top.sshh.bililiverecoder.service.RecordPartPathService;
+import top.sshh.bililiverecoder.service.StorageRootChangeAssessmentService;
+import org.springframework.core.env.Environment;
+
+import java.nio.file.Path;
 
 import java.util.Map;
 
@@ -12,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class StorageRootControllerTest {
+
+    @TempDir
+    Path tempDir;
 
     private final StorageRootService rootService = mock(StorageRootService.class);
     private final PartFileOperationService operationService = mock(PartFileOperationService.class);
@@ -71,6 +80,42 @@ class StorageRootControllerTest {
 
         assertEquals(false, result.get("success"));
         assertEquals("storage root path is not readable", result.get("message"));
+    }
+
+    @Test
+    void webhookPathCheckReportsResolvedRootAndFileAvailability() {
+        Path rootPath = tempDir.resolve("record");
+        String resolvedPath = rootPath.resolve("part.mp4").toString();
+        StorageRoot root = root(4L, rootPath.toString());
+        RecordPartPathService paths = mock(RecordPartPathService.class);
+        when(paths.resolveWebhookPath("incoming/part.mp4")).thenReturn(resolvedPath);
+        when(rootService.matchTrustedRoot(Path.of(resolvedPath))).thenReturn(
+                java.util.Optional.of(new StorageRootService.RootMatch(root, "part.mp4", Path.of(resolvedPath))));
+        StorageRootController pathController = new StorageRootController(rootService, operationService,
+                mock(StorageRootChangeAssessmentService.class), mock(Environment.class), paths);
+
+        Map<String, Object> result = pathController.checkWebhookPath(Map.of("path", "incoming/part.mp4"));
+
+        assertEquals(true, result.get("success"));
+        assertEquals(true, result.get("accepted"));
+        assertEquals(resolvedPath, result.get("resolvedPath"));
+        assertEquals(4L, result.get("matchedRootId"));
+        assertEquals(false, result.get("exists"));
+    }
+
+    @Test
+    void webhookPathCheckExplainsPathsOutsideConfiguredRoots() {
+        RecordPartPathService paths = mock(RecordPartPathService.class);
+        when(paths.resolveWebhookPath("Z:/external/video.mp4"))
+                .thenThrow(new IllegalArgumentException("视频路径不在已配置的存储目录中"));
+        StorageRootController pathController = new StorageRootController(rootService, operationService,
+                mock(StorageRootChangeAssessmentService.class), mock(Environment.class), paths);
+
+        Map<String, Object> result = pathController.checkWebhookPath(Map.of("path", "Z:/external/video.mp4"));
+
+        assertEquals(false, result.get("success"));
+        assertEquals("视频路径不在已配置的存储目录中", result.get("message"));
+        assertTrue(String.valueOf(result.get("suggestion")).contains("挂载映射"));
     }
 
     private static StorageRoot root(Long id, String path) {

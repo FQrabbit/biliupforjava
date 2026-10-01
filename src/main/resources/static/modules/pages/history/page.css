@@ -1163,6 +1163,69 @@
 
 }
 
+.status-chip.info,
+[data-theme="dark"] .status-chip.info {
+    background: color-mix(in srgb, var(--primary-color) 14%, var(--bg-primary));
+    color: var(--primary-color);
+}
+
+.history-processing-records {
+    margin: 0 0 20px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.history-detail-config-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin: 0 0 14px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.history-task-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.history-task-actions .el-button + .el-button {
+    margin-left: 0;
+}
+
+.history-processing-records summary {
+    padding: 12px 14px;
+    cursor: pointer;
+}
+
+.history-processing-records summary:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.history-processing-records-body {
+    padding: 0 14px 12px;
+}
+
+.history-processing-record + .history-processing-record {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-light);
+}
+
+.history-processing-record p {
+    margin: 5px 0 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .status-chip.warn {
 
     background: var(--warning-soft-bg);
