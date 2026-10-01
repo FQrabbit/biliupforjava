@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -24,6 +26,9 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 在 Hibernate 创建 EntityManagerFactory 前完成数据库兼容升级，重复执行也不会重复修改
@@ -116,6 +121,7 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     && migrationPending(connection, "20260928_05", "稿件删除恢复与单实例租约", DELETE_AND_INSTANCE_SIGNATURE)) {
                 backupExistingFileDatabase(connection);
             }
+            log.info("正在检查并升级数据库结构……");
             ensureMigrationTable();
             applyMigration(connection, "20260928_01", "历史数据库兼容修复", LEGACY_SIGNATURE,
                     () -> applyLegacyCompatibility(connection, h2));
@@ -130,7 +136,7 @@ public class DatabaseMigrationInitializer implements InitializingBean {
             applyMigration(connection, "20260928_06", "删除任务安全取消标记", "history-deletion-cancel-fence-v1",
                     () -> applyHistoryDeletionCancellationSchema(connection));
             validateRequiredSchema(connection);
-            log.info("Database compatibility migrations completed for {}", product);
+            log.info("数据库检查与升级完成，继续启动。数据库类型：{}", product);
         } catch (Exception e) {
             log.error("Database compatibility migration failed; application startup is blocked", e);
             throw new BeanCreationException("databaseMigrationInitializer",
@@ -144,12 +150,24 @@ public class DatabaseMigrationInitializer implements InitializingBean {
         if (url == null || url.toLowerCase(Locale.ROOT).contains(":mem:")) return;
         if (!hasApplicationTables(connection.getMetaData(), connection)) return;
         File backupDir = new File(workPath == null || workPath.isBlank() ? "." : workPath, "backup");
-        Files.createDirectories(backupDir.toPath());
         String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
-        String path = new File(backupDir, "biliupforjava-DBbackup-" + stamp + ".zip")
-                .getAbsolutePath().replace("\\", "/").replace("'", "''");
-        jdbc.execute("BACKUP TO '" + path + "'");
-        log.info("Created pre-migration H2 backup at {}", path);
+        Path backupPath = new File(backupDir, "biliupforjava-DBbackup-" + stamp + ".zip")
+                .toPath().toAbsolutePath();
+        long startedAt = System.nanoTime();
+        log.info("正在备份数据库，完成后将继续启动，请勿关闭程序。备份位置：{}", backupPath);
+        try {
+            Files.createDirectories(backupDir.toPath());
+            try (BackupProgress progress = new BackupProgress(backupPath, startedAt)) {
+                String sqlPath = backupPath.toString().replace("\\", "/").replace("'", "''");
+                jdbc.execute("BACKUP TO '" + sqlPath + "'");
+            }
+        } catch (Exception e) {
+            log.error("数据库备份失败，启动已中止：已耗时 {} 秒，备份位置：{}，失败原因：{}",
+                    elapsedSeconds(startedAt), backupPath, e.getMessage());
+            throw e;
+        }
+        log.info("数据库备份完成：耗时 {} 秒，备份大小 {}，备份位置：{}",
+                elapsedSeconds(startedAt), backupSize(backupPath), backupPath);
         File[] backups = backupDir.listFiles((dir, name) -> name.startsWith("biliupforjava-DBbackup-")
                 && name.endsWith(".zip"));
         if (backups != null && backups.length > 10) {
@@ -161,6 +179,46 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     log.warn("Could not remove old H2 backup {}: {}", backups[i].getName(), e.getMessage());
                 }
             }
+        }
+    }
+
+    private static long elapsedSeconds(long startedAt) {
+        return TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - startedAt);
+    }
+
+    private static String backupSize(Path backupPath) {
+        try {
+            if (!Files.exists(backupPath)) return "0.00 MB（等待备份文件写入）";
+            return String.format(Locale.ROOT, "%.2f MB", Files.size(backupPath) / (1024.0 * 1024.0));
+        } catch (IOException | SecurityException e) {
+            return "暂无法读取（等待备份完成）";
+        }
+    }
+
+    /** 仅报告备份状态；实际备份仍在启动线程同步执行，完成后才能迁移。 */
+    private static final class BackupProgress implements AutoCloseable {
+        private final ScheduledExecutorService executor;
+        private boolean closed;
+
+        private BackupProgress(Path backupPath, long startedAt) {
+            executor = Executors.newSingleThreadScheduledExecutor(task -> {
+                Thread thread = new Thread(task, "database-backup-progress");
+                thread.setDaemon(true);
+                return thread;
+            });
+            executor.scheduleWithFixedDelay(() -> report(backupPath, startedAt), 5, 5, TimeUnit.SECONDS);
+        }
+
+        private synchronized void report(Path backupPath, long startedAt) {
+            if (closed) return;
+            log.info("数据库备份进行中：已耗时 {} 秒，备份文件已写入 {}",
+                    elapsedSeconds(startedAt), backupSize(backupPath));
+        }
+
+        @Override
+        public synchronized void close() {
+            closed = true;
+            executor.shutdownNow();
         }
     }
 

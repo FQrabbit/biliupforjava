@@ -1,9 +1,14 @@
 package top.sshh.bililiverecoder.config.db;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.AppenderBase;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
@@ -13,13 +18,21 @@ import org.h2.jdbcx.JdbcDataSource;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
+import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DatabaseMigrationInitializerTest {
@@ -196,6 +209,7 @@ class DatabaseMigrationInitializerTest {
         dataSource.setUser("sa");
         dataSource.setPassword("");
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        MigrationLogCapture logs = new MigrationLogCapture();
         try {
             jdbc.execute("CREATE TABLE app_probe (id BIGINT PRIMARY KEY)");
             jdbc.execute("CREATE TABLE record_history (id BIGINT PRIMARY KEY)");
@@ -206,15 +220,109 @@ class DatabaseMigrationInitializerTest {
 
             Path backupDir = workPath.resolve("backup");
             assertEquals(1, countBackups(backupDir));
+            assertTrue(logs.messages.get(0).startsWith("正在备份数据库，完成后将继续启动，请勿关闭程序。备份位置："));
+            assertTrue(logs.messages.get(0).contains(backupDir.toString()));
+            int backupCompleted = logs.indexOf("数据库备份完成：耗时 ");
+            int migrationStarted = logs.indexOf("正在检查并升级数据库结构");
+            int migrationCompleted = logs.indexOf("数据库检查与升级完成，继续启动");
+            assertTrue(backupCompleted > 0);
+            assertTrue(logs.messages.get(backupCompleted).contains(" MB"));
+            assertTrue(migrationStarted > backupCompleted);
+            assertTrue(migrationCompleted > migrationStarted);
+            assertEquals(-1, logs.indexOf("数据库备份进行中"));
+            logs.messages.clear();
             initializer.afterPropertiesSet();
             assertEquals(1, countBackups(backupDir));
+            assertEquals(-1, logs.indexOf("正在备份数据库"));
         } finally {
+            logs.close();
             try { jdbc.execute("SHUTDOWN"); } catch (RuntimeException ignored) { }
             try (var paths = Files.walk(root)) {
                 paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
                     try { Files.deleteIfExists(path); } catch (Exception ignored) { }
                 });
             }
+        }
+    }
+
+    @Test
+    void slowFailedBackupReportsProgressAndStopsBeforeMigration() throws Exception {
+        Path root = Files.createTempDirectory("biliup-db-backup-progress-");
+        // 同时验证路径中的单引号会正确用于 SQL，但日志仍显示原始路径。
+        Path workPath = root.resolve("work'path");
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:file:" + root.resolve("legacy-db").toString().replace("\\", "/"));
+        dataSource.setUser("sa");
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        MigrationLogCapture logs = new MigrationLogCapture();
+        try {
+            jdbc.execute("CREATE TABLE record_history (id BIGINT PRIMARY KEY)");
+            JdbcTemplate slowBackupJdbc = spy(jdbc);
+            doAnswer(invocation -> {
+                String sql = invocation.getArgument(0);
+                String sqlPath = sql.substring("BACKUP TO '".length(), sql.length() - 1).replace("''", "'");
+                Files.write(Path.of(sqlPath), new byte[1024 * 1024]);
+                assertTrue(logs.progressReported.await(10, TimeUnit.SECONDS), "Long backups should report progress");
+                throw new DataAccessResourceFailureException("模拟备份写入失败");
+            }).when(slowBackupJdbc).execute(startsWith("BACKUP TO '"));
+            DatabaseMigrationInitializer initializer = new DatabaseMigrationInitializer(dataSource, slowBackupJdbc,
+                    workPath.toString());
+
+            BeanCreationException error = assertThrows(BeanCreationException.class, initializer::afterPropertiesSet);
+
+            assertTrue(error.getCause() instanceof DataAccessResourceFailureException);
+            String progress = logs.messages.get(logs.indexOf("数据库备份进行中"));
+            assertTrue(progress.contains("已耗时 "));
+            assertTrue(progress.contains("备份文件已写入 1.00 MB"));
+            int failed = logs.indexOf("数据库备份失败，启动已中止");
+            assertTrue(failed > logs.indexOf("数据库备份进行中"));
+            assertTrue(logs.messages.get(failed).contains("模拟备份写入失败"));
+            assertTrue(logs.messages.get(failed).contains(workPath.toString()));
+            assertEquals(-1, logs.indexOf("数据库备份完成"));
+            assertEquals(-1, logs.indexOf("正在检查并升级数据库结构"));
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
+                    + "WHERE UPPER(TABLE_NAME)='APP_SCHEMA_MIGRATION'", Integer.class));
+            logs.progressThread.join(2000);
+            assertFalse(logs.progressThread.isAlive(), "Progress reporting must stop when backup fails");
+        } finally {
+            logs.close();
+            try { jdbc.execute("SHUTDOWN"); } catch (RuntimeException ignored) { }
+            deleteTree(root);
+        }
+    }
+
+    private static final class MigrationLogCapture extends AppenderBase<ILoggingEvent> implements AutoCloseable {
+        private final Logger logger = (Logger) LoggerFactory.getLogger(DatabaseMigrationInitializer.class);
+        private final List<String> messages = new CopyOnWriteArrayList<>();
+        private final CountDownLatch progressReported = new CountDownLatch(1);
+        private volatile Thread progressThread;
+
+        private MigrationLogCapture() {
+            start();
+            logger.addAppender(this);
+        }
+
+        @Override
+        protected void append(ILoggingEvent event) {
+            String message = event.getFormattedMessage();
+            messages.add(message);
+            if (message.startsWith("数据库备份进行中")) {
+                progressThread = Thread.currentThread();
+                progressReported.countDown();
+            }
+        }
+
+        private int indexOf(String prefix) {
+            for (int i = 0; i < messages.size(); i++) {
+                if (messages.get(i).startsWith(prefix)) return i;
+            }
+            return -1;
+        }
+
+        @Override
+        public void close() {
+            logger.detachAppender(this);
+            stop();
         }
     }
 
