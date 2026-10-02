@@ -151,6 +151,10 @@ public class RecordBiliPublishService {
     private RoomLiveEventXmlIssueService xmlIssueService;
 
     public boolean asyncPublishRecordHistory(RecordHistory history) {
+        return asyncPublishRecordHistory(history, PublishTaskSource.AUTOMATIC);
+    }
+
+    public boolean asyncPublishRecordHistory(RecordHistory history, PublishTaskSource source) {
         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
             return false;
         }
@@ -160,7 +164,8 @@ public class RecordBiliPublishService {
         if (hasOnlineIdentity(history)) {
             return publishAccountScheduler.enqueueEdit(accountId, history.getId());
         } else {
-            return publishAccountScheduler.enqueue(accountId, history.getId());
+            return publishAccountScheduler.accept(accountId, history.getId(), PublishTaskOperation.NEW_PUBLISH,
+                    source, null).isAccepted();
         }
     }
 
@@ -1897,7 +1902,8 @@ public class RecordBiliPublishService {
                     RecordHistory latestHistory = historyRepository.findById(history.getId()).orElse(null);
                     if (latestHistory == null || latestHistory.isDeletePending() || latestHistory.isForceArchived()) return false;
                     PublishReadinessService.Check finalReadiness =
-                            publishReadinessService.check(latestHistory);
+                            PublishReadinessService.allowManualMerge(publishReadinessService.check(latestHistory),
+                                    publishAccountScheduler.isCurrentTaskManualForHistory(latestHistory.getId()));
                     if (!finalReadiness.allowed()) {
                         throw new PublishReadinessService.Deferred(finalReadiness);
                     }

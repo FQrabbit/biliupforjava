@@ -66,6 +66,11 @@ public class PublishReadinessService {
                 || (history.getAvId() != null && !history.getAvId().isBlank());
     }
 
+    // 手动投稿只跳过合并等待，录制中和结束时间不明仍然要等
+    public static Check allowManualMerge(Check check, boolean manual) {
+        return manual && "MERGE_INTERVAL".equals(check.reason()) ? Check.ready() : check;
+    }
+
     public record Check(boolean allowed, String reason, String message, LocalDateTime earliestAt) {
         public static Check ready() { return new Check(true, null, null, null); }
     }

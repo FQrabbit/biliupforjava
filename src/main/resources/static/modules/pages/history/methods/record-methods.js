@@ -52,7 +52,7 @@
         retryPublishTask: function(task) {
             if (!task || this.isPublishTaskActionLoading(task) || !this.ensureHistoryActionAllowed(task.historyId)) return;
             var wait = this.getHistoryPublishWaitText(this.findHistoryForAction(task.historyId));
-            if (wait) { this.$message.warning(wait); return; }
+            if (wait && this.getHistoryPublishWaitReason(this.findHistoryForAction(task.historyId)) !== 'MERGE_INTERVAL') { this.$message.warning(wait); return; }
             var self = this;
             var unknown = this.requiresPublishTaskVerification(task);
             var captchaRetry = task.waitReason === 'CAPTCHA_AUTO_RETRY';
@@ -66,7 +66,7 @@
             }).then(function() {
                 if (!self.ensureHistoryActionAllowed(task.historyId)) return;
                 var wait = self.getHistoryPublishWaitText(self.findHistoryForAction(task.historyId));
-                if (wait) { self.$message.warning(wait); return; }
+                if (wait && self.getHistoryPublishWaitReason(self.findHistoryForAction(task.historyId)) !== 'MERGE_INTERVAL') { self.$message.warning(wait); return; }
                 self.publishTaskActionId = task.taskId;
                 HistoryApi.retryPublishTask(task.taskId, unknown, function(data) {
                     self.publishTaskActionId = null;
@@ -100,7 +100,7 @@
             var self = this;
             [this.findHistoryForAction(id), this.currentDetail].forEach(function(item) {
                 if (!item || Number(item.id) !== Number(id)) return;
-                ['publishWaitReason', 'publishNotBefore'].forEach(function(key) {
+                ['publishWaitReason', 'publishNotBefore', 'waitingForPublish'].forEach(function(key) {
                     if (Object.prototype.hasOwnProperty.call(data, key)) self.$set(item, key, data[key]);
                 });
             });
@@ -420,8 +420,11 @@
             var reason = this.getHistoryPublishDisabledReason(item);
             if (reason) { this.$message.warning(reason); return; }
             var task = this.getMainPublishTask(item);
-            if (task) { this.retryPublishTask(task); return; }
-            this.$pageConfirm('受理后按账号队列顺序处理，仍需等待分P上传、账号冷却、验证码及全局限制。是否加入投稿队列？', '加入投稿队列', {
+            var skipMerge = this.canSkipHistoryMergeWait(item);
+            if (task && !skipMerge) { this.retryPublishTask(task); return; }
+            var message = (skipMerge ? '将跳过本次短时开播合并等待，提前进入投稿队列。' : '')
+                + '受理后按账号队列顺序处理，仍需等待分P上传、账号冷却、验证码及全局限制。是否加入投稿队列？';
+            this.$pageConfirm(message, skipMerge ? '立即投稿' : '加入投稿队列', {
                 confirmButtonText: '加入队列', cancelButtonText: '取消', type: 'info'
             }).then(function() {
                 var current = self.findHistoryForAction(id);

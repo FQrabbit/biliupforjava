@@ -1471,7 +1471,8 @@ public class HistoryController {
                 result.put("msg", "稿件已强制归档，请先恢复处理");
                 return result;
             }
-            PublishReadinessService.Check check = publishReadinessService.check(history);
+            PublishReadinessService.Check check = PublishReadinessService.allowManualMerge(
+                    publishReadinessService.check(history), true);
             if (!check.allowed()) {
                 result.put("accepted", false);
                 result.put("type", "warning");
@@ -1493,8 +1494,14 @@ public class HistoryController {
             }
             history.setUploadRetryCount(0);
             history = historyRepository.save(history);
-            boolean queued = publishService.asyncPublishRecordHistory(history);
+            boolean queued = publishService.asyncPublishRecordHistory(history, PublishTaskSource.MANUAL);
             fillPublishRequestResult(result, history, queued);
+            result.put("accepted", queued);
+            if (queued) {
+                result.put("publishWaitReason", null);
+                result.put("publishNotBefore", null);
+                result.put("waitingForPublish", false);
+            }
             log.info("[BLR] {}", LogKvs.event("History.TouchPublish.Success")
                     .add("historyId", id)
                     .add("roomId", history.getRoomId())

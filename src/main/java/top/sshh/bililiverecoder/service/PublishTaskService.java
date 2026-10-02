@@ -82,6 +82,25 @@ public class PublishTaskService {
                         && !sameJson(existing.getRequestSnapshot(), snapshot)) {
                     return Admission.rejected("已有分P编辑任务使用不同请求内容，请等待结束后重试");
                 }
+                if (operation == PublishTaskOperation.NEW_PUBLISH && source == PublishTaskSource.MANUAL
+                        && existing.getState() != PublishTaskState.SUBMITTING
+                        && existing.getState() != PublishTaskState.VERIFYING
+                        && (existing.getSource() != PublishTaskSource.MANUAL
+                        || (existing.getState() == PublishTaskState.WAITING_UPLOAD
+                        && "MERGE_INTERVAL".equals(existing.getWaitReason())))
+                        && PublishReadinessService.allowManualMerge(readiness.check(history), true).allowed()) {
+                    // 复用原任务并保留入队时间，只解除合并等待，不解除账号和验证码限制
+                    existing.setSource(PublishTaskSource.MANUAL);
+                    if (existing.getState() == PublishTaskState.WAITING_UPLOAD
+                            && "MERGE_INTERVAL".equals(existing.getWaitReason())) {
+                        existing.setState(PublishTaskState.READY);
+                        existing.setWaitReason(null);
+                        existing.setNextAttemptAt(null);
+                        existing.setResultMessage("用户请求跳过合并等待，按原入队顺序处理");
+                    }
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    existing = tasks.save(existing);
+                }
                 return Admission.duplicate(existing);
             }
             if (operation != PublishTaskOperation.HIGH_ENERGY && !ordinary.isEmpty()) {
@@ -93,7 +112,8 @@ public class PublishTaskService {
             }
 
             if (operation != PublishTaskOperation.HIGH_ENERGY) {
-                PublishReadinessService.Check check = readiness.check(history);
+                PublishReadinessService.Check check = PublishReadinessService.allowManualMerge(
+                        readiness.check(history), source == PublishTaskSource.MANUAL);
                 if (!check.allowed()) return Admission.rejected(check.message());
             }
 
@@ -233,6 +253,7 @@ public class PublishTaskService {
                 || "SUBMISSION_ID_MISMATCH".equals(task.getWaitReason()));
         boolean resetCaptchaRetryCycle = task.getWaitReason() != null
                 && task.getWaitReason().startsWith("CAPTCHA_");
+        task.setSource(PublishTaskSource.MANUAL);
         task.setState(PublishTaskState.READY);
         task.setWaitReason(null);
         task.setResultMessage(confirmedNotSubmitted

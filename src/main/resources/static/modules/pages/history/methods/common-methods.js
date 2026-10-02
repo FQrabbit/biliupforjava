@@ -95,8 +95,8 @@
             if (task && task.state === 'WAITING_CAPTCHA') return '等待验证码';
             var wait = this.getHistoryPublishWaitReason(item);
             if (wait === 'RECORDING') return '录制中，暂不能投稿';
-            if (wait === 'MERGE_INTERVAL') return '等待合并';
-            if (wait) return '等待确认录制结束';
+            if (wait === 'MERGE_INTERVAL' && this.canSkipHistoryMergeWait(item)) return '立即投稿';
+            if (wait && wait !== 'MERGE_INTERVAL') return '等待确认录制结束';
             if (task && this.canRetryPublishTask(task)) return '重试投稿';
             return task ? '已在投稿队列' : '加入投稿队列';
         },
@@ -113,10 +113,16 @@
             var task = this.getMainPublishTask(item);
             if (task && this.requiresPublishTaskVerification(task)) return '请在投稿任务中核对线上结果，避免重复投稿';
             var wait = this.getHistoryPublishWaitText(item);
-            if (wait) return wait;
+            if (wait && this.getHistoryPublishWaitReason(item) !== 'MERGE_INTERVAL') return wait;
+            if (this.canSkipHistoryMergeWait(item)) return '';
             if (task && !this.canRetryPublishTask(task)) return '任务已受理，进度及等待原因见投稿任务';
             if (item && item.publish && !task) return '稿件已投稿，修改分P请使用编辑分P';
             return '';
+        },
+        canSkipHistoryMergeWait: function(item) {
+            if (this.getHistoryPublishWaitReason(item) !== 'MERGE_INTERVAL') return false;
+            var task = this.getMainPublishTask(item);
+            return !task || (task.state === 'WAITING_UPLOAD' && task.waitReason === 'MERGE_INTERVAL');
         },
         getHistoryPublishWaitReason: function(item) {
             if (!item || item.publish || item.bvId || item.avId) return '';

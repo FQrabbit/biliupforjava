@@ -42,6 +42,43 @@ import static org.mockito.Mockito.when;
 
 class PublishAccountSchedulerTest {
     @Test
+    void manualSubmissionBypassesMergeAtPreparationAndFinalCheck() throws Exception {
+        try (Fixture fixture = new Fixture(1)) {
+            RecordHistory history = fixture.addHistory(1L, 10L);
+            when(fixture.readiness.check(history)).thenReturn(
+                    new PublishReadinessService.Check(false, "MERGE_INTERVAL", "等待合并", LocalDateTime.now().plusMinutes(10)));
+            CountDownLatch published = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                assertTrue(fixture.scheduler.isCurrentTaskManualForHistory(1L));
+                org.junit.jupiter.api.Assertions.assertFalse(fixture.scheduler.isCurrentTaskManualForHistory(2L));
+                published.countDown();
+                return true;
+            }).when(fixture.publisher).publishRecordHistory(history);
+            fixture.scheduler.accept(10L, 1L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+            assertTrue(published.await(2, TimeUnit.SECONDS));
+            org.junit.jupiter.api.Assertions.assertFalse(fixture.scheduler.isCurrentTaskManualForHistory(1L));
+        }
+    }
+
+    @Test
+    void manualMergeOverrideStillWaitsForUploadAndDoesNotConsumeSubmitInterval() throws Exception {
+        try (Fixture fixture = new Fixture(1)) {
+            RecordHistory history = fixture.addHistory(1L, 10L);
+            when(fixture.readiness.check(history)).thenReturn(
+                    new PublishReadinessService.Check(false, "MERGE_INTERVAL", "等待合并", LocalDateTime.now().plusMinutes(10)));
+            CountDownLatch waiting = new CountDownLatch(1);
+            when(fixture.publisher.preparePublishTask(1L, 10L)).thenAnswer(invocation -> {
+                waiting.countDown();
+                return new RecordBiliPublishService.PreparationResult(false, false, "等待上传", LocalDateTime.now().plusSeconds(30));
+            });
+            fixture.scheduler.accept(10L, 1L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+            assertTrue(waiting.await(2, TimeUnit.SECONDS));
+            verify(fixture.publisher, never()).publishRecordHistory(history);
+            verify(fixture.cooldowns, never()).recordSubmissionFinished(10L);
+        }
+    }
+
+    @Test
     void mergeWaitingAllowsReadyTaskOnSameAccountToProceed() throws Exception {
         try (Fixture fixture = new Fixture(1)) {
             RecordHistory waiting = fixture.addHistory(1L, 10L);
@@ -71,7 +108,7 @@ class PublishAccountSchedulerTest {
                         checked.countDown();
                         return new PublishReadinessService.Check(false, "RECORDING", "重新开播，等待录制结束", null);
                     });
-            fixture.scheduler.enqueue(10L, 1L);
+            fixture.scheduler.accept(10L, 1L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
             assertTrue(checked.await(2, TimeUnit.SECONDS));
             verify(fixture.publisher, never()).publishRecordHistory(history);
             verify(fixture.cooldowns, never()).recordSubmissionFinished(10L);

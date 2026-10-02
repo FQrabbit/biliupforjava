@@ -419,6 +419,13 @@ public class PublishAccountScheduler {
 
     public Long currentTaskId() { return currentTaskId.get(); }
 
+    public boolean isCurrentTaskManualForHistory(Long historyId) {
+        Long id = currentTaskId.get();
+        PublishTask task = id == null ? null : tasks.get(id);
+        return task != null && java.util.Objects.equals(task.getHistoryId(), historyId)
+                && task.getSource() == PublishTaskSource.MANUAL;
+    }
+
     public PublishTask retry(Long id, boolean confirmedNotSubmitted) {
         PublishTask task = tasks.retry(id, confirmedNotSubmitted);
         if (task != null) wakeAccount(task.getAccountId());
@@ -880,7 +887,9 @@ public class PublishAccountScheduler {
     }
 
     private boolean waitForRecordingOrMerge(Long taskId, RecordHistory history) {
-        PublishReadinessService.Check check = readiness.check(history);
+        PublishTask task = tasks.get(taskId);
+        PublishReadinessService.Check check = PublishReadinessService.allowManualMerge(
+                readiness.check(history), task != null && task.getSource() == PublishTaskSource.MANUAL);
         if (check.allowed()) return false;
         transitionPreparing(taskId, PublishTaskState.WAITING_UPLOAD, check.reason(), check.message(),
                 check.earliestAt() == null ? LocalDateTime.now().plusSeconds(30) : check.earliestAt());
@@ -1101,7 +1110,8 @@ public class PublishAccountScheduler {
             RecordHistory latest = histories.findById(history.getId()).orElse(history);
             if (!success && task.getOperation() != PublishTaskOperation.HIGH_ENERGY
                     && !latest.isPublish() && !captchas.hasPendingForHistory(history.getId())) {
-                PublishReadinessService.Check check = readiness.check(latest);
+                PublishReadinessService.Check check = PublishReadinessService.allowManualMerge(
+                        readiness.check(latest), isCurrentTaskManualForHistory(latest.getId()));
                 if (!check.allowed()) {
                     tasks.setState(taskId, PublishTaskState.WAITING_UPLOAD, check.reason(), check.message(),
                             check.earliestAt() == null ? LocalDateTime.now().plusSeconds(30) : check.earliestAt());

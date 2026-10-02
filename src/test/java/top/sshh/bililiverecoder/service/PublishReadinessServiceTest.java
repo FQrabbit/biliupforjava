@@ -90,6 +90,22 @@ class PublishReadinessServiceTest {
     }
 
     @Test
+    void manualSubmissionOnlySkipsMergeAndStillChecksResumedRecording() {
+        RecordHistory history = history();
+        history.setEndTime(now.minusMinutes(2));
+        var waiting = service.check(history, 0, null, Map.of(), now);
+        assertFalse(PublishReadinessService.allowManualMerge(waiting, false).allowed());
+        assertTrue(PublishReadinessService.allowManualMerge(waiting, true).allowed());
+        history.setStreaming(true);
+        assertEquals("RECORDING", PublishReadinessService.allowManualMerge(
+                service.check(history, 0, null, Map.of(), now), true).reason());
+        history.setStreaming(false);
+        history.setEndTime(null);
+        assertEquals("RECORDING_END_UNKNOWN", PublishReadinessService.allowManualMerge(
+                service.check(history, 0, null, Map.of(), now), true).reason());
+    }
+
+    @Test
     void configurationKeepsDefaultAndBounds() {
         assertEquals(20, PublishReadinessService.mergeIntervalMinutes(Map.of()));
         assertEquals(20, PublishReadinessService.mergeIntervalMinutes(Map.of(SystemConfigService.KEY_MERGE_INTERVAL_MINUTES, "bad")));

@@ -7,9 +7,9 @@ const vm = require('node:vm');
 const base = path.resolve(__dirname, '../../main/resources/static/modules/pages/history');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-test('录制中和分P切换期间不受理手动投稿，合并等待显示最早时间', async () => {
+test('录制中仍拦截手动投稿，合并等待可以提前入队', async () => {
     let requests = 0;
-    const model = setup({ touchPublish() { requests++; } });
+    const model = setup({ touchPublish(id, callback) { requests++; callback({ accepted: true, publishWaitReason: null, waitingForPublish: false, publishDispatch: { taskId: 8, historyId: id, operation: 'NEW_PUBLISH', state: 'READY' } }); } });
     model.formatDateTime = value => value;
     model.currentDetail.recordPartCount = 1;
     assert.equal(model.getHistoryPublishActionText(model.currentDetail), '录制中，暂不能投稿');
@@ -20,14 +20,15 @@ test('录制中和分P切换期间不受理手动投稿，合并等待显示最�
     model.currentDetail.streaming = false;
     model.currentDetail.publishWaitReason = 'MERGE_INTERVAL';
     model.currentDetail.publishNotBefore = '2026-10-02 04:20:00';
-    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '等待合并');
-    assert.match(model.getHistoryPublishDisabledReason(model.currentDetail), /04:20:00/);
+    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '立即投稿');
+    assert.match(model.getHistoryPublishWaitText(model.currentDetail), /04:20:00/);
+    assert.equal(model.getHistoryPublishDisabledReason(model.currentDetail), '');
     model.touchPublish(7);
     await flush();
-    assert.equal(requests, 0);
+    assert.equal(requests, 1);
     model.currentDetail.publishWaitReason = null;
     model.currentDetail.publishNotBefore = null;
-    assert.equal(model.getHistoryPublishDisabledReason(model.currentDetail), '');
+    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '已在投稿队列');
 });
 
 test('确认期间重新开播会拦截投稿，后端拒绝会立即更新等待提示', async () => {
@@ -265,4 +266,40 @@ test('批量放弃发送跳过无效稿件，确认后所有队列已完成就�
     model.handleAbandonQueueConfirm();
     await flush();
     assert.equal(calls, 0);
+});
+
+
+test('已在合并等待的自动任务复用原任务受理，重复点击不会增加请求', async () => {
+    let calls = 0, finish, confirmation;
+    const model = setup({ touchPublish(id, callback) { calls++; finish = callback; } });
+    Object.assign(model.currentDetail, { publishWaitReason: 'MERGE_INTERVAL', waitingForPublish: true,
+        publishTasks: [{ taskId: 8, historyId: 7, operation: 'NEW_PUBLISH', state: 'WAITING_UPLOAD', waitReason: 'MERGE_INTERVAL' }] });
+    model.$pageConfirm = message => { confirmation = message; return Promise.resolve(); };
+    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '立即投稿');
+    assert.equal(model.getHistoryPublishDisabledReason(model.currentDetail), '');
+    model.touchPublish(7);
+    await flush();
+    model.touchPublish(7);
+    assert.equal(calls, 1);
+    assert.match(confirmation, /跳过.*合并等待/);
+    finish({ accepted: true, publishWaitReason: null, waitingForPublish: false,
+        publishDispatch: { taskId: 8, historyId: 7, operation: 'NEW_PUBLISH', state: 'READY' },
+        publishTasks: [{ taskId: 8, historyId: 7, operation: 'NEW_PUBLISH', state: 'READY' }] });
+    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '已在投稿队列');
+    assert.notEqual(model.getHistoryPublishDisabledReason(model.currentDetail), '');
+});
+
+test('确认跳过合并时重新开播仍拦截请求，账号冷却不会被按钮解除', async () => {
+    let calls = 0, confirm;
+    const model = setup({ touchPublish() { calls++; } });
+    model.currentDetail.publishWaitReason = 'MERGE_INTERVAL';
+    model.$pageConfirm = () => new Promise(resolve => { confirm = resolve; });
+    model.touchPublish(7);
+    model.currentDetail.recording = true;
+    confirm();
+    await flush();
+    assert.equal(calls, 0);
+    model.currentDetail.recording = false;
+    model.currentDetail.publishTasks = [{ taskId: 8, historyId: 7, operation: 'NEW_PUBLISH', state: 'WAITING_ACCOUNT', waitReason: 'ACCOUNT_COOLDOWN' }];
+    assert.notEqual(model.getHistoryPublishDisabledReason(model.currentDetail), '');
 });

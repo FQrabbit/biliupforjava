@@ -29,6 +29,46 @@ import static org.mockito.Mockito.when;
 
 class PublishTaskServiceTest {
     @Test
+    void manualRequestIsSavedDuringMergeWhileAutomaticRequestStillWaits() {
+        when(readiness.check(any(RecordHistory.class))).thenReturn(
+                new PublishReadinessService.Check(false, "MERGE_INTERVAL", "等待合并", LocalDateTime.now().plusMinutes(10)));
+        assertFalse(service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH,
+                PublishTaskSource.AUTOMATIC, null).isAccepted());
+        var manual = service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+        assertTrue(manual.isAccepted());
+        assertEquals(PublishTaskSource.MANUAL, manual.getTask().getSource());
+        assertEquals(PublishTaskState.READY, manual.getTask().getState());
+    }
+
+    @Test
+    void manualRequestReusesMergeWaitingTaskWithoutChangingAccountOrQueueOrder() {
+        var first = service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.AUTOMATIC, null);
+        PublishTask original = first.getTask();
+        LocalDateTime queuedAt = original.getCreatedAt();
+        original.setState(PublishTaskState.WAITING_UPLOAD);
+        original.setWaitReason("MERGE_INTERVAL");
+        original.setNextAttemptAt(LocalDateTime.now().plusMinutes(10));
+        when(readiness.check(any(RecordHistory.class))).thenReturn(
+                new PublishReadinessService.Check(false, "MERGE_INTERVAL", "等待合并", original.getNextAttemptAt()));
+        var manual = service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+        assertTrue(manual.isAlreadyQueued());
+        assertEquals(original.getId(), manual.getTask().getId());
+        assertEquals(queuedAt, manual.getTask().getCreatedAt());
+        assertEquals(10L, manual.getTask().getAccountId());
+        assertEquals(PublishTaskSource.MANUAL, manual.getTask().getSource());
+        assertEquals(PublishTaskState.READY, manual.getTask().getState());
+        assertEquals(null, manual.getTask().getNextAttemptAt());
+        assertEquals(1, stored.size());
+        manual.getTask().setState(PublishTaskState.WAITING_ACCOUNT);
+        manual.getTask().setWaitReason("ACCOUNT_COOLDOWN");
+        manual.getTask().setNextAttemptAt(LocalDateTime.now().plusMinutes(30));
+        service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+        assertEquals(PublishTaskState.WAITING_ACCOUNT, manual.getTask().getState());
+        assertEquals("ACCOUNT_COOLDOWN", manual.getTask().getWaitReason());
+        assertTrue(manual.getTask().getNextAttemptAt().isAfter(LocalDateTime.now()));
+    }
+
+    @Test
     void newRequestDuringRecordingIsRejectedWithoutSavingTask() {
         when(readiness.check(any(RecordHistory.class))).thenReturn(
                 new PublishReadinessService.Check(false, "RECORDING", "录制中，暂不能投稿", null));
