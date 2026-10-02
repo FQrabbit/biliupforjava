@@ -181,8 +181,8 @@ public class WorkspaceUsageService {
             jdbcUrl = environment.getProperty("spring.datasource.url");
         }
         try {
-            if ((jdbcUrl == null || jdbcUrl.isBlank()) && dataSource instanceof com.zaxxer.hikari.HikariDataSource hikariDataSource) {
-                jdbcUrl = hikariDataSource.getJdbcUrl();
+            if ((jdbcUrl == null || jdbcUrl.isBlank()) && dataSource.isWrapperFor(com.zaxxer.hikari.HikariDataSource.class)) {
+                jdbcUrl = dataSource.unwrap(com.zaxxer.hikari.HikariDataSource.class).getJdbcUrl();
             }
         } catch (Exception ignored) {
         }

@@ -45,6 +45,8 @@ import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.PublishAccountScheduler;
 import top.sshh.bililiverecoder.service.PublishTaskService;
+import top.sshh.bililiverecoder.service.PublishReadinessService;
+import top.sshh.bililiverecoder.service.HistoryOperationPolicy;
 import top.sshh.bililiverecoder.job.LiveMsgSendSync;
 
 import java.io.File;
@@ -74,6 +76,8 @@ public class HistoryController {
     private RecordBiliPublishService publishService;
     @Autowired
     private PublishAccountScheduler publishAccountScheduler;
+    @Autowired
+    private PublishReadinessService publishReadinessService;
     @Autowired
     private LiveMsgRepository msgRepository;
     @Autowired
@@ -990,6 +994,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            String disabledReason = historyOperationDisabledReason(history, "deleteHistoryMsg");
+            if (!disabledReason.isEmpty()) {
+                result.put("type", "warning");
+                result.put("msg", disabledReason);
+                return result;
+            }
             long queryStartNs = System.nanoTime();
             List<LiveMsg> liveMsgs = msgRepository.queryByBvid(history.getBvId());
             long queryCostMs = toCostMs(queryStartNs);
@@ -1031,6 +1041,12 @@ public class HistoryController {
         }
 
         RecordHistory history = historyOptional.get();
+        String disabledReason = historyOperationDisabledReason(history, "abandonHistoryMsgQueue");
+        if (!disabledReason.isEmpty()) {
+            result.put("type", "warning");
+            result.put("msg", disabledReason);
+            return result;
+        }
         HistoryMsgQueueCleanupService.CleanupOptions cleanupOptions = msgQueueCleanupService.optionsFrom(options);
         if (!cleanupOptions.ordinary() && !cleanupOptions.advanced() && !cleanupOptions.reply() && !cleanupOptions.forceArchive()) {
             result.put("type", "info");
@@ -1062,6 +1078,10 @@ public class HistoryController {
     @PostMapping("/{id}/danmaku/retryFailed")
     public Map<String, Object> retryFailedDanmaku(@PathVariable("id") Long id,
                                                    @RequestBody(required = false) Map<String, Object> request) {
+
+        RecordHistory history = historyRepository.findById(id).orElse(null);
+        String reason = history == null ? "稿件不存在" : historyOperationDisabledReason(history, "retryFailedDanmaku");
+        if (!reason.isEmpty()) return HistoryMsgRetryService.RetryResult.warning(reason).toMap();
         int displayedFailed = parseNonNegativeInt(request == null ? null : request.get("displayedFailed"));
         HistoryMsgRetryService.RetryResult retry = msgRetryService.retryFailedByHistoryId(id, displayedFailed);
         if (retry != null && retry.retried > 0) {
@@ -1073,6 +1093,10 @@ public class HistoryController {
     @PostMapping("/{id}/danmaku/forceRetryFailed")
     public Map<String, Object> forceRetryFailedDanmaku(@PathVariable("id") Long id,
                                                         @RequestBody(required = false) Map<String, Object> request) {
+
+        RecordHistory history = historyRepository.findById(id).orElse(null);
+        String reason = history == null ? "稿件不存在" : historyOperationDisabledReason(history, "retryFailedDanmaku");
+        if (!reason.isEmpty()) return HistoryMsgRetryService.RetryResult.warning(reason).toMap();
         int displayedFailed = parseNonNegativeInt(request == null ? null : request.get("displayedFailed"));
         HistoryMsgRetryService.RetryResult retry = msgRetryService.forceRetryFailedByHistoryId(id, displayedFailed);
         if (retry != null && retry.retried > 0) {
@@ -1117,6 +1141,13 @@ public class HistoryController {
             response.put("msg", "请先在线上确认该条弹幕未发送，再明确确认重新入队");
             return response;
         }
+        RecordHistory history = historyRepository.findById(historyId).orElse(null);
+        String reason = history == null ? "稿件不存在" : historyOperationDisabledReason(history, "retryFailedDanmaku");
+        if (!reason.isEmpty()) {
+            response.put("success", false);
+            response.put("msg", reason);
+            return response;
+        }
         LiveMsg message = msgRepository.findById(messageId).orElse(null);
         RecordHistoryPart part = message == null || message.getPartId() == null
                 ? null : partRepository.findById(message.getPartId()).orElse(null);
@@ -1143,8 +1174,22 @@ public class HistoryController {
             result.put("msg", "请选择要处理的稿件");
             return result;
         }
+        List<Long> eligible = new ArrayList<>();
+        Map<Long, String> skipped = new LinkedHashMap<>();
+        for (Long id : ids) {
+            RecordHistory history = historyRepository.findById(id).orElse(null);
+            String reason = history == null ? "稿件不存在" : historyOperationDisabledReason(history, "abandonHistoryMsgQueue");
+            if (reason.isEmpty()) eligible.add(id);
+            else skipped.put(id, reason);
+        }
+        result.put("skipped", skipped);
+        if (eligible.isEmpty()) {
+            result.put("type", "warning");
+            result.put("msg", "所选稿件没有当前可放弃的待发送队列");
+            return result;
+        }
         HistoryMsgQueueCleanupService.CleanupOptions options = msgQueueCleanupService.optionsFrom(request);
-        HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.cleanupByHistoryIds(ids, options, false, "batch");
+        HistoryMsgQueueCleanupService.CleanupResult cleanup = msgQueueCleanupService.cleanupByHistoryIds(eligible, options, false, "batch");
         result.put("type", "success");
         result.putAll(cleanup.toMap());
         result.put("msg", buildCleanupMsg(cleanup, "已放弃所选稿件的待发送队列", "所选稿件没有待发送队列"));
@@ -1247,6 +1292,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            String disabledReason = historyOperationDisabledReason(history, "reloadHistoryMsg");
+            if (!disabledReason.isEmpty()) {
+                result.put("type", "warning");
+                result.put("msg", disabledReason);
+                return result;
+            }
             int scannedParts = 0;
             int reloadedParts = 0;
             int deletedMsgCount = 0;
@@ -1301,6 +1352,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            String disabledReason = historyOperationDisabledReason(history, "updatePartStatus");
+            if (!disabledReason.isEmpty()) {
+                result.put("type", "warning");
+                result.put("msg", disabledReason);
+                return result;
+            }
             int updatedPartCount = 0;
             List<RecordHistoryPart> partList = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             for (RecordHistoryPart part : partList) {
@@ -1337,6 +1394,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            String disabledReason = historyOperationDisabledReason(history, "updatePublishStatus");
+            if (!disabledReason.isEmpty()) {
+                result.put("type", "warning");
+                result.put("msg", disabledReason);
+                return result;
+            }
             LocalDateTime now = LocalDateTime.now();
             if (history.getStartTime() != null) {
                 history.setStartTime(history.getStartTime().plusMinutes(1L));
@@ -1408,6 +1471,26 @@ public class HistoryController {
                 result.put("msg", "稿件已强制归档，请先恢复处理");
                 return result;
             }
+            PublishReadinessService.Check check = publishReadinessService.check(history);
+            if (!check.allowed()) {
+                result.put("accepted", false);
+                result.put("type", "warning");
+                result.put("msg", check.message());
+                result.put("publishWaitReason", check.reason());
+                result.put("publishNotBefore", check.earliestAt());
+                List<PublishTaskStatusDto> existingTasks = publishAccountScheduler.statuses(null, id);
+                existingTasks.stream().filter(task -> task.getOperation() != PublishTaskOperation.HIGH_ENERGY
+                        && task.getState() != null && task.getState().isActive()).findFirst().ifPresent(task -> {
+                    result.put("accepted", true);
+                    result.put("alreadyQueued", true);
+                    result.put("taskId", task.getTaskId());
+                    result.put("publishDispatch", task);
+                    result.put("publishTasks", existingTasks);
+                    result.put("type", "info");
+                    result.put("msg", "稿件已在投稿队列中；" + check.message());
+                });
+                return result;
+            }
             history.setUploadRetryCount(0);
             history = historyRepository.save(history);
             boolean queued = publishService.asyncPublishRecordHistory(history);
@@ -1436,6 +1519,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            String disabledReason = historyOperationDisabledReason(history, "highEnergyCutPublish");
+            if (!disabledReason.isEmpty()) {
+                result.put("type", "warning");
+                result.put("msg", disabledReason);
+                return result;
+            }
             if (history.isForceArchived()) {
                 result.put("type", "warning");
                 result.put("msg", "稿件已强制归档，请先恢复处理");
@@ -1478,6 +1567,12 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
+            String disabledReason = historyOperationDisabledReason(history, "rePublish");
+            if (!disabledReason.isEmpty()) {
+                result.put("type", "warning");
+                result.put("msg", disabledReason);
+                return result;
+            }
             if (history.isForceArchived()) {
                 result.put("type", "warning");
                 result.put("msg", "稿件已强制归档，请先恢复处理");
@@ -2023,39 +2118,52 @@ public class HistoryController {
             history.setGiftReplyTaskState(resolveReplyTaskState(sendGiftReply, history.isPublish(), history.isSendReply(), effectiveReplyTaskStats.giftReplyLineCount()));
         }
 
-    // 计算是否处于等待投稿状态
-    boolean waitingForPublish = false;
-    if (!history.isForceArchived() && history.isUpload() && !history.isPublish() && !history.isRecording() 
-            && history.getGiveUpPartCount() == 0 && history.getPartCount() > 0
-            && history.getUploadPartCount() == history.getPartCount() && history.getEndTime() != null) {
-        
-        // 使用外部传入的配置映射，避免在循环中重复查询数据库
-        String mergeIntervalConfig = configMap.get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
-        int mergeIntervalMinutes = 20; // 默认值
-        try {
-            if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
-                mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
-                // 范围校验：1-1440分钟，超出范围自动修正
-                if (mergeIntervalMinutes < 1) {
-                    mergeIntervalMinutes = 1;
-                } else if (mergeIntervalMinutes > 1440) {
-                    mergeIntervalMinutes = 1440;
-                }
-            }
-        } catch (Exception e) {
-            log.warn("[BLR] {}", LogKvs.event("History.MergeInterval.InvalidConfig")
-                    .add("historyId", history.getId())
-                    .add("configValue", mergeIntervalConfig)
-                    .add("error", e.getMessage()));
-        }
-        
-        // 计算距离结束时间经过的分钟数
-        long minutesSinceEnd = java.time.Duration.between(history.getEndTime(), LocalDateTime.now()).toMinutes();
-        if (minutesSinceEnd >= 0 && minutesSinceEnd < mergeIntervalMinutes) {
-            waitingForPublish = true;
-        }
+        LocalDateTime latestEnd = partStats == null
+                ? partRepository.findLatestEndTimeByHistoryId(history.getId()) : partStats.latestEnd();
+        PublishReadinessService.Check readiness = publishReadinessService.check(
+                history, actuallyRecordingParts, latestEnd, configMap, LocalDateTime.now());
+        history.setPublishWaitReason(readiness.reason());
+        history.setPublishNotBefore(readiness.earliestAt());
+        history.setWaitingForPublish(!history.isForceArchived() && history.isUpload()
+                && "MERGE_INTERVAL".equals(readiness.reason()));
     }
-    history.setWaitingForPublish(waitingForPublish);
+
+    private String historyOperationDisabledReason(RecordHistory history, String action) {
+        boolean danmaku = Set.of("reloadHistoryMsg", "deleteHistoryMsg", "abandonHistoryMsgQueue", "retryFailedDanmaku").contains(action);
+        // 身份还没建立时直接拒绝，不能拿空 BVID 去查询其他稿件的数据
+        if (history.isDeletePending() || history.isForceArchived()
+                || (danmaku && (!history.isPublish() || StringUtils.isBlank(history.getBvId())
+                || (history.getCode() != 0 && history.getCode() != -50)))) {
+            return HistoryOperationPolicy.disabledReason(history, action);
+        }
+        RecordHistory snapshot = new RecordHistory();
+        org.springframework.beans.BeanUtils.copyProperties(history, snapshot);
+        List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
+        snapshot.setPartCount(parts.size());
+        snapshot.setRecordPartCount((int) parts.stream().filter(p -> p.isRecording() || p.getEndTime() == null).count());
+        snapshot.setGiveUpPartTypes(parts.stream().map(RecordHistoryPart::getDeleteFailType)
+                .filter(Objects::nonNull).toList());
+        snapshot.setPublishTasks(publishAccountScheduler.statuses(null, history.getId()));
+        if ("updatePublishStatus".equals(action) && parts.stream().anyMatch(p -> TaskUtil.partUploadTask.containsKey(p.getId()))) {
+            return "分P仍在上传，请先等待或暂停上传";
+        }
+        if (danmaku) {
+            RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
+            snapshot.setRoomSendDm(room != null && Boolean.TRUE.equals(room.getSendDm()));
+            snapshot.setRoomSendSc(room != null && Boolean.TRUE.equals(room.getSendSc()));
+            snapshot.setRoomSendGiftReply(room != null && Boolean.TRUE.equals(room.getSendGiftReply()));
+            snapshot.setMsgCount(msgRepository.countByBvid(history.getBvId()));
+            snapshot.setAdvancedMsgCount(msgRepository.countByBvidAndPool(history.getBvId(), 1));
+            snapshot.setPendingNormalMsgCount(msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 0, -1));
+            snapshot.setPendingHighMsgCount(msgRepository.countByBvidAndPoolAndCode(history.getBvId(), 1, -1));
+            snapshot.setFailedMsgCount(countUnsuccessfulMsg(snapshot.getMsgCount(),
+                    msgRepository.countByBvidAndCode(history.getBvId(), 0),
+                    snapshot.getPendingNormalMsgCount() + snapshot.getPendingHighMsgCount()));
+            if ("abandonHistoryMsgQueue".equals(action) && Boolean.TRUE.equals(snapshot.getRoomSendGiftReply())) {
+                snapshot.setGiftReplyLineCount(buildReplyTaskStats(history, room).giftReplyLineCount());
+            }
+        }
+        return HistoryOperationPolicy.disabledReason(snapshot, action);
     }
 
     private int countUnsuccessfulMsg(int total, int success, int pending) {
@@ -2097,7 +2205,8 @@ public class HistoryController {
                         toInt(row[5]),
                         toInt(row[6]),
                         toInt(row[7]),
-                        toInt(row[8])
+                        toInt(row[8]),
+                        row.length > 9 ? (LocalDateTime) row[9] : null
                 ));
             }
         }
@@ -2326,7 +2435,8 @@ public class HistoryController {
                                  int recordingPartCount,
                                  int giveUpPartCount,
                                  int abnormalPartCount,
-                                 int uploadFlowFallbackCount) {
+                                 int uploadFlowFallbackCount,
+                                 LocalDateTime latestEnd) {
     }
 
     private record MsgListStats(int msgCount,

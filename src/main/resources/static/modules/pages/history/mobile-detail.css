@@ -1244,6 +1244,12 @@
     border-color: color-mix(in srgb, var(--danger-color) 32%, var(--mobile-page-border));
 }
 
+.mobile-history-detail-actions-sheet button:disabled {
+    opacity: 0.45;
+    filter: saturate(0.25);
+    cursor: not-allowed;
+}
+
 .mobile-history-actions-enter-active,
 .mobile-history-actions-leave-active {
     transition: opacity var(--duration-overlay) var(--ease-decel),

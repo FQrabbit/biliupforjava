@@ -155,16 +155,36 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                 .toPath().toAbsolutePath();
         long startedAt = System.nanoTime();
         log.info("正在备份数据库，完成后将继续启动，请勿关闭程序。备份位置：{}", backupPath);
+        Path localDirectory = null;
         try {
             Files.createDirectories(backupDir.toPath());
-            try (BackupProgress progress = new BackupProgress(backupPath, startedAt)) {
-                String sqlPath = backupPath.toString().replace("\\", "/").replace("'", "''");
+            localDirectory = DatabaseFileTransfer.localWorkspace();
+            Path localBackup = localDirectory.resolve("backup.zip");
+            try (BackupProgress progress = new BackupProgress(localBackup, startedAt)) {
+                String sqlPath = localBackup.toString().replace("\\", "/").replace("'", "''");
                 jdbc.execute("BACKUP TO '" + sqlPath + "'");
             }
+            log.info("数据库备份已生成，正在保存到工作目录。备份大小 {}，备份位置：{}", backupSize(localBackup), backupPath);
+            long[] lastReport = {System.nanoTime()};
+            DatabaseFileTransfer.publishBackup(localBackup, backupPath, (written, total) -> {
+                long now = System.nanoTime();
+                if (now - lastReport[0] >= TimeUnit.SECONDS.toNanos(5)) {
+                    log.info("数据库备份保存中：已耗时 {} 秒，已传输 {} / {} MB，进度 {}%",
+                            elapsedSeconds(startedAt), written / (1024 * 1024), total / (1024 * 1024),
+                            total == 0 ? 0 : (int) (100.0 * written / total));
+                    lastReport[0] = now;
+                }
+            });
         } catch (Exception e) {
             log.error("数据库备份失败，启动已中止：已耗时 {} 秒，备份位置：{}，失败原因：{}",
                     elapsedSeconds(startedAt), backupPath, e.getMessage());
             throw e;
+        } finally {
+            try {
+                DatabaseFileTransfer.cleanWorkspace(localDirectory);
+            } catch (IOException cleanupError) {
+                log.warn("数据库备份临时文件清理失败，临时文件位置：{}", localDirectory, cleanupError);
+            }
         }
         log.info("数据库备份完成：耗时 {} 秒，备份大小 {}，备份位置：{}",
                 elapsedSeconds(startedAt), backupSize(backupPath), backupPath);
@@ -195,7 +215,7 @@ public class DatabaseMigrationInitializer implements InitializingBean {
         }
     }
 
-    /** 仅报告备份状态；实际备份仍在启动线程同步执行，完成后才能迁移。 */
+    /** 只报告备份状态，备份完成后才继续迁移 */
     private static final class BackupProgress implements AutoCloseable {
         private final ScheduledExecutorService executor;
         private boolean closed;

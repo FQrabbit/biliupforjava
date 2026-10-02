@@ -41,6 +41,7 @@ return {
                 message: '',
                 detail: '',
                 percent: 0,
+                indeterminate: false,
                 estimated: false,
                 status: 'active'
             },

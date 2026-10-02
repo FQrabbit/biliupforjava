@@ -60,6 +60,7 @@ public class PublishAccountScheduler {
     private final PublishAccountCooldownService cooldowns;
     private final CaptchaService captchas;
     private final ShutdownState shutdown;
+    private final PublishReadinessService readiness;
     private final Map<Long, AccountRuntime> accounts = new ConcurrentHashMap<>();
     private final Set<Long> verificationInFlight = ConcurrentHashMap.newKeySet();
     private final AtomicInteger accountCursor = new AtomicInteger();
@@ -79,7 +80,7 @@ public class PublishAccountScheduler {
                                    RecordRoomRepository rooms,
                                    BiliUserRepository users, PublishTaskService tasks,
                                    PublishAccountCooldownService cooldowns, CaptchaService captchas,
-                                   ShutdownState shutdown) {
+                                   ShutdownState shutdown, PublishReadinessService readiness) {
         this.executor = executor;
         this.highEnergyPrepareExecutor = highEnergyPrepareExecutor;
         this.publisher = publisher;
@@ -92,6 +93,7 @@ public class PublishAccountScheduler {
         this.cooldowns = cooldowns;
         this.captchas = captchas;
         this.shutdown = shutdown;
+        this.readiness = readiness;
         for (int i = 0; i < admissionLocks.length; i++) admissionLocks[i] = new Object();
     }
 
@@ -877,6 +879,14 @@ public class PublishAccountScheduler {
         }
     }
 
+    private boolean waitForRecordingOrMerge(Long taskId, RecordHistory history) {
+        PublishReadinessService.Check check = readiness.check(history);
+        if (check.allowed()) return false;
+        transitionPreparing(taskId, PublishTaskState.WAITING_UPLOAD, check.reason(), check.message(),
+                check.earliestAt() == null ? LocalDateTime.now().plusSeconds(30) : check.earliestAt());
+        return true;
+    }
+
     private void prepareHighEnergy(PublishTask queuedTask, AccountRuntime runtime) {
         PublishTask task = tasks.claim(queuedTask.getId(), PublishTaskState.PREPARING,
                 UUID.randomUUID().toString(), LocalDateTime.now().plusHours(6));
@@ -1020,6 +1030,7 @@ public class PublishAccountScheduler {
             if (task.getOperation() == PublishTaskOperation.NEW_PUBLISH
                     || task.getOperation() == PublishTaskOperation.UPDATE
                     || task.getOperation() == PublishTaskOperation.REPAIR) {
+                if (waitForRecordingOrMerge(taskId, history)) return;
                 RecordBiliPublishService.PreparationResult prep =
                         publisher.getObject().preparePublishTask(history.getId(), accountId);
                 if (prep.needsAction()) {
@@ -1056,6 +1067,8 @@ public class PublishAccountScheduler {
                         "稿件在排队准备期间已删除或强制归档", null);
                 return;
             }
+            if (task.getOperation() != PublishTaskOperation.HIGH_ENERGY
+                    && waitForRecordingOrMerge(taskId, beforeSubmitHistory)) return;
             if (beforeSubmitUser == null || !beforeSubmitUser.isLogin()) {
                 transitionPreparing(taskId, PublishTaskState.NEEDS_ACTION, "ACCOUNT_NOT_LOGGED_IN",
                         "投稿账号在排队期间登录已失效", null);
@@ -1078,16 +1091,22 @@ public class PublishAccountScheduler {
             submissionStarted = true;
             captchaAutoAttemptStarted = tasks.markCaptchaAttemptStarted(taskId);
             boolean success = switch (task.getOperation()) {
-                case NEW_PUBLISH, UPDATE -> publisher.getObject().publishRecordHistory(history);
-                case REPAIR -> history.isPublish()
-                        ? publisher.getObject().editPublishedHistory(history, "republish")
-                        : publisher.getObject().publishRecordHistory(history);
+                case NEW_PUBLISH, UPDATE -> publisher.getObject().publishRecordHistory(beforeSubmitHistory);
+                case REPAIR -> beforeSubmitHistory.isPublish()
+                        ? publisher.getObject().editPublishedHistory(beforeSubmitHistory, "republish")
+                        : publisher.getObject().publishRecordHistory(beforeSubmitHistory);
                 case EDIT_PARTS -> publisher.getObject().executeQueuedEditParts(task);
                 case HIGH_ENERGY -> highEnergy.getObject().executeQueuedTask(task);
             };
             RecordHistory latest = histories.findById(history.getId()).orElse(history);
             if (!success && task.getOperation() != PublishTaskOperation.HIGH_ENERGY
                     && !latest.isPublish() && !captchas.hasPendingForHistory(history.getId())) {
+                PublishReadinessService.Check check = readiness.check(latest);
+                if (!check.allowed()) {
+                    tasks.setState(taskId, PublishTaskState.WAITING_UPLOAD, check.reason(), check.message(),
+                            check.earliestAt() == null ? LocalDateTime.now().plusSeconds(30) : check.earliestAt());
+                    return;
+                }
                 RecordBiliPublishService.PreparationResult prep =
                         publisher.getObject().preparePublishTask(history.getId(), accountId);
                 if (!prep.ready() && !prep.needsAction()) {
@@ -1120,6 +1139,14 @@ public class PublishAccountScheduler {
                         "平台未返回明确成功结果，请检查线上稿件后再决定是否重试", null);
             }
         } catch (Exception e) {
+            if (e instanceof PublishReadinessService.Deferred deferred) {
+                submissionStarted = false;
+                if (captchaAutoAttemptStarted) tasks.undoCaptchaAttemptForUploadChallenge(taskId);
+                PublishReadinessService.Check check = deferred.check();
+                tasks.setState(taskId, PublishTaskState.WAITING_UPLOAD, check.reason(), check.message(),
+                        check.earliestAt() == null ? LocalDateTime.now().plusSeconds(30) : check.earliestAt());
+                return;
+            }
             log.error("Publish task failed taskId={} accountId={}", taskId, accountId, e);
             if (submissionStarted && e instanceof PublishSubmissionException submission
                     && submission.getOutcome() == PublishSubmissionException.Outcome.REJECTED

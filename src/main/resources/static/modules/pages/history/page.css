@@ -1178,16 +1178,6 @@
     font-size: 13px;
 }
 
-.history-detail-config-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 18px;
-    margin: 0 0 14px;
-    color: var(--text-secondary);
-    font-size: 12px;
-    line-height: 1.6;
-}
-
 .history-task-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1212,6 +1202,19 @@
 
 .history-processing-records-body {
     padding: 0 14px 12px;
+}
+
+.history-stage-actions {
+    max-height: calc(100vh - 160px);
+    overflow-y: auto;
+}
+
+.history-stage-actions .el-button.is-disabled,
+.history-stage-actions .el-button.is-disabled:hover {
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    opacity: 0.55;
 }
 
 .history-processing-record + .history-processing-record {

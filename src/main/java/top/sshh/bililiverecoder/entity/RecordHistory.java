@@ -163,6 +163,12 @@ public class RecordHistory {
     private boolean waitingForPublish;
 
     @Transient
+    private String publishWaitReason;
+
+    @Transient
+    private LocalDateTime publishNotBefore;
+
+    @Transient
     private PublishTaskStatusDto publishDispatch;
 
     @Transient

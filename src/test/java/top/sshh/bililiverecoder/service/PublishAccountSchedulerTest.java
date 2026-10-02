@@ -42,6 +42,64 @@ import static org.mockito.Mockito.when;
 
 class PublishAccountSchedulerTest {
     @Test
+    void mergeWaitingAllowsReadyTaskOnSameAccountToProceed() throws Exception {
+        try (Fixture fixture = new Fixture(1)) {
+            RecordHistory waiting = fixture.addHistory(1L, 10L);
+            RecordHistory ready = fixture.addHistory(2L, 10L);
+            LocalDateTime earliest = LocalDateTime.now().plusMinutes(20);
+            when(fixture.readiness.check(waiting)).thenReturn(
+                    new PublishReadinessService.Check(false, "MERGE_INTERVAL", "等待合并", earliest));
+            CountDownLatch published = new CountDownLatch(1);
+            doAnswer(invocation -> { published.countDown(); return true; })
+                    .when(fixture.publisher).publishRecordHistory(ready);
+            fixture.scheduler.enqueue(10L, 1L);
+            fixture.scheduler.enqueue(10L, 2L);
+            assertTrue(published.await(2, TimeUnit.SECONDS));
+            verify(fixture.publisher, never()).publishRecordHistory(waiting);
+            org.junit.jupiter.api.Assertions.assertEquals("MERGE_INTERVAL", fixture.tasks.get(1L).getWaitReason());
+            org.junit.jupiter.api.Assertions.assertEquals(earliest, fixture.tasks.get(1L).getNextAttemptAt());
+        }
+    }
+
+    @Test
+    void recordingResumingDuringPreparationIsCheckedBeforeSubmit() throws Exception {
+        try (Fixture fixture = new Fixture(1)) {
+            RecordHistory history = fixture.addHistory(1L, 10L);
+            CountDownLatch checked = new CountDownLatch(1);
+            when(fixture.readiness.check(history)).thenReturn(PublishReadinessService.Check.ready())
+                    .thenAnswer(invocation -> {
+                        checked.countDown();
+                        return new PublishReadinessService.Check(false, "RECORDING", "重新开播，等待录制结束", null);
+                    });
+            fixture.scheduler.enqueue(10L, 1L);
+            assertTrue(checked.await(2, TimeUnit.SECONDS));
+            verify(fixture.publisher, never()).publishRecordHistory(history);
+            verify(fixture.cooldowns, never()).recordSubmissionFinished(10L);
+        }
+    }
+
+    @Test
+    void deferredBeforeNetworkRequestKeepsTaskWaitingWithoutConsumingSubmissionInterval() throws Exception {
+        try (Fixture fixture = new Fixture(1)) {
+            RecordHistory history = fixture.addHistory(1L, 10L);
+            RecordHistory next = fixture.addHistory(2L, 10L);
+            CountDownLatch finished = new CountDownLatch(1);
+            doAnswer(invocation -> { finished.countDown(); return null; })
+                    .when(fixture.cooldowns).recordSubmissionFinished(10L);
+            when(fixture.publisher.publishRecordHistory(history)).thenThrow(new PublishReadinessService.Deferred(
+                    new PublishReadinessService.Check(false, "RECORDING", "重新开播", null)));
+            CountDownLatch published = new CountDownLatch(1);
+            doAnswer(invocation -> { published.countDown(); return true; })
+                    .when(fixture.publisher).publishRecordHistory(next);
+            fixture.scheduler.enqueue(10L, 1L);
+            fixture.scheduler.enqueue(10L, 2L);
+            assertTrue(published.await(2, TimeUnit.SECONDS));
+            assertTrue(finished.await(2, TimeUnit.SECONDS));
+            verify(fixture.cooldowns, org.mockito.Mockito.times(1)).recordSubmissionFinished(10L);
+            org.junit.jupiter.api.Assertions.assertEquals("RECORDING", fixture.tasks.get(1L).getWaitReason());
+        }
+    }
+    @Test
     void captchaOnOneAccountDoesNotBlockAnotherAccount() throws Exception {
         try (Fixture fixture = new Fixture(2)) {
             RecordHistory accountA = fixture.addHistory(1L, 10L);
@@ -163,6 +221,8 @@ class PublishAccountSchedulerTest {
         private final PublishAccountScheduler scheduler;
         private final Map<Long, RecordHistory> historyData = new ConcurrentHashMap<>();
         private final Map<String, RecordRoom> roomData = new ConcurrentHashMap<>();
+        private final PublishReadinessService readiness = mock(PublishReadinessService.class);
+        private final PublishAccountCooldownService cooldowns = mock(PublishAccountCooldownService.class);
 
         Fixture(int workers) {
             this(workers, workers);
@@ -184,7 +244,6 @@ class PublishAccountSchedulerTest {
             when(publisherProvider.getObject()).thenReturn(publisher);
             ObjectProvider<HighEnergyCutPublishService> highEnergyProvider = mock(ObjectProvider.class);
             when(highEnergyProvider.getObject()).thenReturn(highEnergy);
-            PublishAccountCooldownService cooldowns = mock(PublishAccountCooldownService.class);
             when(cooldowns.waitMs(anyLong())).thenReturn(0L);
             when(histories.findById(anyLong())).thenAnswer(invocation ->
                     Optional.ofNullable(historyData.get(invocation.getArgument(0))));
@@ -198,9 +257,10 @@ class PublishAccountSchedulerTest {
             });
             when(publisher.preparePublishTask(anyLong(), anyLong()))
                     .thenReturn(new RecordBiliPublishService.PreparationResult(true, false, "已就绪", null));
+            when(readiness.check(any(RecordHistory.class))).thenReturn(PublishReadinessService.Check.ready());
             scheduler = new PublishAccountScheduler(executor, highEnergyExecutor, publisherProvider, highEnergyProvider,
                     histories, mock(RecordHistoryPartRepository.class), rooms, users, tasks,
-                    cooldowns, captchas, mock(ShutdownState.class));
+                    cooldowns, captchas, mock(ShutdownState.class), readiness);
         }
 
         RecordHistory addHistory(Long historyId, Long accountId) {

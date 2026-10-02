@@ -48,7 +48,12 @@ public class PublishTaskStatusDto {
         return switch (state) {
             case READY -> "已受理，等待投稿";
             case PREPARING -> "准备投稿材料";
-            case WAITING_UPLOAD -> "等待分P上传";
+            case WAITING_UPLOAD -> switch (waitReason == null ? "" : waitReason) {
+                case "RECORDING" -> "等待录制结束";
+                case "MERGE_INTERVAL" -> "等待合并";
+                case "RECORDING_END_UNKNOWN" -> "等待确认录制结束";
+                default -> "等待分P上传";
+            };
             case WAITING_ACCOUNT -> "等待账号可用";
             case WAITING_CAPTCHA -> "等待验证码";
             case SUBMITTING -> "正在投稿";
@@ -79,6 +84,9 @@ public class PublishTaskStatusDto {
         if (waitReason == null) return null;
         return switch (waitReason) {
             case "PARTS_NOT_READY", "EDIT_PARTS_UPLOAD" -> "正在准备或上传分P";
+            case "RECORDING" -> "稿件仍在录制";
+            case "MERGE_INTERVAL" -> "等待短时开播合并";
+            case "RECORDING_END_UNKNOWN" -> "尚未确认录制结束时间";
             case "ACCOUNT_COOLDOWN" -> "账号处于投稿冷却";
             case "ACCOUNT_CAPTCHA", "PUBLISH_CAPTCHA", "UPLOAD_CAPTCHA" -> "账号需要完成验证码";
             case "SUBMISSION_RESULT_UNKNOWN" -> "平台结果待核对";

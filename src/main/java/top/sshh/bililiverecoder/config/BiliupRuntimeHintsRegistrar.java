@@ -9,6 +9,9 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
 
     @Override
     public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
+        hints.proxies().registerJdkProxy(java.sql.Connection.class);
+        hints.reflection().registerType(java.sql.Connection.class, MemberCategory.INVOKE_PUBLIC_METHODS);
+        hints.reflection().registerType(com.zaxxer.hikari.HikariConfig.class, MemberCategory.DECLARED_FIELDS);
         String[] classesToRegister = {
             "top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse",
             "top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse$RoomInfo",

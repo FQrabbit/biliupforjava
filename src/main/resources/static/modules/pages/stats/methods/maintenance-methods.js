@@ -26,6 +26,7 @@
                 message: message || '正在处理，请稍候',
                 detail: detail || '',
                 percent: 1,
+                indeterminate: false,
                 estimated: false,
                 status: 'active'
             };
@@ -58,6 +59,7 @@
             }
             this.operationProgress.status = 'success';
             this.operationProgress.percent = 100;
+            this.operationProgress.indeterminate = false;
             this.operationProgress.estimated = false;
             this.operationProgress.message = message || '处理完成';
             this.notifyPageOperationState(false);
@@ -95,6 +97,7 @@
             if (!this.operationProgress.percent) this.operationProgress.percent = 1;
             this.operationProgress.estimated = false;
             this.operationProgress.message = message || '处理失败';
+            this.operationProgress.indeterminate = false;
             this.notifyPageOperationState(false);
             if (detail !== undefined) {
                 this.operationProgress.detail = detail;
@@ -416,6 +419,7 @@
             }).then(function () {
                 self.compacting = true;
                 self.startOperationProgress('压缩数据库', '正在进入维护模式', 'webhook 会先写入本地队列，完成后按顺序回放');
+                self.operationProgress.indeterminate = true;
                 StatsApi.compact(function (result) {
                     if (result && result.busy) {
                         self.$message.warning(result.message || '数据库压缩正在执行中');
@@ -478,11 +482,12 @@
                 this.compacting = false;
                 return false;
             }
-            this.compacting = !!(status.running || status.maintenance);
+            this.compacting = !!status.running;
             this.operationProgress.title = '压缩数据库';
             var detail = this.maintenanceProgressDetail(status);
-            this.updateOperationProgress(status.progress || 0, status.phaseLabel || status.message || '数据库维护中', detail);
-            if (status.running || status.maintenance) {
+            this.updateOperationProgress(status.progress || 0, status.message || status.phaseLabel || '数据库维护中', detail);
+            this.operationProgress.indeterminate = !!status.running && status.progressKnown === false;
+            if (status.running) {
                 this.operationProgress.status = 'active';
                 return true;
             }
@@ -493,7 +498,7 @@
                 }
                 this.finishOperationProgress(doneMessage, detail, recovering);
                 if (!recovering) {
-                    this.reload();
+                    if (status.databaseAvailable !== false) this.reload();
                 }
             } else if (status.phase === 'FAILED') {
                 var failedMessage = status.message || '数据库压缩失败';
@@ -501,8 +506,9 @@
                     this.$message.error(failedMessage);
                 }
                 this.failOperationProgress(failedMessage, detail);
+                this.operationProgress.indeterminate = status.progressKnown === false;
                 if (!recovering) {
-                    this.reload();
+                    if (status.databaseAvailable !== false) this.reload();
                 }
             }
             this.compacting = false;
@@ -510,12 +516,29 @@
         },
         maintenanceProgressDetail: function (status) {
             var parts = [];
-            if (status.startedAt) {
+            if (status.elapsedSeconds !== undefined) {
+                parts.push('已耗时 ' + this.durationText(status.elapsedSeconds));
+            } else if (status.startedAt) {
                 var startedAt = this.maintenanceTimeMillis(status.startedAt);
                 if (startedAt > 0) {
                     var elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
                     parts.push('已耗时 ' + this.durationText(elapsed));
                 }
+            }
+            if (status.phaseElapsedSeconds !== undefined && status.running) {
+                parts.push('本阶段 ' + this.durationText(status.phaseElapsedSeconds));
+            }
+            var formatMB = function (bytes) { return (Number(bytes || 0) / (1024 * 1024)).toFixed(2) + ' MB'; };
+            if (status.transferTotalBytes > 0 && status.progressKnown) {
+                parts.push('已传输 ' + formatMB(status.transferredBytes) + ' / ' + formatMB(status.transferTotalBytes));
+            } else if (status.fileBytes > 0 && status.running) {
+                parts.push('当前文件 ' + formatMB(status.fileBytes));
+            }
+            if (status.databaseBytesAfter > 0 && status.phase === 'DONE') {
+                parts.push('数据库 ' + formatMB(status.databaseBytesBefore) + ' → ' + formatMB(status.databaseBytesAfter));
+            }
+            if (status.databaseAvailable === false && status.phase === 'FAILED') {
+                parts.push('数据库尚未恢复，维护暂停仍然生效，请查看日志和备份位置');
             }
             parts.push('待回放 ' + (status.spoolPendingFiles || 0) + ' 个');
             parts.push('已回放 ' + (status.replayed || 0) + ' 个');

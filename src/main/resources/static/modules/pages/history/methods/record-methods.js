@@ -51,6 +51,8 @@
         },
         retryPublishTask: function(task) {
             if (!task || this.isPublishTaskActionLoading(task) || !this.ensureHistoryActionAllowed(task.historyId)) return;
+            var wait = this.getHistoryPublishWaitText(this.findHistoryForAction(task.historyId));
+            if (wait) { this.$message.warning(wait); return; }
             var self = this;
             var unknown = this.requiresPublishTaskVerification(task);
             var captchaRetry = task.waitReason === 'CAPTCHA_AUTO_RETRY';
@@ -63,6 +65,8 @@
                 confirmButtonText: captchaRetry ? '立即尝试' : '确认重试', cancelButtonText: '取消', type: 'warning'
             }).then(function() {
                 if (!self.ensureHistoryActionAllowed(task.historyId)) return;
+                var wait = self.getHistoryPublishWaitText(self.findHistoryForAction(task.historyId));
+                if (wait) { self.$message.warning(wait); return; }
                 self.publishTaskActionId = task.taskId;
                 HistoryApi.retryPublishTask(task.taskId, unknown, function(data) {
                     self.publishTaskActionId = null;
@@ -92,7 +96,14 @@
             }).catch(function() {});
         },
         applyPublishRequestFeedback: function(id, data) {
-            if (!data || (!data.publishDispatch && !data.publishTasks)) return;
+            if (!data) return;
+            var self = this;
+            [this.findHistoryForAction(id), this.currentDetail].forEach(function(item) {
+                if (!item || Number(item.id) !== Number(id)) return;
+                ['publishWaitReason', 'publishNotBefore'].forEach(function(key) {
+                    if (Object.prototype.hasOwnProperty.call(data, key)) self.$set(item, key, data[key]);
+                });
+            });
             var row = this.tableData.find(function(item) { return Number(item.id) === Number(id); });
             if (row) {
                 if (data.publishDispatch) this.$set(row, 'publishDispatch', data.publishDispatch);
@@ -343,15 +354,15 @@
                 });
         },
         updatePartStatus: function (id) {
-            if (!this.ensureHistoryActionAllowed(id)) return;
+            if (!this.ensureHistoryOperationAllowed(id, 'updatePartStatus')) return;
             let _this = this;
-            this.$pageConfirm('此操作将强制结束当前正在录制的分P状态。请仅在录制卡死或状态异常时使用。<br/><br/>确定要强制结束录制吗？', '结束录制确认', {
+            this.$pageConfirm('此操作仅修正本地分P的录制状态，不会停止上游录播程序。请先确认实际录制已结束，仅在状态卡住时使用。<br/><br/>确定要修正录制状态吗？', '结束录制确认', {
                 dangerouslyUseHTMLString: true,
                 confirmButtonText: '结束',
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
-                if (!_this.ensureHistoryActionAllowed(id)) return;
+                if (!_this.ensureHistoryOperationAllowed(id, 'updatePartStatus')) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在结束录制状态...',
@@ -372,7 +383,7 @@
             }).catch(() => {});
         },
         updatePublishStatus: function (id) {
-            if (!this.ensureHistoryActionAllowed(id)) return;
+            if (!this.ensureHistoryOperationAllowed(id, 'updatePublishStatus')) return;
             let _this = this;
             this.$pageConfirm('此操作将把该记录及其所有分P重置为【未上传、未发布】的初始状态，并清除BVID关联。系统将重新开始上传流程。<br/><br/>确定要重置状态吗？', '重置状态确认', {
                 dangerouslyUseHTMLString: true,
@@ -380,7 +391,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
-                if (!_this.ensureHistoryActionAllowed(id)) return;
+                if (!_this.ensureHistoryOperationAllowed(id, 'updatePublishStatus')) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在重置发布状态...',
@@ -429,7 +440,7 @@
             }).catch(function() {});
         },
         rePublish: function (id) {
-            if (!this.ensureHistoryActionAllowed(id)) return;
+            if (!this.ensureHistoryOperationAllowed(id, 'rePublish')) return;
             let _this = this;
             this.$pageConfirm('此操作将重新上传那些因转码失败（如时间戳跳变）而未成功的视频分P。适用于部分分P上传失败的情况。<br/><br/>确定要执行转码修复吗？', '转码修复确认', {
                 dangerouslyUseHTMLString: true,
@@ -437,7 +448,7 @@
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
-                if (!_this.ensureHistoryActionAllowed(id)) return;
+                if (!_this.ensureHistoryOperationAllowed(id, 'rePublish')) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在执行转码修复...',
@@ -459,7 +470,7 @@
             }).catch(() => {});
         },
         highEnergyCutPublish: function (id) {
-            if (!this.ensureHistoryActionAllowed(id)) return;
+            if (!this.ensureHistoryOperationAllowed(id, 'highEnergyCutPublish')) return;
             let _this = this;
             this.$pageConfirm('此操作将根据弹幕数据生成高能剪辑片段并尝试发布。<br/><br/>确定要生成高能片段吗？', '高能片段确认', {
                 dangerouslyUseHTMLString: true,
@@ -467,7 +478,7 @@
                 cancelButtonText: '取消',
                 type: 'success'
             }).then(() => {
-                if (!_this.ensureHistoryActionAllowed(id)) return;
+                if (!_this.ensureHistoryOperationAllowed(id, 'highEnergyCutPublish')) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在生成高能片段...',
@@ -476,6 +487,7 @@
                 });
                 HistoryApi.highEnergyCutPublish(id, function (data) {
                         loading.close();
+                        _this.applyPublishRequestFeedback(id, data);
                         _this.$message({
                             message: data.msg,
                             type: data.type
@@ -530,7 +542,7 @@
                 });
         },
         deleteHistoryMsg: function (id) {
-            if (!this.ensureHistoryActionAllowed(id)) return;
+            if (!this.ensureHistoryOperationAllowed(id, 'deleteHistoryMsg')) return;
             let _this = this;
             this.$pageConfirm('此操作将清空数据库中该记录关联的所有弹幕数据（不会删除本地弹幕文件）。<br/><br/>确定要删除弹幕吗？', '删除弹幕确认', {
                 dangerouslyUseHTMLString: true,
@@ -540,7 +552,7 @@
                 cancelButtonClass: 'el-button--success',
                 type: 'warning'
             }).then(() => {
-                if (!_this.ensureHistoryActionAllowed(id)) return;
+                if (!_this.ensureHistoryOperationAllowed(id, 'deleteHistoryMsg')) return;
                 const loading = _this.$pageLoading({
                     lock: true,
                     text: '正在删除弹幕数据...',
@@ -561,14 +573,14 @@
             }).catch(() => {});
         },
         reloadHistoryMsg: function (id) {
-            if (!this.ensureHistoryActionAllowed(id)) return;
+            if (!this.ensureHistoryOperationAllowed(id, 'reloadHistoryMsg')) return;
             this.currentReloadId = id;
             this.reloadOptions.restartOrdinary = false;
             this.reloadOptions.restartAdvanced = false;
             this.reloadDialogVisible = true;
         },
         abandonHistoryMsgQueue: function (id, row) {
-            if (!this.ensureHistoryActionAllowed(id)) return;
+            if (!this.ensureHistoryOperationAllowed(id, 'abandonHistoryMsgQueue')) return;
             const target = row || this.currentDetail || {};
             const pendingOrdinary = Number(target.pendingNormalMsgCount) || 0;
             const pendingAdvanced = Number(target.pendingHighMsgCount) || 0;
@@ -584,7 +596,7 @@
             this.abandonQueueDialogVisible = true;
         },
         handleAbandonQueueConfirm: function() {
-            if (this.abandonQueueMode !== 'batch' && !this.ensureHistoryActionAllowed(this.currentAbandonQueueId)) return;
+            if (this.abandonQueueMode !== 'batch' && !this.ensureHistoryOperationAllowed(this.currentAbandonQueueId, 'abandonHistoryMsgQueue')) return;
             let _this = this;
             if (!this.abandonQueueOptions.ordinary && !this.abandonQueueOptions.advanced && !this.abandonQueueOptions.reply && !this.abandonQueueOptions.forceArchive) {
                 this.$message.info('请选择要放弃的队列');
@@ -598,7 +610,12 @@
                 confirmButtonClass: 'el-button--warning',
                 type: 'warning'
             }).then(() => {
-                if (_this.abandonQueueMode !== 'batch' && !_this.ensureHistoryActionAllowed(_this.currentAbandonQueueId)) return;
+                if (_this.abandonQueueMode !== 'batch' && !_this.ensureHistoryOperationAllowed(_this.currentAbandonQueueId, 'abandonHistoryMsgQueue')) return;
+                var eligibleIds = (_this.selectedItems || []).filter(function(item) { return !_this.getHistoryOperationDisabledReason(item, 'abandonHistoryMsgQueue'); }).map(function(item) { return item.id; });
+                if (_this.abandonQueueMode === 'batch' && !eligibleIds.length) {
+                    _this.$message.info('所选稿件没有当前可放弃的待发送队列，请刷新状态');
+                    return;
+                }
                 _this.abandonQueueDialogVisible = false;
                 const loading = _this.$pageLoading({
                     lock: true,
@@ -628,7 +645,7 @@
                         _this.$message.error('请求失败');
                     };
                 if (_this.abandonQueueMode === 'batch') {
-                    payload.ids = (_this.selectedItems || []).filter(function(item) { return !_this.getHistoryActionDisabledReason(item); }).map(function(item) { return item.id; });
+                    payload.ids = eligibleIds;
                     HistoryApi.abandonMsgQueueBatch(payload, onSuccess, onError);
                 } else {
                     HistoryApi.abandonMsgQueue(_this.currentAbandonQueueId, payload, onSuccess, onError);
@@ -636,10 +653,10 @@
             }).catch(() => {});
         },
         handleReloadConfirm: function() {
-            if (!this.ensureHistoryActionAllowed(this.currentReloadId)) return;
+            if (!this.ensureHistoryOperationAllowed(this.currentReloadId, 'reloadHistoryMsg')) return;
             let _this = this;
             let doReload = function() {
-                if (!_this.ensureHistoryActionAllowed(_this.currentReloadId)) return;
+                if (!_this.ensureHistoryOperationAllowed(_this.currentReloadId, 'reloadHistoryMsg')) return;
                 _this.reloadDialogVisible = false;
                 const loading = _this.$pageLoading({
                     lock: true,

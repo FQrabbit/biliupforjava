@@ -7,9 +7,48 @@ const vm = require('node:vm');
 const base = path.resolve(__dirname, '../../main/resources/static/modules/pages/history');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+test('录制中和分P切换期间不受理手动投稿，合并等待显示最早时间', async () => {
+    let requests = 0;
+    const model = setup({ touchPublish() { requests++; } });
+    model.formatDateTime = value => value;
+    model.currentDetail.recordPartCount = 1;
+    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '录制中，暂不能投稿');
+    model.touchPublish(7);
+    model.currentDetail.recordPartCount = 0;
+    model.currentDetail.streaming = true;
+    model.touchPublish(7);
+    model.currentDetail.streaming = false;
+    model.currentDetail.publishWaitReason = 'MERGE_INTERVAL';
+    model.currentDetail.publishNotBefore = '2026-10-02 04:20:00';
+    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '等待合并');
+    assert.match(model.getHistoryPublishDisabledReason(model.currentDetail), /04:20:00/);
+    model.touchPublish(7);
+    await flush();
+    assert.equal(requests, 0);
+    model.currentDetail.publishWaitReason = null;
+    model.currentDetail.publishNotBefore = null;
+    assert.equal(model.getHistoryPublishDisabledReason(model.currentDetail), '');
+});
+
+test('确认期间重新开播会拦截投稿，后端拒绝会立即更新等待提示', async () => {
+    let requests = 0, confirm;
+    const model = setup({ touchPublish() { requests++; } });
+    model.$pageConfirm = () => new Promise(resolve => { confirm = resolve; });
+    model.touchPublish(7);
+    model.currentDetail.recording = true;
+    confirm();
+    await flush();
+    assert.equal(requests, 0);
+    model.currentDetail.recording = false;
+    model.applyPublishRequestFeedback(7, { accepted: false, publishWaitReason: 'RECORDING', publishNotBefore: null });
+    assert.equal(model.getHistoryPublishActionText(model.currentDetail), '录制中，暂不能投稿');
+    model.currentDetail.publish = true;
+    assert.equal(model.getHistoryPublishWaitReason(model.currentDetail), '');
+});
+
 function setup(api = {}) {
     const context = { window: {}, HistoryApi: api, setTimeout, clearTimeout, document: { hidden: false } };
-    for (const file of ['common', 'record', 'detail', 'detail-view', 'progress', 'upload', 'batch', 'post-publish']) {
+    for (const file of ['common', 'record', 'detail', 'detail-view', 'progress', 'upload', 'batch', 'post-publish', 'danmaku']) {
         vm.runInNewContext(fs.readFileSync(path.join(base, 'methods', file + '-methods.js'), 'utf8'), context);
     }
     const methods = Object.assign({}, ...Object.values(context.window));
@@ -129,9 +168,8 @@ test('投稿成功与平台审核和可见性保持独立', () => {
     const model = setup();
     Object.assign(model.currentDetail, { publish: true, code: -1 });
     assert.equal(model.getAuditStatusText(model.currentDetail), '审核中');
-    assert.equal(model.getHistoryVisibilityText(model.currentDetail), '待平台确认');
     model.currentDetail.code = -50;
-    assert.equal(model.getHistoryVisibilityText(model.currentDetail), '仅自己可见');
+    assert.equal(model.getAuditStatusText(model.currentDetail), '仅自己可见');
     assert.match(model.getHistoryPublishDisabledReason(model.currentDetail), /已投稿/);
 });
 
@@ -156,4 +194,75 @@ test('处理中为蓝色、等待为黄色、失败为红色，取消为中性',
     assert.equal(model.getStatusColor('被退回'), 'danger');
     assert.equal(model.getStatusColor('已完成'), 'success');
     assert.equal(model.getStatusColor('已取消'), '');
+});
+
+
+test('弹幕操作按投稿审核及实际待发送内容开放', () => {
+    const model = setup();
+    const item = model.currentDetail;
+    Object.assign(item, { partCount: 2, msgCount: 4, failedMsgCount: 1, roomSendDm: true, pendingNormalMsgCount: 2 });
+    for (const action of ['reloadHistoryMsg', 'deleteHistoryMsg', 'retryFailedDanmaku', 'abandonHistoryMsgQueue']) {
+        assert.match(model.getHistoryOperationDisabledReason(item, action), /投稿/);
+    }
+    Object.assign(item, { publish: true, bvId: 'BV1TEST', code: -10 });
+    assert.match(model.getHistoryOperationDisabledReason(item, 'reloadHistoryMsg'), /审核/);
+    item.code = 0;
+    assert.equal(model.getHistoryOperationDisabledReason(item, 'reloadHistoryMsg'), '');
+    assert.equal(model.getHistoryOperationDisabledReason(item, 'retryFailedDanmaku'), '');
+    assert.equal(model.getHistoryOperationDisabledReason(item, 'abandonHistoryMsgQueue'), '');
+    item.pendingNormalMsgCount = 0;
+    assert.match(model.getHistoryOperationDisabledReason(item, 'abandonHistoryMsgQueue'), /没有/);
+    assert.equal(model.getHistoryOperationDisabledReason(item, 'deleteHistoryMsg'), '');
+});
+
+test('仅自己可见稿件保留高级弹幕功能，普通弹幕按公开条件限制', () => {
+    const model = setup();
+    const item = model.currentDetail;
+    Object.assign(item, { publish: true, bvId: 'BV1TEST', code: -50, partCount: 2,
+        roomSendDm: true, roomSendSc: false, pendingNormalMsgCount: 3, failedMsgCount: 2, sendReply: true });
+    assert.notEqual(model.getHistoryOperationDisabledReason(item, 'retryFailedDanmaku'), '');
+    assert.notEqual(model.getHistoryOperationDisabledReason(item, 'abandonHistoryMsgQueue'), '');
+    Object.assign(item, { roomSendSc: true, pendingHighMsgCount: 1 });
+    assert.equal(model.getHistoryOperationDisabledReason(item, 'retryFailedDanmaku'), '');
+    assert.equal(model.getHistoryOperationDisabledReason(item, 'abandonHistoryMsgQueue'), '');
+});
+
+test('确认期间稿件状态改变，强制弹幕重试不会继续请求', async () => {
+    let calls = 0, confirm;
+    const model = setup({ forceRetryFailedDanmaku() { calls++; } });
+    Object.assign(model.currentDetail, { publish: true, bvId: 'BV1TEST', code: 0, roomSendDm: true, failedMsgCount: 1 });
+    model.$pageConfirm = () => new Promise(resolve => { confirm = resolve; });
+    model.forceRetryFailedDanmaku(model.currentDetail);
+    model.currentDetail.code = -10;
+    confirm();
+    await flush();
+    assert.equal(calls, 0);
+    assert.ok(model.notices.some(value => String(value).includes('审核')));
+});
+
+test('录制中修复和剪辑禁用，正常已投稿稿件不能重置成新稿件', () => {
+    const model = setup();
+    Object.assign(model.currentDetail, { recordPartCount: 1, partCount: 2, code: -20 });
+    assert.equal(model.getHistoryOperationDisabledReason(model.currentDetail, 'updatePartStatus'), '');
+    for (const action of ['rePublish', 'highEnergyCutPublish', 'updatePublishStatus']) {
+        assert.match(model.getHistoryOperationDisabledReason(model.currentDetail, action), /录制/);
+    }
+    Object.assign(model.currentDetail, { recordPartCount: 0, publish: true, bvId: 'BV1TEST' });
+    assert.equal(model.getHistoryOperationDisabledReason(model.currentDetail, 'rePublish'), '');
+    assert.match(model.getHistoryOperationDisabledReason(model.currentDetail, 'updatePublishStatus'), /已投稿/);
+});
+
+test('批量放弃发送跳过无效稿件，确认后所有队列已完成就不再请求', async () => {
+    let calls = 0;
+    const model = setup({ abandonMsgQueueBatch() { calls++; } });
+    const ready = { id: 8, publish: true, bvId: 'BV1TEST', code: 0, roomSendDm: true, pendingNormalMsgCount: 1 };
+    model.selectedItems = [model.currentDetail, ready];
+    model.abandonQueueOptions = {};
+    model.openBatchAbandonQueue();
+    assert.equal(model.abandonQueueDialogVisible, true);
+    assert.equal(model.abandonQueueOptions.ordinary, true);
+    ready.pendingNormalMsgCount = 0;
+    model.handleAbandonQueueConfirm();
+    await flush();
+    assert.equal(calls, 0);
 });

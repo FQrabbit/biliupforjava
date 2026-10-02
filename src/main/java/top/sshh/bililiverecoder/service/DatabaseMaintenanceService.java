@@ -2,7 +2,6 @@ package top.sshh.bililiverecoder.service;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.zaxxer.hikari.HikariDataSource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
@@ -17,6 +16,8 @@ import top.sshh.bililiverecoder.entity.blrec.BlrecEventDTO;
 import top.sshh.bililiverecoder.service.blrec.BlrecEventService;
 import top.sshh.bililiverecoder.util.LogKvs;
 import top.sshh.bililiverecoder.util.TaskUtil;
+import top.sshh.bililiverecoder.config.db.DatabaseFileTransfer;
+import top.sshh.bililiverecoder.config.db.MaintenanceDataSource;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -26,6 +27,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.sql.Connection;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -33,6 +44,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -56,7 +68,23 @@ public class DatabaseMaintenanceService {
     @Value("${record.maintenance.compact.wait-webhook-idle-millis:5000}")
     private long waitWebhookIdleMillis;
 
+    @Value("${record.maintenance.compact.wait-database-idle-millis:30000}")
+    private long waitDatabaseIdleMillis = 30000L;
+
+    private volatile long operationStartedNanos;
+    private volatile long phaseStartedNanos;
+    private volatile long operationFinishedNanos;
+    private volatile Path progressFile;
+    private volatile TransferProgress transferProgress = new TransferProgress(0, 0);
+    private volatile long databaseBytesBefore;
+    private volatile long databaseBytesAfter;
+    private volatile boolean databaseAvailable = true;
+    private volatile String recoveryPath;
+    private boolean replacementMayHaveChanged;
+    private final Map<String, Long> phaseElapsedMillis = new ConcurrentHashMap<>();
+
     private final AtomicBoolean compactRunning = new AtomicBoolean(false);
+    private final AtomicInteger spooledCount = new AtomicInteger();
     private final Object webhookSpoolReplayLock = new Object();
     private volatile MaintenanceSnapshot snapshot = new MaintenanceSnapshot("IDLE", null, null, null, 0, 0, 0, null);
 
@@ -85,11 +113,29 @@ public class DatabaseMaintenanceService {
         result.put("running", compactRunning.get());
         result.put("phase", current.phase());
         result.put("phaseLabel", phaseLabel(current.phase()));
-        result.put("progress", phaseProgress(current.phase()));
+        TransferProgress transfer = transferProgress;
+        boolean known = isTransferPhase(current.phase()) && transfer.total() > 0;
+        result.put("progressKnown", known || "DONE".equals(current.phase()));
+        Integer progress = null;
+        if ("DONE".equals(current.phase())) progress = 100;
+        else if (known) progress = (int) (100.0 * transfer.written() / transfer.total());
+        result.put("progress", progress);
+        result.put("transferredBytes", transfer.written());
+        result.put("transferTotalBytes", transfer.total());
+        result.put("elapsedSeconds", elapsedSeconds(operationStartedNanos));
+        result.put("phaseElapsedSeconds", elapsedSeconds(phaseStartedNanos));
+        result.put("phaseElapsedMillis", new LinkedHashMap<>(phaseElapsedMillis));
+        result.put("fileBytes", currentFileBytes());
+        result.put("databaseBytesBefore", databaseBytesBefore);
+        result.put("databaseBytesAfter", databaseBytesAfter);
+        result.put("databaseAvailable", databaseAvailable);
+        result.put("databasePaused", maintenanceState.isDatabasePaused());
+        result.put("activeConnections", maintenanceState.activeConnectionCount());
+        result.put("recoveryPath", recoveryPath);
         result.put("startedAt", current.startedAt());
         result.put("finishedAt", current.finishedAt());
         result.put("message", current.message());
-        result.put("spooled", current.spooled());
+        result.put("spooled", spooledCount.get());
         result.put("replayed", current.replayed());
         result.put("failed", current.failed());
         result.put("pendingWebhookTasks", webhookEventDispatcher.pendingTaskCount());
@@ -106,10 +152,35 @@ public class DatabaseMaintenanceService {
             busy.put("message", "数据库压缩任务正在执行中");
             return busy;
         }
-        maintenanceState.setMaintenanceActive(true);
+        if (!databaseAvailable) {
+            compactRunning.set(false);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "数据库尚未恢复，请先根据维护日志恢复数据库");
+        }
+        synchronized (webhookSpoolReplayLock) {
+            spooledCount.set(0);
+            maintenanceState.setMaintenanceActive(true);
+        }
         LocalDateTime startedAt = LocalDateTime.now();
+        operationStartedNanos = System.nanoTime();
+        operationFinishedNanos = 0;
+        phaseStartedNanos = operationStartedNanos;
+        phaseElapsedMillis.clear();
+        databaseBytesBefore = 0;
+        databaseBytesAfter = 0;
+        recoveryPath = null;
+        replacementMayHaveChanged = false;
+        progressFile = null;
+        transferProgress = new TransferProgress(0, 0);
         snapshot = new MaintenanceSnapshot("QUEUING_WEBHOOK", startedAt, null, "已进入维护模式，新 webhook 将先写入本地队列", 0, 0, 0, null);
-        taskExecutor.execute(this::runCompactMaintenance);
+        try {
+            taskExecutor.execute(this::runCompactMaintenance);
+        } catch (RuntimeException error) {
+            operationFinishedNanos = System.nanoTime();
+            maintenanceState.setMaintenanceActive(false);
+            compactRunning.set(false);
+            snapshot = new MaintenanceSnapshot("FAILED", startedAt, LocalDateTime.now(), "无法启动数据库压缩任务", 0, 0, 0, null);
+            throw error;
+        }
 
         Map<String, Object> result = status();
         result.put("success", true);
@@ -165,20 +236,81 @@ public class DatabaseMaintenanceService {
         int replayed = 0;
         int failed = 0;
         String backupPath = null;
+        Path localDirectory = null;
+        Path originalFile = null;
+        Path localBackup = null;
+        boolean poolClosed = false;
+        boolean preserveLocalFiles = false;
+        int expectedTables = 0;
+        MaintenanceDataSource managed = dataSource instanceof MaintenanceDataSource source ? source : null;
+        ScheduledExecutorService reporter = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "database-maintenance-progress");
+            thread.setDaemon(true);
+            return thread;
+        });
+        reporter.scheduleWithFixedDelay(this::logProgress, 5, 5, TimeUnit.SECONDS);
         try {
+            if (managed == null) throw new IllegalStateException("当前连接池不支持安全的数据库维护");
+            validateFileDatabase(managed.jdbcUrl());
             interruptRecoverableLocalTasks();
             waitWebhookDispatcherIdle();
+            updatePhase("WAIT_DATABASE", "正在等待已有数据库操作结束");
+            maintenanceState.pauseAndDrain(waitDatabaseIdleMillis);
+            String location = jdbcTemplate.queryForObject("SELECT DATABASE_PATH()", String.class);
+            while (location != null && location.startsWith("retry:")) location = location.substring(6);
+            if (location != null && location.startsWith("file:")) location = location.substring(5);
+            if (location == null || location.isBlank()) throw new IllegalStateException("无法确定数据库文件位置");
+            originalFile = Path.of(location + ".mv.db").toAbsolutePath().normalize();
+            if (!Files.isRegularFile(originalFile)) throw new IllegalStateException("数据库文件不存在：" + originalFile);
+            databaseBytesBefore = Files.size(originalFile);
+            expectedTables = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES", Integer.class);
+            localDirectory = DatabaseFileTransfer.localWorkspace();
+            localBackup = localDirectory.resolve("backup.zip");
+            recoveryPath = localDirectory.toString();
 
-            snapshot = new MaintenanceSnapshot("BACKUP", startedAt, null, "正在备份数据库", countSpoolFiles(), replayed, failed, backupPath);
-            backupPath = backupH2Database();
+            updatePhase("BACKUP", "正在生成数据库备份");
+            progressFile = localBackup;
+            jdbcTemplate.execute("BACKUP TO '" + sqlPath(localBackup) + "'");
+            Path backupTarget = Path.of(workPath, "backup", "biliupforjava-DBbackup-before-compact-"
+                    + new SimpleDateFormat("yyyyMMddHHmmssSSS").format(new Date()) + ".zip").toAbsolutePath();
+            updatePhase("SAVE_BACKUP", "正在保存数据库备份");
+            DatabaseFileTransfer.publishBackup(localBackup, backupTarget, this::transferProgress);
+            backupPath = backupTarget.toString();
+            snapshot = new MaintenanceSnapshot(snapshot.phase(), startedAt, null, snapshot.message(),
+                    snapshot.spooled(), replayed, failed, backupPath);
 
-            snapshot = new MaintenanceSnapshot("COMPACT", startedAt, null, "正在执行 H2 SHUTDOWN COMPACT", countSpoolFiles(), replayed, failed, backupPath);
-            executeShutdownCompact();
+            updatePhase("RESTORE_LOCAL", "正在准备待压缩的数据库");
+            Path candidate = localDirectory.resolve("db.mv.db");
+            progressFile = candidate;
+            DatabaseFileTransfer.restoreSnapshot(localBackup, candidate);
+            String localUrl = localJdbcUrl(localDirectory.resolve("db"), managed.jdbcUrl());
+            updatePhase("COMPACT", "正在压缩数据库");
+            progressFile = candidate.resolveSibling(candidate.getFileName() + ".tempFile");
+            try (Connection local = managed.openDirect(localUrl); var statement = local.createStatement()) {
+                statement.execute("SHUTDOWN COMPACT");
+            }
+            updatePhase("VERIFY_LOCAL", "正在检查压缩后的数据库");
+            progressFile = candidate;
+            verifyLocalDatabase(managed, localUrl, expectedTables);
+            databaseBytesAfter = Files.size(candidate);
 
-            snapshot = new MaintenanceSnapshot("RECONNECT", startedAt, null, "正在恢复数据库连接", countSpoolFiles(), replayed, failed, backupPath);
+            updatePhase("SAVE_DATABASE", "正在保存压缩后的数据库");
+            // 从这里开始彻底停止连接池，替换结束前不允许任何连接重新打开原库
+            poolClosed = true;
+            databaseAvailable = false;
+            managed.closePoolForMaintenance();
+            replaceDatabaseFile(candidate, originalFile);
+            updatePhase("RECONNECT", "正在恢复数据库连接");
+            managed.reopenPool();
             verifyReconnect();
+            if (jdbcTemplate.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES", Integer.class) != expectedTables) {
+                throw new IllegalStateException("保存后的数据库表结构检查未通过");
+            }
+            databaseAvailable = true;
+            poolClosed = false;
+            maintenanceState.resumeDatabase();
 
-            snapshot = new MaintenanceSnapshot("REPLAY_WEBHOOK", startedAt, null, "正在按顺序回放维护期间收到的 webhook", countSpoolFiles(), replayed, failed, backupPath);
+            updatePhase("REPLAY_WEBHOOK", "正在按顺序回放维护期间收到的 webhook");
             ReplayResult replayResult;
             synchronized (webhookSpoolReplayLock) {
                 maintenanceState.setMaintenanceActive(false);
@@ -186,28 +318,72 @@ public class DatabaseMaintenanceService {
             }
             replayed = replayResult.replayed();
             failed = replayResult.failed();
-
+            finishPhase();
             snapshot = new MaintenanceSnapshot("DONE", startedAt, LocalDateTime.now(), "数据库压缩完成", countSpoolFiles(), replayed, failed, backupPath);
             log.info("[BLR] {}", LogKvs.event("Database.Compact.Success")
                     .add("backupPath", backupPath)
+                    .add("elapsedSeconds", elapsedSeconds(operationStartedNanos))
+                    .add("bytesBefore", databaseBytesBefore).add("bytesAfter", databaseBytesAfter)
                     .add("replayed", replayed)
                     .add("failed", failed));
         } catch (Exception e) {
-            synchronized (webhookSpoolReplayLock) {
-                maintenanceState.setMaintenanceActive(false);
+            if (poolClosed) {
+                try {
+                    updatePhase("ROLLBACK", "正在恢复原数据库");
+                    if (replacementMayHaveChanged) {
+                        managed.stopPoolForMaintenance();
+                        Path restored = localDirectory.resolve("rollback.mv.db");
+                        DatabaseFileTransfer.restoreSnapshot(localBackup, restored);
+                        replaceDatabaseFile(restored, originalFile);
+                    }
+                    managed.reopenPool();
+                    verifyReconnect();
+                    databaseAvailable = true;
+                } catch (Exception recoveryError) {
+                    e.addSuppressed(recoveryError);
+                    databaseAvailable = false;
+                    preserveLocalFiles = true;
+                    log.error("数据库自动恢复失败，请保留备份和临时文件。备份位置：{}，临时文件位置：{}",
+                            backupPath, localDirectory, recoveryError);
+                }
             }
+            if (databaseAvailable) maintenanceState.resumeDatabase();
+            synchronized (webhookSpoolReplayLock) {
+                maintenanceState.setMaintenanceActive(!databaseAvailable);
+            }
+            finishPhase();
             snapshot = new MaintenanceSnapshot("FAILED", startedAt, LocalDateTime.now(), "数据库压缩失败：" + e.getMessage(), countSpoolFiles(), replayed, failed, backupPath);
             log.error("[BLR] {}", LogKvs.event("Database.Compact.Failed")
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
+            if (!databaseAvailable) maintenanceState.retainDatabasePause();
+            operationFinishedNanos = System.nanoTime();
+            reporter.shutdownNow();
+            progressFile = null;
+            if (!preserveLocalFiles) {
+                try {
+                    DatabaseFileTransfer.cleanWorkspace(localDirectory);
+                    recoveryPath = null;
+                } catch (IOException cleanupError) {
+                    log.warn("维护临时文件清理失败，临时文件位置：{}", localDirectory, cleanupError);
+                }
+            }
             compactRunning.set(false);
         }
     }
 
-    private void interruptRecoverableLocalTasks() {
-        TaskUtil.partUploadTask.values().forEach(this::interruptQuietly);
-        TaskUtil.publishTask.values().forEach(this::interruptQuietly);
+    private void interruptRecoverableLocalTasks() throws InterruptedException {
+        List<Thread> tasks = new ArrayList<>(TaskUtil.partUploadTask.values());
+        tasks.addAll(TaskUtil.publishTask.values());
+        tasks.forEach(this::interruptQuietly);
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitDatabaseIdleMillis);
+        for (Thread thread : tasks) {
+            if (thread == null || !thread.isAlive()) continue;
+            long remaining = deadline - System.nanoTime();
+            if (remaining > 0) TimeUnit.NANOSECONDS.timedJoin(thread, remaining);
+            if (thread.isAlive()) throw new IllegalStateException("已有上传或投稿任务尚未退出，本次压缩已取消");
+        }
     }
 
     private void interruptQuietly(Thread thread) {
@@ -228,42 +404,66 @@ public class DatabaseMaintenanceService {
         if (!webhookEventDispatcher.isIdle()) {
             log.warn("[BLR] {}", LogKvs.event("Database.Compact.WebhookStillBusy")
                     .add("pending", webhookEventDispatcher.pendingTaskCount()));
+            throw new IllegalStateException("Webhook 任务仍在处理中，本次压缩已取消");
         }
     }
 
-    private String backupH2Database() throws IOException {
-        Path backupDir = Path.of(workPath, "backup");
-        Files.createDirectories(backupDir);
-        String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-        String backupPath = backupDir.resolve("biliupforjava-DBbackup-before-compact-" + timestamp + ".zip")
-                .toAbsolutePath()
-                .toString()
-                .replace("\\", "/")
-                .replace("'", "''");
-        jdbcTemplate.execute("BACKUP TO '" + backupPath + "'");
-        return backupPath;
+    private static void validateFileDatabase(String url) {
+        if (url == null || !url.startsWith("jdbc:h2:")) throw new IllegalStateException("数据库压缩只支持 H2 文件数据库");
+        String location = url.substring(8).split(";", 2)[0];
+        while (location.startsWith("retry:")) location = location.substring(6);
+        if (location.startsWith("mem:") || location.startsWith("tcp:") || location.startsWith("ssl:")
+                || (location.contains(":") && !location.startsWith("file:") && !location.matches("^[A-Za-z]:.*"))) {
+            throw new IllegalStateException("数据库压缩只支持本机直接访问的 H2 文件数据库");
+        }
     }
 
-    private void executeShutdownCompact() {
+    private static String localJdbcUrl(Path base, String originalUrl) {
+        StringBuilder url = new StringBuilder("jdbc:h2:").append(base.toAbsolutePath().toString().replace('\\', '/'))
+                .append(";IFEXISTS=TRUE");
+        for (String option : originalUrl.split(";")) {
+            String upper = option.toUpperCase(Locale.ROOT);
+            if (upper.startsWith("CIPHER=") || upper.startsWith("DATABASE_TO_UPPER=") || upper.startsWith("DATABASE_TO_LOWER=")) {
+                url.append(';').append(option);
+            }
+        }
+        return url.toString();
+    }
+
+    private static void verifyLocalDatabase(MaintenanceDataSource source, String url, int expectedTables) throws Exception {
+        try (Connection connection = source.openDirect(url); var statement = connection.createStatement()) {
+            try (var result = statement.executeQuery("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES")) {
+                if (!result.next() || result.getInt(1) != expectedTables) throw new IllegalStateException("压缩后的数据库表结构检查未通过");
+            }
+            statement.execute("SHUTDOWN");
+        }
+    }
+
+    protected void replaceDatabaseFile(Path candidate, Path original) throws IOException {
+        maintenanceState.requireMaintenanceOwner();
+        Path pending = original.resolveSibling(original.getFileName() + ".pending-" + UUID.randomUUID());
         try {
-            jdbcTemplate.execute("SHUTDOWN COMPACT");
-        } catch (Exception e) {
-            String message = e.getMessage();
-            if (message == null || (!message.contains("Database is already closed") && !message.contains("The database has been closed"))) {
-                throw e;
+            DatabaseFileTransfer.copy(candidate, pending, this::transferProgress);
+            maintenanceState.requireMaintenanceOwner();
+            // 不支持原子替换时直接取消，原库不能出现被移走的空档
+            replacementMayHaveChanged = true;
+            try {
+                Files.move(pending, original, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException unsupported) {
+                replacementMayHaveChanged = false;
+                throw new IOException("目标存储不支持原子替换，本次压缩已取消，原数据库保持原样", unsupported);
             }
         } finally {
-            if (dataSource instanceof HikariDataSource hikariDataSource && hikariDataSource.getHikariPoolMXBean() != null) {
-                hikariDataSource.getHikariPoolMXBean().softEvictConnections();
-            }
+            Files.deleteIfExists(pending);
         }
     }
 
     private void verifyReconnect() throws InterruptedException {
         Exception last = null;
         for (int i = 0; i < 10; i++) {
-            try (Connection ignored = dataSource.getConnection()) {
-                jdbcTemplate.queryForObject("SELECT 1", Integer.class);
+            try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement();
+                 var result = statement.executeQuery("SELECT 1")) {
+                if (!result.next() || result.getInt(1) != 1) throw new IllegalStateException("数据库连接验证失败");
                 return;
             } catch (Exception e) {
                 last = e;
@@ -289,9 +489,7 @@ public class DatabaseMaintenanceService {
             item.put("payloadBase64", Base64.getEncoder().encodeToString(nullToEmpty(payload).getBytes(StandardCharsets.UTF_8)));
             Files.writeString(file, item.toJSONString(), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
 
-            MaintenanceSnapshot current = snapshot;
-            snapshot = new MaintenanceSnapshot(current.phase(), current.startedAt(), current.finishedAt(), current.message(),
-                    current.spooled() + 1, current.replayed(), current.failed(), current.backupPath());
+            spooledCount.incrementAndGet();
             log.info("[BLR] {}", LogKvs.event("Database.Compact.WebhookSpooled")
                     .add("endpoint", endpoint)
                     .add("file", file.getFileName())
@@ -309,17 +507,20 @@ public class DatabaseMaintenanceService {
             initialDelayString = "${record.webhook.spool-replay-initial-delay-ms:5000}")
     public void recoverSpooledWebhooks() {
         if (maintenanceState.isMaintenanceActive() || compactRunning.get()) return;
-        try {
-            ReplayResult result = replaySpooledWebhooks();
-            if (result.replayed() > 0) {
-                MaintenanceSnapshot current = snapshot;
-                snapshot = new MaintenanceSnapshot(current.phase(), current.startedAt(), current.finishedAt(),
-                        current.message(), countSpoolFiles(), current.replayed() + result.replayed(),
-                        current.failed() + result.failed(), current.backupPath());
+        synchronized (webhookSpoolReplayLock) {
+            if (maintenanceState.isMaintenanceActive() || compactRunning.get()) return;
+            try {
+                ReplayResult result = replaySpooledWebhooks();
+                if (result.replayed() > 0) {
+                    MaintenanceSnapshot current = snapshot;
+                    snapshot = new MaintenanceSnapshot(current.phase(), current.startedAt(), current.finishedAt(),
+                            current.message(), countSpoolFiles(), current.replayed() + result.replayed(),
+                            current.failed() + result.failed(), current.backupPath());
+                }
+            } catch (Exception error) {
+                log.error("[BLR] {}", LogKvs.event("Database.Compact.WebhookSpoolRecoveryFailed")
+                        .addIfNotBlank("err", error.getMessage()).add("ex", error.getClass().getSimpleName()), error);
             }
-        } catch (Exception error) {
-            log.error("[BLR] {}", LogKvs.event("Database.Compact.WebhookSpoolRecoveryFailed")
-                    .addIfNotBlank("err", error.getMessage()).add("ex", error.getClass().getSimpleName()), error);
         }
     }
 
@@ -431,32 +632,67 @@ public class DatabaseMaintenanceService {
         return value == null ? "" : value;
     }
 
-    private int phaseProgress(String phase) {
-        if ("QUEUING_WEBHOOK".equals(phase)) {
-            return 10;
+    private void updatePhase(String phase, String message) {
+        finishPhase();
+        phaseStartedNanos = System.nanoTime();
+        progressFile = null;
+        transferProgress = new TransferProgress(0, 0);
+        MaintenanceSnapshot previous = snapshot;
+        snapshot = new MaintenanceSnapshot(phase, previous.startedAt(), null, message,
+                previous.spooled(), previous.replayed(), previous.failed(), previous.backupPath());
+        log.info("数据库维护：{}，累计耗时 {} 秒", message, elapsedSeconds(operationStartedNanos));
+    }
+
+    private void finishPhase() {
+        if (phaseStartedNanos != 0) phaseElapsedMillis.put(snapshot.phase(),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - phaseStartedNanos));
+    }
+
+    private void transferProgress(long written, long total) {
+        transferProgress = new TransferProgress(written, total);
+    }
+
+    private static boolean isTransferPhase(String phase) {
+        return "SAVE_BACKUP".equals(phase) || "SAVE_DATABASE".equals(phase) || "ROLLBACK".equals(phase);
+    }
+
+    private long elapsedSeconds(long start) {
+        return start == 0 ? 0 : TimeUnit.NANOSECONDS.toSeconds((operationFinishedNanos == 0
+                ? System.nanoTime() : operationFinishedNanos) - start);
+    }
+
+    private long currentFileBytes() {
+        Path file = progressFile;
+        try {
+            return file != null && Files.exists(file) ? Files.size(file) : 0;
+        } catch (IOException | SecurityException ignored) {
+            return 0;
         }
-        if ("BACKUP".equals(phase)) {
-            return 25;
+    }
+
+    private void logProgress() {
+        try {
+            MaintenanceSnapshot current = snapshot;
+            TransferProgress transfer = transferProgress;
+            log.info("数据库维护进行中：{}，本阶段已耗时 {} 秒，文件大小 {} MB，已传输 {} / {} MB",
+                    current.message(), elapsedSeconds(phaseStartedNanos), currentFileBytes() / (1024 * 1024),
+                    transfer.written() / (1024 * 1024), transfer.total() / (1024 * 1024));
+        } catch (RuntimeException ignored) {
+            // 状态日志失败不能打断数据库维护
         }
-        if ("COMPACT".equals(phase)) {
-            return 55;
-        }
-        if ("RECONNECT".equals(phase)) {
-            return 75;
-        }
-        if ("REPLAY_WEBHOOK".equals(phase)) {
-            return 90;
-        }
-        if ("DONE".equals(phase)) {
-            return 100;
-        }
-        if ("FAILED".equals(phase)) {
-            return 100;
-        }
-        return 0;
+    }
+
+    private static String sqlPath(Path path) {
+        return path.toAbsolutePath().toString().replace("\\", "/").replace("'", "''");
     }
 
     private String phaseLabel(String phase) {
+        if ("WAIT_DATABASE".equals(phase)) return "等待数据库操作结束";
+        if ("SAVE_BACKUP".equals(phase)) return "保存数据库备份";
+        if ("RESTORE_LOCAL".equals(phase)) return "准备数据库";
+        if ("VERIFY_LOCAL".equals(phase)) return "检查压缩结果";
+        if ("SAVE_DATABASE".equals(phase)) return "保存压缩结果";
+        if ("ROLLBACK".equals(phase)) return "恢复原数据库";
         if ("QUEUING_WEBHOOK".equals(phase)) {
             return "进入维护模式";
         }
@@ -493,6 +729,8 @@ public class DatabaseMaintenanceService {
 
     private record ReplayResult(int replayed, int failed) {
     }
+
+    private record TransferProgress(long written, long total) { }
 
     private static final class UUID_SEED {
         private static final java.util.concurrent.atomic.AtomicLong SEQ = new java.util.concurrent.atomic.AtomicLong();

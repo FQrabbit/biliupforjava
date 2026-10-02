@@ -297,6 +297,7 @@
         },
         forceRetryFailedDanmaku: function(item) {
             const target = item || this.getMobileDanmakuStatsItem() || this.currentDetail || {};
+            if (!this.ensureHistoryOperationAllowed(target, 'retryFailedDanmaku')) return;
             if (!this.canRetryFailedDanmaku(target)) {
                 this.notifyDanmakuRetryResult('info', '当前没有可强制重新入队的未成功弹幕');
                 return;
@@ -321,6 +322,7 @@
             const target = item || this.getMobileDanmakuStatsItem() || this.currentDetail || {};
             const historyId = target && target.id;
             if (!historyId || _this.danmakuRetryLoading) return;
+            if (!_this.ensureHistoryOperationAllowed(target, 'retryFailedDanmaku')) return;
             if (!_this.canRetryFailedDanmaku(target)) {
                 _this.notifyDanmakuRetryResult('info', force ? '当前没有可强制重新入队的未成功弹幕' : '当前没有可重试的未成功弹幕');
                 return;

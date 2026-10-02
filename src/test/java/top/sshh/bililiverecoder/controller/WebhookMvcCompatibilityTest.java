@@ -42,7 +42,7 @@ class WebhookMvcCompatibilityTest {
                 new WebhookRequestGuard(""));
         RecordWebhookInboxController inboxController = new RecordWebhookInboxController(inbox);
 
-        MvcConfig config = new MvcConfig(mock(AsyncTaskExecutor.class));
+        MvcConfig config = new MvcConfig(mock(AsyncTaskExecutor.class), new top.sshh.bililiverecoder.service.DatabaseMaintenanceState());
         ReflectionTestUtils.setField(config, "userName", "user");
         ReflectionTestUtils.setField(config, "password", "password");
         InspectableInterceptorRegistry registry = new InspectableInterceptorRegistry();

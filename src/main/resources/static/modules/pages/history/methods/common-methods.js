@@ -26,6 +26,60 @@
             this.$message.warning(reason);
             return false;
         },
+        getHistoryOperationDisabledReason: function(item, action) {
+            if (item && item.id) item = this.findHistoryForAction(item.id) || item;
+            var reason = this.getHistoryActionDisabledReason(item);
+            if (reason) return reason;
+            if (!item) return '稿件不存在，请刷新列表';
+            var recording = this.isActuallyRecording(item) || item.recording || item.streaming;
+            var tasks = this.getPublishFlowTasks(item, true);
+            var active = function(task) { return ['READY', 'PREPARING', 'WAITING_UPLOAD', 'WAITING_ACCOUNT', 'WAITING_CAPTCHA', 'SUBMITTING', 'VERIFYING', 'RETRY_WAIT', 'NEEDS_ACTION'].indexOf(task.state) >= 0; };
+            if (action === 'updatePartStatus') return recording ? '' : '当前没有仍在录制的分P，无需结束录制状态';
+            if (action === 'highEnergyCutPublish') {
+                if (recording) return '请等录制结束后再生成高能片段';
+                if (!(Number(item.partCount) > 0)) return '当前没有可用于剪辑的分P';
+                return tasks.some(function(task) { return task.operation === 'HIGH_ENERGY' && active(task); }) ? '高能片段任务已在处理中' : '';
+            }
+            if (tasks.some(function(task) { return task.operation !== 'HIGH_ENERGY' && active(task); })) return '稿件已有未结束的投稿或编辑任务，请先处理或取消该任务';
+            if (action === 'updatePublishStatus') {
+                if (recording) return '录制中不能重置状态，请先确认录制已结束';
+                if (item.publish || item.bvId || item.avId) return '已投稿稿件不能重置成新稿件，请使用编辑分P或转码修复';
+                if (Number(item.id) === Number(this.currentDetail && this.currentDetail.id) && this.getEffectiveActivePartCount() > 0) return '分P仍在上传，请先等待或暂停上传';
+                return Number(item.partCount) > 0 ? '' : '当前没有可重置的分P';
+            }
+            if (action === 'rePublish') {
+                if (recording) return '请等录制结束后再执行转码修复';
+                return Number(item.code) === -20 || this.hasTimestampJump(item) ? '' : '当前没有检测到转码失败或时间戳跳变，无需转码修复';
+            }
+            if (!item.publish || !item.bvId) return '请先完成稿件投稿并取得 BVID，再操作弹幕队列';
+            if ([0, -50].indexOf(Number(item.code)) < 0) return '稿件尚未审核通过或当前不可发送，请先处理平台状态';
+            if (action === 'deleteHistoryMsg') return Number(item.msgCount) > 0 ? '' : '当前没有可删除的弹幕记录';
+            var ordinaryEnabled = Number(item.code) === 0 && item.roomSendDm === true;
+            var advancedEnabled = item.roomSendSc === true;
+            var dmEnabled = ordinaryEnabled || advancedEnabled;
+            var replyEnabled = item.roomSendSc === true || item.roomSendGiftReply === true;
+            if (action === 'reloadHistoryMsg') {
+                if (!dmEnabled && !replyEnabled) return '当前房间未开启可用的弹幕或评论发送功能';
+                return Number(item.partCount) > 0 ? '' : '当前没有可重新读取弹幕的分P';
+            }
+            if (action === 'retryFailedDanmaku') {
+                if (!dmEnabled) return '当前房间未开启稿件可用的弹幕发送功能';
+                return this.getDanmakuFailedCount(item) > 0 ? '' : '当前没有未成功的弹幕需要重试';
+            }
+            if (action === 'abandonHistoryMsgQueue') {
+                var pending = (ordinaryEnabled && Number(item.pendingNormalMsgCount) > 0) || (advancedEnabled && Number(item.pendingHighMsgCount) > 0);
+                var replyPending = replyEnabled && item.sendReply === false && (Number(item.pendingHighMsgCount) > 0 || Number(item.advancedMsgCount) > 0 || Number(item.highReplyLineCount) > 0 || Number(item.giftReplyLineCount) > 0);
+                return pending || replyPending ? '' : '当前没有可放弃的待发送弹幕或评论';
+            }
+            return '';
+        },
+        ensureHistoryOperationAllowed: function(id, action) {
+            var item = typeof id === 'object' ? id : this.findHistoryForAction(id);
+            var reason = this.getHistoryOperationDisabledReason(item, action);
+            if (!reason) return true;
+            this.$message.warning(reason);
+            return false;
+        },
         getMainPublishTask: function(item) {
             var tasks = this.getPublishFlowTasks(item, true).filter(function(task) {
                 return task.operation !== 'HIGH_ENERGY' && task.state !== 'SUCCEEDED' && task.state !== 'CANCELLED';
@@ -39,6 +93,10 @@
             if (task && this.requiresPublishTaskVerification(task)) return '结果待核对';
             if (task && task.state === 'SUBMITTING') return '正在投稿';
             if (task && task.state === 'WAITING_CAPTCHA') return '等待验证码';
+            var wait = this.getHistoryPublishWaitReason(item);
+            if (wait === 'RECORDING') return '录制中，暂不能投稿';
+            if (wait === 'MERGE_INTERVAL') return '等待合并';
+            if (wait) return '等待确认录制结束';
             if (task && this.canRetryPublishTask(task)) return '重试投稿';
             return task ? '已在投稿队列' : '加入投稿队列';
         },
@@ -54,18 +112,27 @@
             if (this.isHistoryPublishRequesting(item)) return '请求正在受理，请稍候';
             var task = this.getMainPublishTask(item);
             if (task && this.requiresPublishTaskVerification(task)) return '请在投稿任务中核对线上结果，避免重复投稿';
+            var wait = this.getHistoryPublishWaitText(item);
+            if (wait) return wait;
             if (task && !this.canRetryPublishTask(task)) return '任务已受理，进度及等待原因见投稿任务';
             if (item && item.publish && !task) return '稿件已投稿，修改分P请使用编辑分P';
             return '';
         },
+        getHistoryPublishWaitReason: function(item) {
+            if (!item || item.publish || item.bvId || item.avId) return '';
+            if (this.isActuallyRecording(item) || item.recording || item.streaming) return 'RECORDING';
+            return item.publishWaitReason || (item.waitingForPublish ? 'MERGE_INTERVAL' : '');
+        },
+        getHistoryPublishWaitText: function(item) {
+            var reason = this.getHistoryPublishWaitReason(item);
+            if (reason === 'RECORDING') return '录制中，暂不能投稿；已结束分P仍可上传，录制结束后按合并等待设置继续处理';
+            if (reason === 'MERGE_INTERVAL') return '等待短时开播合并'
+                + (item.publishNotBefore ? '，最早可处理时间：' + this.formatDateTime(item.publishNotBefore) : '')
+                + '；到时仍需检查上传和账号状态';
+            return reason ? '尚未确认录制结束时间，请刷新状态或检查录制记录' : '';
+        },
         getPublishTaskDetailText: function(task) {
             return this.getPublishFlowDetail({ publishTasks: [task] }, true);
-        },
-        getHistoryVisibilityText: function(item) {
-            if (!item || !item.publish) return '尚未投稿';
-            if (Number(item.code) === 0) return '公开';
-            if (Number(item.code) === -50) return '仅自己可见';
-            return '待平台确认';
         },
         getDetailUploadSummary: function() {
             var total = this.getEffectiveTotalParts();
@@ -125,7 +192,7 @@
                 return (prefix ? prefix + '：' : '') + (task.label || '投稿处理中');
             }).join(' / ');
             if ((item.publishTasks && item.publishTasks.length) || item.publishDispatch) return '';
-            if (item.waitingForPublish && !item.publish) return '等待自动投稿';
+            if (item.waitingForPublish && !item.publish) return '等待合并';
             return '';
         },
         getPublishFlowClass: function(item, includeCompleted) {

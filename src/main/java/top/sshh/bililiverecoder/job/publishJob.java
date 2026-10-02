@@ -16,6 +16,7 @@ import top.sshh.bililiverecoder.repo.RecordHistoryPartRepository;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.LogAnalyzeService;
+import top.sshh.bililiverecoder.service.PublishReadinessService;
 import top.sshh.bililiverecoder.service.impl.RecordBiliPublishService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
 import top.sshh.bililiverecoder.service.UploadUserSerialScheduler;
@@ -68,7 +69,7 @@ public class publishJob {
     UploadUserSerialScheduler uploadUserSerialScheduler;
 
     @Autowired
-    top.sshh.bililiverecoder.service.SystemConfigService systemConfigService;
+    PublishReadinessService publishReadinessService;
 
     @Autowired
     ShutdownState shutdownState;
@@ -217,22 +218,7 @@ public class publishJob {
         List<RecordHistory> historyList = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
-        // 从配置中读取短时间开播合并时间，默认20分钟
-        int mergeIntervalMinutes = 20;
-        try {
-            String mergeIntervalConfig = systemConfigService.getAllConfigsMap().get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
-            if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
-                mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
-                if (mergeIntervalMinutes < 1) {
-                    mergeIntervalMinutes = 1;
-                } else if (mergeIntervalMinutes > 1440) {
-                    mergeIntervalMinutes = 1440;
-                }
-            }
-        } catch (Exception e) {
-            log.warn("[BLR] {}", LogKvs.event("PublishJob.ParseMergeIntervalConfigFailed")
-                    .add("error", e.getMessage()));
-        }
+        int mergeIntervalMinutes = publishReadinessService.mergeIntervalMinutes();
 
         for (RecordRoom room : roomList) {
             // 查询不在录制,下播指定时间后的需要上传的历史
@@ -256,6 +242,7 @@ public class publishJob {
                         .addIfNotBlank("title", history.getTitle()));
                 continue;
             }
+            if (!publishReadinessService.check(history).allowed()) continue;
             // 二次校验：不信任 history.recording 单字段，避免被历史数据/列表纠偏误改后误触发投稿
             // 只要存在未结束(endTime=null)或仍标记录制中的分P，就视为仍在录制，直接跳过
             int actuallyRecordingParts = 0;

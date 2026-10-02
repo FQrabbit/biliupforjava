@@ -133,12 +133,16 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
                              and (p.uploadRetryCount >= 9999 or (p.deleteFailType is not null and trim(p.deleteFailType) <> ''))
                              and (p.deleteFailType is null or (trim(p.deleteFailType) <> '' and p.deleteFailType not in ('SKIPPED_THRESHOLD', 'MANUAL_SKIP')))
                             then 1 else 0 end),
-                   sum(case when p.uploadFlowFallback = true then 1 else 0 end)
+                   sum(case when p.uploadFlowFallback = true then 1 else 0 end),
+                   max(p.endTime)
             from RecordHistoryPart p
             where p.historyId in ?1
             group by p.historyId
             """)
     List<Object[]> aggregateListStatsByHistoryIds(List<Long> historyIds);
+
+    @Query("select max(p.endTime) from RecordHistoryPart p where p.historyId = ?1")
+    LocalDateTime findLatestEndTimeByHistoryId(Long historyId);
 
     @Query("select p from RecordHistoryPart p where p.historyId = ?1 and p.uploadFlowFallback = true order by p.page asc")
     List<RecordHistoryPart> findUploadFlowFallbackPartsByHistoryId(Long historyId);

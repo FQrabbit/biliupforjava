@@ -21,6 +21,26 @@ class RecordHistoryRepositoryTest {
 
     @Autowired
     private RecordHistoryRepository repository;
+    @Autowired
+    private RecordHistoryPartRepository partRepository;
+
+    @Test
+    void partSummaryReturnsLatestEndAndCountsUnfinishedPartsEvenIfUploaded() {
+        java.time.LocalDateTime end = java.time.LocalDateTime.of(2026, 10, 2, 4, 0);
+        RecordHistory history = repository.save(new RecordHistory());
+        top.sshh.bililiverecoder.entity.RecordHistoryPart ended = new top.sshh.bililiverecoder.entity.RecordHistoryPart();
+        ended.setHistoryId(history.getId());
+        ended.setEndTime(end);
+        top.sshh.bililiverecoder.entity.RecordHistoryPart recording = new top.sshh.bililiverecoder.entity.RecordHistoryPart();
+        recording.setHistoryId(history.getId());
+        recording.setUpload(true);
+        recording.setRecording(true);
+        partRepository.saveAll(List.of(ended, recording));
+        Object[] row = partRepository.aggregateListStatsByHistoryIds(List.of(history.getId())).get(0);
+        assertEquals(1L, ((Number) row[5]).longValue());
+        assertEquals(end, row[9]);
+        assertEquals(end, partRepository.findLatestEndTimeByHistoryId(history.getId()));
+    }
 
     @Test
     void syncListExcludesHistoryWhileEditPartsAreUploading() {

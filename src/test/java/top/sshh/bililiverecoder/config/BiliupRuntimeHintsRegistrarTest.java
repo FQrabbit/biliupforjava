@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.entity.NotificationDelivery;
 import top.sshh.bililiverecoder.entity.NotificationRule;
 import top.sshh.bililiverecoder.entity.PartFileLocation;
 import top.sshh.bililiverecoder.entity.PublishTask;
+import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.PublishTaskOperation;
 import top.sshh.bililiverecoder.entity.PublishTaskSource;
 import top.sshh.bililiverecoder.entity.PublishTaskState;
@@ -35,6 +36,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BiliupRuntimeHintsRegistrarTest {
 
     @Test
+    void registersMaintenanceConnectionProxyAndPoolRestartReflection() {
+        RuntimeHints hints = new RuntimeHints();
+        new BiliupRuntimeHintsRegistrar().registerHints(hints, getClass().getClassLoader());
+        assertTrue(RuntimeHintsPredicates.proxies().forInterfaces(java.sql.Connection.class).test(hints));
+        assertTrue(RuntimeHintsPredicates.reflection().onType(java.sql.Connection.class)
+                .withMemberCategory(MemberCategory.INVOKE_PUBLIC_METHODS).test(hints));
+        assertTrue(RuntimeHintsPredicates.reflection().onType(com.zaxxer.hikari.HikariConfig.class)
+                .withMemberCategory(MemberCategory.DECLARED_FIELDS).test(hints));
+    }
+
+    @Test
     void registersNotificationTypesForReflection() {
         RuntimeHints hints = new RuntimeHints();
 
@@ -56,6 +68,7 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, StorageRootChangeAssessmentService.Snapshot.class);
         assertReflectionRegistered(hints, StorageRootChangeAssessmentService.State.class);
         assertReflectionRegistered(hints, PublishTask.class);
+        assertReflectionRegistered(hints, RecordHistory.class);
         assertReflectionRegistered(hints, PublishTaskOperation.class);
         assertReflectionRegistered(hints, PublishTaskSource.class);
         assertReflectionRegistered(hints, PublishTaskState.class);

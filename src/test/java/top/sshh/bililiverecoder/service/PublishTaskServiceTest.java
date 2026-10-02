@@ -28,16 +28,38 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class PublishTaskServiceTest {
+    @Test
+    void newRequestDuringRecordingIsRejectedWithoutSavingTask() {
+        when(readiness.check(any(RecordHistory.class))).thenReturn(
+                new PublishReadinessService.Check(false, "RECORDING", "录制中，暂不能投稿", null));
+        var result = service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+        assertFalse(result.isAccepted());
+        assertTrue(stored.isEmpty());
+        assertEquals("录制中，暂不能投稿", result.getMessage());
+    }
+
+    @Test
+    void existingTaskIsReturnedEvenIfRecordingResumes() {
+        var first = service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+        when(readiness.check(any(RecordHistory.class))).thenReturn(
+                new PublishReadinessService.Check(false, "RECORDING", "录制中", null));
+        var duplicate = service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null);
+        assertTrue(duplicate.isAlreadyQueued());
+        assertEquals(first.getTask().getId(), duplicate.getTask().getId());
+        assertEquals(1, stored.size());
+    }
     private final PublishTaskRepository repository = mock(PublishTaskRepository.class);
     private final RecordHistoryRepository histories = mock(RecordHistoryRepository.class);
     private final BiliUserRepository users = mock(BiliUserRepository.class);
+    private final PublishReadinessService readiness = mock(PublishReadinessService.class);
     private final List<PublishTask> stored = new ArrayList<>();
     private PublishTaskService service;
 
     @BeforeEach
     void setUp() {
         stored.clear();
-        service = new PublishTaskService(repository, histories, users);
+        service = new PublishTaskService(repository, histories, users, readiness);
+        when(readiness.check(any(RecordHistory.class))).thenReturn(PublishReadinessService.Check.ready());
         RecordHistory history = new RecordHistory();
         history.setId(1L);
         history.setPublish(false);

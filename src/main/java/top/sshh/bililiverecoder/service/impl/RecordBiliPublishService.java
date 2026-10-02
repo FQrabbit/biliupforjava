@@ -30,6 +30,7 @@ import top.sshh.bililiverecoder.service.PartFileOperationService;
 import top.sshh.bililiverecoder.service.PartFileLocationService;
 import top.sshh.bililiverecoder.service.RecordPartPathService;
 import top.sshh.bililiverecoder.service.RecordPartRecordingStateService;
+import top.sshh.bililiverecoder.service.PublishReadinessService;
 import top.sshh.bililiverecoder.service.RoomLiveEventXmlIssueService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.UploadServiceFactory;
@@ -107,6 +108,8 @@ public class RecordBiliPublishService {
     private RecordHistoryRepository historyRepository;
     @Autowired
     private RecordPartRecordingStateService recordingStateService;
+    @Autowired
+    private PublishReadinessService publishReadinessService;
     @Autowired
     private RecordRoomRepository roomRepository;
     @Autowired
@@ -1890,6 +1893,14 @@ public class RecordBiliPublishService {
                                 .addIfNotBlank("cover", abbreviateForLog(videoUploadDto.getCover(), 120))
                                 .addIfNotBlank("source", abbreviateForLog(videoUploadDto.getSource(), 120)));
                     }
+                    // 准备封面和材料期间可能重新开播，发出请求前再读一次最新状态
+                    RecordHistory latestHistory = historyRepository.findById(history.getId()).orElse(null);
+                    if (latestHistory == null || latestHistory.isDeletePending() || latestHistory.isForceArchived()) return false;
+                    PublishReadinessService.Check finalReadiness =
+                            publishReadinessService.check(latestHistory);
+                    if (!finalReadiness.allowed()) {
+                        throw new PublishReadinessService.Deferred(finalReadiness);
+                    }
                     String uploadRes = null;
                     boolean publishRequestStarted = false;
                     try {
@@ -2160,6 +2171,7 @@ public class RecordBiliPublishService {
         }
         } catch (Exception e) {
             if (e instanceof PublishSubmissionException submission) throw submission;
+            if (e instanceof PublishReadinessService.Deferred deferred) throw deferred;
             log.error("[BLR] {}", LogKvs.event("Publish.Error")
                     .add("historyId", history.getId())
                     .add("roomId", history.getRoomId())

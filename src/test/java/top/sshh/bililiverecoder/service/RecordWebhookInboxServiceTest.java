@@ -17,6 +17,18 @@ import static org.mockito.Mockito.when;
 
 class RecordWebhookInboxServiceTest {
     @Test
+    void maintenanceSkipsInboxPollingAndPruningBeforeRepositoryAccess() {
+        RecordWebhookInboxRepository repository = mock(RecordWebhookInboxRepository.class);
+        DatabaseMaintenanceService maintenance = mock(DatabaseMaintenanceService.class);
+        when(maintenance.isMaintenanceActive()).thenReturn(true);
+        RecordWebhookInboxService service = new RecordWebhookInboxService(repository,
+                mock(RecordEventFactory.class), mock(WebhookEventDispatcher.class), 20);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "databaseMaintenanceService", maintenance);
+        service.dispatchDueEvents();
+        service.pruneTerminalEvents();
+        org.mockito.Mockito.verifyNoInteractions(repository);
+    }
+    @Test
     void upstreamEventIdDeduplicatesReformattedPayloadButKeepsSourcesSeparate() {
         RecordWebhookInboxRepository repository = mock(RecordWebhookInboxRepository.class);
         Map<String, RecordWebhookInboxEvent> stored = new HashMap<>();

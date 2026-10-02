@@ -30,11 +30,6 @@
                 </div>
             </div>
 
-            <div class="history-detail-config-summary">
-                <span>自动上传：{{ currentDetail.upload ? '开启' : '关闭' }}</span>
-                <span>{{ getDetailUploadSummary().detail }}</span>
-                <span>可见性：{{ getHistoryVisibilityText(currentDetail) }}</span>
-            </div>
             <!-- 状态栏 -->
             <div class="detail-status-bar">
                 <div class="status-item-modern" :class="{'active': isActuallyRecording(currentDetail), 'warning': isActuallyRecording(currentDetail)}">
@@ -120,12 +115,12 @@
                         <el-button size="small" type="primary" :loading="isPublishTaskActionLoading(task)" :disabled="!!getHistoryActionDisabledReason(currentDetail)" @click="confirmPublishTaskResult(task)">核对线上结果</el-button>
                     </div>
                     <div v-if="canRetryPublishTask(task) || canCancelPublishTask(task)" class="history-task-actions">
-                        <el-button v-if="canRetryPublishTask(task)" size="small" type="warning" :loading="isPublishTaskActionLoading(task)" :disabled="!!getHistoryActionDisabledReason(currentDetail)" @click="retryPublishTask(task)">{{ getPublishTaskRetryLabel(task) }}</el-button>
+                        <el-button v-if="canRetryPublishTask(task)" size="small" type="warning" :loading="isPublishTaskActionLoading(task)" :disabled="!!getHistoryActionDisabledReason(currentDetail) || !!getHistoryPublishWaitReason(currentDetail)" @click="retryPublishTask(task)">{{ getPublishTaskRetryLabel(task) }}</el-button>
                         <el-button v-if="canCancelPublishTask(task)" size="small" :loading="isPublishTaskActionLoading(task)" @click="cancelPublishTask(task)">取消任务</el-button>
                     </div>
                 </div>
             </div>
-            <div v-if="!getPublishFlowTasks(currentDetail, 'active').length && getPublishFlowText(currentDetail, 'active')" class="detail-config-notice info" role="status">
+            <div v-if="!getHistoryPublishWaitReason(currentDetail) && !getPublishFlowTasks(currentDetail, 'active').length && getPublishFlowText(currentDetail, 'active')" class="detail-config-notice info" role="status">
                 <i class="el-icon-time"></i>
                 <div>{{ getPublishFlowText(currentDetail, 'active') }}<p>{{ getPublishFlowDetail(currentDetail, 'active') }}</p></div>
             </div>
@@ -255,7 +250,7 @@
                                          @mouseleave="hideDanmakuFailedHint">
                                         <button type="button"
                                                 class="danmaku-retry-button"
-                                                :disabled="danmakuRetryLoading"
+                                                :disabled="danmakuRetryLoading || !!getHistoryOperationDisabledReason(currentDetail, 'retryFailedDanmaku')" :title="getHistoryOperationDisabledReason(currentDetail, 'retryFailedDanmaku')"
                                                 aria-label="重试可发送弹幕"
                                                 @focus="holdDanmakuFailedHint"
                                                 @blur="hideDanmakuFailedHint"
@@ -265,7 +260,7 @@
                                         </button>
                                         <button type="button"
                                                 class="danmaku-retry-button is-force"
-                                                :disabled="danmakuRetryLoading"
+                                                :disabled="danmakuRetryLoading || !!getHistoryOperationDisabledReason(currentDetail, 'retryFailedDanmaku')" :title="getHistoryOperationDisabledReason(currentDetail, 'retryFailedDanmaku')"
                                                 aria-label="强制重新入队未成功弹幕"
                                                 @focus="holdDanmakuFailedHint"
                                                 @blur="hideDanmakuFailedHint"
@@ -583,24 +578,24 @@
                     <div class="action-backdrop" v-show="showMoreActions" @click="showMoreActions = false"></div>
                 </transition>
                 <transition name="actions-slide">
-                    <div class="action-group-secondary" v-show="showMoreActions">
+                    <div class="action-group-secondary history-stage-actions" v-show="showMoreActions">
                         <div class="action-sub-group">
                             <span class="action-group-label">投稿管理</span>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh" :disabled="!!getHistoryActionDisabledReason(currentDetail)">转码修复</el-button>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play" :disabled="!!getHistoryActionDisabledReason(currentDetail)">高能片段</el-button>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left" :disabled="!!getHistoryActionDisabledReason(currentDetail)">重置状态</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="rePublish(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-refresh" :title="getHistoryOperationDisabledReason(currentDetail, 'rePublish')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'rePublish')">转码修复</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="highEnergyCutPublish(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play" :title="getHistoryOperationDisabledReason(currentDetail, 'highEnergyCutPublish')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'highEnergyCutPublish')">高能片段</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePublishStatus(currentDetail.id)" size="mini" plain icon="el-icon-refresh-left" :title="getHistoryOperationDisabledReason(currentDetail, 'updatePublishStatus')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'updatePublishStatus')">重置状态</el-button>
                             <el-button v-if="currentDetail.forceArchived" class="modern-btn" @click="restoreForceArchive(currentDetail.id)" size="mini" type="success" plain icon="el-icon-video-play" :disabled="isHistoryDeletionPending(currentDetail)">恢复处理</el-button>
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
                             <span class="action-group-label">录制与数据</span>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause" :disabled="!!getHistoryActionDisabledReason(currentDetail)">结束录制</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause" :title="getHistoryOperationDisabledReason(currentDetail, 'updatePartStatus')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'updatePartStatus')">结束录制</el-button>
                             <el-tooltip popper-class="history-page-tooltip-popper" v-if="!currentDetail.forceArchived" effect="dark" content="强制停止所有未完成操作并归档（适用于卡住的任务）" placement="top">
                                 <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button" :disabled="!!getHistoryActionDisabledReason(currentDetail)">强制归档</el-button>
                             </el-tooltip>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round" :disabled="!!getHistoryActionDisabledReason(currentDetail)">重载弹幕</el-button>
-                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="abandonHistoryMsgQueue(currentDetail.id, currentDetail)" size="mini" type="warning" plain icon="el-icon-remove-outline" :disabled="!!getHistoryActionDisabledReason(currentDetail)">放弃发送</el-button>
-                            <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete" :disabled="!!getHistoryActionDisabledReason(currentDetail)">删除弹幕</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="reloadHistoryMsg(currentDetail.id)" size="mini" plain icon="el-icon-chat-dot-round" :title="getHistoryOperationDisabledReason(currentDetail, 'reloadHistoryMsg')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'reloadHistoryMsg')">重载弹幕</el-button>
+                            <el-button v-if="!currentDetail.forceArchived" class="modern-btn" @click="abandonHistoryMsgQueue(currentDetail.id, currentDetail)" size="mini" type="warning" plain icon="el-icon-remove-outline" :title="getHistoryOperationDisabledReason(currentDetail, 'abandonHistoryMsgQueue')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'abandonHistoryMsgQueue')">放弃发送</el-button>
+                            <el-button class="modern-btn" @click="deleteHistoryMsg(currentDetail.id)" size="mini" type="danger" plain icon="el-icon-delete" :title="getHistoryOperationDisabledReason(currentDetail, 'deleteHistoryMsg')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'deleteHistoryMsg')">删除弹幕</el-button>
                         </div>
                         <div class="action-divider"></div>
                         <div class="action-sub-group">

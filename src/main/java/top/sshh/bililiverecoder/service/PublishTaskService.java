@@ -39,13 +39,15 @@ public class PublishTaskService {
     private final PublishTaskRepository tasks;
     private final RecordHistoryRepository histories;
     private final BiliUserRepository users;
+    private final PublishReadinessService readiness;
     private final Object[] historyLocks = new Object[128];
 
     public PublishTaskService(PublishTaskRepository tasks, RecordHistoryRepository histories,
-                              BiliUserRepository users) {
+                              BiliUserRepository users, PublishReadinessService readiness) {
         this.tasks = tasks;
         this.histories = histories;
         this.users = users;
+        this.readiness = readiness;
         for (int i = 0; i < historyLocks.length; i++) historyLocks[i] = new Object();
     }
 
@@ -88,6 +90,11 @@ public class PublishTaskService {
             Long originalAccountId = history.getPublishUserId();
             if (history.isPublish() && originalAccountId != null && !originalAccountId.equals(accountId)) {
                 return Admission.rejected("已发布稿件必须使用原投稿账号");
+            }
+
+            if (operation != PublishTaskOperation.HIGH_ENERGY) {
+                PublishReadinessService.Check check = readiness.check(history);
+                if (!check.allowed()) return Admission.rejected(check.message());
             }
 
             PublishTask task = new PublishTask();

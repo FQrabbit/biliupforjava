@@ -676,7 +676,13 @@
             var pendingOrdinary = 0;
             var pendingAdvanced = 0;
             var pendingReply = false;
-            this.selectedItems.forEach(function(item) {
+            var eligible = this.selectedItems.filter(item => !this.getHistoryOperationDisabledReason(item, 'abandonHistoryMsgQueue'));
+            if (!eligible.length) {
+                this.$message.info('所选稿件没有当前可放弃的待发送队列');
+                return;
+            }
+            if (eligible.length < this.selectedItems.length) this.$message.info('会跳过尚未满足条件或没有待发送内容的稿件');
+            eligible.forEach(function(item) {
                 pendingOrdinary += Number(item.pendingNormalMsgCount) || 0;
                 pendingAdvanced += Number(item.pendingHighMsgCount) || 0;
                 if (item && item.sendReply === false) pendingReply = true;

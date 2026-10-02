@@ -9,6 +9,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PublishTaskStatusDtoSerializationTest {
+    @Test
+    void recordingAndMergeReasonsAreSerializedAsActualWaitingStates() throws Exception {
+        PublishTaskStatusDto dto = new PublishTaskStatusDto();
+        dto.setState(PublishTaskState.WAITING_UPLOAD);
+        dto.setWaitReason("RECORDING");
+        assertEquals("等待录制结束", objectMapper.readTree(objectMapper.writeValueAsString(dto)).get("label").asText());
+        dto.setWaitReason("MERGE_INTERVAL");
+        assertEquals("等待合并", objectMapper.readTree(JSON.toJSONString(dto)).get("label").asText());
+        RecordHistory history = new RecordHistory();
+        history.setPublishWaitReason("MERGE_INTERVAL");
+        history.setPublishNotBefore(java.time.LocalDateTime.of(2026, 10, 2, 4, 20));
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        assertEquals("MERGE_INTERVAL", mapper.readTree(mapper.writeValueAsString(history)).get("publishWaitReason").asText());
+        assertTrue(mapper.readTree(mapper.writeValueAsString(history)).hasNonNull("publishNotBefore"));
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 

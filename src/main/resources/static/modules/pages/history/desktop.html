@@ -454,16 +454,16 @@
                                 <el-dropdown-menu slot="dropdown" class="history-page-dropdown-popper">
                                     <el-dropdown-item command="exportDiagnostic" icon="el-icon-download">导出诊断包</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
-                                    <el-dropdown-item command="rePublish" :disabled="!!getHistoryActionDisabledReason(scope.row)">转码失败修复</el-dropdown-item>
-                                    <el-dropdown-item command="highEnergyCutPublish" :disabled="!!getHistoryActionDisabledReason(scope.row)">发布高能片段</el-dropdown-item>
+                                    <el-dropdown-item command="rePublish" :title="getHistoryOperationDisabledReason(scope.row, 'rePublish')" :disabled="!!getHistoryOperationDisabledReason(scope.row, 'rePublish')">转码失败修复</el-dropdown-item>
+                                    <el-dropdown-item command="highEnergyCutPublish" :title="getHistoryOperationDisabledReason(scope.row, 'highEnergyCutPublish')" :disabled="!!getHistoryOperationDisabledReason(scope.row, 'highEnergyCutPublish')">发布高能片段</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
-                                    <el-dropdown-item command="updatePartStatus" :disabled="!!getHistoryActionDisabledReason(scope.row)">结束分p录制状态</el-dropdown-item>
+                                    <el-dropdown-item command="updatePartStatus" :title="getHistoryOperationDisabledReason(scope.row, 'updatePartStatus')" :disabled="!!getHistoryOperationDisabledReason(scope.row, 'updatePartStatus')">结束分p录制状态</el-dropdown-item>
                                     <el-dropdown-item v-if="!scope.row.publish || getMainPublishTask(scope.row)" command="touchPublish" :disabled="!!getHistoryPublishDisabledReason(scope.row)">{{ getHistoryPublishActionText(scope.row) }}</el-dropdown-item>
-                                    <el-dropdown-item command="updatePublishStatus" :disabled="!!getHistoryActionDisabledReason(scope.row)">重置为未上传发布</el-dropdown-item>
+                                    <el-dropdown-item command="updatePublishStatus" :title="getHistoryOperationDisabledReason(scope.row, 'updatePublishStatus')" :disabled="!!getHistoryOperationDisabledReason(scope.row, 'updatePublishStatus')">重置为未上传发布</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
-                                    <el-dropdown-item command="reloadHistoryMsg" :disabled="!!getHistoryActionDisabledReason(scope.row)">重新加载弹幕</el-dropdown-item>
-                                    <el-dropdown-item command="abandonHistoryMsgQueue" :disabled="!!getHistoryActionDisabledReason(scope.row)">放弃待发送队列</el-dropdown-item>
-                                    <el-dropdown-item command="deleteHistoryMsg" :disabled="!!getHistoryActionDisabledReason(scope.row)">删除弹幕</el-dropdown-item>
+                                    <el-dropdown-item command="reloadHistoryMsg" :title="getHistoryOperationDisabledReason(scope.row, 'reloadHistoryMsg')" :disabled="!!getHistoryOperationDisabledReason(scope.row, 'reloadHistoryMsg')">重新加载弹幕</el-dropdown-item>
+                                    <el-dropdown-item command="abandonHistoryMsgQueue" :title="getHistoryOperationDisabledReason(scope.row, 'abandonHistoryMsgQueue')" :disabled="!!getHistoryOperationDisabledReason(scope.row, 'abandonHistoryMsgQueue')">放弃待发送队列</el-dropdown-item>
+                                    <el-dropdown-item command="deleteHistoryMsg" :title="getHistoryOperationDisabledReason(scope.row, 'deleteHistoryMsg')" :disabled="!!getHistoryOperationDisabledReason(scope.row, 'deleteHistoryMsg')">删除弹幕</el-dropdown-item>
                                     <el-dropdown-item divided></el-dropdown-item>
                                      <el-dropdown-item command="deleteHistory" style="color: var(--danger-color);">删除</el-dropdown-item>
                                 </el-dropdown-menu>

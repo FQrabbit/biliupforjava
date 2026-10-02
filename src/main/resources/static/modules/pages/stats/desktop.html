@@ -68,9 +68,9 @@
                         <strong>{{ operationProgress.title }}</strong>
                         <span>{{ operationProgress.message }}</span>
                     </div>
-                    <em>{{ operationProgress.percent }}%</em>
+                    <em>{{ operationProgress.indeterminate ? (operationProgress.status === 'error' ? '已停止' : '处理中') : operationProgress.percent + '%' }}</em>
                 </div>
-                <el-progress
+                <el-progress v-if="!operationProgress.indeterminate"
                         v-render-progress="statsProgressInterpolator" :percentage="operationProgress.percent"
                         :status="operationProgress.status === 'error' ? 'exception' : (operationProgress.percent >= 100 ? 'success' : undefined)"
                         :stroke-width="8">

@@ -122,6 +122,7 @@ public class RecordWebhookInboxService {
 
     @Scheduled(fixedDelayString = "${record.webhook.inbox-poll-ms:1000}")
     public void dispatchDueEvents() {
+        if (databaseMaintenanceService != null && databaseMaintenanceService.isMaintenanceActive()) return;
         List<RecordWebhookInboxEvent> due = repository.findDueHeadEvents(
                 "PENDING", LocalDateTime.now(), PageRequest.of(0, batchSize));
         for (RecordWebhookInboxEvent candidate : due) {
@@ -132,6 +133,7 @@ public class RecordWebhookInboxService {
 
     @Scheduled(cron = "0 20 4 * * *")
     public void pruneTerminalEvents() {
+        if (databaseMaintenanceService != null && databaseMaintenanceService.isMaintenanceActive()) return;
         repository.deleteOldTerminal(LocalDateTime.now().minusDays(30));
     }
 

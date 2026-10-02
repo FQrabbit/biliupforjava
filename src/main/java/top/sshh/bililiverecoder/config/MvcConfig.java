@@ -7,14 +7,17 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import top.sshh.bililiverecoder.service.DatabaseMaintenanceState;
 
 @Configuration
 public class MvcConfig implements WebMvcConfigurer{
 
     private final AsyncTaskExecutor taskExecutor;
+    private final DatabaseMaintenanceState maintenanceState;
 
-    public MvcConfig(@Qualifier("taskExecutor") AsyncTaskExecutor taskExecutor) {
+    public MvcConfig(@Qualifier("taskExecutor") AsyncTaskExecutor taskExecutor, DatabaseMaintenanceState maintenanceState) {
         this.taskExecutor = taskExecutor;
+        this.maintenanceState = maintenanceState;
     }
 
     @Value("${record.userName}")
@@ -58,5 +61,6 @@ public class MvcConfig implements WebMvcConfigurer{
                         "/api/version/check",
                         "/api/setup/**"
                 );
+        registry.addInterceptor(new DatabaseMaintenanceInterceptor(maintenanceState)).addPathPatterns("/**");
     }
 }
