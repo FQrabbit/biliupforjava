@@ -274,7 +274,8 @@ public class DiagnosticExportService {
             String line;
             while ((line = reader.readLine()) != null) {
                 Matcher matcher = LOG_HEADER.matcher(line);
-                if (matcher.matches()) {
+                // 规则只匹配日志开头，后面的线程、类名和正文还要保留
+                if (matcher.lookingAt()) {
                     if (current != null) consumer.accept(new LogRecord(timestamp, level, current.toString()));
                     current = new StringBuilder(line);
                     timestamp = LocalDateTime.parse(matcher.group(1), LOG_TIME);

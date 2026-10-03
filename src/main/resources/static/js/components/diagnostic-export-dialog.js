@@ -12,7 +12,7 @@
                 historyOptions: [],
                 selectedHistory: null,
                 historyLoading: false,
-                includeFullLogs: false,
+                includeFullLogs: true,
                 includeRoomConfig: true,
                 includeSystemConfig: true,
                 advancedVisible: false,
