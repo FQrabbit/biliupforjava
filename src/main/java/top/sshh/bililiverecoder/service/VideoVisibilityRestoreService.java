@@ -7,7 +7,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
 import top.sshh.bililiverecoder.entity.VideoVisibilityRestoreTask;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
@@ -28,14 +30,17 @@ import java.util.concurrent.locks.ReentrantLock;
 public class VideoVisibilityRestoreService {
     private final VideoVisibilityRestoreTaskRepository repository;
     private final BiliUserRepository users;
+    private final TransactionTemplate transactions;
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
     private final ReentrantLock[] historyLocks = createHistoryLocks();
     @Autowired(required = false)
     private RecordHistoryRepository histories;
 
-    public VideoVisibilityRestoreService(VideoVisibilityRestoreTaskRepository repository, BiliUserRepository users) {
+    public VideoVisibilityRestoreService(VideoVisibilityRestoreTaskRepository repository, BiliUserRepository users,
+                                         PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.users = users;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
     @Transactional(readOnly = true)
@@ -149,7 +154,8 @@ public class VideoVisibilityRestoreService {
     public boolean restoreNow(Long taskId) {
         if (taskId == null || !inFlight.add(taskId)) return false;
         try {
-            VideoVisibilityRestoreTask task = beginAttempt(taskId);
+            // 同类内部调用不会触发事务代理，先提交领取状态，再请求平台
+            VideoVisibilityRestoreTask task = transactions.execute(status -> beginAttempt(taskId));
             if (task == null) return false;
             BiliBiliUser user = users.findById(task.getAccountId()).orElse(null);
             if (user == null || !user.isLogin()) {
@@ -163,7 +169,7 @@ public class VideoVisibilityRestoreService {
                     String message = json == null ? "平台未返回恢复结果" : json.getString("message");
                     return failedAttempt(task, "恢复视频可见性失败：" + message);
                 }
-                markComplete(task.getId());
+                transactions.executeWithoutResult(status -> markComplete(task.getId()));
                 log.info("[BLR] {}", LogKvs.event("VideoVisibility.Restore.Success")
                         .add("historyId", task.getHistoryId()).add("aid", task.getAid())
                         .add("accountId", task.getAccountId()));
@@ -183,8 +189,7 @@ public class VideoVisibilityRestoreService {
         due.forEach(task -> restoreNow(task.getId()));
     }
 
-    @Transactional
-    protected VideoVisibilityRestoreTask beginAttempt(Long taskId) {
+    private VideoVisibilityRestoreTask beginAttempt(Long taskId) {
         VideoVisibilityRestoreTask current = repository.findById(taskId).orElse(null);
         if (current == null) return null;
         ReentrantLock lock = historyLock(current.getHistoryId());
@@ -204,8 +209,7 @@ public class VideoVisibilityRestoreService {
         }
     }
 
-    @Transactional
-    protected void markComplete(Long taskId) {
+    private void markComplete(Long taskId) {
         VideoVisibilityRestoreTask task = repository.findById(taskId).orElse(null);
         if (task == null) return;
         task.setState("COMPLETE");
@@ -215,17 +219,18 @@ public class VideoVisibilityRestoreService {
         repository.save(task);
     }
 
-    @Transactional
-    protected boolean failedAttempt(VideoVisibilityRestoreTask task, String message) {
-        VideoVisibilityRestoreTask current = repository.findById(task.getId()).orElse(task);
-        current.setState("PENDING");
-        current.setErrorMessage(message == null || message.length() <= 2000 ? message : message.substring(0, 2000));
-        current.setUpdatedAt(LocalDateTime.now());
-        current.setNextAttemptAt(LocalDateTime.now().plusMinutes(Math.min(60, Math.max(1, current.getAttemptCount() * 5L))));
-        repository.save(current);
-        log.warn("[BLR] {}", LogKvs.event("VideoVisibility.Restore.Retry")
-                .add("historyId", current.getHistoryId()).add("aid", current.getAid())
-                .add("attempt", current.getAttemptCount()).addIfNotBlank("reason", current.getErrorMessage()));
+    private boolean failedAttempt(VideoVisibilityRestoreTask task, String message) {
+        transactions.executeWithoutResult(status -> {
+            VideoVisibilityRestoreTask current = repository.findById(task.getId()).orElse(task);
+            current.setState("PENDING");
+            current.setErrorMessage(message == null || message.length() <= 2000 ? message : message.substring(0, 2000));
+            current.setUpdatedAt(LocalDateTime.now());
+            current.setNextAttemptAt(LocalDateTime.now().plusMinutes(Math.min(60, Math.max(1, current.getAttemptCount() * 5L))));
+            repository.save(current);
+            log.warn("[BLR] {}", LogKvs.event("VideoVisibility.Restore.Retry")
+                    .add("historyId", current.getHistoryId()).add("aid", current.getAid())
+                    .add("attempt", current.getAttemptCount()).addIfNotBlank("reason", current.getErrorMessage()));
+        });
         return false;
     }
 

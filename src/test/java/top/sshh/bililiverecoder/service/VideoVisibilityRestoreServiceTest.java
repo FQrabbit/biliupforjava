@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
 import top.sshh.bililiverecoder.entity.VideoVisibilityRestoreTask;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.VideoVisibilityRestoreTaskRepository;
@@ -32,7 +33,8 @@ class VideoVisibilityRestoreServiceTest {
                 stored.getId().equals(invocation.getArgument(0)) ? Optional.of(stored) : Optional.empty());
         when(repository.save(any(VideoVisibilityRestoreTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        VideoVisibilityRestoreService service = new VideoVisibilityRestoreService(repository, users);
+        VideoVisibilityRestoreService service = new VideoVisibilityRestoreService(repository, users,
+                mock(PlatformTransactionManager.class));
         VideoVisibilityRestoreTask preparing = service.ensurePreparing(3L, 11L, "12345", 1);
         assertEquals("PREPARING", preparing.getState());
         assertTrue(service.markVideoPublic(preparing.getId()));
