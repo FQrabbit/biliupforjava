@@ -114,6 +114,9 @@ public class RecordBiliPublishService {
     private RecordRoomRepository roomRepository;
     @Autowired
     private UploadServiceFactory uploadServiceFactory;
+
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
     @Autowired
     private UploadUserSerialScheduler uploadUserSerialScheduler;
     @Autowired
@@ -307,8 +310,13 @@ public class RecordBiliPublishService {
 
             part.setFilePath(normalizeFilePath(resolution.path().toString()));
             if (part.getFileSize() <= 0) part.setFileSize(file.length());
-            if (part.getDuration() <= 0 && part.getStartTime() != null && part.getEndTime() != null) {
+            if (part.getDuration() <= 0 && part.getSplitAssigned() == null && part.getStartTime() != null && part.getEndTime() != null) {
                 part.setDuration((int) java.time.Duration.between(part.getStartTime(), part.getEndTime()).getSeconds());
+            }
+            if (part.getSplitAssigned() != null && part.getDuration() <= 0) {
+                if (historySplitService != null) historySplitService.reconcile(part.getHistoryId());
+                part = partRepository.findById(part.getId()).orElse(part);
+                if (part.getDuration() <= 0) return PreparationResult.waiting("等待确认分P视频时长");
             }
             if (part.getEndTime().isAfter(now.plusMinutes(11))) {
                 return PreparationResult.action("分P结束时间异常，需先检查录制记录");

@@ -217,7 +217,8 @@ public class HighEnergyCutPublishService {
                             Files.writeString(Path.of(outputPath).getParent().resolve("prepared-artifact.json"),
                                     JSON.toJSONString(manifest));
                         } catch (IOException error) {
-                            log.warn("高能剪辑上传成功，但产物清单暂时无法更新 taskId={}", task.getId(), error);
+                            log.warn("[BLR] {}", LogKvs.event("HighEnergyCut.Artifact.UpdateFailed")
+                                    .add("taskId", task.getId()), error);
                             manifest = new HashMap<>(artifact);
                             manifest.put("uploadedFileName", fileName);
                             manifest.put("uploadedAt", LocalDateTime.now().toString());

@@ -14,6 +14,11 @@ import java.util.Collection;
 @Repository
 public interface RoomLiveEventParseStateRepository extends CrudRepository<RoomLiveEventParseState, Long> {
 
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("update RoomLiveEventParseState e set e.historyId = ?2 where e.partId = ?1")
+    int reassignHistoryByPartId(Long partId, Long historyId);
+
+
     RoomLiveEventParseState findByPartId(Long partId);
 
     List<RoomLiveEventParseState> findByHistoryId(Long historyId);

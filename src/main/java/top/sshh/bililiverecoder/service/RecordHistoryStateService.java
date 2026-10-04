@@ -41,6 +41,10 @@ public class RecordHistoryStateService {
             RecordHistory history = historyRepository.findById(part.getHistoryId()).orElse(null);
             if (history != null) return history;
         }
+        if (part == null && room != null && room.getHistoryId() != null && isCurrentSession(room, eventData)) {
+            RecordHistory current = historyRepository.findById(room.getHistoryId()).orElse(null);
+            if (current != null) return current;
+        }
         if (eventData != null && StringUtils.isNotBlank(eventData.getRoomId())
                 && StringUtils.isNotBlank(eventData.getSessionId())) {
             for (RecordHistoryPart candidate : partRepository.findByRoomIdAndSessionIdOrderByIdDesc(
@@ -50,7 +54,7 @@ public class RecordHistoryStateService {
                     if (history != null) return history;
                 }
             }
-            RecordHistory history = historyRepository.findBySessionId(eventData.getSessionId());
+            RecordHistory history = historyRepository.findFirstByRoomIdAndSessionIdOrderByIdDesc(eventData.getRoomId(), eventData.getSessionId());
             if (history != null && Objects.equals(history.getRoomId(), eventData.getRoomId())) return history;
         }
         if (room != null && room.getHistoryId() != null && isCurrentSession(room, eventData)) {
@@ -67,7 +71,7 @@ public class RecordHistoryStateService {
 
     @Transactional
     public void markSessionEnded(RecordHistory history, RecordEventData eventData) {
-        if (history == null || history.isForceArchived()) return;
+        if (history == null || history.isForceArchived() || history.isSplitClosed()) return;
         LocalDateTime now = LocalDateTime.now();
         if (StringUtils.isNotBlank(eventData.getSessionId())) history.setSessionId(eventData.getSessionId());
         history.setRecording(false);
@@ -81,7 +85,7 @@ public class RecordHistoryStateService {
 
     @Transactional
     public void markStreamEnded(RecordHistory history) {
-        if (history == null || history.isForceArchived()) return;
+        if (history == null || history.isForceArchived() || history.isSplitClosed()) return;
         LocalDateTime now = LocalDateTime.now();
         history.setStreaming(false);
         history.setEndTime(now);

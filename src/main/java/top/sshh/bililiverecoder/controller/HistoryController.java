@@ -693,7 +693,7 @@ public class HistoryController {
                         .add("aid", history.getAvId())
                         .add("target", isOnlySelf)
                         .add("code", code)
-                    .add("msg", msg)
+                    .add("platformMsg", msg)
                     .addRoundCount("pendingNormal", pendingNormal)
                     .addRoundCount("pendingHigh", pendingHigh)
                     .addStageCostMs("total", totalStartNs));

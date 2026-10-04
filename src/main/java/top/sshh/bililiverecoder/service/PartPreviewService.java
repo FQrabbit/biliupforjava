@@ -583,6 +583,32 @@ public class PartPreviewService {
         return resolvedFfmpegPath;
     }
 
+    // 复用预览的可执行文件查找，只读取单个视频的实际时长
+    public Double probeDuration(Long partId) {
+        Process process = null;
+        try {
+            String executable = refreshFfmpegPathIfNeeded();
+            PartFileLocationService.FileResolution file = partFileLocationService.resolveReadable(partId);
+            if (StringUtils.isBlank(executable) || !file.available()) return null;
+            process = new ProcessBuilder(executable, "-hide_banner", "-i", file.path().toString())
+                    .redirectErrorStream(true).start();
+            if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) return null;
+            String output = new String(process.getInputStream().readNBytes(65536), StandardCharsets.UTF_8);
+            Matcher match = Pattern.compile("Duration: (\\d+):(\\d+):(\\d+(?:\\.\\d+)?)").matcher(output);
+            if (!match.find()) return null;
+            double seconds = Double.parseDouble(match.group(1)) * 3600
+                    + Double.parseDouble(match.group(2)) * 60 + Double.parseDouble(match.group(3));
+            return Double.isFinite(seconds) && seconds > 0 ? seconds : null;
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (IOException | RuntimeException error) {
+            return null;
+        } finally {
+            if (process != null) process.destroyForcibly();
+        }
+    }
+
     private boolean isExecutableFile(String path) {
         if (StringUtils.isBlank(path)) {
             return false;

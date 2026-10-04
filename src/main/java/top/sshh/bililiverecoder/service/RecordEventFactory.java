@@ -71,6 +71,8 @@ public class RecordEventFactory {
                 BlrecUserInfo userInfo = eventDTO.getData().getUserInfo();
                 eventDTO.setEventId(eventDTO.getId());
                 eventData.setSessionId("blrec");
+                if (RecordEventType.VideoFileCreatedEvent.equals(eventDTO.getEventType())) eventData.setFileOpenTime(eventDTO.getDate());
+                if (RecordEventType.VideoFileCompletedEvent.equals(eventDTO.getEventType())) eventData.setFileCloseTime(eventDTO.getDate());
                 eventData.setRecording(false);
                 String path = eventDTO.getData().getPath();
                 if (StringUtils.isNotBlank(path)) {

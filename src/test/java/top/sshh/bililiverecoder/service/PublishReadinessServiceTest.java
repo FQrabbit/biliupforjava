@@ -112,4 +112,15 @@ class PublishReadinessServiceTest {
         assertEquals(1, PublishReadinessService.mergeIntervalMinutes(Map.of(SystemConfigService.KEY_MERGE_INTERVAL_MINUTES, "0")));
         assertEquals(1440, PublishReadinessService.mergeIntervalMinutes(Map.of(SystemConfigService.KEY_MERGE_INTERVAL_MINUTES, "9999")));
     }
+
+    @Test
+    void thresholdClosureSkipsMergeButStillRequiresEveryPartToEnd() {
+        RecordHistory history = history();
+        history.setEndTime(now);
+        history.setSplitClosedAt(now);
+        assertTrue(service.check(history, 0, now, Map.of(), now).allowed());
+        assertEquals("RECORDING", service.check(history, 1, now, Map.of(), now).reason());
+        history.setRecording(true);
+        assertEquals("RECORDING", service.check(history, 0, now, Map.of(), now).reason());
+    }
 }

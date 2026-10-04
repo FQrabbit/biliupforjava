@@ -27,8 +27,17 @@ public class RecordEventFilePostService implements RecordEventService {
     private top.sshh.bililiverecoder.service.RecordPartPathService partPathService;
 
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
     @Override
     public void processing(RecordEventDTO event) {
+        String roomId = event.getEventData().getRoomId();
+        if (roomId == null) throw new IllegalArgumentException("事件缺少房间号");
+        synchronized (roomId.intern()) { processingInside(event); }
+    }
+
+    private void processingInside(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         String sessionId = eventData.getSessionId();
         String relativePath = eventData.getRelativePath();
@@ -72,6 +81,7 @@ public class RecordEventFilePostService implements RecordEventService {
         part.setFileSize(fileSize);
         part = historyPartRepository.save(part);
         partFileLocationService.registerPrimary(part);
+        if (historySplitService != null) historySplitService.reconcile(part.getHistoryId());
         log.info("[BLR] {}", LogKvs.event("FilePost.Saved")
             .add("eventId", event.getEventId())
             .add("sessionId", sessionId)

@@ -72,7 +72,7 @@ public class BiliUserController {
         if (s.getCode() != 0) {
             log.warn("[BLR] {}", LogKvs.event("BiliUser.LoginQr.Generate.Failed")
                     .add("code", s.getCode())
-                    .addIfNotBlank("msg", s.getMessage())
+                    .addIfNotBlank("platformMsg", s.getMessage())
                     .addStageCostMs("apiCall", apiCallStartNs)
                     .addStageCostMs("total", totalStartNs));
             result.put("error", "生成二维码异常，请检查日志");

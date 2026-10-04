@@ -81,6 +81,16 @@
                 </div>
 
                 <div class="config-item">
+                    <label class="config-label">稿件拆分时长<span class="config-unit">分钟</span></label>
+                    <el-input v-model="systemConfig.splitDurationMinutes" @input="checkConfigChanges" size="small" class="config-input" placeholder="0为关闭"></el-input>
+                    <div class="config-help">0为关闭，任一阈值达到后从下一分P开新稿；当前完整分P留在原稿件，阈值从下一份新稿件生效；累计视频时长，不计断播间隔</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">稿件拆分大小<span class="config-unit">GB</span></label>
+                    <el-input v-model="systemConfig.splitSizeGb" @input="checkConfigChanges" size="small" class="config-input" placeholder="0为关闭"></el-input>
+                    <div class="config-help">0为关闭，任一阈值达到后从下一分P开新稿；当前完整分P留在原稿件，阈值从下一份新稿件生效；1 GB = 1024 MB</div>
+                </div>
+                <div class="config-item">
                     <label class="config-label">
                         <i class="el-icon-sort"></i>
                         上传并发连接数

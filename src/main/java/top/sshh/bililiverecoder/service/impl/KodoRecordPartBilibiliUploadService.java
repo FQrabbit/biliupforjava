@@ -114,6 +114,9 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
     private static final int CHUNK_MAX_RETRY = 200;
     private static final int GLOBAL_CHUNK_FAILURE_FUSE_THRESHOLD = 400;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
     @Override
     public void asyncUpload(RecordHistoryPart part) {
         asyncUploadIfNeeded(part);
@@ -121,6 +124,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
 
         @Override
         public boolean asyncUploadIfNeeded(RecordHistoryPart part) {
+        if (historySplitService != null && !historySplitService.canUpload(part)) return false;
         RecordHistoryPart loadedPart = partRepository.findById(part.getId()).get();
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
                 .add("os", OS)
@@ -150,6 +154,7 @@ public class KodoRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     @Override
     public void upload(RecordHistoryPart part) {
+        if (historySplitService != null && !historySplitService.canUpload(part)) return;
         part = partRepository.findById(part.getId()).get();
         long uploadStartNs = System.nanoTime();
         if (part.isUpload()) {

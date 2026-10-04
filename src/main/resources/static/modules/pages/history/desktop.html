@@ -330,6 +330,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="flex: 1; min-width: 0; margin-right: 12px; overflow: hidden;">
                             <div class="card-title">{{ maskText(item.title || '无标题') }}</div>
+                    <div v-if="getHistorySplitLabel(item)" class="config-help">{{ getHistorySplitLabel(item) }}</div>
                             <div class="card-bvid" :class="{ 'is-placeholder': !item.bvId }">
                                 <span v-if="item.bvId">BV: {{ maskText(item.bvId) }}</span>
                                 <span v-else>&nbsp;</span>
@@ -418,7 +419,7 @@
                         <div><span>BV 号</span><strong class="readable-table-copy-line">{{ maskText(scope.row.bvId) || '—' }}<button v-if="scope.row.bvId" type="button" class="readable-table-copy" @click="copyTableValue(maskText(scope.row.bvId))" aria-label="复制显示的 BV 号">复制</button></strong></div>
                         <div><span>弹幕总数 / 成功数</span><strong>{{ scope.row.msgCount }} / {{ scope.row.successMsgCount }}</strong></div>
                     </div></template></el-table-column>
-                    <el-table-column label="稿件" min-width="260"><template slot-scope="scope"><button type="button" class="readable-table-title readable-table-title-button" @click="showDetail(scope.row)" :title="maskText(scope.row.title)">{{ maskText(scope.row.title) || '未命名稿件' }}</button><div class="readable-table-meta">ID {{ scope.row.id }} · {{ maskText(scope.row.bvId) || '暂无 BV 号' }}</div></template></el-table-column>
+                    <el-table-column label="稿件" min-width="260"><template slot-scope="scope"><button type="button" class="readable-table-title readable-table-title-button" @click="showDetail(scope.row)" :title="maskText(scope.row.title)">{{ maskText(scope.row.title) || '未命名稿件' }}</button><div v-if="getHistorySplitLabel(scope.row)" class="readable-table-meta">{{ getHistorySplitLabel(scope.row) }}</div><div class="readable-table-meta">ID {{ scope.row.id }} · {{ maskText(scope.row.bvId) || '暂无 BV 号' }}</div></template></el-table-column>
                     <el-table-column v-if="tableColumnVisible('host')" key="host" label="主播 / 房间" width="150"><template slot-scope="scope"><div class="readable-table-title">{{ maskText(scope.row.roomName) || '—' }}</div><div class="readable-table-meta">房间 {{ maskText(scope.row.roomId) }}</div></template></el-table-column>
                     <el-table-column v-if="tableColumnVisible('file')" key="file" label="文件 / 时长" width="140"><template slot-scope="scope"><div class="readable-table-number"><el-tag size="mini" :type="getFileSizeColorType(scope.row.fileSize)">{{ formatFileSize(scope.row.fileSize) }}</el-tag></div><div class="readable-table-meta readable-table-number">{{ formatDuration(scope.row.partDuration) }}</div></template></el-table-column>
                     <el-table-column v-if="tableColumnVisible('parts')" key="parts" label="分P情况" width="185"><template slot-scope="scope"><div class="readable-table-number">共 {{ scope.row.partCount }} · 已上传 {{ scope.row.uploadPartCount }}</div><div class="readable-table-meta">录制中 {{ scope.row.recordPartCount }}</div><div class="readable-table-meta">异常：

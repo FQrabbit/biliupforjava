@@ -72,7 +72,7 @@ public class RecordHistoryMergeService {
         }
 
         for (RecordHistory activeHistory : activeHistoryList) {
-            if (activeHistory.isPublish()) {
+            if (activeHistory.isPublish() || activeHistory.isSplitClosed()) {
                 log.info("[BLR] {}", LogKvs.event(logPrefix + ".SkipPublished")
                         .add("roomId", roomId)
                         .add("sessionId", sessionId)
@@ -105,7 +105,8 @@ public class RecordHistoryMergeService {
         }
 
         for (RecordHistory history : historyList) {
-            if (isFreshActiveHistory(history, now)) {
+            if (history.isSplitClosed()) continue;
+            if (!history.isSplitClosed() && isFreshActiveHistory(history, now)) {
                 log.info("[BLR] {}", LogKvs.event(logPrefix + ".ReuseOpenPartHistory")
                         .add("roomId", roomId)
                         .add("sessionId", sessionId)
@@ -128,6 +129,7 @@ public class RecordHistoryMergeService {
         RecordHistory history = historyList.stream()
                 .filter(h -> !h.isPublish())
                 .filter(h -> !h.isForceArchived())
+                .filter(h -> !h.isSplitClosed())
                 .reduce((previous, current) -> current)
                 .orElse(null);
         if (history != null) {

@@ -23,6 +23,8 @@ public class SystemConfigService {
     // 历史上已经保存过的配置名，值表示上传速度上限，单位是 MB/s
     public static final String KEY_UPLOAD_SPEED_LIMIT = "bili.limit.upload-mb";
     public static final String KEY_MERGE_INTERVAL_MINUTES = "bili.publish.merge-interval-minutes";
+    public static final String KEY_SPLIT_DURATION_MINUTES = "bili.publish.split-duration-minutes";
+    public static final String KEY_SPLIT_SIZE_GB = "bili.publish.split-size-gb";
     public static final String KEY_UPLOAD_MAX_CONNECTIONS = "upload.max-concurrent-connections";
     public static final String KEY_UPLOAD_NEW_FLOW_ENABLED = "upload.new-flow-enabled";
     public static final String KEY_NORMAL_DANMAKU_INTERVAL_SECONDS = "bili.dm.normal-send-interval-seconds";
@@ -63,7 +65,7 @@ public class SystemConfigService {
 
     @PostConstruct
     public void init() {
-        log.info("[BLR] {}", LogKvs.event("SystemConfig.Init").add("msg", "Initializing system configurations"));
+        log.info("[BLR] {}", LogKvs.event("SystemConfig.Init"));
         removeObsoleteConfig(OBSOLETE_KEY_DANMAKU_DISPATCH_ENABLED);
         removeObsoleteConfig(OBSOLETE_KEY_DANMAKU_ACCOUNT_API_INTERVAL_SECONDS);
         
@@ -73,6 +75,8 @@ public class SystemConfigService {
         loadOrInitConfig(KEY_UPLOAD_SPEED_LIMIT, "0", "视频上传带宽限速 (MB/s) 0:不限速");
         // 加载短时间开播合并时间
         loadOrInitConfig(KEY_MERGE_INTERVAL_MINUTES, "20", "短时间开播合并时间 (分钟) - 下播后等待多长时间再投稿，同时间隔多少分钟内开播算同一次直播，避免短时间开播下播拆分稿件");
+        loadOrInitConfig(KEY_SPLIT_DURATION_MINUTES, "0", "稿件拆分时长 (分钟)，0为关闭，从下一份新稿件生效");
+        loadOrInitConfig(KEY_SPLIT_SIZE_GB, "0", "稿件拆分大小 (GB)，1 GB = 1024 MB，0为关闭");
         // 加载上传最大并发连接数
         loadOrInitConfig(KEY_UPLOAD_MAX_CONNECTIONS, "3", "上传最大并发连接数 (1-16) 控制同时进行的分片上传连接数，值越小网络占用越少");
         loadOrInitConfig(KEY_UPLOAD_NEW_FLOW_ENABLED, "false", "是否使用浏览器 multipart 上传流程，失败后自动回退旧流程");
@@ -181,12 +185,21 @@ public class SystemConfigService {
         
         applyConfig(key, value);
 
-        log.info("[BLR] {}", LogKvs.event("SystemConfig.Updated")
-                .add("key", key)
-                .add("value", KEY_BREC_SYNC_PASSWORD.equals(key) ? "***" : value));
+        LogKvs updateLog;
+        if (KEY_SPLIT_DURATION_MINUTES.equals(key) || KEY_SPLIT_SIZE_GB.equals(key)) {
+            updateLog = LogKvs.splitConfigUpdated(key, value, KEY_SPLIT_DURATION_MINUTES.equals(key));
+        } else {
+            updateLog = LogKvs.event("SystemConfig.Updated")
+                    .add("key", key)
+                    .add("value", KEY_BREC_SYNC_PASSWORD.equals(key) ? "***" : value);
+        }
+        log.info("[BLR] {}", updateLog);
     }
 
     private String normalizeConfigValue(String key, String value) {
+        if (KEY_SPLIT_DURATION_MINUTES.equals(key) || KEY_SPLIT_SIZE_GB.equals(key)) {
+            return RecordHistorySplitService.normalizeThreshold(key, value);
+        }
         if (value == null) {
             return null;
         }

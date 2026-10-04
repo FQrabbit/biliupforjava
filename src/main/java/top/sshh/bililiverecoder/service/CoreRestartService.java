@@ -10,6 +10,7 @@ import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.lifecycle.ShutdownState;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.TaskUtil;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -105,20 +106,20 @@ public class CoreRestartService implements ApplicationContextAware {
                     ConfigurableApplicationContext newContext =
                             BiliLiveRecordApplication.createSpringApplication().run(applicationArgs);
                     context = newContext;
-                    log.info("核心重启完成，attempt={}", attempt);
+                    log.info("[BLR] {}", LogKvs.event("CoreRestart.Completed").add("attempt", attempt));
                     restarting.set(false);
                     return;
                 } catch (Throwable error) {
                     last = error;
-                    log.error("核心重启失败，attempt={}", attempt, error);
+                    log.error("[BLR] {}", LogKvs.event("CoreRestart.AttemptFailed").add("attempt", attempt), error);
                     Thread.sleep(1000L);
                 }
             }
-            log.error("核心重启最终失败，程序即将退出", last);
+            log.error("[BLR] {}", LogKvs.event("CoreRestart.Failed"), last);
             System.exit(1);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("核心重启线程被中断", e);
+            log.error("[BLR] {}", LogKvs.event("CoreRestart.Interrupted"), e);
             System.exit(1);
         }
     }

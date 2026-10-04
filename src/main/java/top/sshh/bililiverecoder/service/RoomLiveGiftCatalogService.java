@@ -57,7 +57,7 @@ public class RoomLiveGiftCatalogService {
                 log.info("[BLR] {}", LogKvs.event("GiftCatalog.Sync.Skip")
                         .add("roomId", roomId)
                         .add("code", root == null ? null : root.getInteger("code"))
-                        .addIfNotBlank("msg", root == null ? null : root.getString("message")));
+                        .addIfNotBlank("platformMsg", root == null ? null : root.getString("message")));
                 return result;
             }
             JSONArray list = extractGiftList(root.getJSONObject("data"));

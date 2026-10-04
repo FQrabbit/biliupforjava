@@ -220,6 +220,7 @@
                             <div class="mobile-history-title-block">
                                 <span class="mobile-history-room">{{ maskText(item.roomName || item.roomId || '未知房间') }}</span>
                                 <h3>{{ maskText(item.title || '无标题稿件') }}</h3>
+                    <div v-if="getHistorySplitLabel(item)" class="config-help">{{ getHistorySplitLabel(item) }}</div>
                             </div>
                             <span class="mobile-history-phase" :class="getMobileHistoryPhaseClass(item)">
                                 {{ getMobileHistoryPhaseText(item) }}

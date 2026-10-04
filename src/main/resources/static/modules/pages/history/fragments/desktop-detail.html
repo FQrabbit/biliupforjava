@@ -5,6 +5,7 @@
             <div class="detail-header-modern">
                 <div class="detail-header-main">
                     <h2 class="detail-title">{{ maskText(currentDetail.title) }}</h2>
+                    <div v-if="getHistorySplitLabel(currentDetail)" class="config-help">{{ getHistorySplitLabel(currentDetail) }}</div>
                     <div class="detail-meta-row">
                         <el-tag size="small" type="info" effect="plain" class="meta-tag">
                             <i class="el-icon-user"></i> {{ maskText(currentDetail.roomName) }}

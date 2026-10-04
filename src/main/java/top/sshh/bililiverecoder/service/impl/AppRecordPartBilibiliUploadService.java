@@ -86,6 +86,9 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Object> USER_UPLOAD_LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
     @Override
     public void asyncUpload(RecordHistoryPart part) {
         asyncUploadIfNeeded(part);
@@ -93,6 +96,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
 
     @Override
     public boolean asyncUploadIfNeeded(RecordHistoryPart part) {
+        if (historySplitService != null && !historySplitService.canUpload(part)) return false;
         part = partRepository.findById(part.getId()).get();
         log.info("[BLR] {}", LogKvs.event("Upload.Part.AsyncStart")
                 .add("os", OS)
@@ -123,6 +127,7 @@ public class AppRecordPartBilibiliUploadService implements RecordPartUploadServi
 
     @Override
     public void upload(RecordHistoryPart part) {
+        if (historySplitService != null && !historySplitService.canUpload(part)) return;
         part = partRepository.findById(part.getId()).get();
         long uploadStartNs = System.nanoTime();
         long preUploadStartNs = 0L;

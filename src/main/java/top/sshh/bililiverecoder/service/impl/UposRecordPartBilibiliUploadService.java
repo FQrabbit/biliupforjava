@@ -153,6 +153,9 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
         }
     }
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
     @Override
     public void asyncUpload(RecordHistoryPart part) {
         asyncUploadIfNeeded(part);
@@ -160,6 +163,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
         @Override
         public boolean asyncUploadIfNeeded(RecordHistoryPart part) {
+        if (historySplitService != null && !historySplitService.canUpload(part)) return false;
         RecordHistoryPart loadedPart = partRepository.findById(part.getId()).get();
         if (uploadPauseService.isUploadPaused(loadedPart.getHistoryId(), loadedPart.getId())) {
             log.info("[BLR] {}", LogKvs.event("Upload.Part.SkipPaused")
@@ -195,6 +199,7 @@ public class UposRecordPartBilibiliUploadService implements RecordPartUploadServ
 
     @Override
     public void upload(RecordHistoryPart part) {
+        if (historySplitService != null && !historySplitService.canUpload(part)) return;
         part = partRepository.findById(part.getId()).get();
         long uploadStartNs = System.nanoTime();
         AtomicBoolean preserveProgressOnExit = new AtomicBoolean(false);

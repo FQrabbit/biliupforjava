@@ -51,6 +51,26 @@ public class RecordHistory {
 
     private String sessionId;
 
+    // 旧稿件没有快照时保持关闭，避免升级后追溯拆稿
+    private Long splitDurationSeconds;
+    private Long splitSizeBytes;
+    private String splitGroup;
+    private Integer splitSequence;
+    @Column(unique = true)
+    private Long splitParentId;
+    private Long splitBoundaryPartId;
+    private String splitReason;
+    private LocalDateTime splitClosedAt;
+
+    public boolean isSplitClosed() {
+        return splitClosedAt != null;
+    }
+
+    public boolean isSplitEnabled() {
+        return (splitDurationSeconds != null && splitDurationSeconds > 0)
+                || (splitSizeBytes != null && splitSizeBytes > 0);
+    }
+
     private String filePath;
 
     private long fileSize;

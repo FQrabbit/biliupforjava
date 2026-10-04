@@ -37,14 +37,26 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
     @Autowired
     private top.sshh.bililiverecoder.service.RecordPartPathService partPathService;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
+    @Autowired
+    private top.sshh.bililiverecoder.service.PartPreviewService previewService;
+
     @Override
     public void processing(BlrecEventDTO event) {
+        String roomId = event.getData().getRoomInfo() == null ? event.getData().getRoomId() : event.getData().getRoomInfo().getRoomId();
+        if (roomId == null) throw new IllegalArgumentException("事件缺少房间号");
+        synchronized (roomId.intern()) { processingInside(event); }
+    }
+
+    private void processingInside(BlrecEventDTO event) {
         BlrecDataDTO eventData = event.getData();
-        String roomId = eventData.getRoomInfo().getRoomId();
+        String roomId = eventData.getRoomInfo() == null ? eventData.getRoomId() : eventData.getRoomInfo().getRoomId();
         String filePath = partPathService.resolveWebhookPath(eventData.getPath());
 
         RecordRoom room = roomRepository.findByRoomId(roomId);
-        if (room == null || !room.isRecording()) {
+        if (room == null) {
             log.warn("[BLR] {}", LogKvs.event("Blrec.VideoFileCompleted.Skip")
                     .add("reason", "Room not found or not in recording state")
                     .add("roomId", roomId)
@@ -52,7 +64,9 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
             return;
         }
 
-        Optional<RecordHistory> historyOpt = historyRepository.findById(room.getHistoryId());
+        RecordHistoryPart existing = partRepository.findByFilePath(filePath);
+        if (existing != null && !roomId.equals(existing.getRoomId())) return;
+        Optional<RecordHistory> historyOpt = historyRepository.findById(existing == null ? room.getHistoryId() : existing.getHistoryId());
         if (!historyOpt.isPresent()) {
             log.error("[BLR] {}", LogKvs.event("Blrec.VideoFileCompleted.HistoryNotFound")
                     .add("roomId", roomId)
@@ -63,31 +77,40 @@ public class BlrecVideoFileCompletedEventService implements BlrecEventService {
         RecordHistory history = historyOpt.get();
 
         // 检查文件是否已存在，防止重复处理
-        if (partRepository.existsByFilePath(filePath)
-                || findByCanonicalPath(partRepository.findByHistoryId(history.getId()), filePath) != null) {
-            log.warn("[BLR] {}", LogKvs.event("Blrec.VideoFileCompleted.PartExists")
-                    .add("roomId", roomId)
-                    .add("historyId", history.getId())
-                    .add("filePath", filePath));
-            return;
-        }
+        if (existing == null) existing = findByCanonicalPath(partRepository.findByHistoryId(history.getId()), filePath);
+        if (existing == null && historySplitService != null) history = historySplitService.historyForNewPart(room, history, LocalDateTime.now());
 
         // 创建新的分P记录
-        RecordHistoryPart part = new RecordHistoryPart();
+        RecordHistoryPart part = existing == null ? new RecordHistoryPart() : existing;
         part.setHistoryId(history.getId());
+        if (existing == null && history.isSplitEnabled()) part.setSplitAssigned(false);
         part.setSourceType("blrec"); // 关键：标记来源为 blrec
         part.setRoomId(roomId);
-        part.setEventId(event.getId());
+        if (part.getId() == null) part.setEventId(event.getId());
         part.setFilePath(filePath);
         part.setTitle(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM月dd日HH点mm分ss秒")));
         part.setLiveTitle(history.getTitle());
-        part.setPartOrder(partRepository.countByHistoryId(history.getId()) + 1);
-        part.setStartTime(history.getStartTime()); // 简单起见，暂用主历史的开始时间
-        part.setEndTime(LocalDateTime.now());
-        part.setRecording(false); // 文件已完成
+        if (part.getId() == null) part.setPartOrder(partRepository.countByHistoryId(history.getId()) + 1);
+        if (part.getEndTime() == null) part.setEndTime(event.getDate() == null ? LocalDateTime.now()
+                : LocalDateTime.ofInstant(event.getDate().toInstant(), java.time.ZoneId.systemDefault()));
+        part.setRecording(false);
+        part.setCloseSource("FILE_CLOSED");
+        java.io.File file = new java.io.File(filePath);
+        if (file.isFile()) part.setFileSize(file.length());
         
         part = partRepository.save(part);
         partFileLocationService.registerPrimary(part);
+        if (part.getDuration() <= 0 && previewService != null) {
+            Double duration = previewService.probeDuration(part.getId());
+            if (duration != null) {
+                part.setDuration(duration.floatValue());
+                if (part.getStartTime() == null) part.setStartTime(part.getEndTime().minusNanos((long) (duration * 1000000000L)));
+                partRepository.save(part);
+            }
+        }
+        if (historySplitService != null) {
+            historySplitService.reconcile(history.getId());
+        }
 
         log.info("[BLR] {}", LogKvs.event("Blrec.VideoFileCompleted.PartSaved")
                 .add("roomId", roomId)

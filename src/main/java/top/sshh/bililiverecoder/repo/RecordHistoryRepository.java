@@ -24,6 +24,18 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     RecordHistory findBySessionId(String sessionId);
 
+    RecordHistory findFirstByRoomIdAndSessionIdOrderByIdDesc(String roomId, String sessionId);
+
+    RecordHistory findBySplitParentId(Long parentId);
+
+    RecordHistory findFirstByRoomIdAndEventId(String roomId, String eventId);
+
+    @Query("select h from RecordHistory h where h.splitClosedAt is null and h.publish = false and h.forceArchived = false and (h.splitDurationSeconds > 0 or h.splitSizeBytes > 0)")
+    List<RecordHistory> findPendingSplitHistories();
+
+    @Query("select h from RecordHistory h where h.roomId = ?1 and h.recording = false and h.upload = true and h.publish = false and h.forceArchived = false and h.uploadRetryCount < ?2 and h.endTime between ?3 and ?4 and (h.splitClosedAt is not null or h.endTime <= ?5) order by h.endTime asc")
+    List<RecordHistory> findAutomaticPublishCandidates(String roomId, int retries, LocalDateTime since, LocalDateTime now, LocalDateTime mergeBefore);
+
     RecordHistory findByBvId(String bvId);
 
     List<RecordHistory> findByRoomIdOrderByIdAsc(String roomId);

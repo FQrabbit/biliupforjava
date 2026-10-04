@@ -6,6 +6,7 @@
                 <div class="mobile-history-detail-title">
                     <span>{{ getMobileHistoryPhaseText(currentDetail) }}</span>
                     <h2>{{ maskText(currentDetail.title || '无标题稿件') }}</h2>
+                    <div v-if="getHistorySplitLabel(currentDetail)" class="config-help">{{ getHistorySplitLabel(currentDetail) }}</div>
                     <p>{{ maskText(currentDetail.roomName || currentDetail.roomId || '未知房间') }} · {{ formatDateTime(currentDetail.startTime) || '--' }}</p>
                 </div>
                 <button type="button" title="关闭详情" @click="requestCloseDetailDialog">

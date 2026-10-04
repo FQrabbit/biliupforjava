@@ -14,6 +14,11 @@ import java.util.List;
 @Repository
 public interface RoomLiveDanmuUserStatsRepository extends CrudRepository<RoomLiveDanmuUserStats, Long> {
 
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("update RoomLiveDanmuUserStats e set e.historyId = ?2 where e.partId = ?1")
+    int reassignHistoryByPartId(Long partId, Long historyId);
+
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("delete from RoomLiveDanmuUserStats")

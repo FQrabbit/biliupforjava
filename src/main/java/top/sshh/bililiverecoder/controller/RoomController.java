@@ -898,6 +898,7 @@ public class RoomController {
             Map<Long, Long> userIdConverMap = new HashMap<>();
             Map<Long, Long> historyIdConverMap = new HashMap<>();
             Map<Long, Long> partIdConverMap = new HashMap<>();
+            Map<Long, Long[]> splitReferences = new HashMap<>();
             Map<Long, Long> storageRootIdConverMap = new HashMap<>();
             Map<Long, Long> notificationChannelIdConverMap = new HashMap<>();
 
@@ -999,7 +1000,7 @@ public class RoomController {
                     case "historyList" -> {
                         importHistoriesStartNs = System.nanoTime();
                         updateConfigTask("导入历史", "正在导入录制历史", importProcessed);
-                        importedHistoryCount = importHistorySection(reader, historyIdConverMap);
+                        importedHistoryCount = importHistorySection(reader, historyIdConverMap, splitReferences);
                         importProcessed = advanceImportProcessed(importProcessed, importedSectionCounts,
                                 "historyList", importedHistoryCount);
                         updateConfigTask("导入历史", "历史 " + importedHistoryCount + " 条", importProcessed);
@@ -1171,6 +1172,7 @@ public class RoomController {
                 log.info("[BLR] {}", LogKvs.event("RoomConfig.Import.Parts.Success")
                         .add("count", importedPartCount));
             }
+            remapSplitReferences(historyIdConverMap, partIdConverMap, splitReferences);
             for (Long importedPartId : partIdConverMap.values()) {
                 partRepository.findById(importedPartId).ifPresent(storageLifecycleMigrationService::migratePart);
             }
@@ -1345,7 +1347,20 @@ public class RoomController {
     }
 
     /** 流式导入录制历史：逐条读取、去重、分批 saveAll，构建旧ID→新ID映射 */
-    private int importHistorySection(JSONReader reader, Map<Long, Long> historyIdConverMap) {
+    // 导入后的数据库ID会变化，拆稿父稿件和边界P也要跟着映射
+    private void remapSplitReferences(Map<Long, Long> historyIds, Map<Long, Long> partIds, Map<Long, Long[]> references) {
+        for (Map.Entry<Long, Long[]> reference : references.entrySet()) {
+            Long importedId = historyIds.get(reference.getKey());
+            if (importedId == null) continue;
+            RecordHistory imported = historyRepository.findById(importedId).orElse(null);
+            if (imported == null) continue;
+            imported.setSplitParentId(historyIds.get(reference.getValue()[0]));
+            imported.setSplitBoundaryPartId(partIds.get(reference.getValue()[1]));
+            historyRepository.save(imported);
+        }
+    }
+
+    private int importHistorySection(JSONReader reader, Map<Long, Long> historyIdConverMap, Map<Long, Long[]> splitReferences) {
         reader.startArray();
         List<RecordHistory> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
         List<Long> batchOldIds = new ArrayList<>(IMPORT_BATCH_SIZE);
@@ -1353,8 +1368,11 @@ public class RoomController {
         while (reader.hasNext()) {
             RecordHistory history = reader.readObject(RecordHistory.class);
             Long oldId = history.getId();
+            if (oldId != null) splitReferences.put(oldId, new Long[]{history.getSplitParentId(), history.getSplitBoundaryPartId()});
+            history.setSplitParentId(null);
+            history.setSplitBoundaryPartId(null);
             history.setId(null);
-            RecordHistory dbHistory = historyRepository.findBySessionId(history.getSessionId());
+            RecordHistory dbHistory = historyRepository.findFirstByRoomIdAndEventId(history.getRoomId(), history.getEventId());
             if (dbHistory != null) {
                 history.setId(dbHistory.getId());
             }

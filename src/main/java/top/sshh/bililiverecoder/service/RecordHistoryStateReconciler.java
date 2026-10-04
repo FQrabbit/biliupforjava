@@ -54,7 +54,7 @@ public class RecordHistoryStateReconciler {
     @Transactional
     public boolean reconcile(Long historyId) {
         RecordHistory history = historyRepository.findById(historyId).orElse(null);
-        if (history == null || !history.isRecording() || !history.isUpload() || history.isPublish()
+        if (history == null || history.isSplitClosed() || !history.isRecording() || !history.isUpload() || history.isPublish()
                 || history.isForceArchived()) return false;
 
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());

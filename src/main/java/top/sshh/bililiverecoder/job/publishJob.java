@@ -66,6 +66,9 @@ public class publishJob {
     UploadServiceFactory uploadServiceFactory;
 
     @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
+    @Autowired
     UploadUserSerialScheduler uploadUserSerialScheduler;
 
     @Autowired
@@ -222,7 +225,7 @@ public class publishJob {
 
         for (RecordRoom room : roomList) {
             // 查询不在录制,下播指定时间后的需要上传的历史
-            Iterator<RecordHistory> iterator = historyRepository.findByRoomIdAndRecordingIsFalseAndUploadIsTrueAndPublishIsFalseAndUploadRetryCountLessThanAndEndTimeBetweenOrderByEndTimeAsc(room.getRoomId(), 5, now.minusMonths(1L), now.minusMinutes((long) mergeIntervalMinutes)).iterator();
+            Iterator<RecordHistory> iterator = historyRepository.findAutomaticPublishCandidates(room.getRoomId(), 5, now.minusMonths(1L), now, now.minusMinutes((long) mergeIntervalMinutes)).iterator();
             iterator.forEachRemaining(historyList::add);
         }
         if (!historyList.isEmpty()) {
@@ -573,8 +576,12 @@ public class publishJob {
                     } catch (Exception ignored) {
                     }
                 }
+                if (part.getSplitAssigned() != null && part.getDuration() <= 0 && historySplitService != null) {
+                    historySplitService.reconcile(part.getHistoryId());
+                    part = partRepository.findById(part.getId()).orElse(part);
+                }
                 int actualDuration = Math.round(part.getDuration());
-                if (actualDuration <= 0 && part.getStartTime() != null && part.getEndTime() != null) {
+                if (actualDuration <= 0 && part.getSplitAssigned() == null && part.getStartTime() != null && part.getEndTime() != null) {
                     actualDuration = (int) java.time.Duration.between(part.getStartTime(), part.getEndTime()).getSeconds();
                     if (actualDuration > 0) {
                         part.setDuration(actualDuration);

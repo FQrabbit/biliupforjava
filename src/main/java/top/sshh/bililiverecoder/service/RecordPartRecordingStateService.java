@@ -114,6 +114,10 @@ public class RecordPartRecordingStateService {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private RecordHistorySplitService historySplitService;
+
     /** 后台补偿或手动重试时调用，连续观察还没满足条件就不改状态 */
     @Transactional
     public boolean closeIfReady(Long partId, String trigger) {
@@ -138,6 +142,18 @@ public class RecordPartRecordingStateService {
             part.setAutoCloseFileModifiedAt(assessment.fileModifiedAt());
             partRepository.save(part);
             closeHistoryWhenSessionCompleted(part);
+            if (historySplitService != null) {
+                Long historyId = part.getHistoryId();
+                if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                    org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                            new org.springframework.transaction.support.TransactionSynchronization() {
+                                @Override
+                                public void afterCommit() { historySplitService.reconcile(historyId); }
+                            });
+                } else {
+                    historySplitService.reconcile(historyId);
+                }
+            }
             return true;
         }
     }
@@ -192,7 +208,7 @@ public class RecordPartRecordingStateService {
         if (part.getHistoryId() == null || StringUtils.isBlank(part.getRoomId())) return;
         RecordHistory history = historyRepository.findById(part.getHistoryId()).orElse(null);
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
-        if (history == null || room == null || history.isForceArchived() || history.isPublish()
+        if (history == null || room == null || history.isForceArchived() || history.isPublish() || history.isSplitClosed()
                 || !history.isUpload() || !part.getHistoryId().equals(room.getHistoryId())
                 || (StringUtils.isNotBlank(part.getSessionId()) && StringUtils.isNotBlank(room.getSessionId())
                     && !part.getSessionId().equals(room.getSessionId()))

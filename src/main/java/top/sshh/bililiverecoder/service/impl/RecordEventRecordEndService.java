@@ -36,6 +36,12 @@ public class RecordEventRecordEndService implements RecordEventService {
 
     @Override
     public void processing(RecordEventDTO event) {
+        String roomId = event.getEventData().getRoomId();
+        if (roomId == null) throw new IllegalArgumentException("事件缺少房间号");
+        synchronized (roomId.intern()) { processingInside(event); }
+    }
+
+    private void processingInside(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         log.info("[BLR] {}", LogKvs.event("RecordEnd.Received")
                 .add("eventId", event.getEventId())
@@ -90,8 +96,7 @@ public class RecordEventRecordEndService implements RecordEventService {
         } else {
             // 当 historyId 为空时，说明录播姬发送了录制结束的 Webhook 但本地并没有开启录制或录制记录已丢失
             log.info("[BLR] {}", LogKvs.event("RecordEnd.NoRecording")
-                    .add("roomId", eventData.getRoomId())
-                    .add("msg", "收到录制结束事件但本地无活跃录制记录。请检查录播姬是否开启了自动录制。"));
+                    .add("roomId", eventData.getRoomId()));
         }
 //        recordBiliPublishService.publishRecordHistory(history);
     }

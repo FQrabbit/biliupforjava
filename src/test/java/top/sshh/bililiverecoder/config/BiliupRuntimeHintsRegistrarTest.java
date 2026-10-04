@@ -69,6 +69,7 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, StorageRootChangeAssessmentService.State.class);
         assertReflectionRegistered(hints, PublishTask.class);
         assertReflectionRegistered(hints, RecordHistory.class);
+        assertReflectionRegistered(hints, top.sshh.bililiverecoder.entity.RecordHistoryPart.class);
         assertReflectionRegistered(hints, PublishTaskOperation.class);
         assertReflectionRegistered(hints, PublishTaskSource.class);
         assertReflectionRegistered(hints, PublishTaskState.class);

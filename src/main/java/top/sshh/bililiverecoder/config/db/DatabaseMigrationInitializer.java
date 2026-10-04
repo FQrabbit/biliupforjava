@@ -6,6 +6,7 @@ import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import top.sshh.bililiverecoder.util.LogKvs;
 
 import javax.sql.DataSource;
 import java.io.File;
@@ -121,7 +122,12 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     && migrationPending(connection, "20260928_05", "稿件删除恢复与单实例租约", DELETE_AND_INSTANCE_SIGNATURE)) {
                 backupExistingFileDatabase(connection);
             }
-            log.info("正在检查并升级数据库结构……");
+            log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Start"));
+            if (h2 && tableExists(connection, "record_history")
+                    && !migrationPending(connection, "20260928_06", "删除任务安全取消标记", "history-deletion-cancel-fence-v1")
+                    && migrationPending(connection, "20261004_01", "累计阈值拆稿状态", "history-split-threshold-v1")) {
+                backupExistingFileDatabase(connection);
+            }
             ensureMigrationTable();
             applyMigration(connection, "20260928_01", "历史数据库兼容修复", LEGACY_SIGNATURE,
                     () -> applyLegacyCompatibility(connection, h2));
@@ -135,8 +141,10 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     () -> applyDeleteAndInstanceSchema(connection, h2));
             applyMigration(connection, "20260928_06", "删除任务安全取消标记", "history-deletion-cancel-fence-v1",
                     () -> applyHistoryDeletionCancellationSchema(connection));
+            applyMigration(connection, "20261004_01", "累计阈值拆稿状态", "history-split-threshold-v1",
+                    () -> applyHistorySplitSchema(connection));
             validateRequiredSchema(connection);
-            log.info("数据库检查与升级完成，继续启动。数据库类型：{}", product);
+            log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Completed").add("databaseType", product));
         } catch (Exception e) {
             log.error("Database compatibility migration failed; application startup is blocked", e);
             throw new BeanCreationException("databaseMigrationInitializer",
@@ -154,7 +162,7 @@ public class DatabaseMigrationInitializer implements InitializingBean {
         Path backupPath = new File(backupDir, "biliupforjava-DBbackup-" + stamp + ".zip")
                 .toPath().toAbsolutePath();
         long startedAt = System.nanoTime();
-        log.info("正在备份数据库，完成后将继续启动，请勿关闭程序。备份位置：{}", backupPath);
+        log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Backup.Start").add("backupPath", backupPath));
         Path localDirectory = null;
         try {
             Files.createDirectories(backupDir.toPath());
@@ -164,30 +172,35 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                 String sqlPath = localBackup.toString().replace("\\", "/").replace("'", "''");
                 jdbc.execute("BACKUP TO '" + sqlPath + "'");
             }
-            log.info("数据库备份已生成，正在保存到工作目录。备份大小 {}，备份位置：{}", backupSize(localBackup), backupPath);
+            log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Backup.Generated")
+                    .add("backupSize", LogKvs.backupSizeLabel(localBackup)).add("backupPath", backupPath));
             long[] lastReport = {System.nanoTime()};
             DatabaseFileTransfer.publishBackup(localBackup, backupPath, (written, total) -> {
                 long now = System.nanoTime();
                 if (now - lastReport[0] >= TimeUnit.SECONDS.toNanos(5)) {
-                    log.info("数据库备份保存中：已耗时 {} 秒，已传输 {} / {} MB，进度 {}%",
-                            elapsedSeconds(startedAt), written / (1024 * 1024), total / (1024 * 1024),
-                            total == 0 ? 0 : (int) (100.0 * written / total));
+                    log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Backup.Saving")
+                            .add("elapsedSeconds", elapsedSeconds(startedAt))
+                            .add("writtenMB", written / (1024 * 1024)).add("totalMB", total / (1024 * 1024))
+                            .add("progressPercent", total == 0 ? 0 : (int) (100.0 * written / total)));
                     lastReport[0] = now;
                 }
             });
         } catch (Exception e) {
-            log.error("数据库备份失败，启动已中止：已耗时 {} 秒，备份位置：{}，失败原因：{}",
-                    elapsedSeconds(startedAt), backupPath, e.getMessage());
+            log.error("[BLR] {}", LogKvs.event("DatabaseMigration.Backup.Failed")
+                    .add("elapsedSeconds", elapsedSeconds(startedAt)).add("backupPath", backupPath)
+                    .add("err", e.getMessage()), e);
             throw e;
         } finally {
             try {
                 DatabaseFileTransfer.cleanWorkspace(localDirectory);
             } catch (IOException cleanupError) {
-                log.warn("数据库备份临时文件清理失败，临时文件位置：{}", localDirectory, cleanupError);
+                log.warn("[BLR] {}", LogKvs.event("DatabaseMigration.Backup.CleanupFailed")
+                        .add("tempPath", localDirectory), cleanupError);
             }
         }
-        log.info("数据库备份完成：耗时 {} 秒，备份大小 {}，备份位置：{}",
-                elapsedSeconds(startedAt), backupSize(backupPath), backupPath);
+        log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Backup.Completed")
+                .add("elapsedSeconds", elapsedSeconds(startedAt))
+                .add("backupSize", LogKvs.backupSizeLabel(backupPath)).add("backupPath", backupPath));
         File[] backups = backupDir.listFiles((dir, name) -> name.startsWith("biliupforjava-DBbackup-")
                 && name.endsWith(".zip"));
         if (backups != null && backups.length > 10) {
@@ -206,15 +219,6 @@ public class DatabaseMigrationInitializer implements InitializingBean {
         return TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - startedAt);
     }
 
-    private static String backupSize(Path backupPath) {
-        try {
-            if (!Files.exists(backupPath)) return "0.00 MB（等待备份文件写入）";
-            return String.format(Locale.ROOT, "%.2f MB", Files.size(backupPath) / (1024.0 * 1024.0));
-        } catch (IOException | SecurityException e) {
-            return "暂无法读取（等待备份完成）";
-        }
-    }
-
     /** 只报告备份状态，备份完成后才继续迁移 */
     private static final class BackupProgress implements AutoCloseable {
         private final ScheduledExecutorService executor;
@@ -231,8 +235,9 @@ public class DatabaseMigrationInitializer implements InitializingBean {
 
         private synchronized void report(Path backupPath, long startedAt) {
             if (closed) return;
-            log.info("数据库备份进行中：已耗时 {} 秒，备份文件已写入 {}",
-                    elapsedSeconds(startedAt), backupSize(backupPath));
+            log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Backup.Generating")
+                    .add("elapsedSeconds", elapsedSeconds(startedAt))
+                    .add("backupSize", LogKvs.backupSizeLabel(backupPath)));
         }
 
         @Override
@@ -307,6 +312,21 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     java.sql.Timestamp.valueOf(LocalDateTime.now()), false, truncate(e.toString(), 1900), version);
             throw new IllegalStateException("迁移 " + version + " 失败：" + e.getMessage(), e);
         }
+    }
+
+    private void applyHistorySplitSchema(Connection connection) {
+        ensureColumn(connection, "record_history", "split_duration_seconds", "BIGINT");
+        ensureColumn(connection, "record_history", "split_size_bytes", "BIGINT");
+        ensureColumn(connection, "record_history", "split_group", "VARCHAR(255)");
+        ensureColumn(connection, "record_history", "split_sequence", "INT");
+        ensureColumn(connection, "record_history", "split_parent_id", "BIGINT");
+        ensureColumn(connection, "record_history", "split_boundary_part_id", "BIGINT");
+        ensureColumn(connection, "record_history", "split_reason", "VARCHAR(255)");
+        ensureColumn(connection, "record_history", "split_closed_at", "TIMESTAMP NULL");
+        ensureColumn(connection, "record_history_part", "split_file_size", "BIGINT");
+        ensureColumn(connection, "record_history_part", "split_duration", "DOUBLE PRECISION");
+        ensureColumn(connection, "record_history_part", "split_assigned", "BOOLEAN");
+        ensureUniqueIndex(connection, "record_history", "uk_history_split_parent", "split_parent_id");
     }
 
     private void applyLegacyCompatibility(Connection connection, boolean h2) {

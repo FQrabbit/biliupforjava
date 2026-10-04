@@ -56,8 +56,11 @@ class DatabaseMigrationInitializerTest {
                     workPath.toString());
             initializer.afterPropertiesSet();
 
-            assertEquals(6, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
+            assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
             assertColumn(jdbc, "record_history", "force_archived");
+            assertColumn(jdbc, "record_history", "split_size_bytes");
+            assertColumn(jdbc, "record_history_part", "split_assigned");
+            org.junit.jupiter.api.Assertions.assertNull(jdbc.queryForObject("SELECT split_size_bytes FROM record_history WHERE id=20", Long.class));
             assertColumn(jdbc, "record_history_part", "source_part_order");
             assertColumn(jdbc, "room_live_session_stats", "imported_snapshot");
             assertColumn(jdbc, "bili_bili_user", "publish_captcha_probe_task_id");
@@ -102,7 +105,7 @@ class DatabaseMigrationInitializerTest {
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM history_deletion_task "
                     + "WHERE history_id=99 AND deletion_started=TRUE", Integer.class));
             assertEquals(taskId, jdbc.queryForObject("SELECT id FROM publish_task WHERE history_id=20", Long.class));
-            assertEquals(6, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
+            assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
         } finally {
             database.shutdown();
             try (var paths = Files.walk(workPath)) {
@@ -220,20 +223,21 @@ class DatabaseMigrationInitializerTest {
 
             Path backupDir = workPath.resolve("backup");
             assertEquals(1, countBackups(backupDir));
-            assertTrue(logs.messages.get(0).startsWith("正在备份数据库，完成后将继续启动，请勿关闭程序。备份位置："));
+            assertTrue(logs.messages.get(0).startsWith("[BLR] event=DatabaseMigration.Backup.Start |"));
+            assertTrue(logs.messages.get(0).contains("msg=正在备份数据库，完成后将继续启动，请勿关闭程序"));
             assertTrue(logs.messages.get(0).contains(backupDir.toString()));
-            int backupCompleted = logs.indexOf("数据库备份完成：耗时 ");
-            int migrationStarted = logs.indexOf("正在检查并升级数据库结构");
-            int migrationCompleted = logs.indexOf("数据库检查与升级完成，继续启动");
+            int backupCompleted = logs.indexOf("DatabaseMigration.Backup.Completed");
+            int migrationStarted = logs.indexOf("DatabaseMigration.Start");
+            int migrationCompleted = logs.indexOf("DatabaseMigration.Completed");
             assertTrue(backupCompleted > 0);
             assertTrue(logs.messages.get(backupCompleted).contains(" MB"));
             assertTrue(migrationStarted > backupCompleted);
             assertTrue(migrationCompleted > migrationStarted);
-            assertEquals(-1, logs.indexOf("数据库备份进行中"));
+            assertEquals(-1, logs.indexOf("DatabaseMigration.Backup.Generating"));
             logs.messages.clear();
             initializer.afterPropertiesSet();
             assertEquals(1, countBackups(backupDir));
-            assertEquals(-1, logs.indexOf("正在备份数据库"));
+            assertEquals(-1, logs.indexOf("DatabaseMigration.Backup.Start"));
         } finally {
             logs.close();
             try { jdbc.execute("SHUTDOWN"); } catch (RuntimeException ignored) { }
@@ -271,15 +275,15 @@ class DatabaseMigrationInitializerTest {
             BeanCreationException error = assertThrows(BeanCreationException.class, initializer::afterPropertiesSet);
 
             assertTrue(error.getCause() instanceof DataAccessResourceFailureException);
-            String progress = logs.messages.get(logs.indexOf("数据库备份进行中"));
-            assertTrue(progress.contains("已耗时 "));
-            assertTrue(progress.contains("备份文件已写入 1.00 MB"));
-            int failed = logs.indexOf("数据库备份失败，启动已中止");
-            assertTrue(failed > logs.indexOf("数据库备份进行中"));
+            String progress = logs.messages.get(logs.indexOf("DatabaseMigration.Backup.Generating"));
+            assertTrue(progress.contains("elapsedSeconds="));
+            assertTrue(progress.contains("backupSize=1.00 MB"));
+            int failed = logs.indexOf("DatabaseMigration.Backup.Failed");
+            assertTrue(failed > logs.indexOf("DatabaseMigration.Backup.Generating"));
             assertTrue(logs.messages.get(failed).contains("模拟备份写入失败"));
             assertTrue(logs.messages.get(failed).contains(workPath.toString()));
-            assertEquals(-1, logs.indexOf("数据库备份完成"));
-            assertEquals(-1, logs.indexOf("正在检查并升级数据库结构"));
+            assertEquals(-1, logs.indexOf("DatabaseMigration.Backup.Completed"));
+            assertEquals(-1, logs.indexOf("DatabaseMigration.Start"));
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                     + "WHERE UPPER(TABLE_NAME)='APP_SCHEMA_MIGRATION'", Integer.class));
             logs.progressThread.join(2000);
@@ -306,15 +310,15 @@ class DatabaseMigrationInitializerTest {
         protected void append(ILoggingEvent event) {
             String message = event.getFormattedMessage();
             messages.add(message);
-            if (message.startsWith("数据库备份进行中")) {
+            if (message.startsWith("[BLR] event=DatabaseMigration.Backup.Generating |")) {
                 progressThread = Thread.currentThread();
                 progressReported.countDown();
             }
         }
 
-        private int indexOf(String prefix) {
+        private int indexOf(String eventName) {
             for (int i = 0; i < messages.size(); i++) {
-                if (messages.get(i).startsWith(prefix)) return i;
+                if (messages.get(i).startsWith("[BLR] event=" + eventName + " |")) return i;
             }
             return -1;
         }

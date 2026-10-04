@@ -13,6 +13,11 @@ import java.util.List;
 @Repository
 public interface RoomLiveEventXmlIssueRepository extends CrudRepository<RoomLiveEventXmlIssue, Long> {
 
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("update RoomLiveEventXmlIssue e set e.historyId = ?2 where e.partId = ?1")
+    int reassignHistoryByPartId(Long partId, Long historyId);
+
+
     List<RoomLiveEventXmlIssue> findAllByOrderByLastCheckedAtDesc();
 
     List<RoomLiveEventXmlIssue> findByPartIdIn(Collection<Long> partIds);

@@ -1,9 +1,13 @@
 package top.sshh.bililiverecoder.util;
 
 import java.net.URI;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Locale;
 
 /**
  * 日志键值对构建器
@@ -368,11 +372,11 @@ public final class LogKvs {
         EVENT_ZH.put("StreamEnd.IgnoredEmpty", "收到空的下播事件，忽略");
         EVENT_ZH.put("StreamEnd.Received", "收到下播事件");
         EVENT_ZH.put("StreamEnd.RoomMissing", "下播事件：房间不存在，忽略");
-        EVENT_ZH.put("StreamEnd.NoRecording", "下播事件：本地无活跃录制记录");
+        EVENT_ZH.put("StreamEnd.NoRecording", "收到下播事件但本地无活跃录制记录，请检查录播姬是否开启了自动录制，或录播姬与本程序的连接是否正常");
         EVENT_ZH.put("RecordEnd.Received", "收到录制结束事件");
         EVENT_ZH.put("RecordEnd.NoRoom", "录制结束事件：房间不存在，忽略");
         EVENT_ZH.put("RecordEnd.IgnoreStaleSession", "录制结束事件：旧 session 结束事件，已忽略");
-        EVENT_ZH.put("RecordEnd.NoRecording", "录制结束事件：本地无活跃录制记录");
+        EVENT_ZH.put("RecordEnd.NoRecording", "收到录制结束事件但本地无活跃录制记录，请检查录播姬是否开启了自动录制");
         EVENT_ZH.put("RecordEnd.PartHeal.Done", "录制结束：分P纠偏/修复成功");
         EVENT_ZH.put("RecordEnd.PartHeal.Failed", "录制结束：分P纠偏/修复失败");
         EVENT_ZH.put("RecordEnd.ParseMergeIntervalFailed", "录制结束：解析合并间隔配置失败");
@@ -402,15 +406,15 @@ public final class LogKvs {
         EVENT_ZH.put("FileOpen.DebugPart", "分P调试信息");
         EVENT_ZH.put("FileOpen.SleepInterrupted", "文件打开事件等待被中断(通常不影响主流程)");
         EVENT_ZH.put("FileOpen.UnhandledException", "文件打开事件：发生未捕获异常");
-        EVENT_ZH.put("FileClosed.NoRecording", "文件关闭事件：本地无活跃录制记录");
+        EVENT_ZH.put("FileClosed.NoRecording", "收到文件关闭事件但本地无房间配置记录，已忽略");
         EVENT_ZH.put("FileClosed.PartMatchedNormalizedPath", "文件关闭事件：按规范化路径命中已有分P记录");
         EVENT_ZH.put("FileClosed.PartMissing", "文件关闭事件：找不到分P记录");
-        EVENT_ZH.put("FileClosed.FileMissing", "文件关闭事件：文件不存在");
+        EVENT_ZH.put("FileClosed.FileMissing", "文件关闭事件：文件不存在，请检查工作目录配置或 Docker 挂载目录映射");
         EVENT_ZH.put("FileClosed.MoveSuccess", "文件关闭后移动文件成功");
         EVENT_ZH.put("FileClosed.MoveFailed", "文件关闭后移动文件失败");
         EVENT_ZH.put("FileClosed.CopySuccess", "文件关闭后复制文件成功");
         EVENT_ZH.put("FileClosed.CopyFailed", "文件关闭后复制文件失败");
-        EVENT_ZH.put("FileClosed.MissingHistory", "文件关闭事件：找不到录制历史");
+        EVENT_ZH.put("FileClosed.MissingHistory", "未找到对应会话，避免把旧文件关闭事件写入当前稿件");
         EVENT_ZH.put("FileClosed.HistoryRecovered.ByPart", "文件关闭事件：按分P记录自愈并修正historyId");
         EVENT_ZH.put("FileClosed.HistoryRecovered.ByActiveHistory", "文件关闭事件：复用活跃history自愈并修正historyId");
         EVENT_ZH.put("FileClosed", "收到文件关闭事件(分P文件写入结束)");
@@ -540,7 +544,7 @@ public final class LogKvs {
         EVENT_ZH.put("LiveMsgSendSync.Visibility.SwitchPrivate.Error", "私有稿件评论流程：切回仅自己可见异常");
         EVENT_ZH.put("LiveMsgSendSync.SleepInterrupted", "弹幕/评论发送：等待被中断");
         EVENT_ZH.put("LiveMsgSendSync.Lock.Failed", "弹幕发送：获取锁失败");
-        EVENT_ZH.put("LiveMsgSendSync.Part.SkipMissingCid", "分P缺失CID，跳过弹幕发送");
+        EVENT_ZH.put("LiveMsgSendSync.Part.SkipMissingCid", "分P缺失CID，标记为异常并跳过后续处理");
         EVENT_ZH.put("LiveMsgSendSync.UploadUser.InvalidState", "弹幕/评论发送：上传账号不可用(未登录或缺少UID)");
         EVENT_ZH.put("LiveMsgSendSync.AllDmDisabled.Archive", "弹幕/评论发送：房间普通弹幕/SC/礼物评论全关闭，直接归档");
         EVENT_ZH.put("LiveMsgSendSync.PendingPart.Empty", "弹幕/评论发送：没有待处理分P");
@@ -621,7 +625,7 @@ public final class LogKvs {
         EVENT_ZH.put("VideoSync.File.MoveFailed", "视频状态同步：移动文件失败");
         EVENT_ZH.put("VideoSync.File.CopySuccess", "视频状态同步：复制文件成功");
         EVENT_ZH.put("VideoSync.File.CopyFailed", "视频状态同步：复制文件失败");
-        EVENT_ZH.put("VideoSync.Part.ExceptionCleared", "视频状态同步：分P缺失CID异常已清除");
+        EVENT_ZH.put("VideoSync.Part.ExceptionCleared", "CID已获取，清除异常状态");
         EVENT_ZH.put("VideoSync.ManualRefresh.VideoInfoFailed", "稿件状态刷新：获取公开视频信息失败");
         EVENT_ZH.put("VideoSync.ManualRefresh.PartInfoFailed", "稿件状态刷新：获取投稿后台分P信息失败");
         EVENT_ZH.put("VideoSync.LockedDetect.Failed", "稿件状态同步：检测稿件锁定状态失败");
@@ -705,6 +709,10 @@ public final class LogKvs {
         EVENT_ZH.put("SystemConfig.Init", "系统配置：初始化");
         EVENT_ZH.put("SystemConfig.CreateDefault", "系统配置：创建默认配置");
         EVENT_ZH.put("SystemConfig.Updated", "系统配置：配置已更新");
+        EVENT_ZH.put("SystemConfig.SplitThreshold.Enabled", "稿件拆分%s已更新为 %s %s，从下一份新稿件开始生效");
+        EVENT_ZH.put("SystemConfig.SplitThreshold.Disabled", "稿件拆分%s已关闭，从下一份新稿件开始生效");
+        EVENT_ZH.put("Split.Closed", "自动拆稿：累计大小或时长达到阈值，当前稿件已收尾");
+        EVENT_ZH.put("Split.ReconcileFailed", "自动拆稿：待判定稿件处理失败");
         EVENT_ZH.put("SystemConfig.ApplyFailed", "系统配置：应用配置失败");
         EVENT_ZH.put("SystemConfig.ApplyBoolean", "系统配置：应用布尔配置项");
         EVENT_ZH.put("SystemConfig.IgnoreObsolete", "系统配置：忽略已废弃的配置项");
@@ -762,6 +770,24 @@ public final class LogKvs {
         EVENT_ZH.put("Database.Backup.Cleanup.Success", "数据库备份：清理旧备份成功");
         EVENT_ZH.put("Database.Backup.Cleanup.Failed", "数据库备份：清理旧备份失败");
         EVENT_ZH.put("Database.Compact.Success", "数据库维护：压缩完成");
+        EVENT_ZH.put("DatabaseMigration.Start", "正在检查并升级数据库结构");
+        EVENT_ZH.put("DatabaseMigration.Completed", "数据库检查与升级完成，继续启动");
+        EVENT_ZH.put("DatabaseMigration.Backup.Start", "正在备份数据库，完成后将继续启动，请勿关闭程序");
+        EVENT_ZH.put("DatabaseMigration.Backup.Generated", "数据库备份已生成，正在保存到工作目录");
+        EVENT_ZH.put("DatabaseMigration.Backup.Saving", "数据库备份正在保存到工作目录");
+        EVENT_ZH.put("DatabaseMigration.Backup.Failed", "数据库备份失败，启动已中止");
+        EVENT_ZH.put("DatabaseMigration.Backup.CleanupFailed", "数据库备份临时文件清理失败");
+        EVENT_ZH.put("DatabaseMigration.Backup.Completed", "数据库备份完成，继续启动");
+        EVENT_ZH.put("DatabaseMigration.Backup.Generating", "数据库备份进行中，等待备份完成");
+        EVENT_ZH.put("Database.Compact.RecoveryFailed", "数据库自动恢复失败，请保留备份和临时文件");
+        EVENT_ZH.put("Database.Compact.CleanupFailed", "维护临时文件清理失败");
+        EVENT_ZH.put("Database.Compact.PhaseChanged", "数据库维护：阶段已更新");
+        EVENT_ZH.put("Database.Compact.Progress", "数据库维护进行中");
+        EVENT_ZH.put("CoreRestart.Completed", "核心重启完成");
+        EVENT_ZH.put("CoreRestart.AttemptFailed", "核心重启失败");
+        EVENT_ZH.put("CoreRestart.Failed", "核心重启最终失败，程序即将退出");
+        EVENT_ZH.put("CoreRestart.Interrupted", "核心重启线程被中断");
+        EVENT_ZH.put("HighEnergyCut.Artifact.UpdateFailed", "高能剪辑上传成功，但产物清单暂时无法更新");
         EVENT_ZH.put("Database.Compact.Failed", "数据库维护：压缩失败");
         EVENT_ZH.put("Database.Compact.WebhookStillBusy", "数据库维护：仍在维护中，Webhook 暂存");
         EVENT_ZH.put("Database.Compact.WebhookSpooled", "数据库维护：Webhook 已暂存等待重放");
@@ -805,6 +831,32 @@ public final class LogKvs {
 
     public static LogKvs event(String eventName) {
         return new LogKvs().add("event", eventName);
+    }
+
+    // 备份大小也会出现在日志里，等待状态的中文说明放在这里维护
+    public static String backupSizeLabel(Path backupPath) {
+        try {
+            if (!Files.exists(backupPath)) return "0.00 MB（等待备份文件写入）";
+            return String.format(Locale.ROOT, "%.2f MB", Files.size(backupPath) / (1024.0 * 1024.0));
+        } catch (IOException | SecurityException e) {
+            return "暂无法读取（等待备份完成）";
+        }
+    }
+
+    // 拆稿配置保留统一更新事件，动态中文说明和单位也由这里集中维护
+    public static LogKvs splitConfigUpdated(String key, String value, boolean duration) {
+        boolean enabled = !"0".equals(value);
+        String label = duration ? "时长" : "大小";
+        String unit = duration ? "分钟" : "GB";
+        String message = enabled
+                ? EVENT_ZH.get("SystemConfig.SplitThreshold.Enabled").formatted(label, value, unit)
+                : EVENT_ZH.get("SystemConfig.SplitThreshold.Disabled").formatted(label);
+        return event("SystemConfig.Updated")
+                .add("key", key)
+                .add("value", value)
+                .add("unit", unit)
+                .add("enabled", enabled)
+                .msg(message);
     }
 
     public LogKvs add(String key, Object value) {

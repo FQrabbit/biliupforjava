@@ -21,6 +21,35 @@ import static org.mockito.Mockito.*;
 
 class RoomControllerStorageImportTest {
 
+    @Test
+    void splitHistoriesWithSameSessionRemainDistinctAndReferencesAreRemapped() {
+        top.sshh.bililiverecoder.repo.RecordHistoryRepository histories = mock(top.sshh.bililiverecoder.repo.RecordHistoryRepository.class);
+        ReflectionTestUtils.setField(controller, "historyRepository", histories);
+        Map<Long, top.sshh.bililiverecoder.entity.RecordHistory> saved = new HashMap<>();
+        java.util.concurrent.atomic.AtomicLong ids = new java.util.concurrent.atomic.AtomicLong(100);
+        when(histories.saveAll(any())).thenAnswer(call -> {
+            Iterable<top.sshh.bililiverecoder.entity.RecordHistory> batch = call.getArgument(0);
+            for (var history : batch) { history.setId(ids.getAndIncrement()); saved.put(history.getId(), history); }
+            return batch;
+        });
+        when(histories.findById(anyLong())).thenAnswer(call -> Optional.ofNullable(saved.get(call.getArgument(0))));
+        Map<Long, Long> historyIds = new HashMap<>();
+        Map<Long, Long[]> references = new HashMap<>();
+        String json = "[{\"id\":20,\"roomId\":\"100\",\"sessionId\":\"same\",\"eventId\":\"root\",\"splitBoundaryPartId\":30},"
+                + "{\"id\":21,\"roomId\":\"100\",\"sessionId\":\"same\",\"eventId\":\"split:20:30\",\"splitParentId\":20,\"splitBoundaryPartId\":31}]";
+        try (JSONReader reader = new JSONReader(new StringReader(json))) {
+            assertEquals(2, (Integer) ReflectionTestUtils.invokeMethod(controller, "importHistorySection", reader, historyIds, references));
+        }
+        assertNotEquals(historyIds.get(20L), historyIds.get(21L));
+        assertNull(saved.get(historyIds.get(21L)).getSplitParentId());
+        ReflectionTestUtils.invokeMethod(controller, "remapSplitReferences", historyIds, new HashMap<>(Map.of(30L, 500L, 31L, 501L)), references);
+        assertEquals(500L, saved.get(historyIds.get(20L)).getSplitBoundaryPartId());
+        assertEquals(historyIds.get(20L), saved.get(historyIds.get(21L)).getSplitParentId());
+        assertEquals(501L, saved.get(historyIds.get(21L)).getSplitBoundaryPartId());
+        verify(histories).findFirstByRoomIdAndEventId("100", "root");
+        verify(histories).findFirstByRoomIdAndEventId("100", "split:20:30");
+    }
+
     private final StorageRootRepository rootRepository = mock(StorageRootRepository.class);
     private final PartFileLocationRepository locationRepository = mock(PartFileLocationRepository.class);
     private final RoomController controller = new RoomController();

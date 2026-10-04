@@ -81,6 +81,26 @@
                 </div>
                 <div class="mobile-config-field">
                     <div class="mobile-config-row">
+                        <div class="mobile-config-label"><span>稿件拆分时长</span><em>分钟</em></div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="systemConfig.splitDurationMinutes" inputmode="numeric" @input="checkConfigChanges" size="small" class="mobile-config-input" placeholder="0为关闭"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'splitDurationMinutes' }" @click="toggleConfigHint('splitDurationMinutes')" aria-label="查看稿件拆分时长说明"><i class="el-icon-info"></i></button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint"><div v-if="activeConfigHint === 'splitDurationMinutes'" class="mobile-config-hint">0为关闭，任一阈值达到后从下一分P开新稿；当前完整分P留在原稿件，阈值从下一份新稿件生效；累计视频时长，不计断播间隔</div></transition>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
+                        <div class="mobile-config-label"><span>稿件拆分大小</span><em>GB</em></div>
+                        <div class="mobile-config-control">
+                            <el-input v-model="systemConfig.splitSizeGb" inputmode="decimal" @input="checkConfigChanges" size="small" class="mobile-config-input" placeholder="0为关闭"></el-input>
+                            <button type="button" class="mobile-config-info" :class="{ 'is-active': activeConfigHint === 'splitSizeGb' }" @click="toggleConfigHint('splitSizeGb')" aria-label="查看稿件拆分大小说明"><i class="el-icon-info"></i></button>
+                        </div>
+                    </div>
+                    <transition name="mobile-config-hint"><div v-if="activeConfigHint === 'splitSizeGb'" class="mobile-config-hint">0为关闭，任一阈值达到后从下一分P开新稿；当前完整分P留在原稿件，阈值从下一份新稿件生效；1 GB = 1024 MB</div></transition>
+                </div>
+                <div class="mobile-config-field">
+                    <div class="mobile-config-row">
                         <div class="mobile-config-label">
                             <span>上传并发连接</span>
                             <em>个</em>

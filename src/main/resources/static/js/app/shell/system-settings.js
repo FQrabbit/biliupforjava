@@ -9,6 +9,8 @@
                 apiQps: 5.0,
                 uploadSpeedLimitMBps: 0,
                 mergeIntervalMinutes: 20,
+                splitDurationMinutes: 0,
+                splitSizeGb: 0,
                 maxConnections: 3,
                 normalDanmakuIntervalSeconds: 25,
                 highLevelDanmakuIntervalSeconds: 25,
@@ -18,6 +20,8 @@
                 apiQps: 5.0,
                 uploadSpeedLimitMBps: 0,
                 mergeIntervalMinutes: 20,
+                splitDurationMinutes: 0,
+                splitSizeGb: 0,
                 maxConnections: 3,
                 normalDanmakuIntervalSeconds: 25,
                 highLevelDanmakuIntervalSeconds: 25,
@@ -161,7 +165,7 @@
             var currentHighLevelDanmakuIntervalSeconds = parseInt(self.systemConfig.highLevelDanmakuIntervalSeconds) || 25;
             var currentNewUploadFlowEnabled = !!self.systemConfig.newUploadFlowEnabled;
 
-            self.hasConfigChanges = (originalApiQps !== currentApiQps) || (originalUploadSpeedLimitMBps !== currentUploadSpeedLimitMBps) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections) || (originalNormalDanmakuIntervalSeconds !== currentNormalDanmakuIntervalSeconds) || (originalHighLevelDanmakuIntervalSeconds !== currentHighLevelDanmakuIntervalSeconds) || (originalNewUploadFlowEnabled !== currentNewUploadFlowEnabled);
+            self.hasConfigChanges = (String(self.originalConfig.splitDurationMinutes) !== String(self.systemConfig.splitDurationMinutes)) || (String(self.originalConfig.splitSizeGb) !== String(self.systemConfig.splitSizeGb)) || (originalApiQps !== currentApiQps) || (originalUploadSpeedLimitMBps !== currentUploadSpeedLimitMBps) || (originalMergeIntervalMinutes !== currentMergeIntervalMinutes) || (originalMaxConnections !== currentMaxConnections) || (originalNormalDanmakuIntervalSeconds !== currentNormalDanmakuIntervalSeconds) || (originalHighLevelDanmakuIntervalSeconds !== currentHighLevelDanmakuIntervalSeconds) || (originalNewUploadFlowEnabled !== currentNewUploadFlowEnabled);
         },
         resetConfig: function() {
             // 重置配置
@@ -169,6 +173,8 @@
             self.systemConfig.apiQps = self.originalConfig.apiQps;
             self.systemConfig.uploadSpeedLimitMBps = self.originalConfig.uploadSpeedLimitMBps;
             self.systemConfig.mergeIntervalMinutes = self.originalConfig.mergeIntervalMinutes;
+            self.systemConfig.splitDurationMinutes = self.originalConfig.splitDurationMinutes;
+            self.systemConfig.splitSizeGb = self.originalConfig.splitSizeGb;
             self.systemConfig.maxConnections = self.originalConfig.maxConnections;
             self.systemConfig.normalDanmakuIntervalSeconds = self.originalConfig.normalDanmakuIntervalSeconds;
             self.systemConfig.highLevelDanmakuIntervalSeconds = self.originalConfig.highLevelDanmakuIntervalSeconds;
@@ -186,6 +192,10 @@
                             self.systemConfig.uploadSpeedLimitMBps = parseFloat(item.configValue);
                         } else if (item.configKey === 'bili.publish.merge-interval-minutes') {
                             self.systemConfig.mergeIntervalMinutes = parseInt(item.configValue);
+                        } else if (item.configKey === 'bili.publish.split-duration-minutes') {
+                            self.systemConfig.splitDurationMinutes = Number(item.configValue);
+                        } else if (item.configKey === 'bili.publish.split-size-gb') {
+                            self.systemConfig.splitSizeGb = Number(item.configValue);
                         } else if (item.configKey === 'upload.max-concurrent-connections') {
                             self.systemConfig.maxConnections = parseInt(item.configValue);
                         } else if (item.configKey === 'bili.dm.normal-send-interval-seconds') {
@@ -202,6 +212,8 @@
                     apiQps: self.systemConfig.apiQps,
                     uploadSpeedLimitMBps: self.systemConfig.uploadSpeedLimitMBps,
                     mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
+                    splitDurationMinutes: self.systemConfig.splitDurationMinutes,
+                    splitSizeGb: self.systemConfig.splitSizeGb,
                     maxConnections: self.systemConfig.maxConnections,
                     normalDanmakuIntervalSeconds: self.systemConfig.normalDanmakuIntervalSeconds,
                     highLevelDanmakuIntervalSeconds: self.systemConfig.highLevelDanmakuIntervalSeconds,
@@ -235,35 +247,46 @@
                 return;
             }
 
+            var splitDuration = String(self.systemConfig.splitDurationMinutes).trim();
+            var splitSize = String(self.systemConfig.splitSizeGb).trim();
+            if (!/^\d+$/.test(splitDuration) || !/^\d+(?:\.\d{1,2})?$/.test(splitSize)
+                    || !Number.isSafeInteger(Number(splitDuration) * 60)
+                    || !Number.isSafeInteger(Math.ceil(Number(splitSize) * 1073741824))) {
+                this.configLoading = false;
+                this.$message.warning('拆稿时长须为非负整数，大小须为非负数且最多两位小数，数值不能溢出');
+                return;
+            }
             var updates = [
                 { key: 'bili.limit.api-qps', value: String(apiQps) },
                 { key: 'bili.limit.upload-mb', value: String(uploadSpeedLimitMBps) },
                 { key: 'bili.publish.merge-interval-minutes', value: String(mergeIntervalMinutes) },
+                { key: 'bili.publish.split-duration-minutes', value: splitDuration },
+                { key: 'bili.publish.split-size-gb', value: splitSize },
                 { key: 'upload.max-concurrent-connections', value: String(maxConnections) },
                 { key: 'bili.dm.normal-send-interval-seconds', value: String(normalDanmakuIntervalSeconds) },
                 { key: 'bili.dm.high-level-send-interval-seconds', value: String(highLevelDanmakuIntervalSeconds) },
                 { key: 'upload.new-flow-enabled', value: String(newUploadFlowEnabled) }
             ];
 
-            var promises = updates.map(function(item) {
-                return new Promise(function(resolve, reject) {
-                    SystemApi.updateConfig(item, resolve, reject);
-                });
-            });
-
-            Promise.all(promises).then(function() {
+            var batch = {};
+            updates.forEach(function(item) { batch[item.key] = item.value; });
+            new Promise(function(resolve, reject) {
+                SystemApi.updateConfigBatch(batch, resolve, reject);
+            }).then(function() {
                 // 保存成功后更新原始配置
                 self.originalConfig = {
                     apiQps: self.systemConfig.apiQps,
                     uploadSpeedLimitMBps: self.systemConfig.uploadSpeedLimitMBps,
                     mergeIntervalMinutes: self.systemConfig.mergeIntervalMinutes,
+                    splitDurationMinutes: self.systemConfig.splitDurationMinutes,
+                    splitSizeGb: self.systemConfig.splitSizeGb,
                     maxConnections: self.systemConfig.maxConnections,
                     normalDanmakuIntervalSeconds: self.systemConfig.normalDanmakuIntervalSeconds,
                     highLevelDanmakuIntervalSeconds: self.systemConfig.highLevelDanmakuIntervalSeconds,
                     newUploadFlowEnabled: !!self.systemConfig.newUploadFlowEnabled
                 };
                 self.hasConfigChanges = false;
-                self.$message.success('系统配置已保存并生效');
+                self.$message.success('系统配置已保存，拆稿阈值从下一份新稿件生效');
             }).catch(function() {
                 self.$message.error('保存配置失败');
             }).finally(function() {

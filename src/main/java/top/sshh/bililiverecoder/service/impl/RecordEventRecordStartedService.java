@@ -29,6 +29,9 @@ public class RecordEventRecordStartedService implements RecordEventService {
     @Autowired
     private RecordHistoryMergeService historyMergeService;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
     @Override
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
@@ -56,7 +59,9 @@ public class RecordEventRecordStartedService implements RecordEventService {
             }
 
             String currentSessionId = room.getSessionId();
-            RecordHistory knownSession = historyRepository.findBySessionId(eventData.getSessionId());
+            if (room.isRecording() && java.util.Objects.equals(currentSessionId, eventData.getSessionId())
+                    && historyRepository.findFirstByRoomIdAndEventId(roomId, event.getEventId()) != null) return;
+            RecordHistory knownSession = historyRepository.findFirstByRoomIdAndSessionIdOrderByIdDesc(roomId, eventData.getSessionId());
             if (knownSession != null && !knownSession.isRecording()
                     && eventData.getSessionId() != null
                     && !eventData.getSessionId().equals(currentSessionId)) {
@@ -68,6 +73,7 @@ public class RecordEventRecordStartedService implements RecordEventService {
                         .add("historyId", knownSession.getId()));
                 return;
             }
+            boolean wasRecording = room.isRecording();
             room.setUname(eventData.getName());
             room.setTitle(eventData.getTitle());
             room.setSessionId(eventData.getSessionId());
@@ -76,11 +82,18 @@ public class RecordEventRecordStartedService implements RecordEventService {
             room.setRecording(eventData.isRecording());
             room.setStreaming(eventData.isStreaming());
 
+            RecordHistory pending = room.getHistoryId() == null ? null : historyRepository.findById(room.getHistoryId()).orElse(null);
+            if (wasRecording && pending != null && pending.isSplitClosed()) {
+                roomRepository.save(room);
+                return;
+            }
+
             RecordHistory history = historyMergeService.findReusableHistory(
                     roomId, now, eventData.getSessionId(), "RecordStarted");
 
             if (history == null) {
                 history = new RecordHistory();
+                        if (historySplitService != null) historySplitService.initializeNew(history);
                 history.setRoomId(room.getRoomId());
                 history.setStartTime(now);
                 history.setUpdateTime(now);

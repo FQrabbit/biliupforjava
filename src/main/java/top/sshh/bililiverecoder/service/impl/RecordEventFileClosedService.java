@@ -81,8 +81,17 @@ public class RecordEventFileClosedService implements RecordEventService {
     }
 
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
     @Override
     public void processing(RecordEventDTO event) {
+        String roomId = event.getEventData().getRoomId();
+        if (roomId == null) throw new IllegalArgumentException("事件缺少房间号");
+        synchronized (roomId.intern()) { processingInside(event); }
+    }
+
+    private void processingInside(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         String sessionId = eventData.getSessionId();
         String relativePath = eventData.getRelativePath();
@@ -96,8 +105,7 @@ public class RecordEventFileClosedService implements RecordEventService {
         if (room == null) {
             log.info("[BLR] {}", LogKvs.event("FileClosed.NoRecording")
                     .add("roomId", eventData.getRoomId())
-                    .add("filePath", relativePath)
-                    .add("msg", "收到文件关闭事件但本地无房间配置记录，已忽略。"));
+                    .add("filePath", relativePath));
             return;
         }
         String filePath = partPathService.resolveWebhookPath(relativePath);
@@ -135,6 +143,12 @@ public class RecordEventFileClosedService implements RecordEventService {
                         .add("partId", part.getId())
                         .add("filePath", relativePath));
             }
+            if (part == null && history.isSplitClosed() && historySplitService != null) {
+                LocalDateTime partStart = eventData.getFileOpenTime() == null
+                        ? LocalDateTime.now().minusSeconds(Math.max(0L, (long) eventData.getDuration()))
+                        : LocalDateTime.ofInstant(eventData.getFileOpenTime().toInstant(), ZoneId.systemDefault());
+                history = historySplitService.historyForNewPart(room, history, partStart);
+            }
             if (part == null) {
                 log.info("[BLR] {}", LogKvs.event("FileClosed.PartMissing")
                         .add("roomId", eventData.getRoomId())
@@ -149,6 +163,7 @@ public class RecordEventFileClosedService implements RecordEventService {
                 part.setHistoryId(history.getId());
                 part.setFilePath(filePath);
                 part.setFileSize(0L);
+                if (history.isSplitEnabled()) part.setSplitAssigned(false);
                 part.setPartOrder(historyPartRepository.countByHistoryId(history.getId()) + 1);
                 part.setSessionId(sessionId);
                 part.setRecording(eventData.isRecording());
@@ -168,8 +183,7 @@ public class RecordEventFileClosedService implements RecordEventService {
             } else {
                 log.error("[BLR] {}", LogKvs.event("FileClosed.FileMissing")
                         .add("roomId", eventData.getRoomId())
-                        .add("filePath", filePath)
-                        .add("hint", "check work-path or docker volume mapping"));
+                        .add("filePath", filePath));
                 fileSize = eventData.getFileSize();
             }
             LocalDateTime startTime = part.getStartTime();
@@ -189,7 +203,8 @@ public class RecordEventFileClosedService implements RecordEventService {
             part.setRecording(false);
             part.setFileSize(fileSize);
             float durationFromEvent = eventData.getDuration();
-            float durationToSave = durationFromEvent > 0.0f ? durationFromEvent : (float) durationSeconds;
+            float durationToSave = Float.isFinite(durationFromEvent) && durationFromEvent > 0.0f
+                    ? durationFromEvent : history.isSplitEnabled() ? 0 : (float) durationSeconds;
             part.setDuration(durationToSave);
             part.setEndTime(endTime);
             part.setCloseSource("FILE_CLOSED");
@@ -201,20 +216,27 @@ public class RecordEventFileClosedService implements RecordEventService {
             part = historyPartRepository.save(part);
             partFileLocationService.registerPrimary(part);
 
-            history.setFileSize(historyPartRepository.findByHistoryId(history.getId()).stream()
-                    .mapToLong(RecordHistoryPart::getFileSize).sum());
-            history.setTitle(eventData.getTitle());
+            if (!history.isSplitClosed()) {
+                history.setFileSize(historyPartRepository.findByHistoryId(history.getId()).stream()
+                        .mapToLong(RecordHistoryPart::getFileSize).sum());
+            }
+            if (!history.isSplitClosed()) history.setTitle(eventData.getTitle());
             // FileClosed 只代表一个分P完成，不能以 payload 中可能已过期的
             // recording/streaming 标志复活已由 SessionEnded 关闭的历史稿件
             if (StringUtils.isNotBlank(sessionId)) {
                 history.setSessionId(sessionId);
             }
             history.setUpdateTime(LocalDateTime.now());
-            if (history.getEndTime() == null || history.getEndTime().isBefore(endTime)) {
+            if (!history.isSplitClosed() && (history.getEndTime() == null || history.getEndTime().isBefore(endTime))) {
                 history.setEndTime(endTime);
             }
             history = historyRepository.save(history);
             statsAggregationService.refreshHistoryStatsAsync(history.getId());
+            if (historySplitService != null) {
+                historySplitService.reconcile(history.getId());
+                part = historyPartRepository.findById(part.getId()).orElse(part);
+                history = historyRepository.findById(part.getHistoryId()).orElse(history);
+            }
             if (!vidleFile.exists()) {
                 return;
             }
@@ -222,12 +244,11 @@ public class RecordEventFileClosedService implements RecordEventService {
                     && partFileCleanupPolicy.isPostRecordCloseCleanupType(room.getDeleteType())) {
                 Long id = part.getId();
                 if (!shutdownState.isShuttingDown()) {
-                    Long historyId = history.getId();
                     long closedFileSize = fileSize;
                     taskExecutor.execute(() -> {
                         if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) return;
                         RecordHistoryPart currentPart = historyPartRepository.findById(id).orElse(null);
-                        RecordHistory currentHistory = historyRepository.findById(historyId).orElse(null);
+                        RecordHistory currentHistory = currentPart == null ? null : historyRepository.findById(currentPart.getHistoryId()).orElse(null);
                         if (currentPart == null || currentHistory == null) return;
                         if (!partFileCleanupPolicy.shouldSkipProtectedArchive(room, currentHistory, currentPart,
                                 currentPart.getFilePath(), "FileClosed", "postRecordCleanup")) {
@@ -247,14 +268,15 @@ public class RecordEventFileClosedService implements RecordEventService {
                     .add("title", eventData.getTitle())
                     .add("filePath", relativePath)
                     .add("historyId", room.getHistoryId())
-                    .add("sessionId", sessionId)
-                    .add("msg", "未找到对应会话，避免把旧文件关闭事件写入当前稿件。"));
+                    .add("sessionId", sessionId));
         }
 
     }
 
     private void startUploadOrMarkSkipped(RecordRoom room, RecordHistory history,
                                           RecordHistoryPart part, long fileSize) {
+        if ((history.isSplitEnabled() || part.getSplitAssigned() != null)
+                && (!Float.isFinite(part.getDuration()) || part.getDuration() <= 0)) return;
         if (fileSize > 1024 * 1024 * room.getFileSizeLimit() && part.getDuration() > room.getDurationLimit()) {
             if (!shutdownState.isShuttingDown()) {
                 uploadServiceFactory.getUploadService(room.getLine()).asyncUpload(part);

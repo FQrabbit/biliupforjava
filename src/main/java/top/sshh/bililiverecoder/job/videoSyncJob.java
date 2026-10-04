@@ -815,7 +815,7 @@ public class videoSyncJob {
                     .addIfNotBlank("title", next.getTitle())
                     .addIfNotBlank("bvid", next.getBvId())
                     .add("code", code)
-                    .addIfNotBlank("msg", videoInfoResponse.getMessage()));
+                    .addIfNotBlank("platformMsg", videoInfoResponse.getMessage()));
             
             // 处理 62002 (稿件不可见)
             if (code == 62002) {
@@ -903,7 +903,7 @@ public class videoSyncJob {
                                     .add("historyId", next.getId())
                                     .addIfNotBlank("bvid", next.getBvId())
                                     .add("code", confirm.getCode())
-                                    .addIfNotBlank("msg", confirm.getMessage()));
+                                    .addIfNotBlank("platformMsg", confirm.getMessage()));
                         }
 
                         int fallbackOldCode = next.getCode();
@@ -1056,8 +1056,7 @@ public class videoSyncJob {
                     part.setDeleteFailReason("");
                     log.info("[BLR] {}", LogKvs.event("VideoSync.Part.ExceptionCleared")
                             .add("historyId", next.getId())
-                            .add("partId", part.getId())
-                            .add("msg", "CID已获取，清除异常状态"));
+                            .add("partId", part.getId()));
                 }
 
                 part = partRepository.save(part);

@@ -14,6 +14,11 @@ import java.util.List;
 @Repository
 public interface RoomLiveEventRepository extends CrudRepository<RoomLiveEvent, Long> {
 
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("update RoomLiveEvent e set e.historyId = ?2 where e.partId = ?1")
+    int reassignHistoryByPartId(Long partId, Long historyId);
+
+
     long countByHistoryId(Long historyId);
 
     long countByHistoryIdAndType(Long historyId, String type);

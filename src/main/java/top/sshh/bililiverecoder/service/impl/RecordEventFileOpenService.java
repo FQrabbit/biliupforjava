@@ -54,6 +54,9 @@ public class RecordEventFileOpenService implements RecordEventService {
         workPath = workPath.replace("\\", "/");
     }
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+
     @Override
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
@@ -88,11 +91,11 @@ public class RecordEventFileOpenService implements RecordEventService {
                     room.setHistoryId(-1L);
                 }
 
-                room.setWebhookSource("BREC");
+                room.setWebhookSource(top.sshh.bililiverecoder.entity.RecordEventType.VideoFileCreatedEvent.equals(event.getEventType()) ? "BLREC" : "BREC");
                 room.setWebhookLastSeenAt(LocalDateTime.now());
 
                 String currentSessionId = room.getSessionId();
-                RecordHistory knownSession = historyRepository.findBySessionId(incomingSessionId);
+                RecordHistory knownSession = historyRepository.findFirstByRoomIdAndSessionIdOrderByIdDesc(roomId, incomingSessionId);
                 if (knownSession != null && !knownSession.isRecording()
                         && incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
                     // FileOpening 可在 SessionEnded 之后迟到。稿件已经结束时不再重新打开它，
@@ -118,6 +121,7 @@ public class RecordEventFileOpenService implements RecordEventService {
 
                     if (history == null) {
                         history = new RecordHistory();
+                        if (historySplitService != null) historySplitService.initializeNew(history);
                         history.setRoomId(roomId);
                         history.setStartTime(fileOpenTimeOrNow(eventData, now));
                         history.setEndTime(history.getStartTime());
@@ -162,7 +166,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                 RecordHistory history = historyOptional.get();
 
                 int partCount = historyPartRepository.countByHistoryId(history.getId());
-                if (partCount >= 99) {
+                if (!history.isSplitClosed() && partCount >= 99) {
                     log.warn("[BLR] {}", LogKvs.event("FileOpen.PartLimitReached")
                             .add("historyId", history.getId())
                             .add("limit", 100));
@@ -171,7 +175,12 @@ public class RecordEventFileOpenService implements RecordEventService {
 
                 String filePath = partPathService.resolveWebhookPath(relativePath);
 
-                RecordHistoryPart existingPart = findByCanonicalPath(historyPartRepository.findByHistoryId(history.getId()), filePath);
+                RecordHistoryPart existingPart = historyPartRepository.findByFilePath(filePath);
+                if (existingPart != null && roomId.equals(existingPart.getRoomId())) {
+                    history = historyRepository.findById(existingPart.getHistoryId()).orElse(history);
+                } else {
+                    existingPart = findByCanonicalPath(historyPartRepository.findByHistoryId(history.getId()), filePath);
+                }
                 if (historyPartRepository.existsByFilePath(filePath) || existingPart != null) {
                     // 自动收尾后，同一路径又收到文件打开事件，说明又开始写了，还没投稿就恢复录制
                     // 重新观察文件是否稳定，之前的上传结果不能再用
@@ -187,13 +196,15 @@ public class RecordEventFileOpenService implements RecordEventService {
                         existingPart.setAutoCloseFileModifiedAt(null);
                         existingPart.setUpdateTime(LocalDateTime.now());
                         historyPartRepository.save(existingPart);
-                        history.setRecording(true);
-                        history.setStreaming(eventData.isStreaming());
+                        history.setRecording(!history.isSplitClosed());
+                        history.setStreaming(!history.isSplitClosed() && eventData.isStreaming());
                         history.setUpdateTime(LocalDateTime.now());
                         historyRepository.save(history);
-                        room.setRecording(true);
-                        room.setStreaming(eventData.isStreaming());
-                        roomRepository.save(room);
+                        if (!history.isSplitClosed() && java.util.Objects.equals(room.getHistoryId(), history.getId())) {
+                            room.setRecording(true);
+                            room.setStreaming(eventData.isStreaming());
+                            roomRepository.save(room);
+                        }
                         log.info("[BLR] {}", LogKvs.event("FileOpen.RestoreAutoClosedPart")
                                 .add("roomId", roomId).add("historyId", history.getId()).add("partId", existingPart.getId()));
                         return;
@@ -205,9 +216,13 @@ public class RecordEventFileOpenService implements RecordEventService {
                     return;
                 }
 
+                if (historySplitService != null) {
+                    history = historySplitService.historyForNewPart(room, history, fileOpenTimeOrNow(eventData, LocalDateTime.now()));
+                    partCount = historyPartRepository.countByHistoryId(history.getId());
+                }
                 RecordHistoryPart part = new RecordHistoryPart();
                 part.setEventId(event.getEventId());
-                part.setSourceType("brec");
+                part.setSourceType(top.sshh.bililiverecoder.entity.RecordEventType.VideoFileCreatedEvent.equals(event.getEventType()) ? "blrec" : "brec");
                 part.setTitle(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM\u6708dd\u65e5HH\u70b9mm\u5206ss\u79d2")));
                 part.setLiveTitle(eventData.getTitle());
                 part.setAreaName(eventData.getAreaNameChild());
@@ -215,10 +230,11 @@ public class RecordEventFileOpenService implements RecordEventService {
                 part.setHistoryId(history.getId());
                 part.setFilePath(filePath);
                 part.setFileSize(0L);
+                if (history.isSplitEnabled()) part.setSplitAssigned(false);
                 part.setPartOrder(partCount + 1);
                 part.setSessionId(incomingSessionId);
                 part.setRecording(true);
-                part.setStartTime(LocalDateTime.now());
+                part.setStartTime(fileOpenTimeOrNow(eventData, LocalDateTime.now()));
                 part.setEndTime(null);
                 part = historyPartRepository.save(part);
                 partFileLocationService.registerPrimary(part);

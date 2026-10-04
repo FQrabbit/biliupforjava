@@ -67,6 +67,11 @@ public class RecordHistoryPart {
 
     private String sessionId;
 
+    // 拆稿采用首次确认的结束数据，后续删文件或转封装不改写边界
+    private Long splitFileSize;
+    private Double splitDuration;
+    private Boolean splitAssigned;
+
 
     private boolean recording;
 

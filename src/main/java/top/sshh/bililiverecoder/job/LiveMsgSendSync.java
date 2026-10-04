@@ -180,8 +180,7 @@ public class LiveMsgSendSync {
                             .add("historyId", history.getId())
                             .add("partId", p.getId())
                             .addIfNotBlank("title", p.getTitle())
-                            .addIfNotBlank("bvid", history.getBvId())
-                            .add("msg", "分P缺失CID，标记为异常并跳过后续处理"));
+                            .addIfNotBlank("bvid", history.getBvId()));
                 } else {
                     parts.add(p);
                 }

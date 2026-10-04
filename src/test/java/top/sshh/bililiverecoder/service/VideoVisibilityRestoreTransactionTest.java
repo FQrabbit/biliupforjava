@@ -97,6 +97,9 @@ class VideoVisibilityRestoreTransactionTest {
     @Test
     void scheduledRetryCommitsCompletionWithoutCallerTransaction() {
         VideoVisibilityRestoreTask task = pendingTask(true);
+        // 这里验收到期任务的事务提交，让任务明确到期，避免数据库时间精度影响扫描
+        task.setNextAttemptAt(LocalDateTime.now().minusSeconds(1));
+        tasks.save(task);
 
         service.processDueTasks();
 
@@ -120,6 +123,9 @@ class VideoVisibilityRestoreTransactionTest {
     @Test
     void loggedOutAccountPersistsRetryWithoutCallingPlatform() {
         VideoVisibilityRestoreTask task = pendingTask(false);
+        // 这里验收未登录账号的重试持久化，让到期条件明确，避免依赖数据库时间精度
+        task.setNextAttemptAt(LocalDateTime.now().minusSeconds(1));
+        tasks.save(task);
 
         service.processDueTasks();
 

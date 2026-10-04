@@ -39,6 +39,10 @@ public class RoomLiveEventParseCommitService {
     public void replacePartData(Long partId, List<RoomLiveEvent> events,
                                 List<RoomLiveDanmuUserStats> danmuStats,
                                 RoomLiveEventParseState state) {
+        Long historyId = currentHistoryId(partId, state.getHistoryId());
+        state.setHistoryId(historyId);
+        if (events != null) events.forEach(event -> event.setHistoryId(historyId));
+        if (danmuStats != null) danmuStats.forEach(stats -> stats.setHistoryId(historyId));
         eventRepository.deleteByPartId(partId);
         danmuStatsRepository.deleteByPartId(partId);
         if (events != null && !events.isEmpty()) eventRepository.saveAll(events);
@@ -50,6 +54,8 @@ public class RoomLiveEventParseCommitService {
     public void replacePartDataFromSpool(Long partId, Path eventSpool,
                                          List<RoomLiveDanmuUserStats> danmuStats,
                                          RoomLiveEventParseState state, int batchSize) {
+        Long historyId = currentHistoryId(partId, state.getHistoryId());
+        state.setHistoryId(historyId);
         int safeBatchSize = Math.max(50, Math.min(2000, batchSize));
         eventRepository.deleteByPartId(partId);
         danmuStatsRepository.deleteByPartId(partId);
@@ -61,7 +67,9 @@ public class RoomLiveEventParseCommitService {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) continue;
-                entityManager.persist(JSON.parseObject(line, RoomLiveEvent.class));
+                RoomLiveEvent event = JSON.parseObject(line, RoomLiveEvent.class);
+                event.setHistoryId(historyId);
+                entityManager.persist(event);
                 if (++pending >= safeBatchSize) {
                     entityManager.flush();
                     entityManager.clear();
@@ -69,6 +77,7 @@ public class RoomLiveEventParseCommitService {
                 }
             }
             for (RoomLiveDanmuUserStats stats : danmuStats) {
+                stats.setHistoryId(historyId);
                 entityManager.persist(stats);
                 if (++pending >= safeBatchSize) {
                     entityManager.flush();
@@ -81,5 +90,13 @@ public class RoomLiveEventParseCommitService {
         } catch (IOException error) {
             throw new IllegalStateException("读取 XML 解析暂存文件失败", error);
         }
+    }
+
+    // 解析可能在拆稿前开始，提交时锁住分P并读取最新归属
+    private Long currentHistoryId(Long partId, Long fallback) {
+        if (entityManager == null) return fallback;
+        top.sshh.bililiverecoder.entity.RecordHistoryPart current = entityManager.find(
+                top.sshh.bililiverecoder.entity.RecordHistoryPart.class, partId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        return current == null ? fallback : current.getHistoryId();
     }
 }

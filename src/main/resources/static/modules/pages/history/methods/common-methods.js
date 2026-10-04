@@ -5,6 +5,18 @@
     'use strict';
 
     window.HistoryPageCommonMethods = {
+        getHistorySplitLabel: function(item) {
+            if (!item || !item.splitGroup) return '';
+            var sequence = Number(item.splitSequence) || 1;
+            if (!item.splitClosedAt && !item.splitParentId) return '';
+            var label = '自动拆稿 · 第' + sequence + '段';
+            if (item.splitClosedAt) {
+                var reason = item.splitReason === 'SIZE' ? '累计大小' : item.splitReason === 'DURATION' ? '累计时长' : '累计大小和时长';
+                label += ' · ' + reason + '达到阈值';
+                if (!item.publish) label += '，等待上传投稿';
+            }
+            return label;
+        },
         findHistoryForAction: function(id) {
             var records = [this.currentDetail].concat(this.tableData || [], [this.history]);
             return records.find(function(item) { return item && Number(item.id) === Number(id); }) || null;

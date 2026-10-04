@@ -343,8 +343,8 @@ public class DatabaseMaintenanceService {
                     e.addSuppressed(recoveryError);
                     databaseAvailable = false;
                     preserveLocalFiles = true;
-                    log.error("数据库自动恢复失败，请保留备份和临时文件。备份位置：{}，临时文件位置：{}",
-                            backupPath, localDirectory, recoveryError);
+                    log.error("[BLR] {}", LogKvs.event("Database.Compact.RecoveryFailed")
+                            .add("backupPath", backupPath).add("tempPath", localDirectory), recoveryError);
                 }
             }
             if (databaseAvailable) maintenanceState.resumeDatabase();
@@ -366,7 +366,8 @@ public class DatabaseMaintenanceService {
                     DatabaseFileTransfer.cleanWorkspace(localDirectory);
                     recoveryPath = null;
                 } catch (IOException cleanupError) {
-                    log.warn("维护临时文件清理失败，临时文件位置：{}", localDirectory, cleanupError);
+                    log.warn("[BLR] {}", LogKvs.event("Database.Compact.CleanupFailed")
+                            .add("tempPath", localDirectory), cleanupError);
                 }
             }
             compactRunning.set(false);
@@ -640,7 +641,9 @@ public class DatabaseMaintenanceService {
         MaintenanceSnapshot previous = snapshot;
         snapshot = new MaintenanceSnapshot(phase, previous.startedAt(), null, message,
                 previous.spooled(), previous.replayed(), previous.failed(), previous.backupPath());
-        log.info("数据库维护：{}，累计耗时 {} 秒", message, elapsedSeconds(operationStartedNanos));
+        log.info("[BLR] {}", LogKvs.event("Database.Compact.PhaseChanged")
+                .add("phase", phase).add("phaseLabel", message)
+                .add("elapsedSeconds", elapsedSeconds(operationStartedNanos)));
     }
 
     private void finishPhase() {
@@ -674,9 +677,12 @@ public class DatabaseMaintenanceService {
         try {
             MaintenanceSnapshot current = snapshot;
             TransferProgress transfer = transferProgress;
-            log.info("数据库维护进行中：{}，本阶段已耗时 {} 秒，文件大小 {} MB，已传输 {} / {} MB",
-                    current.message(), elapsedSeconds(phaseStartedNanos), currentFileBytes() / (1024 * 1024),
-                    transfer.written() / (1024 * 1024), transfer.total() / (1024 * 1024));
+            log.info("[BLR] {}", LogKvs.event("Database.Compact.Progress")
+                    .add("phase", current.phase()).add("phaseLabel", current.message())
+                    .add("phaseElapsedSeconds", elapsedSeconds(phaseStartedNanos))
+                    .add("fileSizeMB", currentFileBytes() / (1024 * 1024))
+                    .add("writtenMB", transfer.written() / (1024 * 1024))
+                    .add("totalMB", transfer.total() / (1024 * 1024)));
         } catch (RuntimeException ignored) {
             // 状态日志失败不能打断数据库维护
         }

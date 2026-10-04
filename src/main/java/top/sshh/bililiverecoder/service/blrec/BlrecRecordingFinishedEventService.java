@@ -26,6 +26,12 @@ public class BlrecRecordingFinishedEventService implements BlrecEventService {
 
     @Override
     public void processing(BlrecEventDTO event) {
+        String roomId = event.getData().getRoomInfo() == null ? event.getData().getRoomId() : event.getData().getRoomInfo().getRoomId();
+        if (roomId == null) throw new IllegalArgumentException("事件缺少房间号");
+        synchronized (roomId.intern()) { processingInside(event); }
+    }
+
+    private void processingInside(BlrecEventDTO event) {
         BlrecRoomInfoDTO roomInfo = event.getData().getRoomInfo();
         String roomId = roomInfo.getRoomId();
 
@@ -34,6 +40,10 @@ public class BlrecRecordingFinishedEventService implements BlrecEventService {
             log.warn("[BLR] {}", LogKvs.event("Blrec.RecordingFinished.RoomNotFound").add("roomId", roomId));
             return;
         }
+
+        RecordHistory current = room.getHistoryId() == null ? null : historyRepository.findById(room.getHistoryId()).orElse(null);
+        if (current != null && current.getStartTime() != null && event.getDate() != null
+                && java.time.LocalDateTime.ofInstant(event.getDate().toInstant(), java.time.ZoneId.systemDefault()).isBefore(current.getStartTime())) return;
 
         // 更新房间状态
         room.setRecording(false);
@@ -44,6 +54,7 @@ public class BlrecRecordingFinishedEventService implements BlrecEventService {
         Optional<RecordHistory> historyOpt = historyRepository.findById(room.getHistoryId());
         if (historyOpt.isPresent()) {
             RecordHistory history = historyOpt.get();
+            if (history.isSplitClosed()) return;
             if (history.isForceArchived()) {
                 room.setHistoryId(-1L);
                 room.setSessionId(null);

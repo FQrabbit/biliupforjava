@@ -54,6 +54,7 @@ public class PublishReadinessService {
         if (end == null) {
             return new Check(false, "RECORDING_END_UNKNOWN", "尚未确认录制结束时间，请刷新状态或检查录制记录", null);
         }
+        if (history.isSplitClosed()) return Check.ready();
         LocalDateTime earliest = end.plusMinutes(mergeIntervalMinutes(config));
         if (now.isBefore(earliest)) {
             return new Check(false, "MERGE_INTERVAL", "等待短时开播合并，合并等待结束后才能投稿", earliest);
