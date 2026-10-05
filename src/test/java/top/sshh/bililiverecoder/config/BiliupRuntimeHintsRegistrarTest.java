@@ -34,6 +34,15 @@ import top.sshh.bililiverecoder.service.CaptchaService;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BiliupRuntimeHintsRegistrarTest {
+    @Test
+    void registersPackagePrivateStatsMethodsForNativeProxyInvocation() {
+        RuntimeHints hints = new RuntimeHints();
+        new BiliupRuntimeHintsRegistrar().registerHints(hints, getClass().getClassLoader());
+        var type = top.sshh.bililiverecoder.service.StatsAggregationService.class;
+        assertTrue(RuntimeHintsPredicates.reflection().onType(type)
+                .withMemberCategory(MemberCategory.INVOKE_DECLARED_METHODS).test(hints));
+    }
+
 
     @Test
     void registersMaintenanceConnectionProxyAndPoolRestartReflection() {
@@ -57,6 +66,9 @@ class BiliupRuntimeHintsRegistrarTest {
         assertReflectionRegistered(hints, NotificationRule.class);
         assertReflectionRegistered(hints, NotificationDelivery.class);
         assertReflectionRegistered(hints, RoomLiveSessionStats.class);
+        assertReflectionRegistered(hints, top.sshh.bililiverecoder.entity.StatsUpdateState.class);
+        assertReflectionRegistered(hints, top.sshh.bililiverecoder.entity.StatsDailyUpdateState.class);
+        assertReflectionRegistered(hints, top.sshh.bililiverecoder.entity.StatsDailyUpdateState.Key.class);
         assertReflectionRegistered(hints, StorageRoot.class);
         assertReflectionRegistered(hints, PartFileLocation.class);
         assertReflectionRegistered(hints, NotificationEvent.class);

@@ -12,6 +12,9 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
         hints.proxies().registerJdkProxy(java.sql.Connection.class);
         hints.reflection().registerType(java.sql.Connection.class, MemberCategory.INVOKE_PUBLIC_METHODS);
         hints.reflection().registerType(com.zaxxer.hikari.HikariConfig.class, MemberCategory.DECLARED_FIELDS);
+        // 统计服务被 Spring 代理后，后台调用的包内方法也需要允许反射执行
+        hints.reflection().registerType(top.sshh.bililiverecoder.service.StatsAggregationService.class,
+                MemberCategory.INVOKE_DECLARED_METHODS);
         String[] classesToRegister = {
             "top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse",
             "top.sshh.bililiverecoder.entity.data.BiliLiveRoomInfoResponse$RoomInfo",
@@ -76,6 +79,9 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
             "top.sshh.bililiverecoder.entity.NotificationChannel",
             "top.sshh.bililiverecoder.entity.NotificationRule",
             "top.sshh.bililiverecoder.entity.NotificationDelivery",
+            "top.sshh.bililiverecoder.entity.StatsUpdateState",
+            "top.sshh.bililiverecoder.entity.StatsDailyUpdateState",
+            "top.sshh.bililiverecoder.entity.StatsDailyUpdateState$Key",
             "top.sshh.bililiverecoder.entity.RoomLiveSessionStats",
             "top.sshh.bililiverecoder.entity.RoomLiveDailyStats",
             "top.sshh.bililiverecoder.entity.RoomLiveMsgBucketStats",

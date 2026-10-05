@@ -67,7 +67,14 @@ public class StatsAggregationService {
     @Qualifier("myAsyncPool")
     private TaskExecutor taskExecutor;
 
-    private final ReentrantLock statsWriteLock = new ReentrantLock();
+    @Autowired
+    private StatsResultWriter statsResultWriter;
+    @Autowired
+    @Lazy
+    private StatsUpdateService statsUpdateService;
+
+    private final ReentrantLock statsWriteLock = new ReentrantLock(true);
+    private final ThreadLocal<Runnable> deferredTerminal = new ThreadLocal<>();
     private final Object taskStatusLock = new Object();
     private volatile StatsTaskStatus taskStatus = StatsTaskStatus.idle();
 
@@ -120,6 +127,7 @@ public class StatsAggregationService {
                         .add("unresolved", parseSummary.count(RoomLiveEventXmlIssue.IssueType.PATH_UNRESOLVED))
                         .add("internal", parseSummary.count(RoomLiveEventXmlIssue.IssueType.INTERNAL_ERROR)));
             }
+            finishDailyResults();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("updated", updated);
@@ -127,7 +135,7 @@ public class StatsAggregationService {
             result.put("status", getStatsStatus());
             return result;
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -151,6 +159,7 @@ public class StatsAggregationService {
                     }
                 }
             }
+            finishDailyResults();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("updated", updated);
@@ -158,7 +167,7 @@ public class StatsAggregationService {
             result.put("status", getStatsStatus());
             return result;
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -166,28 +175,17 @@ public class StatsAggregationService {
         return startStatsTask("backfill", "补全未统计", this::runBackfillMissingStatsTask);
     }
 
-    @Async("myAsyncPool")
+    public void refreshHistoryStatsAfterCommit(Long historyId) {
+        if (statsUpdateService != null) statsUpdateService.requestAfterCommit(historyId);
+        else refreshHistoryStatsAsync(historyId);
+    }
+
     public void refreshHistoryStatsAsync(Long historyId) {
-        if (databaseMaintenanceState.isMaintenanceActive()) {
-            log.info("[BLR] {}", LogKvs.event("Stats.RefreshHistory.SkipMaintenance")
-                    .add("historyId", historyId));
+        if (statsUpdateService != null) {
+            statsUpdateService.requestContent(historyId);
             return;
         }
-        if (!statsWriteLock.tryLock()) {
-            log.info("[BLR] {}", LogKvs.event("Stats.RefreshHistory.SkipBusy")
-                    .add("historyId", historyId));
-            return;
-        }
-        try {
-            refreshHistoryStatsUnlocked(historyId);
-        } catch (Throwable e) {
-            log.warn("[BLR] {}", LogKvs.event("Stats.RefreshHistory.Failed")
-                    .add("historyId", historyId)
-                    .add("err", e.getMessage())
-                    .add("ex", e.getClass().getSimpleName()));
-        } finally {
-            statsWriteLock.unlock();
-        }
+        refreshHistoryStats(historyId);
     }
 
     public Map<String, Object> rebuildAllStats() {
@@ -210,6 +208,7 @@ public class StatsAggregationService {
                 }
             }
 
+            finishDailyResults();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("updated", updated);
@@ -219,7 +218,7 @@ public class StatsAggregationService {
             result.put("status", getStatsStatus());
             return result;
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -285,12 +284,13 @@ public class StatsAggregationService {
             String message = "XML 已重新解析：" + repairReport.getOrDefault("summary", "处理完成");
             if (repairReport.containsKey("backupPath")) message += "；原文件已备份";
             terminalMessage = message;
+            finishDailyResults();
             terminalResult = result;
         } catch (Throwable e) {
             terminalMessage = stage + "：" + e.getMessage();
             log.warn("XML repair failed for part {}: {}", partId, e.getMessage(), e);
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
             // 保持任务持续运行，直到其锁被释放：客户端一旦观察到 DONE/FAILED
             // 下一个任务就可能立即启动
             if (terminalResult != null) updateTaskDone(terminalMessage, terminalResult);
@@ -322,7 +322,7 @@ public class StatsAggregationService {
             result.put("status", getStatsStatus());
             return result;
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -370,7 +370,7 @@ public class StatsAggregationService {
     }
 
     private void runXmlIssueRecheckTask(List<Long> partIds) {
-        if (!statsWriteLock.tryLock()) {
+        if (!waitForManualStatsLock()) {
             updateTaskBusy("已有统计任务正在执行");
             return;
         }
@@ -407,6 +407,7 @@ public class StatsAggregationService {
                     refreshed++;
                 }
             }
+            finishDailyResults();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("checked", processed);
@@ -426,12 +427,12 @@ public class StatsAggregationService {
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
     private void runBackfillMissingStatsTask() {
-        if (!statsWriteLock.tryLock()) {
+        if (!waitForManualStatsLock()) {
             updateTaskBusy("已有统计任务正在执行");
             return;
         }
@@ -458,6 +459,7 @@ public class StatsAggregationService {
                 processed++;
                 updateTaskProgress("正在补全", processed, targets.size(), history.getRoomId() + " / " + history.getId());
             }
+            finishDailyResults();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("updated", updated);
@@ -471,12 +473,12 @@ public class StatsAggregationService {
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
     private void runRebuildAllStatsTask() {
-        if (!statsWriteLock.tryLock()) {
+        if (!waitForManualStatsLock()) {
             updateTaskBusy("已有统计任务正在执行");
             return;
         }
@@ -500,6 +502,7 @@ public class StatsAggregationService {
                 processed++;
                 updateTaskProgress("正在重建", processed, histories.size(), history.getRoomId() + " / " + history.getId());
             }
+            finishDailyResults();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("updated", updated);
@@ -516,12 +519,12 @@ public class StatsAggregationService {
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
     private void runCleanupStatsTask() {
-        if (!statsWriteLock.tryLock()) {
+        if (!waitForManualStatsLock()) {
             updateTaskBusy("已有统计任务正在执行");
             return;
         }
@@ -545,7 +548,22 @@ public class StatsAggregationService {
                     .add("err", e.getMessage())
                     .add("ex", e.getClass().getSimpleName()), e);
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
+        }
+    }
+
+    private boolean waitForManualStatsLock() {
+        try { return statsWriteLock.tryLock(30, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); return false; }
+    }
+
+    // 先释放统计锁，再让前端看到任务的最终状态
+    private void releaseStatsLock() {
+        statsWriteLock.unlock();
+        if (!statsWriteLock.isHeldByCurrentThread()) {
+            Runnable terminal = deferredTerminal.get();
+            deferredTerminal.remove();
+            if (terminal != null) terminal.run();
         }
     }
 
@@ -556,12 +574,20 @@ public class StatsAggregationService {
     }
 
     private void updateTaskDone(String message, Map<String, Object> result) {
+        if (statsWriteLock.isHeldByCurrentThread()) {
+            deferredTerminal.set(() -> updateTaskDone(message, result));
+            return;
+        }
         synchronized (taskStatusLock) {
             taskStatus = taskStatus.done(message, result);
         }
     }
 
     private void updateTaskFailed(String message) {
+        if (statsWriteLock.isHeldByCurrentThread()) {
+            deferredTerminal.set(() -> updateTaskFailed(message));
+            return;
+        }
         synchronized (taskStatusLock) {
             taskStatus = taskStatus.failed(message);
         }
@@ -589,7 +615,7 @@ public class StatsAggregationService {
             result.put("cleanedAt", LocalDateTime.now());
             return result;
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -650,7 +676,7 @@ public class StatsAggregationService {
             result.put("cleanedAt", now);
             return result;
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -712,9 +738,84 @@ public class StatsAggregationService {
         statsWriteLock.lock();
         try {
             refreshHistoryStatsUnlocked(historyId);
+            finishDailyResults();
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
+    }
+
+    boolean manualTaskRunning() { return taskStatus.running; }
+
+    boolean updateQueuedHistory(RecordHistory history, List<RecordHistoryPart> parts, boolean content,
+                                boolean price, boolean sourcesAvailable) {
+        if (!statsWriteLock.tryLock()) return false;
+        try {
+            if (!statsUpdateService.currentAllowed()) return true;
+            if (!isHistoryReadyForStats(history, parts)) return false;
+            var previous = sessionStatsRepository.findByHistoryId(history.getId());
+            if (previous != null && previous.isImportedSnapshot()) return true;
+            if (content && sourcesAvailable) {
+                for (var part : parts) {
+                    var parsed = roomLiveEventParseService.parsePartForStatsUpdate(part);
+                    if (parsed.issueType() != null) {
+                        updateMetadata(history, parts, previous, price, false);
+                        statsUpdateService.blockCurrentXml();
+                        return true;
+                    }
+                }
+                aggregateHistory(history);
+                return true;
+            }
+            if (previous == null) {
+                if (!sourcesAvailable) return false;
+                aggregateHistory(history);
+                return true;
+            }
+            updateMetadata(history, parts, previous, price, !content);
+            return !content;
+        } finally { releaseStatsLock(); }
+    }
+
+    private void updateMetadata(RecordHistory history, List<RecordHistoryPart> parts,
+                                RoomLiveSessionStats previous, boolean price, boolean complete) {
+        if (previous == null) return;
+        var candidate = new RoomLiveSessionStats();
+        org.springframework.beans.BeanUtils.copyProperties(previous, candidate);
+        var room = roomRepository.findByRoomId(history.getRoomId());
+        candidate.setRoomId(history.getRoomId());
+        candidate.setUname(room == null ? null : room.getUname());
+        candidate.setTitle(history.getTitle());
+        candidate.setBvId(history.getBvId());
+        candidate.setUploadEnabled(history.isUpload());
+        candidate.setPublished(history.isPublish());
+        candidate.setPublishCode(history.getCode());
+        candidate.setSendReply(history.isSendReply());
+        candidate.setFileSize(resolveFileSize(history, parts));
+        candidate.setStatsUpdatedAt(LocalDateTime.now());
+        if (price) {
+            var gifts = buildGiftValueStats(history.getId());
+            candidate.setGiftTotalCoin(gifts.totalCoin);
+            candidate.setGiftAmountCny(gifts.amountCny);
+        }
+        statsResultWriter.metadata(candidate, complete);
+    }
+
+    void drainDailyUpdates() {
+        if (statsUpdateService != null) statsUpdateService.drainDaily(this);
+    }
+
+    boolean updateQueuedDaily(StatsUpdateStore.Daily daily, RecordRoom room) {
+        if (!statsWriteLock.tryLock()) return false;
+        try {
+            statsUpdateService.commitDaily(daily, () -> recomputeDailyStats(daily.roomId(), daily.date(), room, LocalDateTime.now()));
+            return true;
+        } finally { releaseStatsLock(); }
+    }
+
+    private void finishDailyResults() {
+        if (statsUpdateService != null) statsUpdateService.drainManualDaily(this, (processed, total) -> {
+            if (taskStatus.running) updateTaskProgress("正在汇总统计", processed, total, "按房间和日期更新日汇总");
+        });
     }
 
     public <T> T withStatsWriteLock(Supplier<T> action) {
@@ -723,7 +824,7 @@ public class StatsAggregationService {
         try {
             return action.get();
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -733,6 +834,7 @@ public class StatsAggregationService {
         }
         statsWriteLock.lock();
         try {
+            if (statsUpdateService != null) statsUpdateService.deleteRoom(roomId);
             int deletedBuckets = bucketStatsRepository.deleteByRoomId(roomId);
             int deletedDailyStats = dailyStatsRepository.deleteByRoomId(roomId);
             int deletedSessionStats = sessionStatsRepository.deleteByRoomId(roomId);
@@ -765,7 +867,7 @@ public class StatsAggregationService {
                     .add("deletedTotalStatistics", result.deletedTotal()));
             return result;
         } finally {
-            statsWriteLock.unlock();
+            releaseStatsLock();
         }
     }
 
@@ -797,6 +899,7 @@ public class StatsAggregationService {
     }
 
     private StatsCleanupResult cleanupStatsRows() {
+        if (statsUpdateService != null) statsUpdateService.suppressExisting();
         int deletedBuckets = bucketStatsRepository.deleteAllRows();
         int deletedDailyStats = dailyStatsRepository.deleteAllRows();
         int deletedSessionStats = sessionStatsRepository.deleteAllRows();
@@ -961,6 +1064,7 @@ public class StatsAggregationService {
         if (history != null && isImportedSnapshotProtected(history.getId())) {
             return false;
         }
+        if (statsUpdateService != null && !statsUpdateService.hasCurrent()) statsUpdateService.restoreManual(history.getId());
         List<RecordHistoryPart> parts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
         if (!isHistoryReadyForStats(history, parts)) {
             log.debug("[BLR] {}", LogKvs.event("Stats.Aggregate.SkipActive")
@@ -1001,11 +1105,8 @@ public class StatsAggregationService {
 
         LocalDate liveDate = startTime.toLocalDate();
         LocalDateTime now = LocalDateTime.now();
-        RoomLiveSessionStats stats = sessionStatsRepository.findByHistoryId(history.getId());
-        if (stats == null) {
-            stats = new RoomLiveSessionStats();
-            stats.setHistoryId(history.getId());
-        }
+        RoomLiveSessionStats stats = new RoomLiveSessionStats();
+        stats.setHistoryId(history.getId());
         stats.setRoomId(history.getRoomId());
         stats.setUname(room == null ? null : room.getUname());
         stats.setTitle(history.getTitle());
@@ -1037,11 +1138,17 @@ public class StatsAggregationService {
         stats.setStatsVersion(STATS_VERSION);
         stats.setImportedSnapshot(false);
 
-        bucketStatsRepository.deleteByHistoryId(history.getId());
         BucketPeak peak = saveBucketStats(history.getId(), history.getRoomId(), startTime, parts, eventStats.fromRawEvents, now);
         stats.setPeakMinuteIndex(peak.bucketIndex);
         stats.setPeakMinuteMsgCount(peak.msgCount);
+        if (statsResultWriter != null) {
+            boolean manual = statsUpdateService != null && !statsUpdateService.hasCurrent();
+            if (manual) statsUpdateService.prepareManual(history);
+            try { return statsResultWriter.save(stats, peak.buckets); }
+            finally { if (manual) statsUpdateService.endManual(); }
+        }
         sessionStatsRepository.save(stats);
+        bucketStatsRepository.saveAll(peak.buckets);
         recomputeDailyStats(history.getRoomId(), liveDate, room, now);
         return true;
     }
@@ -1183,8 +1290,7 @@ public class StatsAggregationService {
             }
         }
         mergeEventBucketStats(historyId, roomId, partOffsetMs, now, bucketMap, false);
-        bucketStatsRepository.saveAll(bucketMap.values());
-        return new BucketPeak(peakIndex, peakCount);
+        return new BucketPeak(peakIndex, peakCount, bucketMap.values());
     }
 
     private BucketPeak saveRawEventBucketStats(Long historyId, String roomId, Map<Long, Long> partOffsetMs, LocalDateTime now) {
@@ -1198,8 +1304,7 @@ public class StatsAggregationService {
                 peakIndex = bucket.getBucketIndex();
             }
         }
-        bucketStatsRepository.saveAll(bucketMap.values());
-        return new BucketPeak(peakIndex, peakCount);
+        return new BucketPeak(peakIndex, peakCount, bucketMap.values());
     }
 
     private void mergeEventBucketStats(Long historyId, String roomId, Map<Long, Long> partOffsetMs, LocalDateTime now,
@@ -1283,17 +1388,14 @@ public class StatsAggregationService {
         return bucket;
     }
 
-    private void recomputeDailyStats(String roomId, LocalDate liveDate, RecordRoom room, LocalDateTime now) {
+    void recomputeDailyStats(String roomId, LocalDate liveDate, RecordRoom room, LocalDateTime now) {
         if (roomId == null || liveDate == null) {
             return;
         }
         List<RoomLiveSessionStats> sessions = sessionStatsRepository.findByRoomIdAndLiveDate(roomId, liveDate);
-        RoomLiveDailyStats daily = dailyStatsRepository.findByRoomIdAndLiveDate(roomId, liveDate);
-        if (daily == null) {
-            daily = new RoomLiveDailyStats();
-            daily.setRoomId(roomId);
-            daily.setLiveDate(liveDate);
-        }
+        RoomLiveDailyStats daily = new RoomLiveDailyStats();
+        daily.setRoomId(roomId);
+        daily.setLiveDate(liveDate);
         daily.setUname(room == null ? null : room.getUname());
         daily.setLiveCount(sessions.size());
         long totalDuration = sessions.stream().mapToLong(RoomLiveSessionStats::getDurationSeconds).sum();
@@ -1315,7 +1417,8 @@ public class StatsAggregationService {
         daily.setSuccessfulPublishCount((int) sessions.stream().filter(this::isPublishSuccess).count());
         daily.setStatsUpdatedAt(now);
         daily.setStatsVersion(STATS_VERSION);
-        dailyStatsRepository.save(daily);
+        if (statsResultWriter != null) statsResultWriter.saveDaily(daily);
+        else dailyStatsRepository.save(daily);
     }
 
     public Map<String, Object> getOverview() {
@@ -1351,6 +1454,7 @@ public class StatsAggregationService {
         result.put("hourBuckets", toLongList(hourBuckets));
         result.put("favoriteHour", favoriteHour(hourBuckets));
         result.put("coverage", coverage.toMap());
+        if (statsUpdateService != null) result.put("backgroundUpdate", statsUpdateService.status());
         result.put("publishStatusDistribution", buildPublishStatusDistribution(sessions));
         result.put("durationDistribution", buildDurationDistribution(sessions));
         result.put("dailyTrend", buildDailyTrend(filterDailyStatsByDate(toList(dailyStatsRepository.findAll()), from, to)));
@@ -1363,7 +1467,9 @@ public class StatsAggregationService {
     }
 
     public Map<String, Object> getStatsStatus() {
-        return buildStatsCoverage(toList(sessionStatsRepository.findAll())).toMap();
+        Map<String, Object> result = buildStatsCoverage(toList(sessionStatsRepository.findAll())).toMap();
+        if (statsUpdateService != null) result.put("backgroundUpdate", statsUpdateService.status());
+        return result;
     }
 
     public List<Map<String, Object>> getRoomSummaries() {
@@ -2165,7 +2271,8 @@ public class StatsAggregationService {
         }
     }
 
-    private record BucketPeak(Integer bucketIndex, long msgCount) {
+    private record BucketPeak(Integer bucketIndex, long msgCount, Collection<RoomLiveMsgBucketStats> buckets) {
+        private BucketPeak(Integer bucketIndex, long msgCount) { this(bucketIndex, msgCount, List.of()); }
     }
 
     private static class EventStats {

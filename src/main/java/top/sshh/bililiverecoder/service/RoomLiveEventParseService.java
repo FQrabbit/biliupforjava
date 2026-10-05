@@ -111,6 +111,26 @@ public class RoomLiveEventParseService {
         });
     }
 
+    public ParseResult parsePartForStatsUpdate(RecordHistoryPart part) {
+        boolean changed = false;
+        if (xmlIssueService.find(part.getId()).isPresent()) {
+            var xml = partFileLocationService.inspectCompanionState(part.getId(), ".xml", new java.util.HashMap<>());
+            var state = parseStateRepository.findByPartId(part.getId());
+            if (xml.available()) {
+                var file = xml.path().toFile();
+                changed = state == null || !java.util.Objects.equals(state.getXmlPath(), file.getPath())
+                        || state.getXmlSize() != file.length() || state.getXmlLastModified() != file.lastModified();
+                var issue = xmlIssueService.find(part.getId()).orElse(null);
+                changed |= issue != null && (issue.getIssueType() == RoomLiveEventXmlIssue.IssueType.ROOT_OFFLINE
+                        || issue.getIssueType() == RoomLiveEventXmlIssue.IssueType.MISSING_UNEXPECTED);
+            }
+        }
+        return parsePart(part, changed);
+    }
+
+    @Autowired
+    private StatsUpdateStore statsUpdateStore;
+
     private ParseResult parsePartLocked(RecordHistoryPart part, boolean force, boolean logFailedCached) {
         if (!partRepository.existsById(part.getId())) {
             return ParseResult.skipped("part deleted");
@@ -172,6 +192,11 @@ public class RoomLiveEventParseService {
 
         long lastModified = xmlFile.lastModified();
         long size = xmlFile.length();
+        if (!force && state.isSuccess() && state.getXmlLastModified() == lastModified && state.getXmlSize() == size
+                && statsUpdateStore != null && part.getHistoryId() != null) {
+            var update = statsUpdateStore.find(part.getHistoryId());
+            if (update != null && update.suppressed()) return ParseResult.skipped("stats cache manually cleared");
+        }
         boolean missingDanmuUserStats = state.isSuccess()
                 && state.getDanmuCount() > 0
                 && !danmuUserStatsRepository.existsByPartId(part.getId());
@@ -578,9 +603,10 @@ public class RoomLiveEventParseService {
         if (event.getGiftId() == null) {
             return;
         }
-        RoomLiveGiftCatalog catalog = giftCatalogRepository.findByRoomIdAndGiftId(event.getRoomId(), event.getGiftId());
-        if (catalog == null) {
-            catalog = new RoomLiveGiftCatalog();
+        RoomLiveGiftCatalog previous = giftCatalogRepository.findByRoomIdAndGiftId(event.getRoomId(), event.getGiftId());
+        RoomLiveGiftCatalog catalog = new RoomLiveGiftCatalog();
+        if (previous != null) org.springframework.beans.BeanUtils.copyProperties(previous, catalog);
+        if (previous == null) {
             catalog.setRoomId(event.getRoomId());
             catalog.setGiftId(event.getGiftId());
         }
@@ -591,8 +617,9 @@ public class RoomLiveEventParseService {
             catalog.setPriceCoin(event.getGiftPriceCoin());
             catalog.setPriceCny(giftCatalogService.toCny(event.getGiftPriceCoin()));
         }
+        if (StatsValues.same(previous, catalog, "updatedAt")) return;
         catalog.setUpdatedAt(LocalDateTime.now());
-        giftCatalogRepository.save(catalog);
+        giftCatalogService.saveChangedCatalog(catalog);
     }
 
     private String attr(Element element, String name) {

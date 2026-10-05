@@ -31,6 +31,28 @@ public class RoomLiveGiftCatalogService {
     @Autowired
     private RoomLiveGiftCatalogRepository giftCatalogRepository;
 
+    @Autowired
+    private GiftCatalogResultWriter resultWriter;
+    @Autowired
+    private DatabaseMaintenanceState maintenance;
+    @Autowired
+    private top.sshh.bililiverecoder.repo.RecordRoomRepository roomRepository;
+    private final java.util.concurrent.atomic.AtomicBoolean syncRunning = new java.util.concurrent.atomic.AtomicBoolean();
+
+    @org.springframework.scheduling.annotation.Async("myAsyncPool")
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 3600000, initialDelay = 60000)
+    public void syncKnownRooms() {
+        if (maintenance.isMaintenanceActive() || !syncRunning.compareAndSet(false, true)) return;
+        try {
+            for (var room : roomRepository.findAll()) {
+                if (maintenance.isMaintenanceActive()) break;
+                syncRoomGiftCatalog(room.getRoomId(), false);
+            }
+        } finally { syncRunning.set(false); }
+    }
+
+    public void saveChangedCatalog(RoomLiveGiftCatalog catalog) { resultWriter.saveChanged(List.of(catalog)); }
+
     private final Map<String, Long> roomNextSuccessSyncAt = new ConcurrentHashMap<>();
     private final Map<String, FailureState> roomFailureState = new ConcurrentHashMap<>();
 
@@ -93,7 +115,9 @@ public class RoomLiveGiftCatalogService {
                 }
                 Long priceCoin = firstLong(item, "price", "discount_price");
                 String giftName = firstString(item, "name", "gift_name", "giftName");
-                RoomLiveGiftCatalog catalog = existing.getOrDefault(giftId, new RoomLiveGiftCatalog());
+                RoomLiveGiftCatalog previous = existing.get(giftId);
+                RoomLiveGiftCatalog catalog = new RoomLiveGiftCatalog();
+                if (previous != null) org.springframework.beans.BeanUtils.copyProperties(previous, catalog);
                 catalog.setRoomId(roomId);
                 catalog.setGiftId(giftId);
                 if (StringUtils.isNotBlank(giftName)) {
@@ -103,11 +127,15 @@ public class RoomLiveGiftCatalogService {
                     catalog.setPriceCoin(priceCoin);
                     catalog.setPriceCny(toCny(priceCoin));
                 }
-                catalog.setUpdatedAt(now);
-                toSave.add(catalog);
+                if (!StatsValues.same(previous, catalog, "updatedAt")) {
+                    catalog.setUpdatedAt(now);
+                    toSave.add(catalog);
+                }
                 existing.put(giftId, catalog);
             }
-            giftCatalogRepository.saveAll(toSave);
+            if (!toSave.isEmpty()) {
+                resultWriter.saveChanged(toSave);
+            }
             roomFailureState.remove(roomId);
             roomNextSuccessSyncAt.put(roomId, nowMs + SYNC_INTERVAL_MS);
             log.debug("[BLR] {}", LogKvs.event("GiftCatalog.Sync.Done")

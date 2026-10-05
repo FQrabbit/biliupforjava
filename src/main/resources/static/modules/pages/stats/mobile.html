@@ -1,4 +1,9 @@
 <div class="mobile-stats-container page-surface-stats" data-page-scroll-root v-loading="loading">
+    <p v-if="backgroundUpdate.pendingCount || backgroundUpdate.running || backgroundUpdate.lastScanCompletedAt" class="stats-subtitle">
+        后台{{ backgroundUpdate.running ? '更新中' : (backgroundUpdate.pendingCount ? '等待更新' : '已同步') }} · 待处理 {{ number(backgroundUpdate.pendingCount) }} 场
+        <span v-if="backgroundUpdate.retryCount"> · 重试 {{ number(backgroundUpdate.retryCount) }} 场</span>
+        <span v-if="backgroundUpdate.lastScanCompletedAt"> · 最近巡检 {{ dateTime(backgroundUpdate.lastScanCompletedAt) }}</span>
+    </p>
     <section class="mobile-stats-page" aria-label="移动端统计中心">
         <header class="mobile-stats-hero">
             <div class="mobile-stats-hero-copy">

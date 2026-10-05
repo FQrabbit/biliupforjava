@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,6 +101,44 @@ class RoomLiveEventParseServiceTest {
             Supplier<?> action = invocation.getArgument(0);
             return action.get();
         }).when(statsAggregationService).withStatsWriteLock(any());
+    }
+
+    @Test
+    void manuallyClearedCacheDoesNotCauseAutomaticXmlReimport() throws Exception {
+        executeStatsWriteActionsImmediately();
+        var states = mock(top.sshh.bililiverecoder.repo.RoomLiveEventParseStateRepository.class);
+        var issues = mock(RoomLiveEventXmlIssueService.class);
+        var locations = mock(PartFileLocationService.class);
+        var users = mock(top.sshh.bililiverecoder.repo.RoomLiveDanmuUserStatsRepository.class);
+        var updates = mock(StatsUpdateStore.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "parseStateRepository", states);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "xmlIssueService", issues);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "partFileLocationService", locations);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "danmuUserStatsRepository", users);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "statsUpdateStore", updates);
+        var part = part(11L, 21L);
+        part.setEndTime(java.time.LocalDateTime.now());
+        when(partRepository.existsById(11L)).thenReturn(true);
+        when(historyRepository.existsById(21L)).thenReturn(true);
+        java.nio.file.Path xml = java.nio.file.Files.createTempFile("cleared-stats-", ".xml");
+        try {
+            java.nio.file.Files.writeString(xml, "<i><d>cached</d></i>");
+            var state = new top.sshh.bililiverecoder.entity.RoomLiveEventParseState();
+            state.setPartId(11L); state.setHistoryId(21L); state.setRoomId("123"); state.setSuccess(true);
+            state.setDanmuCount(1); state.setXmlSize(java.nio.file.Files.size(xml));
+            state.setXmlLastModified(java.nio.file.Files.getLastModifiedTime(xml).toMillis());
+            state.setParserVersion(100);
+            when(states.findByPartId(11L)).thenReturn(state);
+            when(issues.find(11L)).thenReturn(java.util.Optional.empty());
+            when(locations.resolveCompanionState(11L, ".xml")).thenReturn(new PartFileLocationService.CompanionResolution(
+                    PartFileLocationService.CompanionState.AVAILABLE, xml, xml, null, null));
+            when(updates.find(21L)).thenReturn(new StatsUpdateStore.State(21L,"123",0,0,0,0,true,"c","m","c","m",0,null,false,0));
+            var result = service.parsePart(part, false);
+            assertFalse(result.parsed());
+            assertEquals("stats cache manually cleared", result.reason());
+            verify(users, never()).existsByPartId(any());
+            verify(states, never()).save(any());
+        } finally { java.nio.file.Files.deleteIfExists(xml); }
     }
 
     private static RecordHistoryPart part(Long id, Long historyId) {

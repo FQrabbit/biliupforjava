@@ -227,6 +227,12 @@ public class StorageRootService {
         return root != null && root.getStatus() == StorageRoot.RootStatus.ONLINE;
     }
 
+    public boolean probeOnline(StorageRoot root) {
+        if (root == null || root.getStatus() == StorageRoot.RootStatus.RETIRED || root.getLastCheckedAt() == null) return false;
+        Path path = normalizeAbsolute(root.getPath());
+        return Files.isDirectory(path) && Files.isReadable(path);
+    }
+
     @Transactional
     public boolean ensureOnline(StorageRoot root) {
         if (root == null || root.getStatus() == StorageRoot.RootStatus.RETIRED

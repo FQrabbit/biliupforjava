@@ -70,6 +70,7 @@ return {
         };
     },
     computed: {
+        backgroundUpdate: function () { return this.overview.backgroundUpdate || {}; },
         coverage: function () {
             return this.overview.coverage || {
                 totalHistoryCount: 0,

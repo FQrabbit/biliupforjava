@@ -76,6 +76,8 @@ public class RoomLiveEventXmlIssueService {
                 || !Objects.equals(issue.getStorageRootId(), storageRootId)
                 || !Objects.equals(issue.getXmlPath(), xmlPath)
                 || !Objects.equals(issue.getErrorMessage(), abbreviate(errorMessage));
+        if (!changed && issue != null && java.util.Objects.equals(issue.getHistoryId(), part.getHistoryId())
+                && java.util.Objects.equals(issue.getRoomId(), part.getRoomId())) return new IssueUpdate(issue, false);
         LocalDateTime now = LocalDateTime.now();
         if (issue == null) {
             issue = new RoomLiveEventXmlIssue();

@@ -30,11 +30,10 @@ class RecordHistorySplitStatsTest {
             .withUserConfiguration(AsyncConfiguration.class);
 
     @Test
-    void realAsyncStatsServiceIsResolvedOnlyAfterCommitAndRefreshesBothHistories() {
+    void durableStatsRequestsAreResolvedOnlyAfterCommitAndCoverBothHistories() {
         AtomicInteger creations = new AtomicInteger();
         CountDownLatch refreshed = new CountDownLatch(2);
         List<Long> refreshedIds = new CopyOnWriteArrayList<>();
-        List<String> workerNames = new CopyOnWriteArrayList<>();
         runner.withBean("statsAggregationService", StatsAggregationService.class, () -> {
                     creations.incrementAndGet();
                     return new StatsAggregationService();
@@ -46,13 +45,12 @@ class RecordHistorySplitStatsTest {
                             context.getBeanFactory().registerSingleton(field.getName(), mock(field.getType()));
                         }
                     }
-                    RecordHistoryRepository histories = context.getBeanFactory().getBean(RecordHistoryRepository.class);
-                    when(histories.findById(anyLong())).thenAnswer(invocation -> {
+                    StatsUpdateService updates = context.getBeanFactory().getBean(StatsUpdateService.class);
+                    doAnswer(invocation -> {
                         refreshedIds.add(invocation.getArgument(0));
-                        workerNames.add(Thread.currentThread().getName());
                         refreshed.countDown();
-                        return Optional.empty();
-                    });
+                        return null;
+                    }).when(updates).requestAfterCommit(anyLong());
                 }).run(context -> {
                     assertNull(context.getStartupFailure());
                     assertEquals(0, creations.get());
@@ -67,7 +65,7 @@ class RecordHistorySplitStatsTest {
                         assertEquals(1, creations.get());
                         assertTrue(AopUtils.isAopProxy(context.getBean(StatsAggregationService.class)));
                         assertEquals(List.of(11L, 12L), refreshedIds);
-                        assertTrue(workerNames.stream().allMatch(name -> name.startsWith("split-stats-test-")));
+                        verify(context.getBean(StatsUpdateService.class), times(2)).requestAfterCommit(anyLong());
                     } finally {
                         TransactionSynchronizationManager.clearSynchronization();
                     }

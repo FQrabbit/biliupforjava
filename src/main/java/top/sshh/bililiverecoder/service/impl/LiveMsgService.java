@@ -401,7 +401,6 @@ public class LiveMsgService {
 
                 if (!liveMsgs.isEmpty()) {
                     jdbcService.saveLiveMsgList(liveMsgs);
-                    statsAggregationService.refreshHistoryStatsAsync(part.getHistoryId());
                     log.info("[BLR] {}", LogKvs.event("LiveMsg.Parse.Saved")
                             .add("filePath", xmlFilePath)
                             .add("count", liveMsgs.size())
@@ -413,6 +412,7 @@ public class LiveMsgService {
                             .addStageField("xmlParse", "costMs", parseXmlCostMs)
                             .addStageField("dbSave", "costMs", dbSaveCostMs));
                 }
+                statsAggregationService.refreshHistoryStatsAsync(part.getHistoryId());
             } catch (Exception e) {
                 log.error("[BLR] {}", LogKvs.event("LiveMsg.Parse.Failed")
                         .add("filePath", xmlFilePath)

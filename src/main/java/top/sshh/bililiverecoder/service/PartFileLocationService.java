@@ -292,6 +292,14 @@ public class PartFileLocationService {
     }
 
     public CompanionResolution resolveCompanionState(Long partId, String extension) {
+        return resolveCompanionState(partId, extension, null);
+    }
+
+    public CompanionResolution inspectCompanionState(Long partId, String extension, java.util.Map<Long, Boolean> roots) {
+        return resolveCompanionState(partId, extension, roots);
+    }
+
+    private CompanionResolution resolveCompanionState(Long partId, String extension, java.util.Map<Long, Boolean> roots) {
         String suffix = extension == null ? "" : extension.startsWith(".") ? extension : "." + extension;
         if (partId == null) {
             return new CompanionResolution(CompanionState.PATH_UNRESOLVED, null, null, null, "part missing");
@@ -315,7 +323,9 @@ public class PartFileLocationService {
                 }
                 StorageRoot root = rootService.findById(location.getStorageRootId()).orElse(null);
                 if (root == null) continue;
-                if (!rootService.ensureOnline(root)) {
+                boolean online = roots == null ? rootService.ensureOnline(root)
+                          : roots.computeIfAbsent(root.getId(), ignored -> rootService.probeOnline(root));
+                  if (!online) {
                     if (offlineRootId == null) offlineRootId = root.getId();
                     continue;
                 }

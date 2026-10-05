@@ -128,7 +128,17 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     && migrationPending(connection, "20261004_01", "累计阈值拆稿状态", "history-split-threshold-v1")) {
                 backupExistingFileDatabase(connection);
             }
+            if (h2 && tableExists(connection, "record_history")
+                    && !migrationPending(connection, "20261004_01", "累计阈值拆稿状态", "history-split-threshold-v1")
+                    && migrationPending(connection, "20261004_02", "统计增量更新队列", "stats-incremental-update-v1")) {
+                backupExistingFileDatabase(connection);
+            }
             ensureMigrationTable();
+            if (h2 && tableExists(connection, "room_live_event")
+                    && !migrationPending(connection, "20261004_02", "统计增量更新队列", "stats-incremental-update-v1")
+                    && migrationPending(connection, "20261005_01", "统计礼物补价查询索引", "stats-gift-price-query-indexes-v1")) {
+                backupExistingFileDatabase(connection);
+            }
             applyMigration(connection, "20260928_01", "历史数据库兼容修复", LEGACY_SIGNATURE,
                     () -> applyLegacyCompatibility(connection, h2));
             applyMigration(connection, "20260928_02", "投稿任务及验证码恢复字段", PUBLISH_SIGNATURE,
@@ -143,6 +153,13 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     () -> applyHistoryDeletionCancellationSchema(connection));
             applyMigration(connection, "20261004_01", "累计阈值拆稿状态", "history-split-threshold-v1",
                     () -> applyHistorySplitSchema(connection));
+            applyMigration(connection, "20261004_02", "统计增量更新队列", "stats-incremental-update-v1",
+                    () -> applyStatsUpdateSchema(connection));
+            applyMigration(connection, "20261005_01", "统计礼物补价查询索引", "stats-gift-price-query-indexes-v1",
+                    () -> {
+                        ensureIndex(connection, "room_live_event", "idx_room_live_event_type_gift_id", "type,gift_id,history_id");
+                        ensureIndex(connection, "room_live_event", "idx_room_live_event_type_gift_name", "type,gift_name,history_id");
+                    });
             validateRequiredSchema(connection);
             log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Completed").add("databaseType", product));
         } catch (Exception e) {
@@ -485,7 +502,45 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                 "BOOLEAN NOT NULL DEFAULT TRUE");
     }
 
+    private void applyStatsUpdateSchema(Connection connection) {
+        jdbc.execute("CREATE TABLE IF NOT EXISTS stats_update_state (history_id BIGINT PRIMARY KEY)");
+        ensureColumn(connection, "stats_update_state", "room_id", "VARCHAR(255) NULL");
+        for (String column : List.of("requested_revision", "applied_revision", "raw_revision", "applied_raw_revision")) {
+            ensureColumn(connection, "stats_update_state", column, "BIGINT NOT NULL DEFAULT 0");
+        }
+        for (String column : List.of("reasons", "failures")) {
+            ensureColumn(connection, "stats_update_state", column, "INT NOT NULL DEFAULT 0");
+        }
+        ensureColumn(connection, "stats_update_state", "suppressed", "BOOLEAN NOT NULL DEFAULT FALSE");
+        ensureColumn(connection, "stats_update_state", "blocked_xml", "BOOLEAN NOT NULL DEFAULT FALSE");
+        for (String column : List.of("observed_content", "observed_metadata", "applied_content", "applied_metadata")) {
+            ensureColumn(connection, "stats_update_state", column, "VARCHAR(64) NULL");
+        }
+        for (String column : List.of("retry_at", "completed_at")) {
+            ensureColumn(connection, "stats_update_state", column, "TIMESTAMP NULL");
+        }
+        ensureColumn(connection, "stats_update_state", "last_error", "VARCHAR(512) NULL");
+        ensureIndex(connection, "stats_update_state", "idx_stats_update_due", "suppressed,retry_at,history_id");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS stats_daily_update_state (room_id VARCHAR(255) NOT NULL, "
+                + "live_date DATE NOT NULL, PRIMARY KEY(room_id,live_date))");
+        ensureColumn(connection, "stats_daily_update_state", "requested_revision", "BIGINT NOT NULL DEFAULT 0");
+        ensureColumn(connection, "stats_daily_update_state", "applied_revision", "BIGINT NOT NULL DEFAULT 0");
+    }
+
     private void validateRequiredSchema(Connection connection) throws SQLException {
+        if (tableExists(connection, "room_live_event")) {
+            validateIndexes(connection, "room_live_event", new String[]{
+                    "idx_room_live_event_type_gift_id", "idx_room_live_event_type_gift_name"});
+        }
+        for (String column : List.of("history_id", "room_id", "requested_revision", "applied_revision", "raw_revision", "applied_raw_revision",
+                "reasons", "failures", "suppressed", "blocked_xml", "observed_content", "observed_metadata", "applied_content",
+                "applied_metadata", "retry_at", "completed_at", "last_error")) {
+            if (!columnExists(connection, "stats_update_state", column)) throw new IllegalStateException("统计队列表缺少字段 " + column);
+        }
+        for (String column : List.of("room_id", "live_date", "requested_revision", "applied_revision")) {
+            if (!columnExists(connection, "stats_daily_update_state", column)) throw new IllegalStateException("日汇总队列表缺少字段 " + column);
+        }
+        if (!indexExists(connection, "stats_update_state", "idx_stats_update_due")) throw new IllegalStateException("统计队列表缺少调度索引");
         for (String column : List.of("id", "history_id", "account_id", "operation", "source", "state",
                 "wait_reason", "created_at", "updated_at", "next_attempt_at", "retry_count", "result_message",
                 "request_snapshot", "claim_token", "lease_until", "task_version", "captcha_retry_count",

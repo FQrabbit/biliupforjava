@@ -54,9 +54,12 @@ class DatabaseMigrationInitializerTest {
 
             DatabaseMigrationInitializer initializer = new DatabaseMigrationInitializer(database, jdbc,
                     workPath.toString());
+            jdbc.execute("CREATE TABLE room_live_event (id BIGINT PRIMARY KEY, history_id BIGINT, type VARCHAR(32), gift_id INTEGER, gift_name VARCHAR(255))");
             initializer.afterPropertiesSet();
 
-            assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
+            assertEquals(9, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
+            assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES WHERE INDEX_NAME IN "
+                    + "('IDX_ROOM_LIVE_EVENT_TYPE_GIFT_ID','IDX_ROOM_LIVE_EVENT_TYPE_GIFT_NAME')", Integer.class));
             assertColumn(jdbc, "record_history", "force_archived");
             assertColumn(jdbc, "record_history", "split_size_bytes");
             assertColumn(jdbc, "record_history_part", "split_assigned");
@@ -105,7 +108,7 @@ class DatabaseMigrationInitializerTest {
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM history_deletion_task "
                     + "WHERE history_id=99 AND deletion_started=TRUE", Integer.class));
             assertEquals(taskId, jdbc.queryForObject("SELECT id FROM publish_task WHERE history_id=20", Long.class));
-            assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
+            assertEquals(9, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
         } finally {
             database.shutdown();
             try (var paths = Files.walk(workPath)) {

@@ -149,7 +149,7 @@
         cleanupStats: function () {
             var self = this;
             this.moreActionsVisible = false;
-            this.$pageConfirm('清理会删除统计中心生成的缓存/汇总表，并同步置空事件表中遗留的原始JSON文本；不会删除录制历史、分P、原始弹幕或已解析出的统计字段。', '清理缓存', {
+            this.$pageConfirm('清理会删除统计中心生成的缓存/汇总表，并同步置空事件表中遗留的原始JSON文本；不会删除录制历史、分P、原始弹幕或已解析出的统计字段。旧历史将等待手动补全或重建，后续真实变化仍会自动更新。', '清理缓存', {
                 confirmButtonText: '确认清理',
                 cancelButtonText: '取消',
                 type: 'warning'

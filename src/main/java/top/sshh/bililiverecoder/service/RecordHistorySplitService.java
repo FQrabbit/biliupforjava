@@ -239,8 +239,8 @@ public class RecordHistorySplitService {
                         // 提交后再取统计服务，避免懒加载代理和异步代理在 AOT 启动时冲突
                         StatsAggregationService stats = statsProvider.getIfAvailable();
                         if (stats == null) return;
-                        stats.refreshHistoryStatsAsync(previousId);
-                        stats.refreshHistoryStatsAsync(nextId);
+                        stats.refreshHistoryStatsAfterCommit(previousId);
+                        stats.refreshHistoryStatsAfterCommit(nextId);
                     }
                 });
     }

@@ -16,7 +16,9 @@ import java.time.LocalDateTime;
                 @Index(name = "idx_room_live_event_room_type", columnList = "roomId,type"),
                 @Index(name = "idx_room_live_event_live_date", columnList = "liveDate"),
                 @Index(name = "idx_room_live_event_uid", columnList = "uid"),
-                @Index(name = "idx_room_live_event_history_type_part_time", columnList = "historyId,type,partId,sendTime")
+                @Index(name = "idx_room_live_event_history_type_part_time", columnList = "historyId,type,partId,sendTime"),
+                @Index(name = "idx_room_live_event_type_gift_id", columnList = "type,giftId,historyId"),
+                @Index(name = "idx_room_live_event_type_gift_name", columnList = "type,giftName,historyId")
         })
 public class RoomLiveEvent {
 
