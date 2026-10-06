@@ -238,7 +238,7 @@ public class publishJob {
             if (shutdownState.isShuttingDown() || Thread.currentThread().isInterrupted()) {
                 return;
             }
-            if (history.isForceArchived()) {
+            if (history.isProcessingArchived()) {
                 log.info("[BLR] {}", LogKvs.event("PublishJob.Skip.ForceArchived")
                         .add("historyId", history.getId())
                         .add("roomId", history.getRoomId())

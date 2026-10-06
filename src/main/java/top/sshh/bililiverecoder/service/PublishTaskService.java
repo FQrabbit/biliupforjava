@@ -62,7 +62,7 @@ public class PublishTaskService {
             RecordHistory history = histories.findByIdForUpdate(historyId).orElse(null);
             if (history == null) return Admission.rejected("稿件不存在");
             if (history.isDeletePending()) return Admission.rejected("稿件正在删除，不能再创建投稿任务");
-            if (history.isForceArchived()) return Admission.rejected("稿件已强制归档");
+            if (history.isProcessingArchived()) return Admission.rejected("稿件已强制归档");
             if (operation == PublishTaskOperation.NEW_PUBLISH && history.isPublish()) {
                 return Admission.rejected("该稿件已有发布记录，请使用稿件更新或分P编辑任务");
             }

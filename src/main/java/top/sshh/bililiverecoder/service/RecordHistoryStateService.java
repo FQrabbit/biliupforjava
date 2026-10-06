@@ -71,7 +71,7 @@ public class RecordHistoryStateService {
 
     @Transactional
     public void markSessionEnded(RecordHistory history, RecordEventData eventData) {
-        if (history == null || history.isForceArchived() || history.isSplitClosed()) return;
+        if (history == null || history.isProcessingArchived() || history.isSplitClosed()) return;
         LocalDateTime now = LocalDateTime.now();
         if (StringUtils.isNotBlank(eventData.getSessionId())) history.setSessionId(eventData.getSessionId());
         history.setRecording(false);
@@ -85,7 +85,7 @@ public class RecordHistoryStateService {
 
     @Transactional
     public void markStreamEnded(RecordHistory history) {
-        if (history == null || history.isForceArchived() || history.isSplitClosed()) return;
+        if (history == null || history.isProcessingArchived() || history.isSplitClosed()) return;
         LocalDateTime now = LocalDateTime.now();
         history.setStreaming(false);
         history.setEndTime(now);

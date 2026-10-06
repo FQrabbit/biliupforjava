@@ -30,10 +30,10 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     RecordHistory findFirstByRoomIdAndEventId(String roomId, String eventId);
 
-    @Query("select h from RecordHistory h where h.splitClosedAt is null and h.publish = false and h.forceArchived = false and (h.splitDurationSeconds > 0 or h.splitSizeBytes > 0)")
+    @Query("select h from RecordHistory h where h.splitClosedAt is null and h.publish = false and h.forceArchived = false and h.importArchived = false and (h.splitDurationSeconds > 0 or h.splitSizeBytes > 0)")
     List<RecordHistory> findPendingSplitHistories();
 
-    @Query("select h from RecordHistory h where h.roomId = ?1 and h.recording = false and h.upload = true and h.publish = false and h.forceArchived = false and h.uploadRetryCount < ?2 and h.endTime between ?3 and ?4 and (h.splitClosedAt is not null or h.endTime <= ?5) order by h.endTime asc")
+    @Query("select h from RecordHistory h where h.roomId = ?1 and h.recording = false and h.upload = true and h.publish = false and h.forceArchived = false and h.importArchived = false and h.uploadRetryCount < ?2 and h.endTime between ?3 and ?4 and (h.splitClosedAt is not null or h.endTime <= ?5) order by h.endTime asc")
     List<RecordHistory> findAutomaticPublishCandidates(String roomId, int retries, LocalDateTime since, LocalDateTime now, LocalDateTime mergeBefore);
 
     RecordHistory findByBvId(String bvId);
@@ -46,14 +46,14 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByRoomIdAndRecordingTrueOrderByStartTimeDesc(String roomId);
 
-    @Query("select h from RecordHistory h where h.recording = true and h.upload = true and h.publish = false and h.forceArchived = false and h.endTime is not null and h.endTime >= ?1 order by h.endTime asc")
+    @Query("select h from RecordHistory h where h.recording = true and h.upload = true and h.publish = false and h.forceArchived = false and h.importArchived = false and h.endTime is not null and h.endTime >= ?1 order by h.endTime asc")
     List<RecordHistory> findRecentUnpublishedRecordingHistories(LocalDateTime since, Pageable pageable);
 
     @org.springframework.data.jpa.repository.Query("""
             select h from RecordHistory h
             where h.roomId = ?1
               and h.publish = false
-              and h.forceArchived = false
+              and h.forceArchived = false and h.importArchived = false
               and exists (
                   select 1 from RecordHistoryPart p
                   where p.historyId = h.id
@@ -71,12 +71,14 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByPublishIsTrueAndCodeIn(List<Integer> codes);
 
+    @Query("select h from RecordHistory h where h.publish=true and h.sendReply=false and h.code in ?1 and h.importArchived=false")
     List<RecordHistory> findByPublishIsTrueAndSendReplyIsFalseAndCodeIn(List<Integer> codes);
 
     @org.springframework.data.jpa.repository.Query("""
             select h from RecordHistory h
             where h.publish = true
               and h.sendReply = false
+              and h.importArchived = false
               and h.code in (0, -50)
             order by h.id asc
             """)
@@ -88,7 +90,7 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     List<RecordHistory> findByEndTimeIsNotNullOrderByEndTimeDesc();
 
-    @org.springframework.data.jpa.repository.Query("select r from RecordHistory r where r.bvId is not null and r.publish = true and r.editPartsUploading = false and r.code in (-1, -9, -30, -40)")
+    @org.springframework.data.jpa.repository.Query("select r from RecordHistory r where r.bvId is not null and r.publish = true and r.importArchived = false and r.editPartsUploading = false and r.code in (-1, -9, -30, -40)")
     List<RecordHistory> findSyncList();
 
     List<RecordHistory> findByEditPartsUploadingTrue();
@@ -168,7 +170,7 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
               and h.endTime <= ?1
               and h.recording = false
               and h.streaming = false
-              and h.forceArchived = false
+              and h.forceArchived = false and h.importArchived = false
               and h.publish = true
               and h.code = 0
               and p.uploadRetryCount < 9999
@@ -191,7 +193,7 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
               and h.endTime <= ?1
               and h.recording = false
               and h.streaming = false
-              and h.forceArchived = false
+              and h.forceArchived = false and h.importArchived = false
               and h.publish = true
               and h.code in (0, -50)
               and p.uploadRetryCount < 9999
@@ -209,10 +211,11 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
               and h.endTime <= ?1
               and h.recording = false
               and h.streaming = false
-              and h.forceArchived = false
+              and h.forceArchived = false and h.importArchived = false
               and h.publish = true
               and h.code in (0, -50)
               and h.sendReply = false
+              and h.importArchived = false
               and r.roomId = h.roomId
               and (r.sendSc = true or r.sendGiftReply = true)
             order by h.endTime asc

@@ -223,7 +223,7 @@ public class HistoryMsgQueueCleanupService {
                     changed = true;
                 }
             }
-            if (options.forceArchive && !history.isForceArchived()) {
+            if (options.forceArchive && !history.isProcessingArchived()) {
                 result.forceArchived++;
                 if (!dryRun) {
                     history.setForceArchived(true);
@@ -285,7 +285,7 @@ public class HistoryMsgQueueCleanupService {
     }
 
     private boolean isReplyDispatchable(RecordHistory history, Map<String, RecordRoom> roomCache) {
-        if (history == null || history.isForceArchived() || (history.getCode() != 0 && history.getCode() != -50)) {
+        if (history == null || history.isProcessingArchived() || (history.getCode() != 0 && history.getCode() != -50)) {
             return false;
         }
         String roomId = history.getRoomId();

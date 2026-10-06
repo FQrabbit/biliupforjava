@@ -118,8 +118,8 @@ public class RecordEventFileClosedService implements RecordEventService {
         RecordHistory history = historyStateService.resolveHistory(room, eventData, partByPath);
         if (history != null) {
             // 正常逻辑
-            if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isForceArchived()) {
-                if (history.isForceArchived() && Objects.equals(room.getHistoryId(), history.getId())) {
+            if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isProcessingArchived()) {
+                if (history.isProcessingArchived() && Objects.equals(room.getHistoryId(), history.getId())) {
                     room.setHistoryId(-1L);
                     room.setSessionId(null);
                     room.setRecording(false);
@@ -129,7 +129,7 @@ public class RecordEventFileClosedService implements RecordEventService {
                 log.info("[BLR] {}", LogKvs.event("FileClosed.SkipHistoryUpdate")
                         .add("roomId", eventData.getRoomId())
                         .add("historyId", history.getId())
-                        .add("forceArchived", history.isForceArchived())
+                        .add("forceArchived", history.isProcessingArchived())
                         .add("filePath", relativePath));
                 return;
             }

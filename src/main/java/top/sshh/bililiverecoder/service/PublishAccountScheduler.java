@@ -908,7 +908,7 @@ public class PublishAccountScheduler {
                 try {
                     RecordHistory history = histories.findById(task.getHistoryId()).orElse(null);
                     BiliBiliUser user = users.findById(task.getAccountId()).orElse(null);
-                    if (history == null || history.isForceArchived()) {
+                    if (history == null || history.isProcessingArchived()) {
                         transitionPreparing(task.getId(), PublishTaskState.NEEDS_ACTION, "HISTORY_UNAVAILABLE",
                                 "稿件不存在或已强制归档", null);
                         return;
@@ -1003,7 +1003,7 @@ public class PublishAccountScheduler {
             if (task == null) return;
             currentTaskId.set(taskId);
             RecordHistory history = histories.findById(task.getHistoryId()).orElse(null);
-            if (history == null || history.isForceArchived()) {
+            if (history == null || history.isProcessingArchived()) {
                 transitionPreparing(taskId, PublishTaskState.NEEDS_ACTION, "HISTORY_UNAVAILABLE",
                         history == null ? "稿件不存在" : "稿件已强制归档", null);
                 return;
@@ -1071,7 +1071,7 @@ public class PublishAccountScheduler {
             RecordHistory beforeSubmitHistory = histories.findById(task.getHistoryId()).orElse(null);
             BiliBiliUser beforeSubmitUser = users.findById(accountId).orElse(null);
             if (beforeSubmit == null || beforeSubmit.getState() != PublishTaskState.PREPARING) return;
-            if (beforeSubmitHistory == null || beforeSubmitHistory.isForceArchived()) {
+            if (beforeSubmitHistory == null || beforeSubmitHistory.isProcessingArchived()) {
                 transitionPreparing(taskId, PublishTaskState.NEEDS_ACTION, "HISTORY_UNAVAILABLE",
                         "稿件在排队准备期间已删除或强制归档", null);
                 return;

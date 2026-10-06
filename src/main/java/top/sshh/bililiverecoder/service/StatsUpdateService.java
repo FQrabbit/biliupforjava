@@ -181,7 +181,7 @@ public class StatsUpdateService {
     }
 
     private void inspect(RecordHistory history, Map<Long, Boolean> roots) {
-        if (history.getEndTime() == null || history.isRecording() || history.isStreaming()
+        if (history.isImportArchived() || history.getEndTime() == null || history.isRecording() || history.isStreaming()
                 || rooms.findByRoomId(history.getRoomId()) == null) return;
         var before = store.find(history.getId());
         Snapshot snapshot = snapshot(history, before, roots);
@@ -212,6 +212,10 @@ public class StatsUpdateService {
         if (history.isDeletePending()) { store.retry(state, "历史记录正在删除"); return; }
         var imported = sessions.findByHistoryId(history.getId());
         if (imported != null && imported.isImportedSnapshot()) {
+            store.observe(history.getId(), history.getRoomId(), "", "", true, true);
+            return;
+        }
+        if (history.isImportArchived()) {
             store.observe(history.getId(), history.getRoomId(), "", "", true, true);
             return;
         }

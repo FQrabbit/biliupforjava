@@ -97,7 +97,7 @@ public class BlrecRecordingStartedEventService implements BlrecEventService {
             List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes((long) mergeIntervalMinutes), now);
             if (!CollectionUtils.isEmpty(historyList)) {
                 // 过滤掉已经发布的稿件
-                historyList = historyList.stream().filter(h -> !h.isPublish() && !h.isSplitClosed() && !h.isForceArchived()).collect(java.util.stream.Collectors.toList());
+                historyList = historyList.stream().filter(h -> !h.isPublish() && !h.isSplitClosed() && !h.isProcessingArchived()).collect(java.util.stream.Collectors.toList());
                 if (!historyList.isEmpty()) {
                     // 复用最近的一条记录（取列表的最后一条，即 EndTime 最大的）
                     history = historyList.get(historyList.size() - 1);

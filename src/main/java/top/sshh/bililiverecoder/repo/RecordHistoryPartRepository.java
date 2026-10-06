@@ -17,13 +17,13 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     RecordHistoryPart findByFilePathStartingWith(String path);
 
-    @Query("select p from RecordHistoryPart p where p.roomId = ?1 and (p.recording = true or p.endTime is null) order by p.id desc")
+    @Query("select p from RecordHistoryPart p where p.roomId = ?1 and (p.recording = true or p.endTime is null) and not exists (select 1 from RecordHistory h where h.id=p.historyId and h.importArchived=true) order by p.id desc")
     List<RecordHistoryPart> findOpenCandidatesByRoomId(String roomId);
 
-    @Query("select p from RecordHistoryPart p where p.recording = true or p.endTime is null order by p.id asc")
+    @Query("select p from RecordHistoryPart p where (p.recording = true or p.endTime is null) and not exists (select 1 from RecordHistory h where h.id=p.historyId and h.importArchived=true) order by p.id asc")
     List<RecordHistoryPart> findOpenCandidates(Pageable pageable);
 
-    @Query("select p from RecordHistoryPart p where p.id > ?1 and (p.recording = true or p.endTime is null) order by p.id asc")
+    @Query("select p from RecordHistoryPart p where p.id > ?1 and (p.recording = true or p.endTime is null) and not exists (select 1 from RecordHistory h where h.id=p.historyId and h.importArchived=true) order by p.id asc")
     List<RecordHistoryPart> findOpenCandidatesAfterId(Long id, Pageable pageable);
 
     @Query("""
@@ -76,7 +76,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     List<RecordHistoryPart> findByIdGreaterThanOrderByIdAsc(Long id, Pageable pageable);
 
-    @Query("select p from RecordHistoryPart p where p.id > ?1 and p.filePath is not null and p.historyId is not null and p.upload = false and exists (select 1 from RecordHistory h where h.id = p.historyId and h.upload = true and h.publish = false and h.forceArchived = false and (h.uploadPaused is null or h.uploadPaused = false)) order by p.id asc")
+    @Query("select p from RecordHistoryPart p where p.id > ?1 and p.filePath is not null and p.historyId is not null and p.upload = false and exists (select 1 from RecordHistory h where h.id = p.historyId and h.upload = true and h.publish = false and h.forceArchived = false and h.importArchived = false and (h.uploadPaused is null or h.uploadPaused = false)) order by p.id asc")
     List<RecordHistoryPart> findStorageRecoveryCandidatesAfterId(Long id, Pageable pageable);
 
     @Query("""
@@ -91,6 +91,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
     @Query("""
             select p from RecordHistoryPart p
             where p.roomId = ?1 and p.endTime < ?2
+              and not exists (select 1 from RecordHistory h where h.id=p.historyId and h.importArchived=true)
               and exists (select 1 from PartFileLocation l
                           where l.partId = p.id and l.state = ?3)
             order by p.endTime asc
@@ -184,11 +185,12 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
+                and h.importArchived = false
                 and h.upload = true
-                and h.forceArchived = false
+                and h.forceArchived = false and h.importArchived = false
                 and (h.uploadPaused is null or h.uploadPaused = false)
                 and h.publish = false
-                and h.forceArchived = false
+                and h.forceArchived = false and h.importArchived = false
           )
         order by p.endTime asc
         """)
@@ -209,6 +211,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
+                and h.importArchived = false
                 and h.upload = true
                 and (h.uploadPaused is null or h.uploadPaused = false)
                 and h.publish = false
@@ -231,8 +234,9 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
+                and h.importArchived = false
                 and h.upload = true
-                and h.forceArchived = false
+                and h.forceArchived = false and h.importArchived = false
                 and h.code not in (-2, -4)
                 and (h.avId is not null and trim(h.avId) <> ''
                      or h.bvId is not null and trim(h.bvId) <> '')
@@ -252,10 +256,11 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
+                and h.importArchived = false
                 and h.upload = true
                 and (h.uploadPaused is null or h.uploadPaused = false)
                 and h.publish = false
-                and h.forceArchived = false
+                and h.forceArchived = false and h.importArchived = false
           )
         """)
     int countPendingUploadPartsWithHistoryUploadEnabled();
@@ -270,6 +275,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
+                and h.importArchived = false
                 and (h.publish = true or (h.bvId is not null and trim(h.bvId) <> ''))
           )
         """)
@@ -283,6 +289,7 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
           and exists (
               select 1 from RecordHistory h
               where h.id = p.historyId
+                and h.importArchived = false
                 and (h.publish = true or (h.bvId is not null and trim(h.bvId) <> ''))
           )
           and (p.sourceType is null or p.sourceType <> 'EDIT_PART')

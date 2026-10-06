@@ -37,7 +37,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
-    @Query("update LiveMsg m set m.code = -2 where m.code = -4")
+    @Query("update LiveMsg m set m.code = -2 where m.code = -4 and not exists (select 1 from RecordHistoryPart p, RecordHistory h where p.id=m.partId and h.id=p.historyId and h.importArchived=true)")
     int recoverInterruptedSendingMessages();
 
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -47,7 +47,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
 
     int countByPartIdAndCode(Long partId, int code);
 
-    @Query("SELECT DISTINCT m.partId FROM LiveMsg m WHERE m.code = ?1")
+    @Query("SELECT DISTINCT m.partId FROM LiveMsg m WHERE m.code = ?1 AND NOT EXISTS (select 1 from RecordHistoryPart p, RecordHistory h where p.id=m.partId and h.id=p.historyId and h.importArchived=true)")
     List<Long> findDistinctPartIdByCode(int code);
 
     List<LiveMsg> findByPoolAndCodeAndPartIdInOrderBySendTimeAsc(int pool, int code, List<Long> partIds);
@@ -70,6 +70,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         select 1
                         from RecordHistory h
                         where h.id = p.historyId
+                          and h.importArchived = false
                           and h.publish = true
                           and h.code = 0
                           and h.sendReply = true
@@ -100,6 +101,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         select 1
                         from RecordHistory h
                         where h.id = p.historyId
+                          and h.importArchived = false
                           and h.publish = true
                           and h.code in (0, -50)
                           and h.sendReply = true
@@ -131,6 +133,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         select 1
                         from RecordHistory h
                         where h.id = p.historyId
+                          and h.importArchived = false
                           and h.publish = true
                           and h.code = 0
                           and h.sendReply = true
@@ -162,6 +165,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                         select 1
                         from RecordHistory h
                         where h.id = p.historyId
+                          and h.importArchived = false
                           and h.publish = true
                           and h.code in (0, -50)
                           and h.sendReply = true
@@ -226,7 +230,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                   where p.id in ?1
                     and p.historyId = h.id
                     and r.roomId = p.roomId
-                    and h.forceArchived = false
+                    and h.forceArchived = false and h.importArchived = false
                     and h.recording = false
                     and h.streaming = false
                     and h.publish = true
@@ -265,7 +269,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                   where p.id in ?1
                     and p.historyId = h.id
                     and r.roomId = p.roomId
-                    and h.forceArchived = false
+                    and h.forceArchived = false and h.importArchived = false
                     and h.recording = false
                     and h.streaming = false
                     and h.publish = true
@@ -297,7 +301,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                   where p.id in ?1
                     and p.historyId = h.id
                     and r.roomId = p.roomId
-                    and h.forceArchived = false
+                    and h.forceArchived = false and h.importArchived = false
                     and h.recording = false
                     and h.streaming = false
                     and h.publish = true
@@ -328,7 +332,7 @@ public interface LiveMsgRepository extends CrudRepository<LiveMsg, Long> {
                   where p.id in ?1
                     and p.historyId = h.id
                     and r.roomId = p.roomId
-                    and h.forceArchived = false
+                    and h.forceArchived = false and h.importArchived = false
                     and h.recording = false
                     and h.streaming = false
                     and h.publish = true

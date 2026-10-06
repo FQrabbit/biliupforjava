@@ -856,7 +856,7 @@ public class HistoryController {
                 }
 
                 RecordHistory history = historyOptional.get();
-                if (upload && history.isForceArchived()) {
+                if (upload && history.isProcessingArchived()) {
                     skipped++;
                     detail.put("status", "skipped");
                     detail.put("reason", "稿件已强制归档，请先恢复处理");
@@ -1466,7 +1466,7 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
-            if (history.isForceArchived()) {
+            if (history.isProcessingArchived()) {
                 result.put("type", "warning");
                 result.put("msg", "稿件已强制归档，请先恢复处理");
                 return result;
@@ -1532,7 +1532,7 @@ public class HistoryController {
                 result.put("msg", disabledReason);
                 return result;
             }
-            if (history.isForceArchived()) {
+            if (history.isProcessingArchived()) {
                 result.put("type", "warning");
                 result.put("msg", "稿件已强制归档，请先恢复处理");
                 return result;
@@ -1580,7 +1580,7 @@ public class HistoryController {
                 result.put("msg", disabledReason);
                 return result;
             }
-            if (history.isForceArchived()) {
+            if (history.isProcessingArchived()) {
                 result.put("type", "warning");
                 result.put("msg", "稿件已强制归档，请先恢复处理");
                 return result;
@@ -1819,8 +1819,21 @@ public class HistoryController {
         Optional<RecordHistory> historyOptional = historyRepository.findById(id);
         if (historyOptional.isPresent()) {
             RecordHistory history = historyOptional.get();
-            if (history.isForceArchived()) {
-                history.setForceArchived(false);
+            if (history.isProcessingArchived()) {
+                if (history.isImportArchived()) {
+                    if (history.getPublishUserId()==null || userRepository.findById(history.getPublishUserId()).isEmpty()) {
+                        result.put("type","warning");result.put("msg","请先为这条历史关联有效的投稿账号，再恢复处理");return result;
+                    }
+                    List<RecordHistoryPart> parts=partRepository.findByHistoryIdOrderByStartTimeAsc(id);
+                    if(parts.isEmpty()) {
+                        result.put("type","warning");result.put("msg","这条历史没有可处理的分P，请继续保留归档");return result;
+                    }
+                    for(RecordHistoryPart part:parts)if(!part.isUpload() && !partFileLocationService.resolveReadable(part.getId()).available()) {
+                        result.put("type","warning");result.put("msg","尚未上传的分P缺少可读取文件，请先修复文件位置再恢复处理");return result;
+                    }
+                    history.setImportArchived(false);
+                }
+                else history.setForceArchived(false);
                 history.setUpdateTime(LocalDateTime.now());
                 historyRepository.save(history);
                 result.put("type", "success");
@@ -1952,7 +1965,7 @@ public class HistoryController {
     }
 
     private Predicate buildFullArchivedPredicate(CriteriaBuilder criteriaBuilder, Root<RecordHistory> root) {
-        Predicate isForceArchived = criteriaBuilder.equal(root.get("forceArchived"), true);
+        Predicate isForceArchived = criteriaBuilder.or(criteriaBuilder.equal(root.get("forceArchived"), true), criteriaBuilder.equal(root.get("importArchived"), true));
         Predicate isNotEditingParts = criteriaBuilder.equal(root.get("editPartsUploading"), false);
 
         // 正常上传并完成的条件
@@ -2131,14 +2144,14 @@ public class HistoryController {
                 history, actuallyRecordingParts, latestEnd, configMap, LocalDateTime.now());
         history.setPublishWaitReason(readiness.reason());
         history.setPublishNotBefore(readiness.earliestAt());
-        history.setWaitingForPublish(!history.isForceArchived() && history.isUpload()
+        history.setWaitingForPublish(!history.isProcessingArchived() && history.isUpload()
                 && "MERGE_INTERVAL".equals(readiness.reason()));
     }
 
     private String historyOperationDisabledReason(RecordHistory history, String action) {
         boolean danmaku = Set.of("reloadHistoryMsg", "deleteHistoryMsg", "abandonHistoryMsgQueue", "retryFailedDanmaku").contains(action);
         // 身份还没建立时直接拒绝，不能拿空 BVID 去查询其他稿件的数据
-        if (history.isDeletePending() || history.isForceArchived()
+        if (history.isDeletePending() || history.isProcessingArchived()
                 || (danmaku && (!history.isPublish() || StringUtils.isBlank(history.getBvId())
                 || (history.getCode() != 0 && history.getCode() != -50)))) {
             return HistoryOperationPolicy.disabledReason(history, action);

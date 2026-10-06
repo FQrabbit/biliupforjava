@@ -55,7 +55,7 @@ public class RecordHistoryStateReconciler {
     public boolean reconcile(Long historyId) {
         RecordHistory history = historyRepository.findById(historyId).orElse(null);
         if (history == null || history.isSplitClosed() || !history.isRecording() || !history.isUpload() || history.isPublish()
-                || history.isForceArchived()) return false;
+                || history.isProcessingArchived()) return false;
 
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         // 当前房间仍明确指向这条 history 且仍在录制，绝不猜测它已经结束

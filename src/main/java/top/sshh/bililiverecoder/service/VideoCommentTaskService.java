@@ -141,7 +141,7 @@ public class VideoCommentTaskService {
         lock.lock();
         try {
             if (historyRepository != null && historyRepository.findByIdForUpdate(historyId)
-                    .map(history -> history.isDeletePending() || history.isForceArchived() || history.isSendReply()).orElse(true)) {
+                    .map(history -> history.isDeletePending() || history.isProcessingArchived() || history.isSendReply()).orElse(true)) {
                 return repository.findByHistoryIdOrderBySequenceAsc(historyId);
             }
             return prepareLocked(historyId, accountId, replies);
@@ -255,7 +255,7 @@ public class VideoCommentTaskService {
             task = repository.findById(id).orElse(null);
             if (task == null || !"READY".equals(task.getState())) return task;
             if (historyRepository != null && historyRepository.findByIdForUpdate(task.getHistoryId())
-                    .map(history -> history.isDeletePending() || history.isForceArchived() || history.isSendReply()).orElse(true)) return task;
+                    .map(history -> history.isDeletePending() || history.isProcessingArchived() || history.isSendReply()).orElse(true)) return task;
             task.setState("SUBMITTING");
             task.setUpdatedAt(LocalDateTime.now());
             task.setErrorMessage(null);
@@ -306,7 +306,7 @@ public class VideoCommentTaskService {
             if (task == null || !"SENT".equals(task.getState())
                     || !("PENDING".equals(task.getPinState()) || "RETRY".equals(task.getPinState()))) return task;
             if (historyRepository != null && historyRepository.findById(task.getHistoryId())
-                    .map(history -> history.isForceArchived() || history.isSendReply()).orElse(true)) return task;
+                    .map(history -> history.isProcessingArchived() || history.isSendReply()).orElse(true)) return task;
             task.setPinState("SUBMITTING");
             task.setUpdatedAt(LocalDateTime.now());
             task.setErrorMessage(null);

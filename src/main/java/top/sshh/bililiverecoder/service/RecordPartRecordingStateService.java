@@ -61,6 +61,8 @@ public class RecordPartRecordingStateService {
             return new Assessment(State.ENDED, "分P已结束", false, 0, 0, 0, 0);
         }
         RecordHistory history = part.getHistoryId() == null ? null : historyRepository.findById(part.getHistoryId()).orElse(null);
+        if (history != null && history.isImportArchived())
+            return new Assessment(State.ENDED, "导入归档不再自动收尾", false, 0, 0, 0, 0);
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
         boolean activeSession = isCurrentActiveSession(room, history, part);
         long required = Math.max(0L, activeSession ? activeSessionStableThresholdMs : endedSessionStableThresholdMs);
@@ -208,7 +210,7 @@ public class RecordPartRecordingStateService {
         if (part.getHistoryId() == null || StringUtils.isBlank(part.getRoomId())) return;
         RecordHistory history = historyRepository.findById(part.getHistoryId()).orElse(null);
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
-        if (history == null || room == null || history.isForceArchived() || history.isPublish() || history.isSplitClosed()
+        if (history == null || room == null || history.isProcessingArchived() || history.isPublish() || history.isSplitClosed()
                 || !history.isUpload() || !part.getHistoryId().equals(room.getHistoryId())
                 || (StringUtils.isNotBlank(part.getSessionId()) && StringUtils.isNotBlank(room.getSessionId())
                     && !part.getSessionId().equals(room.getSessionId()))

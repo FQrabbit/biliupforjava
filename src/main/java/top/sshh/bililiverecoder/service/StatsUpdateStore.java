@@ -95,7 +95,7 @@ public class StatsUpdateStore {
             // 补价只更新队列表，不锁历史行，提交结果时仍会检查历史是否存在和正在删除
             String source = "SELECT h.id AS history_id,h.room_id FROM record_history h "
                     + "WHERE h.id IN (" + String.join(",", Collections.nCopies(group.size(), "?")) + ") "
-                    + "AND EXISTS (SELECT 1 FROM record_room r WHERE r.room_id=h.room_id) "
+                    + "AND h.import_archived=false AND EXISTS (SELECT 1 FROM record_room r WHERE r.room_id=h.room_id) "
                     + "AND NOT EXISTS (SELECT 1 FROM room_live_session_stats s WHERE s.history_id=h.id AND s.imported_snapshot=true)";
             tx.executeWithoutResult(status -> {
                 if (mysql) {

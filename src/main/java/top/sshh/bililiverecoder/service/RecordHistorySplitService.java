@@ -127,7 +127,7 @@ public class RecordHistorySplitService {
 
     public void reconcile(Long historyId) {
         RecordHistory initial = historyId == null ? null : histories.findById(historyId).orElse(null);
-        if (initial == null || !initial.isSplitEnabled() || initial.isPublish() || initial.isForceArchived()) return;
+        if (initial == null || !initial.isSplitEnabled() || initial.isPublish() || initial.isProcessingArchived()) return;
         synchronized (initial.getRoomId().intern()) {
             transactions.executeWithoutResult(status -> reconcileInside(historyId));
         }
@@ -142,7 +142,7 @@ public class RecordHistorySplitService {
             return;
         }
         while (history != null && history.isSplitEnabled() && !history.isSplitClosed()
-                && !history.isPublish() && !history.isForceArchived()) {
+                && !history.isPublish() && !history.isProcessingArchived()) {
             List<RecordHistoryPart> ordered = new ArrayList<>(parts.findByHistoryId(history.getId()));
             ordered.sort(Comparator.comparing(RecordHistoryPart::getStartTime, Comparator.nullsLast(Comparator.naturalOrder()))
                     .thenComparing(RecordHistoryPart::getId));

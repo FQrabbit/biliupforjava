@@ -6,18 +6,139 @@
 
     window.RoomPageRuntimeMethods = {
         beforeConfigUpload: function (file) {
-            // 点击选择文件时已经生成任务 ID。这里不能再次生成，否则 Element Upload
-            // 可能仍把旧 ID 放进请求头，而状态轮询已经切到新 ID，界面就会永远停在 1%
-            if (!this.configTaskId) this.prepareConfigUpload();
-            var maxConfigSize = 512 * 1024 * 1024;
-            if (file && file.size > maxConfigSize) {
-                this.$message.error('导入配置文件不能超过 512MB，请重新导出时减少数据范围再试');
-                this.failConfigProgress('导入失败', '配置文件超过 512MB，当前导入上限为 512MB。');
-                return false;
+            this.uploadBackupFile(file);
+            return false;
+        },
+        backupRequest: function (url, method, body) {
+            var options = { method: method || 'GET', credentials: 'same-origin', headers: {} };
+            try {var token=localStorage.getItem('biliup_auth');if(token)options.headers.Authorization=token;} catch(error) {}
+            if (body !== undefined) {
+                options.headers['Content-Type'] = body instanceof Blob ? 'application/octet-stream' : 'application/json';
+                options.body = body instanceof Blob ? body : JSON.stringify(body);
             }
-            this.startConfigProgress('导入配置', '正在上传并解析配置文件', '后端解析中...');
-            this.pollConfigTaskStatus('import');
-            return true;
+            return fetch(ApiUtil.resolveUrl(url), options).then(function (response) {
+                if(response.status === 401) {ApiUtil.redirectToLogin();throw new Error('登录状态失效，请重新登录');}
+                return response.json().then(function (data) {
+                    if (!response.ok) throw new Error(data.message || '备份请求失败');
+                    return data;
+                });
+            });
+        },
+        uploadBackupFile: async function (file) {
+            if(this.backupTaskActive || this.configOperationProgress.visible && this.configOperationProgress.status === 'active') { this.$message.warning('请先完成或取消当前导入');return; }
+            this.backupTaskActive = true;
+            this.configTaskId = null;
+            this.startConfigProgress('导入备份', '正在上传备份', '上传完成后会先显示恢复预览');
+            this.backupDecisions = {};
+            this.backupResult = null;
+            try {
+                var session = await this.backupRequest('/room/backup/session', 'POST', { size: file.size });
+                this.configTaskId = session.taskId;
+                for (var offset = 0, index = 0; offset < file.size; offset += session.chunkSize, index++) {
+                    if(!this.backupTaskActive) return;
+                    await this.backupRequest('/room/backup/session/' + session.taskId + '/chunks/' + index, 'PUT', file.slice(offset, offset + session.chunkSize));
+                    this.updateConfigProgress(Math.floor(Math.min(file.size, offset + session.chunkSize) * 100 / file.size), '正在上传备份', '完成上传后继续解析和检查');
+                }
+                if(!this.backupTaskActive) return;
+                await this.backupRequest('/room/backup/session/' + session.taskId + '/prepare', 'POST', {});
+                this.pollBackupTask('import');
+            } catch (error) {
+                if(session) await this.backupRequest('/room/backup/cancel/' + session.taskId, 'POST', {}).catch(function () {});
+                this.backupTaskActive = false;
+                this.failConfigProgress('导入失败', error.message);
+            }
+        },
+        pollBackupTask: function (task) {
+            var self = this;
+            if (this.configTaskPoller) clearInterval(this.configTaskPoller);
+            var busy = false;
+            var check = async function () {
+                if (busy) return;
+                busy = true;
+                try {
+                    var status = await self.backupRequest('/room/backup/status/' + encodeURIComponent(self.configTaskId));
+                    var total = Number(status.recordsTotal || 0);
+                    var processed = Number(status.processed || 0);
+                    self.updateConfigProgress(total ? Math.floor(processed * 100 / total) : 0, status.message, '已处理 ' + processed.toLocaleString('zh-CN') + ' 条');
+                    self.configOperationProgress.estimated = !total;
+                    if (status.phase === 'PREVIEW') {
+                        clearInterval(self.configTaskPoller); self.configTaskPoller = null;
+                        self.configOperationProgress.visible = false;
+                        await self.loadBackupPreview(0);
+                    } else if (status.phase === 'DONE') {
+                        clearInterval(self.configTaskPoller); self.configTaskPoller = null;
+                        if (task === 'import') {
+                            self.backupTaskActive = false;
+                            self.backupResult = status.result;
+                            self.backupPreviewVisible = true;
+                            self.finishConfigProgress('恢复完成', status.message, 8000);
+                            self.initTable();
+                        }
+                    } else if (status.phase === 'FAILED' || status.phase === 'CANCELLED') {
+                        self.backupTaskActive = false;
+                        self.failConfigProgress(status.phase === 'CANCELLED' ? '已取消' : '处理失败', status.message);
+                    }
+                } catch (error) {
+                    // 导出请求可能还没有进入后台，稍后继续查询同一个任务
+                    if (task !== 'export') self.failConfigProgress('状态查询失败', error.message);
+                } finally { busy = false; }
+            };
+            this.configTaskPoller = setInterval(check, 1000);
+            check();
+        },
+        loadBackupPreview: async function (page) {
+            try {
+                var preview = await this.backupRequest('/room/backup/session/' + this.configTaskId + '/preview?page=' + page);
+                this.backupPreview = preview;
+                preview.conflicts.forEach(function (row) {
+                    var key = row.section + ':' + row.key;
+                    if (!Object.prototype.hasOwnProperty.call(this.backupDecisions, key)) this.$set(this.backupDecisions, key, preview.emptyTarget && row.section === 'systemConfigList' ? 'REPLACE' : 'KEEP');
+                }, this);
+                this.backupPreviewVisible = true;
+            } catch (error) { this.$message.error(error.message); }
+        },
+        commitBackup: async function () {
+            try {
+                await this.backupRequest('/room/backup/session/' + this.configTaskId + '/commit', 'POST', { decisions: this.backupDecisions });
+                this.backupPreviewVisible = false;
+                this.startConfigProgress('恢复数据', '正在恢复数据', '旧历史将归档，不恢复以前的任务');
+                this.pollBackupTask('import');
+            } catch (error) { this.$message.error(error.message); }
+        },
+        cancelBackup: async function () {
+            try {
+                this.backupTaskActive = false;
+                await this.backupRequest('/room/backup/cancel/' + this.configTaskId, 'POST', {});
+                this.backupPreviewVisible = false;
+                this.startConfigProgress('取消导入', '正在等待取消结果', '尚未提交的恢复将回滚');
+                this.pollBackupTask('import');
+            } catch (error) { this.$message.error(error.message); }
+        },
+        loadBackupQuarantine: async function (page) {
+            try {
+                var data = await this.backupRequest('/room/backup/quarantine?page=' + page);
+                data.page = page;this.backupQuarantine = data;this.backupQuarantineVisible = true;
+            } catch(error) {this.$message.error(error.message);}
+        },
+        downloadQuarantineRecord: async function (record) {
+            var result=await ApiUtil.fetchBlob('/room/backup/quarantine/' + record.id + '/payload', {acceptAnyBlob:true});
+            var url=URL.createObjectURL(result.blob);
+            var link=document.createElement('a');link.href=url;link.download='isolated-' + record.id + '.json';link.click();
+            setTimeout(function () {URL.revokeObjectURL(url);},1000);
+        },
+        backupSectionLabel: function (section) {
+            var labels = { userList: '上传账号', roomList: '直播间', historyList: '录制历史', partList: '分P', liveMsgList: '弹幕', systemConfigList: '系统设置', storageRootList: '存储目录', partFileLocationList: '文件位置', notificationChannelList: '推送渠道', notificationRuleList: '推送规则', roomLiveSessionStatsList: '场次统计', roomLiveDailyStatsList: '每日统计', roomLiveMsgBucketStatsList: '分钟趋势', roomLiveDanmuUserStatsList: '弹幕用户统计', roomLiveEventList: '直播事件', roomLiveEventParseStateList: '统计解析记录', roomLiveEventXmlIssueList: 'XML诊断', roomLiveGiftCatalogList: '礼物价格', quarantineList: '隔离记录' };
+            return labels[section] || '其他数据';
+        },
+        backupReportRows: function () {
+            var sections = this.backupResult && this.backupResult.sections || {};
+            return Object.keys(sections).filter(function (key) { return sections[key].source > 0; }).map(function (key) { return Object.assign({ section: key }, sections[key]); });
+        },
+        downloadBackupReport: function () {
+            var blob = new Blob([JSON.stringify(this.backupResult, null, 2)], { type: 'application/json' });
+            var url = URL.createObjectURL(blob); var link = document.createElement('a');
+            link.href = url; link.download = 'biliupforjava-import-report.json'; link.click();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         },
         prepareConfigUpload: function () {
             this.configTaskId = typeof window.BiliupProgressTaskId === 'function'
@@ -242,8 +363,8 @@
                 message: message || '正在处理',
                 detail: detail || '',
                 metrics: '',
-                percent: 1,
-                estimated: false,
+                percent: 0,
+                estimated: true,
                 status: 'active'
             };
         },
@@ -299,74 +420,6 @@
             if (detail !== undefined) {
                 this.configOperationProgress.detail = detail;
             }
-        },
-        pollConfigTaskStatus: function (task) {
-            var self = this;
-            var pollingStartedAt = Date.now();
-            var idlePolls = 0;
-            var fallbackInFlight = false;
-            if (this.configTaskPoller) {
-                clearInterval(this.configTaskPoller);
-            }
-            var taskId = this.configTaskId;
-            var statusUrl = taskId
-                ? '/room/configTask/status/' + encodeURIComponent(taskId)
-                : '/room/configTask/status';
-            var applyStatus = function (status, adoptTaskId) {
-                if (!status || status.task === 'idle' || (task && status.task !== task)) {
-                    return false;
-                }
-                if (Number(status.startedAtEpochMs) > 0
-                    && Number(status.startedAtEpochMs) < pollingStartedAt - 1000) {
-                    return false;
-                }
-                if (adoptTaskId && status.taskId && status.taskId !== taskId) {
-                    taskId = status.taskId;
-                    self.configTaskId = status.taskId;
-                    statusUrl = '/room/configTask/status/' + encodeURIComponent(taskId);
-                }
-                idlePolls = 0;
-                var detail = status.detail || '';
-                self.animateConfigTaskStatus(status);
-                if (!status.running) {
-                    if (status.success && status.phase === 'DONE' && task === 'export') {
-                        // 服务端写完响应并不代表浏览器已收齐 Blob；保持进度卡直到下载链接实际触发
-                        clearInterval(self.configTaskPoller);
-                        self.configTaskPoller = null;
-                        self.updateConfigProgress(100, '正在接收导出文件',
-                            '服务端已生成配置，正在接收完整文件…');
-                        self.configOperationProgress.metrics = '';
-                    } else if (status.success && status.phase === 'DONE') {
-                        self.finishConfigProgress(status.message || '处理完成', detail);
-                    } else if (status.phase === 'FAILED') {
-                        self.failConfigProgress(status.message || '处理失败', detail);
-                    }
-                }
-                return true;
-            };
-            var recoverLatestTask = function () {
-                if (fallbackInFlight || !taskId) return;
-                fallbackInFlight = true;
-                $.getJSON('/room/configTask/status')
-                    .done(function (latest) {
-                        applyStatus(latest, true);
-                    })
-                    .always(function () {
-                        fallbackInFlight = false;
-                    });
-            };
-            var check = function () {
-                $.getJSON(statusUrl)
-                    .done(function (status) {
-                        if (applyStatus(status, false)) return;
-                        if (status && status.task === 'idle') {
-                            idlePolls++;
-                            if (idlePolls >= 3) recoverLatestTask();
-                        }
-                    });
-            };
-            check();
-            this.configTaskPoller = setInterval(check, 500);
         },
         startPolling: function () {
             var self = this;

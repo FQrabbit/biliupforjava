@@ -58,11 +58,11 @@ public class RecordEventStreamEndService implements RecordEventService {
                     .add("roomId", eventData.getRoomId()));
             return;
         }
-        if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isForceArchived()) {
+        if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isProcessingArchived()) {
             log.info("[BLR] {}", LogKvs.event("StreamEnd.SkipHistoryUpdate")
                     .add("roomId", eventData.getRoomId())
                     .add("historyId", history.getId())
-                    .add("forceArchived", history.isForceArchived()));
+                    .add("forceArchived", history.isProcessingArchived()));
             return;
         }
         // 下播不等同录制结束；只更新 streaming，当前会话才同步房间状态

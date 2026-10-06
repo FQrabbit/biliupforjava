@@ -60,7 +60,7 @@ public class HistoryMsgRetryService {
             return RetryResult.warning("稿件不存在");
         }
         RecordHistory history = historyOptional.get();
-        if (history.isForceArchived()) {
+        if (history.isProcessingArchived()) {
             return RetryResult.warning("稿件已强制归档，不能重新加入弹幕队列");
         }
         if (!history.isPublish() || (history.getCode() != 0 && history.getCode() != -50)) {

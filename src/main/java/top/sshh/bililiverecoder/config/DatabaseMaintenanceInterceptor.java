@@ -18,7 +18,8 @@ public class DatabaseMaintenanceInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if (!state.isMaintenanceActive() || !(handler instanceof HandlerMethod)) return true;
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        if (path.startsWith("/stats/maintenance/") || path.equals("/recordWebHook") || path.equals("/webhook/blrec")
+        if (path.startsWith("/stats/maintenance/") || path.startsWith("/room/backup/status/")
+                || path.startsWith("/room/backup/cancel/") || path.equals("/recordWebHook") || path.equals("/webhook/blrec")
                 || path.equals("/error") || path.equals("/") || path.equals("/index.html")
                 || path.equals("/api/version") || path.equals("/api/version/check")) return true;
         response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);

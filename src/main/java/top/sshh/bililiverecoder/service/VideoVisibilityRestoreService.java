@@ -92,7 +92,7 @@ public class VideoVisibilityRestoreService {
         lock.lock();
         try {
             if (histories != null && histories.findByIdForUpdate(historyId)
-                    .map(history -> history.isDeletePending() || history.isForceArchived() || history.isSendReply()).orElse(true)) {
+                    .map(history -> history.isDeletePending() || history.isProcessingArchived() || history.isSendReply()).orElse(true)) {
                 throw new IllegalStateException("稿件已归档或评论流程已结束，不能创建可见性恢复任务");
             }
             VideoVisibilityRestoreTask task = repository.findByHistoryId(historyId).orElseGet(VideoVisibilityRestoreTask::new);
@@ -198,7 +198,7 @@ public class VideoVisibilityRestoreService {
             VideoVisibilityRestoreTask task = repository.findById(taskId).orElse(null);
             if (task == null || !"PENDING".equals(task.getState())) return null;
             if (histories != null && histories.findByIdForUpdate(task.getHistoryId())
-                    .map(RecordHistory -> RecordHistory.isDeletePending() || RecordHistory.isForceArchived())
+                    .map(RecordHistory -> RecordHistory.isDeletePending() || RecordHistory.isProcessingArchived())
                     .orElse(true)) return null;
             task.setState("RESTORING");
             task.setAttemptCount(task.getAttemptCount() + 1);

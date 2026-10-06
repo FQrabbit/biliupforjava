@@ -279,7 +279,7 @@ public class RoomDeletionService {
             if (historyId == null) {
                 continue;
             }
-            boolean uploadRequested = !history.isForceArchived()
+            boolean uploadRequested = !history.isProcessingArchived()
                     && ((history.isUpload() && !history.isPublish()) || history.isEditPartsUploading());
             boolean publishTaskRunning = isRunning(TaskUtil.publishTask.get(historyId));
             if (uploadRequested || publishTaskRunning) {

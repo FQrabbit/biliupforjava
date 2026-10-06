@@ -28,7 +28,7 @@
         getHistoryActionDisabledReason: function(item) {
             if (item && item.id) item = this.findHistoryForAction(item.id) || item;
             if (this.isHistoryDeletionPending(item)) return '稿件正在等待或执行删除，可取消尚未执行的删除后继续操作';
-            if (item && item.forceArchived) return '稿件已强制归档，请先恢复处理';
+            if (item && (item.forceArchived || item.importArchived)) return '稿件已归档，请先恢复处理';
             return '';
         },
         ensureHistoryActionAllowed: function(id, allowArchived) {
@@ -287,6 +287,7 @@
         },
         // 真正异常分P的数量（排除预期跳过类型）
         abnormalPartCount: function(item) {
+            if (item && item.importArchived) return 0;
             if (!item) return 0;
             // 优先使用后端返回的 abnormalPartCount 字段
             if (item.abnormalPartCount !== undefined && item.abnormalPartCount !== null) {
@@ -423,9 +424,10 @@
             if (this.getPublishFlowTasks(item, 'active').length) return flow;
             if (item.editPartsUploading) return '分P上传中';
             if (this.hasTimestampJump(item)) return '时间戳跳变';
+            if (item.importArchived) return '导入归档';
             if (this.abnormalPartCount(item) > 0) return '异常';
             if (this.isActuallyRecording(item)) return '录制中';
-            if (item.forceArchived && this.form.viewType === 'archived') return '已归档';
+            if ((item.forceArchived || item.importArchived) && this.form.viewType === 'archived') return '已归档';
             if (item.publish) return this.getAuditStatusText(item);
             if (item.upload && !item.publish) return this.getHistoryDisplayStatus(item);
             if (!item.upload && (Number(item.partCount) || 0) > 0) return '待上传';
@@ -439,6 +441,7 @@
             }
             if (item.editPartsUploading) return 'is-upload';
             if (this.hasTimestampJump(item)) return 'is-danger';
+            if (item.importArchived) return 'is-info';
             if (this.abnormalPartCount(item) > 0) return 'is-danger';
             if (this.isActuallyRecording(item)) return 'is-recording';
             if (item.publish) {
@@ -449,7 +452,7 @@
                 return 'is-info';
             }
             if (item.upload) return 'is-upload';
-            if (item.forceArchived) return 'is-info';
+            if ((item.forceArchived || item.importArchived)) return 'is-info';
             return 'is-warning';
         },
         handleVisibilityChange: function() {

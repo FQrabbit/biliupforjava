@@ -19,7 +19,7 @@ public class HistoryUploadAdmissionService {
     public boolean tryRegisterUpload(Long historyId, Long partId) {
         if (historyId == null || partId == null) return false;
         RecordHistory history = histories.findByIdForUpdate(historyId).orElse(null);
-        if (history == null || history.isDeletePending() || history.isForceArchived()) return false;
+        if (HistoryProcessingPolicy.blocksAutomatic(history)) return false;
         return activities.tryRegisterUpload(partId, historyId);
     }
 
@@ -27,7 +27,7 @@ public class HistoryUploadAdmissionService {
     public boolean tryRegisterHistoryUpload(Long historyId) {
         if (historyId == null) return false;
         RecordHistory history = histories.findByIdForUpdate(historyId).orElse(null);
-        if (history == null || history.isDeletePending() || history.isForceArchived()) return false;
+        if (HistoryProcessingPolicy.blocksAutomatic(history)) return false;
         return activities.tryRegisterHistoryUpload(historyId);
     }
 }

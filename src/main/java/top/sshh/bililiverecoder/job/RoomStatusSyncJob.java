@@ -100,7 +100,7 @@ public class RoomStatusSyncJob {
                                         room.setHistoryId(-1L);
                                         changed = true;
                                     } else {
-                                        if (history.isForceArchived()) {
+                                        if (history.isProcessingArchived()) {
                                             room.setHistoryId(-1L);
                                             room.setSessionId(null);
                                             changed = true;

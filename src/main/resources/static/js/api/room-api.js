@@ -23,13 +23,10 @@
         if (!blob || typeof blob.slice !== 'function') {
             return Promise.reject(new Error('导出响应无效，未收到配置文件'));
         }
-        var tailStart = Math.max(0, blob.size - 1024);
-        return blob.slice(tailStart).text().then(function(tail) {
-            if (/"exportCompleted"\s*:\s*true\s*}\s*$/.test(tail)) {
-                return result;
-            }
-            return exportFailureFromTaskStatus('导出内容不完整，后端在生成配置文件时中断', taskId);
-        });
+        if (result.headers && result.headers.get('X-Backup-Format') === '3' && blob.size > 0 && Number(result.headers.get('Content-Length')) === blob.size) {
+            return Promise.resolve(result);
+        }
+        return exportFailureFromTaskStatus('未收到完整的备份文件', taskId);
     }
 
     window.RoomApi = {

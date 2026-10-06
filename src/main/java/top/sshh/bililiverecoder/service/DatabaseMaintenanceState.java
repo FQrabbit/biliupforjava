@@ -95,6 +95,10 @@ public class DatabaseMaintenanceState {
         return maintenanceActive.get();
     }
 
+    public boolean tryBeginMaintenance() {
+        return maintenanceActive.compareAndSet(false, true);
+    }
+
     public void setMaintenanceActive(boolean active) {
         maintenanceActive.set(active);
     }

@@ -257,7 +257,7 @@ public class DanmakuSendScheduler {
                 requeueHighPart(partId, 5000L);
                 return;
             }
-            if (history == null || history.isForceArchived() || history.getCode() == -4) {
+            if (history == null || history.isProcessingArchived() || history.getCode() == -4) {
                 if (history != null && history.getId() != null) {
                     msgQueueCleanupService.cleanupByHistoryId(history.getId(),
                             new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
@@ -271,7 +271,7 @@ public class DanmakuSendScheduler {
                         .add("partId", partId)
                         .add("historyId", history == null ? null : history.getId())
                         .add("code", history == null ? null : history.getCode())
-                        .add("forceArchived", history != null && history.isForceArchived()));
+                        .add("forceArchived", history != null && history.isProcessingArchived()));
                 return;
             }
             RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
@@ -491,7 +491,7 @@ public class DanmakuSendScheduler {
                 requeueNormalPart(partId, 5000L);
                 return;
             }
-            if (history == null || history.isForceArchived() || history.getCode() == -4) {
+            if (history == null || history.isProcessingArchived() || history.getCode() == -4) {
                 if (history != null && history.getId() != null) {
                     msgQueueCleanupService.cleanupByHistoryId(history.getId(),
                             new HistoryMsgQueueCleanupService.CleanupOptions(true, true, true, false),
@@ -505,7 +505,7 @@ public class DanmakuSendScheduler {
                         .add("partId", partId)
                         .add("historyId", history == null ? null : history.getId())
                         .add("code", history == null ? null : history.getCode())
-                        .add("forceArchived", history != null && history.isForceArchived()));
+                        .add("forceArchived", history != null && history.isProcessingArchived()));
                 return;
             }
             long globalWaitMs = globalDanmakuWaitMs();

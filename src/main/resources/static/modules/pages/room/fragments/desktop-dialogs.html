@@ -223,7 +223,7 @@
             <el-button @click="addRoomF()" type="primary">保 存</el-button>
         </div>
     </el-dialog>
-    <el-dialog :visible.sync="exportConfigDialog" :fullscreen="isMobile" title="导出配置" custom-class="room-page-dialog export-config-dialog">
+    <el-dialog :visible.sync="exportConfigDialog" :fullscreen="isMobile" title="导出备份" custom-class="room-page-dialog export-config-dialog">
         <el-form :model="exportConfig">
             <el-form-item :label-width="formLabelWidth" label="导出选项">
                 <el-checkbox v-model="exportConfig.exportRoom">导出直播间配置</el-checkbox>
@@ -233,8 +233,8 @@
                 <el-checkbox v-model="exportConfig.exportLiveMsg" :disabled="!exportConfig.exportHistory" @change="handleExportLiveMsgChange">导出弹幕数据</el-checkbox>
                 <el-checkbox v-model="exportConfig.exportStats" :disabled="!exportConfig.exportHistory" @change="handleExportStatsChange">导出统计数据</el-checkbox>
             </el-form-item>
-            <div v-if="exportConfig.exportUser" class="export-config-warning">
-                导出的用户信息包含当前登录态。如果导出后原环境继续使用一段时间，登录凭据可能发生刷新或失效，之后导入这份旧备份时可能需要重新登录。用户信息包含 Cookie、Token 等敏感数据，请妥善保管备份文件
+            <div v-if="exportConfig.exportUser || exportConfig.exportRoom || exportConfig.exportHistory" class="export-config-warning">
+                历史和直播间备份会同时携带关联账号，以便恢复账号映射。账号信息包含当前登录态。如果导出后原环境继续使用一段时间，登录凭据可能发生刷新或失效，之后导入这份旧备份时可能需要重新登录。用户信息包含 Cookie、Token 等敏感数据，请妥善保管备份文件
             </div>
             <div v-if="exportConfig.exportSystemConfig" class="export-config-warning">
                 系统配置包含推送渠道参数和密钥，请妥善保管备份文件
@@ -247,7 +247,7 @@
             </div>
         </el-form>
         <div class="dialog-footer" slot="footer">
-            <el-button @click="exportConfigDialog = false">放 弃</el-button>
+            <el-button @click="loadBackupQuarantine(0)">隔离记录</el-button><el-button @click="exportConfigDialog = false">放 弃</el-button>
             <el-button @click="exportConfigF()" type="success">导 出</el-button>
         </div>
     </el-dialog>
@@ -502,4 +502,59 @@
             <el-button @click="pasteConfirmDialogVisible = false">取 消</el-button>
             <el-button type="primary" @click="confirmPaste">确 认 粘 贴</el-button>
         </div>
+    </el-dialog>
+
+
+    <el-dialog :visible.sync="backupPreviewVisible" :fullscreen="isMobile" :show-close="!!backupResult" :close-on-press-escape="!!backupResult" title="数据恢复" custom-class="room-page-dialog backup-preview-dialog" append-to-body :close-on-click-modal="false" width="860px">
+        <template v-if="!backupResult">
+            <el-alert title="旧录制历史将作为归档保留，不恢复以前的上传、投稿、弹幕和文件处理任务" type="info" :closable="false"></el-alert>
+            <p>将归档 {{ backupPreview.archiveHistories || 0 }} 条历史。未选择覆盖的目标记录保持原状。</p>
+            <p v-if="backupPreview.missingStats">这份备份未包含场次统计，恢复后不会自动重算旧历史。</p>
+            <p><span v-for="(count, section) in backupPreview.counts" :key="section" style="display:inline-block; margin-right:16px">{{ backupSectionLabel(section) }}：{{ count }}</span></p>
+            <el-table key="backup-conflicts" :data="backupPreview.conflicts" max-height="360" style="width:100%">
+                <el-table-column label="数据" width="120"><template slot-scope="scope">{{ backupSectionLabel(scope.row.section) }}</template></el-table-column>
+                <el-table-column prop="title" label="名称" min-width="140"></el-table-column>
+                <el-table-column prop="reason" label="冲突说明" min-width="210"></el-table-column>
+                <el-table-column label="处理方式" width="170"><template slot-scope="scope">
+                    <el-select popper-class="room-page-select-popper" v-model="backupDecisions[scope.row.section + ':' + scope.row.key]" size="small">
+                        <el-option label="保留目标" value="KEEP"></el-option>
+                        <el-option label="使用备份替换" value="REPLACE" :disabled="!scope.row.replaceAllowed"></el-option>
+                        <el-option label="隔离保存" value="QUARANTINE"></el-option>
+                    </el-select>
+                </template></el-table-column>
+            </el-table>
+            <el-pagination v-if="backupPreview.conflictCount > 100" :current-page="backupPreview.page + 1" :page-size="100" :total="backupPreview.conflictCount" layout="prev, pager, next" @current-change="loadBackupPreview($event - 1)"></el-pagination>
+            <p>替换会结束该历史的旧任务。原数据会在恢复前另存一份主要业务备份。</p>
+        </template>
+        <template v-else>
+            <el-alert title="恢复完成，旧历史已归档" type="success" :closable="false"></el-alert>
+            <el-table key="backup-report" :data="backupReportRows()" max-height="420">
+                <el-table-column label="数据"><template slot-scope="scope">{{ backupSectionLabel(scope.row.section) }}</template></el-table-column>
+                <el-table-column prop="source" label="备份数量"></el-table-column>
+                <el-table-column prop="written" label="恢复"></el-table-column>
+                <el-table-column prop="skipped" label="保留目标"></el-table-column>
+                <el-table-column prop="quarantined" label="隔离保存"></el-table-column>
+            </el-table>
+            <p>重启核心后加载新设置。隔离数据保留在数据库中，后续导出历史时会一起备份。</p>
+        </template>
+        <span slot="footer">
+            <el-button v-if="!backupResult" @click="cancelBackup">取消导入</el-button>
+            <el-button v-if="!backupResult" type="primary" @click="commitBackup">按以上选择恢复</el-button>
+            <el-button v-if="backupResult" @click="downloadBackupReport">下载恢复报告</el-button>
+            <el-button v-if="backupResult" @click="loadBackupQuarantine(0)">查看隔离记录</el-button>
+            <el-button v-if="backupResult" @click="backupPreviewVisible = false">关闭</el-button>
+            <el-button v-if="backupResult" type="primary" @click="backupPreviewVisible = false; promptCoreRestart()">重启核心</el-button>
+        </span>
+    </el-dialog>
+
+    <el-dialog :visible.sync="backupQuarantineVisible" :fullscreen="isMobile" title="隔离记录" custom-class="room-page-dialog backup-quarantine-dialog" width="860px" append-to-body>
+        <p>这些记录因关联缺失或用户选择而单独保留，不会进入自动处理。下载原文可供后续检查。</p>
+        <el-table :data="backupQuarantine.records" max-height="440">
+            <el-table-column label="数据"><template slot-scope="scope">{{ backupSectionLabel(scope.row.section) }}</template></el-table-column>
+            <el-table-column prop="sourceKey" label="原记录ID"></el-table-column>
+            <el-table-column prop="reason" label="隔离原因" min-width="220"></el-table-column>
+            <el-table-column prop="createdAt" label="导入时间" min-width="160"></el-table-column>
+            <el-table-column label="原文"><template slot-scope="scope"><el-button size="small" @click="downloadQuarantineRecord(scope.row)">下载</el-button></template></el-table-column>
+        </el-table>
+        <el-pagination :current-page="backupQuarantine.page + 1" :page-size="50" :total="backupQuarantine.total" layout="prev, pager, next" @current-change="loadBackupQuarantine($event - 1)"></el-pagination>
     </el-dialog>

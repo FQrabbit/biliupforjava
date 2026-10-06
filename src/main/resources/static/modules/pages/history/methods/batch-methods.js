@@ -460,7 +460,7 @@
             var enable = upload === true;
             var eligibleItems = this.selectedItems.filter(function(item) {
                 if (!item || _this.getHistoryActionDisabledReason(item)) return false;
-                return enable ? (!item.forceArchived && (!item.upload || item.uploadPaused)) : !!item.upload;
+                return enable ? (!(item.forceArchived || item.importArchived) && (!item.upload || item.uploadPaused)) : !!item.upload;
             });
             if (eligibleItems.length === 0) {
                 this.$message.info(enable ? '所选稿件无需开启上传' : '所选稿件的上传开关均已关闭');

@@ -56,7 +56,7 @@ public class BlrecRecordingCancelledEventService implements BlrecEventService {
         if (historyOpt.isPresent()) {
             RecordHistory history = historyOpt.get();
             if (history.isSplitClosed()) return;
-            if (history.isForceArchived()) {
+            if (history.isProcessingArchived()) {
                 room.setHistoryId(-1L);
                 room.setSessionId(null);
                 roomRepository.save(room);

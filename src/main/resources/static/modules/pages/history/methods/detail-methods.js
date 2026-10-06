@@ -43,7 +43,7 @@
         restoreForceArchive: function(id) {
             if (!this.ensureHistoryActionAllowed(id, true)) return;
             let _this = this;
-            this.$pageConfirm('此操作只会取消强制归档标记，不会自动恢复录制。恢复后可再按需重新开启上传或重置状态。<br/><br/>确定要恢复处理吗？', '恢复处理确认', {
+            this.$pageConfirm('此操作会取消归档保护。导入历史需要有有效投稿账号，未上传的分P需要有可读取文件。恢复后可再按需开启上传，不会恢复备份中的旧任务。<br/><br/>确定要恢复处理吗？', '恢复处理确认', {
                 dangerouslyUseHTMLString: true,
                 confirmButtonText: '恢复处理',
                 cancelButtonText: '取消',

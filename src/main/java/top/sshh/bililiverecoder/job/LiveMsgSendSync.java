@@ -143,7 +143,7 @@ public class LiveMsgSendSync {
                         Optional<RecordHistory> opt = historyRepository.findById(hid);
                         if (opt.isPresent()) {
                             RecordHistory h = opt.get();
-                            if (h.isPublish() && (h.getCode() == 0 || h.getCode() == -50)) {
+                            if (!h.isProcessingArchived() && h.isPublish() && (h.getCode() == 0 || h.getCode() == -50)) {
                                 historyList.add(h);
                             }
                         }
@@ -160,6 +160,7 @@ public class LiveMsgSendSync {
         format.setTimeZone(TimeZone.getTimeZone("UTC"));
         List<RecordHistoryPart> partList = new ArrayList<>();
         for (RecordHistory history : historyList) {
+            if (history.isProcessingArchived()) continue;
             List<RecordHistoryPart> allParts = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId());
             List<RecordHistoryPart> parts = new ArrayList<>();
             for (RecordHistoryPart p : allParts) {

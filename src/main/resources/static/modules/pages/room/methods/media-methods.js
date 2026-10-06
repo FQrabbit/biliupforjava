@@ -586,14 +586,10 @@
             this.coverUpload.message = '正在准备上传';
             return true;
         },
-        uploadSuccess: function () {
-            this.$message({
-                message: '导入成功',
-                type: 'success'
-            });
-            this.finishConfigProgress('导入完成', '配置已导入');
-            this.initTable();
-            this.promptCoreRestart();
+        uploadSuccess: function (result) {
+            if(result && result.requiresReview && result.taskId) {
+                this.configTaskId=result.taskId;this.backupTaskActive=true;this.pollBackupTask('import');
+            } else this.failConfigProgress('导入失败','服务端没有返回恢复预览');
         }
     };
 })(window);

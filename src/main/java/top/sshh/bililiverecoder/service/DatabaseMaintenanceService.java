@@ -157,8 +157,11 @@ public class DatabaseMaintenanceService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "数据库尚未恢复，请先根据维护日志恢复数据库");
         }
         synchronized (webhookSpoolReplayLock) {
+            if (!maintenanceState.tryBeginMaintenance()) {
+                compactRunning.set(false);
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "数据库已有备份或维护任务");
+            }
             spooledCount.set(0);
-            maintenanceState.setMaintenanceActive(true);
         }
         LocalDateTime startedAt = LocalDateTime.now();
         operationStartedNanos = System.nanoTime();

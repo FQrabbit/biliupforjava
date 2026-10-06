@@ -10,7 +10,7 @@ public final class HistoryOperationPolicy {
     public static String disabledReason(RecordHistory history, String action) {
         if (history == null) return "稿件不存在，请刷新列表";
         if (history.isDeletePending()) return "稿件正在等待或执行删除，请先取消尚未执行的删除";
-        if (history.isForceArchived()) return "稿件已强制归档，请先恢复处理";
+        if (history.isProcessingArchived()) return "稿件已强制归档，请先恢复处理";
         boolean recording = history.isRecording() || history.isStreaming() || history.getRecordPartCount() > 0;
         boolean online = history.isPublish() && history.getBvId() != null && !history.getBvId().isBlank();
         boolean ordinaryBusy = history.getPublishTasks() != null && history.getPublishTasks().stream()

@@ -49,7 +49,7 @@ public class PartFileCleanupPolicy {
                 .addIfNotBlank("aid", history.getAvId())
                 .add("code", history.getCode())
                 .addIfNotBlank("protectedReason", protectedReason(history, part))
-                .add("forceArchived", history.isForceArchived())
+                .add("forceArchived", history.isProcessingArchived())
                 .add("partId", part == null ? null : part.getId())
                 .addIfNotBlank("partTitle", part == null ? null : part.getTitle())
                 .addIfNotBlank("filePath", filePath)
@@ -59,7 +59,7 @@ public class PartFileCleanupPolicy {
 
     public boolean isProtectedFromPartFileCleanup(RecordHistory history) {
         return history != null
-                && (history.isForceArchived()
+                && (history.isProcessingArchived()
                 || history.getCode() == -2
                 || history.getCode() == -4
                 || "TIMESTAMP_JUMP".equals(history.getPublishIssueType()));
@@ -69,7 +69,7 @@ public class PartFileCleanupPolicy {
         if (history == null) {
             return false;
         }
-        if (history.isForceArchived() || history.getCode() == -2 || history.getCode() == -4) {
+        if (history.isProcessingArchived() || history.getCode() == -2 || history.getCode() == -4) {
             return true;
         }
         if (!"TIMESTAMP_JUMP".equals(history.getPublishIssueType())) {
@@ -136,7 +136,7 @@ public class PartFileCleanupPolicy {
         if (codeReason != null) {
             return codeReason;
         }
-        if (history.isForceArchived()) {
+        if (history.isProcessingArchived()) {
             return "forceArchived";
         }
         if ("TIMESTAMP_JUMP".equals(history.getPublishIssueType())) {

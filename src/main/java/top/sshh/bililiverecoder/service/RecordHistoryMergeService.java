@@ -79,7 +79,7 @@ public class RecordHistoryMergeService {
                         .add("historyId", activeHistory.getId()));
                 continue;
             }
-            if (activeHistory.isForceArchived()) {
+            if (activeHistory.isProcessingArchived()) {
                 log.info("[BLR] {}", LogKvs.event(logPrefix + ".SkipForceArchived")
                         .add("roomId", roomId)
                         .add("sessionId", sessionId)
@@ -128,7 +128,7 @@ public class RecordHistoryMergeService {
 
         RecordHistory history = historyList.stream()
                 .filter(h -> !h.isPublish())
-                .filter(h -> !h.isForceArchived())
+                .filter(h -> !h.isProcessingArchived())
                 .filter(h -> !h.isSplitClosed())
                 .reduce((previous, current) -> current)
                 .orElse(null);

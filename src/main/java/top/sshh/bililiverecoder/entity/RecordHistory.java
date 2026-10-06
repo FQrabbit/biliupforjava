@@ -21,6 +21,26 @@ public class RecordHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(unique = true, length = 36)
+    private String backupKey;
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private boolean importArchived;
+    private LocalDateTime importedAt;
+    private String importBatchId;
+    private Long originalPublishUid;
+    @Lob
+    private String archiveOriginalState;
+
+    @PrePersist
+    void initializeBackupKey() {
+        if (backupKey == null || backupKey.isBlank()) backupKey = java.util.UUID.randomUUID().toString();
+    }
+
+    public boolean isProcessingArchived() {
+        return forceArchived || importArchived;
+    }
+
+
     private String roomId;
 
     @Transient
@@ -286,6 +306,7 @@ public class RecordHistory {
      * 不修改数据库结构，仅做逻辑映射
      */
     public String getStatus() {
+        if (importArchived) return publish ? "导入归档（已投稿）" : "导入归档（未投稿）";
         if (editPartsUploading) {
             return "分P上传中";
         }

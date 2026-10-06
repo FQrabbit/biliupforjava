@@ -57,11 +57,11 @@ public class RecordEventRecordEndService implements RecordEventService {
         }
         RecordHistory history = historyStateService.resolveHistory(room, eventData, null);
         if (history != null) {
-                if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isForceArchived()) {
+                if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isProcessingArchived()) {
                     log.info("[BLR] {}", LogKvs.event("RecordEnd.SkipHistoryUpdate")
                             .add("roomId", eventData.getRoomId())
                             .add("historyId", history.getId())
-                            .add("forceArchived", history.isForceArchived()));
+                            .add("forceArchived", history.isProcessingArchived()));
                     return;
                 }
                 // 旧会话也必须被收尾；但只有它仍是 room 当前会话时才清空房间指针

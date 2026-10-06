@@ -249,7 +249,7 @@ public class RecordBiliPublishService {
         }
         RecordHistory history = historyRepository.findById(historyId).orElse(null);
         if (history == null) return PreparationResult.action("稿件不存在");
-        if (history.isForceArchived()) return PreparationResult.action("稿件已强制归档");
+        if (history.isProcessingArchived()) return PreparationResult.action("稿件已强制归档");
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         if (room == null) return PreparationResult.action("稿件所属房间不存在");
         if (!history.isPublish() && !Objects.equals(room.getUploadUserId(), accountId)) {
@@ -680,7 +680,7 @@ public class RecordBiliPublishService {
             return PreparationResult.action("分P编辑请求快照缺失，请重新提交编辑");
         }
         RecordHistory history = historyRepository.findById(task.getHistoryId()).orElse(null);
-        if (history == null || history.isForceArchived()) return PreparationResult.action("稿件不存在或已强制归档");
+        if (history == null || history.isProcessingArchived()) return PreparationResult.action("稿件不存在或已强制归档");
         RecordRoom room = roomRepository.findByRoomId(history.getRoomId());
         if (room == null) return PreparationResult.action("稿件所属房间不存在");
         BiliBiliUser user = biliUserRepository.findById(task.getAccountId()).orElse(null);
@@ -1908,7 +1908,7 @@ public class RecordBiliPublishService {
                     }
                     // 准备封面和材料期间可能重新开播，发出请求前再读一次最新状态
                     RecordHistory latestHistory = historyRepository.findById(history.getId()).orElse(null);
-                    if (latestHistory == null || latestHistory.isDeletePending() || latestHistory.isForceArchived()) return false;
+                    if (latestHistory == null || latestHistory.isDeletePending() || latestHistory.isProcessingArchived()) return false;
                     PublishReadinessService.Check finalReadiness =
                             PublishReadinessService.allowManualMerge(publishReadinessService.check(latestHistory),
                                     publishAccountScheduler.isCurrentTaskManualForHistory(latestHistory.getId()));

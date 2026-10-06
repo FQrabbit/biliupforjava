@@ -133,6 +133,11 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     && migrationPending(connection, "20261004_02", "统计增量更新队列", "stats-incremental-update-v1")) {
                 backupExistingFileDatabase(connection);
             }
+            if (h2 && tableExists(connection, "record_history")
+                    && !migrationPending(connection, "20261005_01", "统计礼物补价查询索引", "stats-gift-price-query-indexes-v1")
+                    && migrationPending(connection, "20261005_02", "数据继承备份与导入归档", "backup-inheritance-archive-v1")) {
+                backupExistingFileDatabase(connection);
+            }
             ensureMigrationTable();
             if (h2 && tableExists(connection, "room_live_event")
                     && !migrationPending(connection, "20261004_02", "统计增量更新队列", "stats-incremental-update-v1")
@@ -160,6 +165,8 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                         ensureIndex(connection, "room_live_event", "idx_room_live_event_type_gift_id", "type,gift_id,history_id");
                         ensureIndex(connection, "room_live_event", "idx_room_live_event_type_gift_name", "type,gift_name,history_id");
                     });
+            applyMigration(connection, "20261005_02", "数据继承备份与导入归档", "backup-inheritance-archive-v1",
+                    () -> applyBackupInheritanceSchema(connection, h2));
             validateRequiredSchema(connection);
             log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Completed").add("databaseType", product));
         } catch (Exception e) {
@@ -168,6 +175,31 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     "数据库兼容升级失败，业务尚未启动。请保留数据库与启动日志，修复失败迁移后重新启动："
                             + e.getMessage(), e);
         }
+    }
+
+    private void applyBackupInheritanceSchema(Connection connection, boolean h2) {
+        for (String table : List.of("record_history", "record_history_part")) {
+            if (!tableExists(connection, table)) continue;
+            ensureColumn(connection, table, "backup_key", "VARCHAR(36) NULL");
+            ensureColumn(connection, table, "archive_original_state", (h2 ? "CLOB" : "LONGTEXT") + " NULL");
+            while (true) {
+                List<Long> ids = jdbc.queryForList("SELECT id FROM " + table + " WHERE backup_key IS NULL OR backup_key='' ORDER BY id LIMIT 500", Long.class);
+                if (ids.isEmpty()) break;
+                jdbc.batchUpdate("UPDATE " + table + " SET backup_key=? WHERE id=?", ids.stream()
+                        .map(id -> new Object[]{java.util.UUID.randomUUID().toString(), id}).toList());
+            }
+            if (!indexExists(connection, table, "uk_" + table + "_backup_key"))
+                jdbc.execute("CREATE UNIQUE INDEX uk_" + table + "_backup_key ON " + table + "(backup_key)");
+        }
+        if (tableExists(connection, "record_history")) {
+            ensureColumn(connection, "record_history", "import_archived", "BOOLEAN NOT NULL DEFAULT FALSE");
+            ensureColumn(connection, "record_history", "imported_at", "TIMESTAMP NULL");
+            ensureColumn(connection, "record_history", "import_batch_id", "VARCHAR(255) NULL");
+            ensureColumn(connection, "record_history", "original_publish_uid", "BIGINT NULL");
+        }
+        jdbc.execute("CREATE TABLE IF NOT EXISTS backup_quarantine_record (id BIGINT AUTO_INCREMENT PRIMARY KEY, batch_id VARCHAR(255), section VARCHAR(255), source_key VARCHAR(255), reason VARCHAR(255), payload "
+                + (h2 ? "CLOB" : "LONGTEXT") + ", created_at TIMESTAMP)");
+        ensureIndex(connection, "backup_quarantine_record", "idx_backup_quarantine_batch", "batch_id");
     }
 
     private void backupExistingFileDatabase(Connection connection) throws Exception {

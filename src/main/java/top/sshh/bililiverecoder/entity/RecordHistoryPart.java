@@ -20,6 +20,16 @@ public class RecordHistoryPart {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(unique = true, length = 36)
+    private String backupKey;
+    @Lob
+    private String archiveOriginalState;
+
+    @PrePersist
+    void initializeBackupKey() {
+        if (backupKey == null || backupKey.isBlank()) backupKey = java.util.UUID.randomUUID().toString();
+    }
+
 
     private String roomId;
     private Long historyId;

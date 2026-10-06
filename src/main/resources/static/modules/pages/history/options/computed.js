@@ -44,7 +44,7 @@
         selectedUploadEnableCount: function() {
             if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
             return this.selectedItems.filter(item => {
-                return item && !this.getHistoryActionDisabledReason(item) && !item.forceArchived && (!item.upload || item.uploadPaused);
+                return item && !this.getHistoryActionDisabledReason(item) && !(item.forceArchived || item.importArchived) && (!item.upload || item.uploadPaused);
             }).length;
         },
         selectedUploadDisableCount: function() {
@@ -56,7 +56,7 @@
         selectedForceArchiveEligibleCount: function() {
             if (!Array.isArray(this.selectedItems) || this.selectedItems.length === 0) return 0;
             return this.selectedItems.filter(item => {
-                return item && !this.getHistoryActionDisabledReason(item) && !item.forceArchived;
+                return item && !this.getHistoryActionDisabledReason(item) && !(item.forceArchived || item.importArchived);
             }).length;
         },
         batchVisibilityPercent: function() {
@@ -415,14 +415,14 @@
         // 判断是否有删除选项被选中，用于禁用批量可见性按钮
         canShowHistoryPauseButton: function() {
             if (!this.currentDetail || !this.currentDetail.id || this.currentDetail.uploadPaused) return false;
-            if (this.currentDetail.forceArchived) return false;
+            if ((this.currentDetail.forceArchived || this.currentDetail.importArchived)) return false;
             if (!this.currentDetail.upload || this.currentDetail.publish) return false;
             return this.mergedParts.some(function(p) {
                 return p && p.state !== 'SUCCESS' && p.state !== 'SKIPPED' && p.state !== 'ISSUE';
             });
         },
         canShowHistoryResumeButton: function() {
-            return !!(this.currentDetail && this.currentDetail.id && !this.currentDetail.forceArchived && this.currentDetail.uploadPaused && this.currentDetail.upload && !this.currentDetail.publish);
+            return !!(this.currentDetail && this.currentDetail.id && !(this.currentDetail.forceArchived || this.currentDetail.importArchived) && this.currentDetail.uploadPaused && this.currentDetail.upload && !this.currentDetail.publish);
         },
         isDeleteOptionSelected: function() {
             return this.batchDeleteOptions.deleteVideo || this.batchDeleteOptions.deleteDanmaku || this.batchDeleteOptions.deleteCover;
