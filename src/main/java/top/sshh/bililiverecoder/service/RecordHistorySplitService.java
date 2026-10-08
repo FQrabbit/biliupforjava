@@ -248,7 +248,12 @@ public class RecordHistorySplitService {
     public boolean canUpload(RecordHistoryPart part) {
         if (part == null) return false;
         RecordHistory history = histories.findById(part.getHistoryId()).orElse(null);
-        if (history == null || !history.isSplitEnabled()) return true;
+        if (HistoryProcessingPolicy.blocksAutomatic(history)) return false;
+        if (!history.isSplitEnabled()) return true;
+        // 已投稿稿件的替换素材不参与录制拆稿，也不会产生拆稿归属
+        if (history.isPublish() && "EDIT_PART".equals(part.getSourceType())) {
+            return !part.isRecording() && part.getEndTime() != null;
+        }
         reconcile(history.getId());
         RecordHistoryPart current = parts.findById(part.getId()).orElse(null);
         RecordHistory owner = current == null ? null : histories.findById(current.getHistoryId()).orElse(null);

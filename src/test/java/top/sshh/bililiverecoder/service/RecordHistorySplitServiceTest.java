@@ -88,6 +88,40 @@ class RecordHistorySplitServiceTest {
     }
 
     @Test
+    void publishedEditReplacementDoesNotNeedRecordingSplitAssignment() {
+        RecordHistory history = history();
+        RecordHistoryPart boundary = part(history, 0, 10, 3600, false);
+        service.reconcile(history.getId());
+        history.setPublish(true);
+        history.setCode(-2);
+        histories.save(history);
+        RecordHistoryPart replacement = part(history, 1, 1, 0, false);
+        replacement.setSourceType("EDIT_PART");
+        parts.save(replacement);
+
+        assertTrue(service.canUpload(replacement));
+        assertNull(replacement.getSplitAssigned());
+        assertEquals(boundary.getId(), history.getSplitBoundaryPartId());
+        assertEquals(10L * 1073741824L, history.getFileSize());
+        assertNull(histories.findBySplitParentId(history.getId()));
+
+        replacement.setRecording(true);
+        assertFalse(service.canUpload(replacement));
+        replacement.setRecording(false);
+        replacement.setEndTime(null);
+        assertFalse(service.canUpload(replacement));
+        replacement.setEndTime(start.plusHours(2));
+        history.setImportArchived(true);
+        assertFalse(service.canUpload(replacement));
+        history.setImportArchived(false);
+        history.setForceArchived(true);
+        assertFalse(service.canUpload(replacement));
+        history.setForceArchived(false);
+        history.setDeletePending(true);
+        assertFalse(service.canUpload(replacement));
+    }
+
+    @Test
     void exactSizeSealsWithoutEmptySuccessorAndKeepsRoomRecording() {
         RecordHistory history = history();
         RecordHistoryPart boundary = part(history, 0, 10, 3600, false);

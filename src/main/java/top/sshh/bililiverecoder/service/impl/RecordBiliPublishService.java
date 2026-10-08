@@ -2748,11 +2748,14 @@ public class RecordBiliPublishService {
         }
         File file = new File(path);
         String resolvedPath = path;
-        RecordHistoryPart part = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()).stream()
+        RecordHistoryPart existingPart = partRepository.findByHistoryIdOrderByStartTimeAsc(history.getId()).stream()
                 .filter(existing -> "EDIT_PART".equals(existing.getSourceType())
                         && existing.getPage() == page
                         && Objects.equals(normalizeFilePath(existing.getFilePath()), resolvedPath))
-                .findFirst().orElseGet(RecordHistoryPart::new);
+                .findFirst().orElse(null);
+        // 准备检查和提交都会复用这条记录，不能把上传结果或重试进度重新清空
+        if (existingPart != null) return existingPart;
+        RecordHistoryPart part = new RecordHistoryPart();
         part.setHistoryId(history.getId());
         part.setRoomId(history.getRoomId());
         part.setStartTime(history.getStartTime());
