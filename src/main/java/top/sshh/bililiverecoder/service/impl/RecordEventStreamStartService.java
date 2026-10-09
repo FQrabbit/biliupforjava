@@ -9,6 +9,7 @@ import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.notification.NotificationEvent;
 import top.sshh.bililiverecoder.notification.NotificationEventType;
 import top.sshh.bililiverecoder.notification.NotificationEventPublisher;
+import top.sshh.bililiverecoder.notification.LiveNotificationDurationService;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.util.LogKvs;
@@ -25,10 +26,14 @@ public class RecordEventStreamStartService implements RecordEventService {
     @Autowired
     private NotificationEventPublisher notificationEventPublisher;
 
+    @Autowired
+    private LiveNotificationDurationService liveNotificationDurationService;
+
     @Override
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         String roomId = eventData.getRoomId();
+        liveNotificationDurationService.streamStarted(event);
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
         if (room == null) {
             synchronized (roomId.intern()) {

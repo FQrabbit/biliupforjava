@@ -7,6 +7,7 @@ import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordEventData;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordRoom;
+import top.sshh.bililiverecoder.notification.LiveNotificationDurationService;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.service.RecordEventService;
 import top.sshh.bililiverecoder.service.RecordHistoryStateService;
@@ -23,6 +24,9 @@ public class RecordEventStreamEndService implements RecordEventService {
 
     @Autowired
     private RecordHistoryStateService historyStateService;
+
+    @Autowired
+    private LiveNotificationDurationService liveNotificationDurationService;
 
     @Override
     public void processing(RecordEventDTO event) {
@@ -43,6 +47,7 @@ public class RecordEventStreamEndService implements RecordEventService {
                 .add("eventId", event.getEventId())
                 .add("roomId", eventData.getRoomId())
                 .add("title", eventData.getTitle()));
+        liveNotificationDurationService.streamEnded(event);
         RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
         if (room == null) {
             log.warn("[BLR] {}", LogKvs.event("StreamEnd.RoomMissing")

@@ -13,12 +13,13 @@ import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.notification.NotificationEvent;
 import top.sshh.bililiverecoder.notification.NotificationEventPublisher;
 import top.sshh.bililiverecoder.notification.NotificationEventType;
+import top.sshh.bililiverecoder.notification.LiveNotificationDurationService;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
 import top.sshh.bililiverecoder.util.BiliApi;
 import top.sshh.bililiverecoder.util.LogKvs;
 
-import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Objects;
@@ -40,6 +41,9 @@ public class RoomStatusSyncJob {
 
     @Autowired
     private NotificationEventPublisher notificationEventPublisher;
+
+    @Autowired
+    private LiveNotificationDurationService liveNotificationDurationService;
 
     @Value("${record.room-status-sync-room-delay-ms:10000}")
     private long roomDelayMs;
@@ -64,11 +68,14 @@ public class RoomStatusSyncJob {
                 }
                 // 避免请求过快，降低API请求压力
                 Thread.sleep(roomDelayMs);
+                Instant observedAt = Instant.now();
                 BiliLiveRoomInfoResponse response = BiliApi.getLiveRoomInfo(room.getRoomId());
                 if (response != null && response.getCode() == 0 && response.getData() != null) {
                     boolean isLive = response.getData().getLive_status() == 1;
                     Boolean previousObservedLive = observedLiveStates.put(room.getRoomId(), isLive);
                     boolean notifyLiveEnded = shouldPublishLiveEnded(previousObservedLive, isLive);
+                    String durationText = liveNotificationDurationService.observeRoom(
+                            room.getRoomId(), isLive, response.getData().getLive_time(), observedAt, previousObservedLive);
                     boolean changed = false;
 
                     if (room.isStreaming() != isLive) {
@@ -205,7 +212,10 @@ public class RoomStatusSyncJob {
                         roomRepository.save(room);
                     }
                     if (notifyLiveEnded) {
-                        publishLiveEnded(room);
+                        publishLiveEnded(room, durationText);
+                    }
+                    if (!isLive) {
+                        liveNotificationDurationService.notificationConsumed(room.getRoomId(), observedAt);
                     }
                     processedRooms++;
                 }
@@ -240,37 +250,10 @@ public class RoomStatusSyncJob {
         return Boolean.TRUE.equals(previousObservedLive) && !currentLive;
     }
 
-    private void publishLiveEnded(RecordRoom room) {
+    private void publishLiveEnded(RecordRoom room, String durationText) {
         NotificationEvent event = NotificationEvent.of(room, NotificationEventType.LIVE_STREAM_ENDED)
                 .add("liveTitle", room == null ? null : room.getTitle())
-                .add("durationText", resolveLiveDurationText(room));
+                .add("durationText", durationText);
         notificationEventPublisher.publish(event, room);
-    }
-
-    private String resolveLiveDurationText(RecordRoom room) {
-        if (room == null || room.getHistoryId() == null || room.getHistoryId() == -1L) {
-            return null;
-        }
-        return historyRepository.findById(room.getHistoryId())
-                .map(this::formatHistoryDuration)
-                .orElse(null);
-    }
-
-    private String formatHistoryDuration(RecordHistory history) {
-        if (history == null || history.getStartTime() == null) {
-            return null;
-        }
-        LocalDateTime endTime = history.getEndTime() == null ? LocalDateTime.now() : history.getEndTime();
-        long seconds = Math.max(0L, Duration.between(history.getStartTime(), endTime).getSeconds());
-        long hours = seconds / 3600L;
-        long minutes = seconds % 3600L / 60L;
-        long remainSeconds = seconds % 60L;
-        if (hours > 0) {
-            return "%d小时%d分%d秒".formatted(hours, minutes, remainSeconds);
-        }
-        if (minutes > 0) {
-            return "%d分%d秒".formatted(minutes, remainSeconds);
-        }
-        return "%d秒".formatted(remainSeconds);
     }
 }
