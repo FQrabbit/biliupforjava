@@ -2,6 +2,8 @@ package top.sshh.bililiverecoder.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -331,8 +333,10 @@ class PartFileLifecycleServiceTest {
         assertFalse(historyRepository.findById(history.getId()).orElseThrow().isRecording());
     }
 
-    @Test
-    void activeSessionAlsoNeedsTwoObservationsBeforeFallbackClose() throws Exception {
+    @ParameterizedTest
+    @CsvSource({"true,true", "true,false", "false,true"})
+    void activeSessionClosesStablePartWithoutEndingHistoryOrClearingSession(
+            boolean recording, boolean streaming) throws Exception {
         Path source = createVideo("active-stale/video.flv", "active-stale-data");
         String roomId = "active-stale-" + UUID.randomUUID();
         RecordHistory history = new RecordHistory();
@@ -341,16 +345,19 @@ class PartFileLifecycleServiceTest {
         history.setRecording(true);
         history.setStreaming(true);
         history.setUpload(true);
+        history.setSessionId("active-session");
         history = historyRepository.save(history);
         RecordRoom room = new RecordRoom();
         room.setRoomId(roomId);
         room.setHistoryId(history.getId());
-        room.setRecording(true);
-        room.setStreaming(true);
+        room.setRecording(recording);
+        room.setStreaming(streaming);
+        room.setSessionId("active-session");
         roomRepository.save(room);
         RecordHistoryPart part = createPartRecord(source, false, Files.size(source));
         part.setRoomId(roomId);
         part.setHistoryId(history.getId());
+        part.setSessionId("active-session");
         part.setRecording(true);
         part.setStartTime(java.time.LocalDateTime.now().minusMinutes(20));
         part.setEndTime(null);
@@ -360,7 +367,15 @@ class PartFileLifecycleServiceTest {
         assertEquals(0, staleReconciler.reconcileBatch());
         assertEquals(1, staleReconciler.reconcileBatch());
         assertFalse(partRepository.findById(part.getId()).orElseThrow().isRecording());
-        assertFalse(historyRepository.findById(history.getId()).orElseThrow().isRecording());
+        RecordHistory active = historyRepository.findById(history.getId()).orElseThrow();
+        RecordRoom currentRoom = roomRepository.findById(room.getId()).orElseThrow();
+        assertTrue(active.isRecording());
+        assertTrue(active.isStreaming());
+        assertEquals(recording, currentRoom.isRecording());
+        assertEquals(streaming, currentRoom.isStreaming());
+        assertEquals("active-session", currentRoom.getSessionId());
+        assertFalse(new PublishReadinessService(partRepository, null)
+                .check(active, 0, java.time.LocalDateTime.now(), java.util.Map.of(), java.time.LocalDateTime.now()).allowed());
 
         Files.writeString(source, "resumed-write", java.nio.file.StandardOpenOption.APPEND);
         assertFalse(recordingStateService.verifyAutoClosedFiles(historyRepository.findById(history.getId()).orElseThrow()));

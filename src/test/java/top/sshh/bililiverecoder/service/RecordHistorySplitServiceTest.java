@@ -122,6 +122,42 @@ class RecordHistorySplitServiceTest {
     }
 
     @Test
+    void publishedLateRecordingPartUploadsWithoutSplitAssignmentOrMovingHistory() {
+        RecordHistory history = history();
+        history.setPublish(true);
+        histories.save(history);
+        RecordHistoryPart late = part(history, 0, 12, 3600, false);
+        late.setSplitAssigned(false);
+        parts.save(late);
+
+        assertTrue(service.canUpload(late));
+        assertFalse(late.getSplitAssigned());
+        assertEquals(history.getId(), late.getHistoryId());
+        assertFalse(history.isSplitClosed());
+        assertNull(histories.findBySplitParentId(history.getId()));
+
+        late.setDuration(0);
+        assertFalse(service.canUpload(late));
+        late.setDuration(Float.NaN);
+        assertFalse(service.canUpload(late));
+        late.setDuration(3600);
+        late.setRecording(true);
+        assertFalse(service.canUpload(late));
+        late.setRecording(false);
+        late.setEndTime(null);
+        assertFalse(service.canUpload(late));
+        late.setEndTime(start.plusHours(1));
+        history.setImportArchived(true);
+        assertFalse(service.canUpload(late));
+        history.setImportArchived(false);
+        history.setForceArchived(true);
+        assertFalse(service.canUpload(late));
+        history.setForceArchived(false);
+        history.setDeletePending(true);
+        assertFalse(service.canUpload(late));
+    }
+
+    @Test
     void exactSizeSealsWithoutEmptySuccessorAndKeepsRoomRecording() {
         RecordHistory history = history();
         RecordHistoryPart boundary = part(history, 0, 10, 3600, false);

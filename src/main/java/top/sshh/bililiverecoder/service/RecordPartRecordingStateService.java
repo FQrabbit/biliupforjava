@@ -210,7 +210,9 @@ public class RecordPartRecordingStateService {
         if (part.getHistoryId() == null || StringUtils.isBlank(part.getRoomId())) return;
         RecordHistory history = historyRepository.findById(part.getHistoryId()).orElse(null);
         RecordRoom room = roomRepository.findByRoomId(part.getRoomId());
+        // 单个文件稳定不能说明整场结束，房间仍活动时保留稿件和会话状态
         if (history == null || room == null || history.isProcessingArchived() || history.isPublish() || history.isSplitClosed()
+                || room.isRecording() || room.isStreaming()
                 || !history.isUpload() || !part.getHistoryId().equals(room.getHistoryId())
                 || (StringUtils.isNotBlank(part.getSessionId()) && StringUtils.isNotBlank(room.getSessionId())
                     && !part.getSessionId().equals(room.getSessionId()))

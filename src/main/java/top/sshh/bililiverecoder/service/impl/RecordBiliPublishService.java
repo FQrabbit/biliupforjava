@@ -269,6 +269,10 @@ public class RecordBiliPublishService {
         if (history.isPublish() && hasOnlineIdentity(history)) {
             BiliBiliUser originalUser = biliUserRepository.findById(accountId).orElse(null);
             BiliVideoPartInfoResponse online = loadOnlinePartInfo(originalUser, history);
+            if (online == null || online.getCode() != 0 || online.getData() == null
+                    || online.getData().getVideos() == null) {
+                return PreparationResult.waiting("暂时无法获取线上分P，稍后自动重试");
+            }
             onlineByPage = buildOnlineVideoPageMap(online);
             onlineByTitle = buildOnlineVideoTitleMap(online);
         }
@@ -338,7 +342,7 @@ public class RecordBiliPublishService {
             boolean enqueued = enqueuePartUploadAsync(room, part, accountId, "publish-task");
             if (enqueued) waiting = true;
             else if (uploadUserSerialScheduler.hasPendingPart(part.getId())) waiting = true;
-            else return PreparationResult.waiting("上传队列暂不可用，稍后自动重试");
+            else return PreparationResult.waiting("分P暂时无法开始上传，稍后自动重试");
         }
         if (waiting) return PreparationResult.waiting("正在等待分P上传或录制结束");
 
@@ -365,14 +369,19 @@ public class RecordBiliPublishService {
     private boolean enqueuePartUploadAsync(RecordRoom room, RecordHistoryPart part,
                                            Long accountId, String source) {
         if (room == null || part == null || part.getId() == null) return false;
+        if (historySplitService != null && !historySplitService.canUpload(part)) return false;
         Long effectiveAccountId = accountId != null ? accountId : room.getUploadUserId();
         if (effectiveAccountId == null) return false;
         return uploadUserSerialScheduler.submitIfPartNotPending(
                 effectiveAccountId, room.getRoomId(), part.getHistoryId(), part.getId(), source,
                 () -> {
                     boolean captchaPaused = false;
+                    boolean uploadReady = false;
                     try {
                         uploadServiceFactory.getUploadService(room.getLine()).upload(part);
+                        RecordHistoryPart uploaded = partRepository.findById(part.getId()).orElse(null);
+                        uploadReady = uploaded != null && (isSkippedPart(uploaded)
+                                || uploaded.isUpload() && StringUtils.isNotBlank(uploaded.getFileName()));
                     } catch (RuntimeException e) {
                         CaptchaChallengeRequiredException captcha = CaptchaChallengeRequiredException.find(e);
                         if (captcha != null) {
@@ -388,7 +397,7 @@ public class RecordBiliPublishService {
                                 gatewayFailure ? "上传网关异常，当前稿件延后 30 分钟" : "分P上传失败，30 秒后重试",
                                 retryAt);
                     } finally {
-                        if (!captchaPaused && !suspendMap.containsKey(part.getHistoryId())) {
+                        if (uploadReady && !captchaPaused && !suspendMap.containsKey(part.getHistoryId())) {
                             publishAccountScheduler.wakeHistory(part.getHistoryId());
                         }
                     }
@@ -2223,7 +2232,7 @@ public class RecordBiliPublishService {
         return null;
     }
 
-    private BiliVideoPartInfoResponse loadOnlinePartInfo(BiliBiliUser user, RecordHistory history) {
+    BiliVideoPartInfoResponse loadOnlinePartInfo(BiliBiliUser user, RecordHistory history) {
         if (user == null || history == null || StringUtils.isBlank(history.getBvId())) {
             return null;
         }

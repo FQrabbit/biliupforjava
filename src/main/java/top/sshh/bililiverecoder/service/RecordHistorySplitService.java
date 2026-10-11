@@ -250,9 +250,10 @@ public class RecordHistorySplitService {
         RecordHistory history = histories.findById(part.getHistoryId()).orElse(null);
         if (HistoryProcessingPolicy.blocksAutomatic(history)) return false;
         if (!history.isSplitEnabled()) return true;
-        // 已投稿稿件的替换素材不参与录制拆稿，也不会产生拆稿归属
-        if (history.isPublish() && "EDIT_PART".equals(part.getSourceType())) {
-            return !part.isRecording() && part.getEndTime() != null;
+        // 已投稿稿件不再拆稿，补收的录制分P和替换素材都留在原稿件上传
+        if (history.isPublish()) {
+            return !part.isRecording() && part.getEndTime() != null
+                    && ("EDIT_PART".equals(part.getSourceType()) || validDuration(part.getDuration()));
         }
         reconcile(history.getId());
         RecordHistoryPart current = parts.findById(part.getId()).orElse(null);
