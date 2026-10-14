@@ -104,6 +104,7 @@ public class RecordEventFactory {
                     eventData.setAreaNameParent(roomInfo.getParentAreaName());
                     eventData.setAreaNameChild(roomInfo.getAreaName());
                     eventData.setRecording(roomInfo.getLiveStatus() == 1);
+                    eventData.setStreaming(roomInfo.getLiveStatus() == 1);
                 }
                 if (userInfo != null) {
                     eventData.setName(userInfo.getName());

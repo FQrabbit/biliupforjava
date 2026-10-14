@@ -151,6 +151,14 @@ public class RecordRoom {
 
     private String sessionId;
 
+    // 本地直播归组、下播时间和事件边界，拆稿不会改变它们
+    @Column(updatable = false)
+    private String liveGroup;
+    @Column(updatable = false)
+    private LocalDateTime liveEventAt;
+    @Column(updatable = false)
+    private LocalDateTime liveEndedAt;
+
     /** 最近一次驱动该房间的 Webhook 来源：BililiveRecorder 或 BLREC */
     @Column(name = "webhook_source", length = 16)
     private String webhookSource;

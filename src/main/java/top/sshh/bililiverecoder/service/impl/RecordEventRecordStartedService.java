@@ -55,25 +55,15 @@ public class RecordEventRecordStartedService implements RecordEventService {
                 room = new RecordRoom();
                 room.setRoomId(roomId);
                 room.setCreateTime(now);
-                room = roomRepository.save(room);
+                room = roomRepository.saveLiveState(room);
             }
 
             String currentSessionId = room.getSessionId();
             if (room.isRecording() && java.util.Objects.equals(currentSessionId, eventData.getSessionId())
                     && historyRepository.findFirstByRoomIdAndEventId(roomId, event.getEventId()) != null) return;
-            RecordHistory knownSession = historyRepository.findFirstByRoomIdAndSessionIdOrderByIdDesc(roomId, eventData.getSessionId());
-            if (knownSession != null && !knownSession.isRecording()
-                    && eventData.getSessionId() != null
-                    && !eventData.getSessionId().equals(currentSessionId)) {
-                // 同一房间重连后才迟到的旧 SessionStarted 不能把当前会话指针拨回去
-                log.info("[BLR] {}", LogKvs.event("RecordStarted.IgnoreCompletedStaleSession")
-                        .add("roomId", roomId)
-                        .add("incomingSessionId", eventData.getSessionId())
-                        .add("currentSessionId", currentSessionId)
-                        .add("historyId", knownSession.getId()));
-                return;
-            }
-            boolean wasRecording = room.isRecording();
+            if (!historyMergeService.beginLive(room,
+                    event.getEventTimestamp() == null ? event.getDate() : event.getEventTimestamp(), now)) return;
+            RecordHistory history = historyMergeService.findReusableHistory(room, eventData.getSessionId(), "RecordStarted");
             room.setUname(eventData.getName());
             room.setTitle(eventData.getTitle());
             room.setSessionId(eventData.getSessionId());
@@ -82,18 +72,16 @@ public class RecordEventRecordStartedService implements RecordEventService {
             room.setRecording(eventData.isRecording());
             room.setStreaming(eventData.isStreaming());
 
-            RecordHistory pending = room.getHistoryId() == null ? null : historyRepository.findById(room.getHistoryId()).orElse(null);
-            if (wasRecording && pending != null && pending.isSplitClosed()) {
-                roomRepository.save(room);
+            // 同场重连可以继续拆分组，已经收尾的稿件本身不能重新打开
+            if (history != null && history.isSplitClosed()) {
+                roomRepository.saveLiveState(room);
                 return;
             }
 
-            RecordHistory history = historyMergeService.findReusableHistory(
-                    roomId, now, eventData.getSessionId(), "RecordStarted");
-
             if (history == null) {
                 history = new RecordHistory();
-                        if (historySplitService != null) historySplitService.initializeNew(history);
+                if (historySplitService != null) historySplitService.initializeNew(history);
+                history.setSplitGroup(room.getLiveGroup());
                 history.setRoomId(room.getRoomId());
                 history.setStartTime(now);
                 history.setUpdateTime(now);
@@ -114,7 +102,7 @@ public class RecordEventRecordStartedService implements RecordEventService {
             history = historyRepository.save(history);
 
             room.setHistoryId(history.getId());
-            roomRepository.save(room);
+            roomRepository.saveLiveState(room);
 
             log.info("[BLR] {}", LogKvs.event("RecordStarted.Processed")
                     .add("roomId", roomId)

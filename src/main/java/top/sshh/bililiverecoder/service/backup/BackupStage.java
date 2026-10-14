@@ -1,6 +1,7 @@
 package top.sshh.bililiverecoder.service.backup;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** 记录和映射放在临时库中，大备份不会把全部弹幕留在内存 */
 public final class BackupStage implements AutoCloseable {
+    private static final TypeReference<Map<String,Object>> MAP_TYPE = new TypeReference<Map<String,Object>>() {};
     public record Row(String section, String key, Map<String, Object> data, Long targetId, boolean conflict, String reason) {}
     public final String id;
     public final Path directory;
@@ -61,7 +63,7 @@ public final class BackupStage implements AutoCloseable {
         while(true) {
             check();int[] scanned={0};
             jdbc.query("SELECT * FROM staged WHERE section=? AND source_key>? ORDER BY source_key LIMIT 16",(org.springframework.jdbc.core.RowCallbackHandler) r->{
-                check();Row row=new Row(section,r.getString("source_key"),JSON.parseObject(r.getString("payload"),Map.class,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect),r.getObject("target_id",Long.class),r.getBoolean("conflict"),r.getString("reason"));
+                check();Row row=new Row(section,r.getString("source_key"),JSON.parseObject(r.getString("payload"),MAP_TYPE,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect),r.getObject("target_id",Long.class),r.getBoolean("conflict"),r.getString("reason"));
                 action.accept(row);cursor[0]=row.key();scanned[0]++;
             },section,cursor[0]);
             if(scanned[0]==0)return;
@@ -69,7 +71,7 @@ public final class BackupStage implements AutoCloseable {
     }
     public Row find(String section, Object key) {
         if (key == null) return null;
-        List<Row> values=jdbc.query("SELECT * FROM staged WHERE section=? AND source_key=?", (r,n) -> new Row(section,r.getString("source_key"),JSON.parseObject(r.getString("payload"),Map.class,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect),r.getObject("target_id",Long.class),r.getBoolean("conflict"),r.getString("reason")),section,key.toString());
+        List<Row> values=jdbc.query("SELECT * FROM staged WHERE section=? AND source_key=?", (r,n) -> new Row(section,r.getString("source_key"),JSON.parseObject(r.getString("payload"),MAP_TYPE,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect),r.getObject("target_id",Long.class),r.getBoolean("conflict"),r.getString("reason")),section,key.toString());
         return values.isEmpty()?null:values.get(0);
     }
     public void map(String section, String key, Object target, String disposition) {

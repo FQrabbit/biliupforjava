@@ -1,5 +1,7 @@
 package top.sshh.bililiverecoder.service;
 
+import java.time.LocalDateTime;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -384,6 +386,30 @@ class PartFileLifecycleServiceTest {
         assertNull(resumed.getEndTime());
         assertFalse(resumed.isUpload());
         assertNull(resumed.getFileName());
+    }
+
+    @Test
+    void changedRecorderIdUsesLocalGroupAndLatestFileForStableObservation() throws Exception {
+        Path firstPath = createVideo("time-group/first.flv", "first");
+        String roomId = "time-group-" + UUID.randomUUID();
+        RecordHistory history = new RecordHistory(); history.setRoomId(roomId);
+        history.setEventId(UUID.randomUUID().toString()); history.setSplitGroup("group"); history.setRecording(true);
+        history = historyRepository.save(history);
+        RecordRoom room = new RecordRoom(); room.setRoomId(roomId); room.setHistoryId(history.getId());
+        room.setLiveGroup("group"); room.setRecording(true); room.setSessionId("new-recorder-id");
+        roomRepository.saveLiveState(room);
+        RecordHistoryPart first = createPartRecord(firstPath, false, Files.size(firstPath));
+        first.setRoomId(roomId); first.setHistoryId(history.getId()); first.setSessionId("old-recorder-id");
+        first.setRecording(true); first.setEndTime(null); first.setStartTime(LocalDateTime.now().minusMinutes(20));
+        first = partRepository.save(first); locationService.registerPrimary(first);
+        assertTrue(recordingStateService.assess(first).activeSession());
+        Path nextPath = createVideo("time-group/next.flv", "next");
+        RecordHistoryPart next = createPartRecord(nextPath, false, Files.size(nextPath));
+        next.setRoomId(roomId); next.setHistoryId(history.getId()); next.setRecording(true); next.setEndTime(null);
+        next.setStartTime(LocalDateTime.now().minusMinutes(10)); next = partRepository.save(next);
+        locationService.registerPrimary(next);
+        assertFalse(recordingStateService.assess(first).activeSession());
+        assertTrue(recordingStateService.assess(next).activeSession());
     }
 
     @Test

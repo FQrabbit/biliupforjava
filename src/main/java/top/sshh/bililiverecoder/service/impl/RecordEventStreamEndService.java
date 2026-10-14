@@ -56,7 +56,8 @@ public class RecordEventStreamEndService implements RecordEventService {
             return;
         }
 
-        RecordHistory history = historyStateService.resolveHistory(room, eventData, null);
+        RecordHistory history = historyStateService.resolveEventHistory(room, event, null);
+        historyStateService.markCurrentStreamEnded(room, event);
         if (history == null) {
             // 当 historyId 为空时，说明录播姬发送了 Webhook 但本地并没有开启录制或录制记录已丢失
             log.info("[BLR] {}", LogKvs.event("StreamEnd.NoRecording")
@@ -72,10 +73,5 @@ public class RecordEventStreamEndService implements RecordEventService {
         }
         // 下播不等同录制结束；只更新 streaming，当前会话才同步房间状态
         historyStateService.markStreamEnded(history);
-        if (historyStateService.isCurrentSession(room, eventData)
-                && Objects.equals(room.getHistoryId(), history.getId())) {
-            room.setStreaming(false);
-            roomRepository.save(room);
-        }
     }
 }

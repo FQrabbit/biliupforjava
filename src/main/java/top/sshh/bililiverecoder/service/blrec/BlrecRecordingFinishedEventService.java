@@ -42,13 +42,16 @@ public class BlrecRecordingFinishedEventService implements BlrecEventService {
         }
 
         RecordHistory current = room.getHistoryId() == null ? null : historyRepository.findById(room.getHistoryId()).orElse(null);
+        if (top.sshh.bililiverecoder.service.LiveSessionPolicy.isOlderEvent(room, event.getDate())) return;
         if (current != null && current.getStartTime() != null && event.getDate() != null
                 && java.time.LocalDateTime.ofInstant(event.getDate().toInstant(), java.time.ZoneId.systemDefault()).isBefore(current.getStartTime())) return;
 
         // 更新房间状态
         room.setRecording(false);
         room.setStreaming(roomInfo.getLiveStatus() == 1);
-        roomRepository.save(room);
+        room.setWebhookLastSeenAt(LocalDateTime.now());
+        if (!room.isStreaming()) top.sshh.bililiverecoder.service.LiveSessionPolicy.end(room, event.getDate(), LocalDateTime.now());
+        roomRepository.saveLiveState(room);
 
         // 查找并终结对应的历史记录
         Optional<RecordHistory> historyOpt = historyRepository.findById(room.getHistoryId());
@@ -58,7 +61,7 @@ public class BlrecRecordingFinishedEventService implements BlrecEventService {
             if (history.isProcessingArchived()) {
                 room.setHistoryId(-1L);
                 room.setSessionId(null);
-                roomRepository.save(room);
+                roomRepository.saveLiveState(room);
                 log.info("[BLR] {}", LogKvs.event("Blrec.RecordingFinished.SkipForceArchived")
                         .add("roomId", roomId)
                         .add("historyId", history.getId()));

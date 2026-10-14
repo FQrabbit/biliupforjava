@@ -66,11 +66,15 @@ class LiveNotificationDurationServiceTest {
         room.setRoomId("100");
         when(rooms.findByRoomId("100")).thenReturn(room);
         when(rooms.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(rooms.saveLiveState(any())).thenAnswer(call -> call.getArgument(0));
 
         RecordEventStreamStartService startHandler = new RecordEventStreamStartService();
         ReflectionTestUtils.setField(startHandler, "roomRepository", rooms);
         ReflectionTestUtils.setField(startHandler, "notificationEventPublisher", publisher);
         ReflectionTestUtils.setField(startHandler, "liveNotificationDurationService", service);
+        var merge = mock(top.sshh.bililiverecoder.service.RecordHistoryMergeService.class);
+        when(merge.beginLive(any(), any(), any())).thenReturn(true);
+        ReflectionTestUtils.setField(startHandler, "historyMergeService", merge);
         startHandler.processing(event("encrypted", START, "start"));
 
         RecordEventStreamEndService endHandler = new RecordEventStreamEndService();
@@ -259,13 +263,20 @@ class LiveNotificationDurationServiceTest {
     }
 
     @Test
-    void newWebhookDuringMissingOfflineSampleRejectsOldPlatformStart() {
+    void changedWebhookIdWithoutEndKeepsOriginalLiveStart() {
         service.streamStarted(event("old", START, "old-start"));
         service.observeRoom("100", true, "2026-10-08 20:00:00", START.plusSeconds(1800), null);
         service.streamStarted(event("new", START.plusSeconds(7200), "new-start"));
         service.observeRoom("100", true, "2026-10-08 20:00:00", START.plusSeconds(9000), true);
         service.streamEnded(event("new", START.plusSeconds(10800), "end"));
 
+        assertEquals("3小时0分0秒", service.observeRoom("100", false, null, NOW, true));
+    }
+
+    @Test
+    void unknownEndIdStillClosesCurrentPhysicalLive() {
+        service.streamStarted(event("start-id", START, "start"));
+        service.streamEnded(event("end-id", START.plusSeconds(3600), "end"));
         assertEquals("1小时0分0秒", service.observeRoom("100", false, null, NOW, true));
     }
 }

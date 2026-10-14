@@ -46,20 +46,16 @@ public class LiveNotificationDurationService {
                 if (current.lastEnd != null && !time.at().isAfter(current.lastEnd)) return current;
                 if (current.end == null && current.start != null) {
                     if (current.knownStart && time.at().isBefore(current.start)) return current;
-                    boolean sameSession = sessionId != null && sessionId.equals(current.sessionId);
-                    boolean joinsPlatformSession = current.sessionId == null && current.platformStart != null
-                            && (time.estimated() || current.lastObservedLive != null
-                            && !time.at().isAfter(current.lastObservedLive));
-                    if (sameSession || joinsPlatformSession) {
-                        if (!current.knownStart) {
-                            current.start = time.at();
-                            current.knownStart = true;
-                            current.estimatedStart = time.estimated();
-                        }
-                        current.sessionId = sessionId;
-                        current.startEventId = eventId;
-                        return current;
+                    // 尚未下播时换了上游 ID 也继续计时，实际下播后再开始新的计时区间
+                    if (!current.knownStart) {
+                        current.start = time.at();
+                        current.knownStart = true;
+                        current.estimatedStart = time.estimated();
                     }
+                    if (current.sessionId != null && !current.sessionId.equals(sessionId)) rememberSession(current, current.sessionId);
+                    current.sessionId = sessionId;
+                    current.startEventId = eventId;
+                    return current;
                 }
             }
             Timing next = newTiming(current, time.at(), true);
@@ -77,7 +73,7 @@ public class LiveNotificationDurationService {
         timings.compute(event.getEventData().getRoomId(), (roomId, current) -> {
             if (current == null) current = new Timing();
             if (current.start != null && time.at().isBefore(current.start)) return current;
-            if (sessionId != null && current.sessionId != null && !sessionId.equals(current.sessionId)) return current;
+            if (sessionId != null && !sessionId.equals(current.sessionId) && current.retiredSessions.contains(sessionId)) return current;
             if (current.end != null && (!current.estimatedEnd || time.estimated())) return current;
             if (current.end != null && time.at().isAfter(current.end)) return current;
             current.end = time.at();
@@ -158,8 +154,16 @@ public class LiveNotificationDurationService {
         if (previous != null) {
             next.lastEnd = previous.lastEnd;
             next.platformFloor = previous.platformStart == null ? previous.platformFloor : previous.platformStart;
+            next.retiredSessions.addAll(previous.retiredSessions);
+            rememberSession(next, previous.sessionId);
         }
         return next;
+    }
+
+    private void rememberSession(Timing timing, String sessionId) {
+        if (sessionId == null) return;
+        timing.retiredSessions.add(sessionId);
+        if (timing.retiredSessions.size() > 64) timing.retiredSessions.remove(timing.retiredSessions.iterator().next());
     }
 
     private Instant parsePlatformStart(String value, Instant observedAt) {
@@ -206,6 +210,7 @@ public class LiveNotificationDurationService {
         private Instant lastEnd;
         private Instant lastObservedLive;
         private String sessionId;
+        private final java.util.Set<String> retiredSessions = new java.util.LinkedHashSet<>();
         private String startEventId;
         private boolean knownStart;
         private boolean estimatedStart;

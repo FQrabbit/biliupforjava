@@ -24,6 +24,7 @@ public class BlrecVideoFileCreatedEventService implements BlrecEventService {
         RecordEventDTO normalized = new RecordEventDTO();
         normalized.setEventId(event.getId());
         normalized.setEventType(RecordEventType.VideoFileCreatedEvent);
+        normalized.setEventTimestamp(event.getDate());
         RecordEventData data = new RecordEventData();
         data.setRoomId(roomId);
         data.setSessionId(room.getSessionId());

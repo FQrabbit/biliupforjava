@@ -55,7 +55,7 @@ public class RecordEventRecordEndService implements RecordEventService {
                     .add("sessionId", eventData.getSessionId()));
             return;
         }
-        RecordHistory history = historyStateService.resolveHistory(room, eventData, null);
+        RecordHistory history = historyStateService.resolveEventHistory(room, event, null);
         if (history != null) {
                 if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isProcessingArchived()) {
                     log.info("[BLR] {}", LogKvs.event("RecordEnd.SkipHistoryUpdate")
@@ -65,8 +65,8 @@ public class RecordEventRecordEndService implements RecordEventService {
                     return;
                 }
                 // 旧会话也必须被收尾；但只有它仍是 room 当前会话时才清空房间指针
-                historyStateService.markSessionEnded(history, eventData);
-                historyStateService.markCurrentRoomStopped(room, eventData, history);
+                historyStateService.markCurrentRoomStopped(room, event, history);
+                historyStateService.markSessionEnded(history, eventData, room);
 
                 // 文件关闭事件丢了也要收尾，但得连续观察文件，不能只看一次旧的修改时间
                 try {
@@ -94,6 +94,7 @@ public class RecordEventRecordEndService implements RecordEventService {
                             .add("ex", e.getClass().getSimpleName()), e);
                 }
         } else {
+            historyStateService.markCurrentRoomStopped(room, event, null);
             // 当 historyId 为空时，说明录播姬发送了录制结束的 Webhook 但本地并没有开启录制或录制记录已丢失
             log.info("[BLR] {}", LogKvs.event("RecordEnd.NoRecording")
                     .add("roomId", eventData.getRoomId()));

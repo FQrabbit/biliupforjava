@@ -2,6 +2,7 @@ package top.sshh.bililiverecoder.service.backup;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONReader;
+import com.alibaba.fastjson.TypeReference;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -25,6 +26,7 @@ import java.util.zip.*;
 /** 备份先校验再写入，旧状态只留作历史事实 */
 @Service
 public class BackupService {
+    private static final TypeReference<Map<String,Object>> MAP_TYPE = new TypeReference<Map<String,Object>>() {};
     public record Conflict(String section, String key, Long targetId, String title, String reason, boolean replaceAllowed) {}
     public record CommitRequest(Map<String,String> decisions) {}
     public record ExportArtifact(Path path, long bytes, String sha256) {}
@@ -95,7 +97,7 @@ public class BackupService {
     public Map<String,Object> preview(String id,int page) {
         BackupStage s=session(id);s.check();if(!s.phase.equals("PREVIEW")) throw new IllegalStateException("备份尚未完成预检");
         List<Conflict> conflicts=s.jdbc.query("SELECT * FROM staged WHERE conflict=TRUE ORDER BY section,source_key LIMIT 100 OFFSET ?",(r,n) -> {
-            Map<String,Object> data=JSON.parseObject(r.getString("payload"),Map.class,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect);String section=r.getString("section");Long target=r.getObject("target_id",Long.class);
+            Map<String,Object> data=JSON.parseObject(r.getString("payload"),MAP_TYPE,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect);String section=r.getString("section");Long target=r.getObject("target_id",Long.class);
             return new Conflict(section,r.getString("source_key"),target,Objects.toString(data.getOrDefault("title",data.getOrDefault("uname",data.getOrDefault("configKey",data.get("name")))),""),r.getString("reason"),(target!=null || section.equals("systemConfigList")) && replacementAllowed(s,section,target));
         },Math.max(0,page)*100);
         return Map.of("taskId",id,"counts",s.counts,"conflicts",conflicts,"conflictCount",s.jdbc.queryForObject("SELECT COUNT(*) FROM staged WHERE conflict=TRUE",Long.class),"page",Math.max(0,page),"missingStats",!s.counts.containsKey("roomLiveSessionStatsList"),"archiveHistories",s.counts.getOrDefault("historyList",0L),"emptyTarget",count("record_history","1=1")==0 && count("record_room","1=1")==0 && count("bili_bili_user","1=1")==0);
@@ -164,11 +166,11 @@ public class BackupService {
                 String key=reader.readString();
                 if(BackupSchema.SECTIONS.containsKey(key)) {
                     s.counts.putIfAbsent(key,0L);reader.startArray();
-                    while(reader.hasNext()) s.add(key,reader.readObject(Map.class));reader.endArray();
+                    while(reader.hasNext()) s.add(key,reader.readObject(MAP_TYPE));reader.endArray();
                 } else if(key.equals("configFormatVersion"))version=((Number)reader.readObject()).intValue();
                 else if(key.equals("exportCompleted"))completed=Boolean.TRUE.equals(reader.readObject());
                 else if(key.equals("recordCount"))total=((Number)reader.readObject()).longValue();
-                else if(key.equals("sectionCounts")) { expected=new LinkedHashMap<>();Map<?,?> values=reader.readObject(Map.class);for(var e:values.entrySet())expected.put(e.getKey().toString(),((Number)e.getValue()).longValue()); }
+                else if(key.equals("sectionCounts")) { expected=new LinkedHashMap<>();Map<?,?> values=reader.readObject(MAP_TYPE);for(var e:values.entrySet())expected.put(e.getKey().toString(),((Number)e.getValue()).longValue()); }
                 else skipLegacyValue(reader);
             }
             reader.endObject();
@@ -193,18 +195,18 @@ public class BackupService {
             }
             var manifestEntry=zip.getEntry("manifest.json");if(manifestEntry==null)throw new IllegalArgumentException("备份缺少清单");
             Map<String,Object> manifest;
-            try(InputStream in=zip.getInputStream(manifestEntry)) { byte[] bytes=in.readNBytes(1024*1024+1);if(bytes.length>1024*1024)throw new IllegalArgumentException("备份清单过大");manifest=JSON.parseObject(new String(bytes,StandardCharsets.UTF_8),Map.class,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect); }
+            try(InputStream in=zip.getInputStream(manifestEntry)) { byte[] bytes=in.readNBytes(1024*1024+1);if(bytes.length>1024*1024)throw new IllegalArgumentException("备份清单过大");manifest=JSON.parseObject(new String(bytes,StandardCharsets.UTF_8),MAP_TYPE,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect); }
             if(!Objects.equals(manifest.get("configFormatVersion"),3) || !Boolean.TRUE.equals(manifest.get("exportCompleted")))throw new IllegalArgumentException("备份格式不支持或未完成");
-            Map<String,Object> sections=(Map<String,Object>)manifest.get("sections");if(sections==null)throw new IllegalArgumentException("备份清单缺少数据段");
+            Map<?,?> sections=(Map<?,?>)manifest.get("sections");if(sections==null)throw new IllegalArgumentException("备份清单缺少数据段");
             if(names.size()!=sections.size()+1)throw new IllegalArgumentException("清单与备份数据段不一致");
             for(var e:sections.entrySet()) {
-                String section=e.getKey();if(!BackupSchema.SECTIONS.containsKey(section))throw new IllegalArgumentException("未知的备份数据段");
+                String section=(String)e.getKey();if(!BackupSchema.SECTIONS.containsKey(section))throw new IllegalArgumentException("未知的备份数据段");
                 ZipEntry entry=zip.getEntry(section+".jsonl");if(entry==null)throw new IllegalArgumentException("备份数据段缺失："+section);
-                Map<String,Object> info=(Map<String,Object>)e.getValue();MessageDigest digest=MessageDigest.getInstance("SHA-256");s.counts.put(section,0L);
+                Map<?,?> info=(Map<?,?>)e.getValue();MessageDigest digest=MessageDigest.getInstance("SHA-256");s.counts.put(section,0L);
                 try(InputStream raw=zip.getInputStream(entry);InputStream limited=new FilterInputStream(raw) {
                     @Override public int read(byte[] b,int off,int len)throws IOException { int n=super.read(b,off,len);if(n>0 && (s.expandedBytes+=n)>expandedLimit)throw new IOException("备份展开内容超过上限");return n; }
                 };DigestInputStream input=new DigestInputStream(limited,digest);BufferedReader reader=new BufferedReader(new BackupRecordReader(new InputStreamReader(input,StandardCharsets.UTF_8),false))) {
-                    String line;while((line=readBoundedLine(reader))!=null) { s.check();s.add(section,JSON.parseObject(line,Map.class,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect)); }
+                    String line;while((line=readBoundedLine(reader))!=null) { s.check();s.add(section,JSON.parseObject(line,MAP_TYPE,com.alibaba.fastjson.parser.Feature.DisableSpecialKeyDetect)); }
                 }
                 if(s.counts.get(section)!=((Number)info.get("count")).longValue() || !HexFormat.of().formatHex(digest.digest()).equals(info.get("sha256")))throw new IllegalArgumentException("备份数据段数量或校验值不一致："+section);
             }
@@ -493,7 +495,7 @@ public class BackupService {
                 data.put("streaming",false);data.put("upload",false);data.put("editPartsUploading",false);data.put("deletePending",false);
             }else {data.put("deleteRetryCount",0);data.put("deleteFailType",null);data.put("deleteFailReason",null);}
         }
-        if(section.equals("roomList")) { data.put("recording",false);data.put("streaming",false);data.put("sessionId",null);data.put("webhookLastSeenAt",null); }
+        if(section.equals("roomList")) { data.put("recording",false);data.put("streaming",false);data.put("sessionId",null);data.put("webhookLastSeenAt",null);data.put("liveGroup",null);data.put("liveEventAt",null);data.put("liveEndedAt",null); }
         if(section.equals("userList")) {
             Map<String,Object> current=existing==null?Map.of():query(section,"id=?",existing).get(0);
             data.put("publishCaptchaProbeTaskId",current.get("publishCaptchaProbeTaskId"));data.put("publishCaptchaRetryAt",current.get("publishCaptchaRetryAt"));

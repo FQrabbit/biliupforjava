@@ -15,6 +15,8 @@ public interface RecordHistoryPartRepository extends CrudRepository<RecordHistor
 
     RecordHistoryPart findByFilePath(String path);
 
+    RecordHistoryPart findFirstByHistoryIdOrderByStartTimeDescIdDesc(Long historyId);
+
     RecordHistoryPart findByFilePathStartingWith(String path);
 
     @Query("select p from RecordHistoryPart p where p.roomId = ?1 and (p.recording = true or p.endTime is null) and not exists (select 1 from RecordHistory h where h.id=p.historyId and h.importArchived=true) order by p.id desc")

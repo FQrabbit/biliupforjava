@@ -17,6 +17,17 @@ import static org.mockito.Mockito.*;
 class RoomStatusSyncJobTest {
 
     @Test
+    void slowObservationCannotOverwriteMoreRecentWebhookState() {
+        RoomStatusSyncJob job = new RoomStatusSyncJob();
+        java.time.Instant observedAt = java.time.Instant.parse("2026-10-14T12:00:00Z");
+        RecordRoom room = new RecordRoom();
+        room.setWebhookLastSeenAt(java.time.LocalDateTime.ofInstant(observedAt.plusSeconds(1), java.time.ZoneId.systemDefault()));
+        assertFalse(job.shouldApplyObservation(room, observedAt));
+        room.setWebhookLastSeenAt(java.time.LocalDateTime.ofInstant(observedAt.minusSeconds(1), java.time.ZoneId.systemDefault()));
+        assertTrue(job.shouldApplyObservation(room, observedAt));
+    }
+
+    @Test
     void shouldOnlyPublishLiveEndedAfterObservedLiveState() {
         RoomStatusSyncJob job = new RoomStatusSyncJob();
 

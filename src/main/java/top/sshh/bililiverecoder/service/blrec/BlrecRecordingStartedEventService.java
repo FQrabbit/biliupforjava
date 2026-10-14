@@ -3,139 +3,62 @@ package top.sshh.bililiverecoder.service.blrec;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.util.CollectionUtils;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordRoom;
 import top.sshh.bililiverecoder.entity.blrec.BlrecEventDTO;
 import top.sshh.bililiverecoder.entity.blrec.BlrecRoomInfoDTO;
 import top.sshh.bililiverecoder.repo.RecordHistoryRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
+import top.sshh.bililiverecoder.service.RecordHistoryMergeService;
+import top.sshh.bililiverecoder.service.RecordHistorySplitService;
 import top.sshh.bililiverecoder.util.LogKvs;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.List;
 
 @Slf4j
 @Service("blrecRecordingStartedEventService")
 public class BlrecRecordingStartedEventService implements BlrecEventService {
-
-    @Autowired
-    private RecordRoomRepository roomRepository;
-
-    @Autowired
-    private RecordHistoryRepository historyRepository;
-
-    @Autowired
-    private top.sshh.bililiverecoder.service.SystemConfigService systemConfigService;
-
-    @Autowired
-    private top.sshh.bililiverecoder.service.RecordHistorySplitService historySplitService;
+    @Autowired private RecordRoomRepository roomRepository;
+    @Autowired private RecordHistoryRepository historyRepository;
+    @Autowired private RecordHistoryMergeService historyMergeService;
+    @Autowired private RecordHistorySplitService historySplitService;
 
     @Override
     public void processing(BlrecEventDTO event) {
-        String roomId = event.getData().getRoomInfo() == null ? event.getData().getRoomId() : event.getData().getRoomInfo().getRoomId();
+        BlrecRoomInfoDTO info = event.getData().getRoomInfo();
+        String roomId = info == null ? event.getData().getRoomId() : info.getRoomId();
         if (roomId == null) throw new IllegalArgumentException("事件缺少房间号");
-        synchronized (roomId.intern()) { processingInside(event); }
-    }
-
-    private void processingInside(BlrecEventDTO event) {
-        LocalDateTime now = LocalDateTime.now();
-        BlrecRoomInfoDTO roomInfo = event.getData().getRoomInfo();
-        String roomId = roomInfo.getRoomId();
-
-        RecordRoom room = roomRepository.findByRoomId(roomId);
-        if (room == null) {
-            room = new RecordRoom();
-            room.setRoomId(roomId);
-            room.setCreateTime(LocalDateTime.now());
-            log.info("[BLR] {}", LogKvs.event("Blrec.Room.AutoCreate").add("roomId", roomId));
-        }
-
-        if (historyRepository.findFirstByRoomIdAndEventId(roomId, event.getId()) != null) return;
-
-        RecordHistory pending = room.getHistoryId() == null ? null : historyRepository.findById(room.getHistoryId()).orElse(null);
-        boolean continueSplit = room.isRecording() && pending != null && pending.isSplitClosed();
-
-        // 更新房间基本信息
-        room.setUname(String.valueOf(roomInfo.getUid())); // 注意：blrec的room_info里没有uname，我们暂用uid代替
-        room.setTitle(roomInfo.getTitle());
-        room.setWebhookSource("BLREC");
-        room.setWebhookLastSeenAt(now);
-        room.setStreaming(roomInfo.getLiveStatus() == 1);
-        room.setRecording(true); // 核心：将录制状态设置为 true
-        room.setSessionId("blrec:" + roomId + ":" + roomInfo.getLiveStartTime());
-        
-        if (continueSplit) {
-            roomRepository.save(room);
-            return;
-        }
-
-        // 尝试复用已有的历史记录（短时间开播合并逻辑）
-        RecordHistory history = room.getHistoryId() != null ? historyRepository.findById(room.getHistoryId()).orElse(null) : null;
-        if (history == null || history.isPublish() || history.isSplitClosed() || !history.isRecording()) {
-            history = null;
-            // 从配置中读取合并时间间隔，默认20分钟
-            int mergeIntervalMinutes = 20;
-            try {
-                String mergeIntervalConfig = systemConfigService.getAllConfigsMap().get(top.sshh.bililiverecoder.service.SystemConfigService.KEY_MERGE_INTERVAL_MINUTES);
-                if (mergeIntervalConfig != null && !mergeIntervalConfig.isEmpty()) {
-                    mergeIntervalMinutes = Integer.parseInt(mergeIntervalConfig);
-                    if (mergeIntervalMinutes < 1) {
-                        mergeIntervalMinutes = 1;
-                    } else if (mergeIntervalMinutes > 1440) {
-                        mergeIntervalMinutes = 1440;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("[BLR] {}", LogKvs.event("Blrec.RecordStarted.ParseMergeIntervalFailed")
-                        .add("roomId", roomId)
-                        .add("error", e.getMessage()));
+        synchronized (roomId.intern()) {
+            LocalDateTime now = LocalDateTime.now();
+            RecordRoom room = roomRepository.findByRoomId(roomId);
+            if (room == null) {
+                room = new RecordRoom(); room.setRoomId(roomId); room.setCreateTime(now);
+                log.info("[BLR] {}", LogKvs.event("Blrec.Room.AutoCreate").add("roomId", roomId));
             }
-            // 查询在合并时间间隔内结束的记录
-            List<RecordHistory> historyList = historyRepository.findByRoomIdAndEndTimeBetweenOrderByEndTimeAsc(roomId, now.minusMinutes((long) mergeIntervalMinutes), now);
-            if (!CollectionUtils.isEmpty(historyList)) {
-                // 过滤掉已经发布的稿件
-                historyList = historyList.stream().filter(h -> !h.isPublish() && !h.isSplitClosed() && !h.isProcessingArchived()).collect(java.util.stream.Collectors.toList());
-                if (!historyList.isEmpty()) {
-                    // 复用最近的一条记录（取列表的最后一条，即 EndTime 最大的）
-                    history = historyList.get(historyList.size() - 1);
-                } else {
-                    // 如果所有记录都已发布，设置为null以便创建新记录
-                    history = null;
-                }
+            if (historyRepository.findFirstByRoomIdAndEventId(roomId, event.getId()) != null) return;
+            if (!historyMergeService.beginLive(room, event.getDate(), now)) return;
+            String sessionId = info == null ? null : "blrec:" + roomId + ":" + info.getLiveStartTime();
+            RecordHistory history = historyMergeService.findReusableHistory(room, sessionId, "RecordStarted");
+            if (info != null) {
+                room.setUname(String.valueOf(info.getUid())); room.setTitle(info.getTitle());
             }
-        }
-        
-        // 如果没有可复用的历史记录，则创建新的
-        if (history == null) {
-            history = new RecordHistory();
-            if (historySplitService != null) historySplitService.initializeNew(history);
-            history.setRoomId(roomId);
-            history.setTitle(roomInfo.getTitle());
-            history.setStartTime(LocalDateTime.ofInstant(Instant.ofEpochSecond(roomInfo.getLiveStartTime()), ZoneId.systemDefault()));
-            history.setEndTime(history.getStartTime());
-            history.setEventId(event.getId()); // 使用blrec的事件ID
-            history.setSessionId(room.getSessionId());
-            history.setRecording(true);
-            history.setStreaming(true);
-            history.setUpload(room.isUpload());
+            room.setWebhookSource("BLREC"); room.setWebhookLastSeenAt(now);
+            room.setStreaming(info == null || info.getLiveStatus() == 1);
+            room.setRecording(true); room.setSessionId(sessionId);
+            if (history != null && history.isSplitClosed()) {
+                roomRepository.saveLiveState(room);
+                return;
+            }
+            if (history == null) {
+                history = new RecordHistory(); historySplitService.initializeNew(history);
+                history.setSplitGroup(room.getLiveGroup()); history.setRoomId(roomId);
+                history.setTitle(room.getTitle()); history.setStartTime(now); history.setEndTime(now);
+                history.setUpload(room.isUpload());
+            }
+            history.setEventId(event.getId()); history.setSessionId(sessionId);
+            history.setRecording(true); history.setStreaming(room.isStreaming()); history.setUpdateTime(now);
             history = historyRepository.save(history);
-        } else {
-            // 复用已有的历史记录
-            history.setSessionId(room.getSessionId());
-            history.setRecording(true);
-            history.setStreaming(true);
-            historyRepository.save(history);
-            log.info("[BLR] {}", LogKvs.event("Blrec.RecordingStarted.ReuseHistory")
-                    .add("roomId", roomId)
-                    .add("title", roomInfo.getTitle())
-                    .add("reusedHistoryId", history.getId()));
+            room.setHistoryId(history.getId()); roomRepository.saveLiveState(room);
         }
-
-        // 关联历史记录
-        room.setHistoryId(history.getId());
-        roomRepository.save(room);
     }
 }

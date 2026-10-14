@@ -29,42 +29,38 @@ public class RecordEventStreamStartService implements RecordEventService {
     @Autowired
     private LiveNotificationDurationService liveNotificationDurationService;
 
+    @Autowired
+    private top.sshh.bililiverecoder.service.RecordHistoryMergeService historyMergeService;
+
     @Override
     public void processing(RecordEventDTO event) {
         RecordEventData eventData = event.getEventData();
         String roomId = eventData.getRoomId();
-        liveNotificationDurationService.streamStarted(event);
-        RecordRoom room = roomRepository.findByRoomId(eventData.getRoomId());
-        if (room == null) {
-            synchronized (roomId.intern()) {
-                room = roomRepository.findByRoomId(eventData.getRoomId());
-                if (room == null) {
-                    log.warn("[BLR] {}", LogKvs.event("Room.AutoCreate")
-                            .add("roomId", eventData.getRoomId())
-                            .add("title", eventData.getTitle())
-                            .add("uname", eventData.getName()));
-                    room = new RecordRoom();
-                    room.setRoomId(eventData.getRoomId());
-                    room.setCreateTime(LocalDateTime.now());
-                    room.setTitle(eventData.getTitle());
-                    room = roomRepository.save(room);
-                }
+        synchronized (roomId.intern()) {
+            RecordRoom room = roomRepository.findByRoomId(roomId);
+            if (room == null) {
+                log.warn("[BLR] {}", LogKvs.event("Room.AutoCreate")
+                        .add("roomId", roomId).add("title", eventData.getTitle()).add("uname", eventData.getName()));
+                room = new RecordRoom();
+                room.setRoomId(roomId); room.setCreateTime(LocalDateTime.now()); room.setTitle(eventData.getTitle());
+                room = roomRepository.saveLiveState(room);
             }
+            if (!historyMergeService.beginLive(room,
+                    event.getEventTimestamp() == null ? event.getDate() : event.getEventTimestamp(), LocalDateTime.now())) return;
+            liveNotificationDurationService.streamStarted(event);
+            room.setUname(eventData.getName());
+            room.setTitle(eventData.getTitle());
+            room.setSessionId(eventData.getSessionId());
+            room.setWebhookSource("BREC");
+            room.setWebhookLastSeenAt(LocalDateTime.now());
+            room.setRecording(eventData.isRecording());
+            room.setStreaming(eventData.isStreaming());
+            room = roomRepository.saveLiveState(room);
+            NotificationEvent notificationEvent = NotificationEvent.of(room, NotificationEventType.LIVE_STREAM_STARTED)
+                    .add("liveTitle", room.getTitle())
+                    .add("areaNameParent", eventData.getAreaNameParent())
+                    .add("areaNameChild", eventData.getAreaNameChild());
+            notificationEventPublisher.publish(notificationEvent, room);
         }
-        room.setUname(eventData.getName());
-        room.setTitle(eventData.getTitle());
-        room.setSessionId(eventData.getSessionId());
-        room.setWebhookSource("BREC");
-        room.setWebhookLastSeenAt(LocalDateTime.now());
-        room.setRecording(eventData.isRecording());
-        room.setStreaming(eventData.isStreaming());
-        room = roomRepository.save(room);
-        NotificationEvent notificationEvent = NotificationEvent.of(room, NotificationEventType.LIVE_STREAM_STARTED)
-                .add("liveTitle", room.getTitle())
-                .add("areaNameParent", eventData.getAreaNameParent())
-                .add("areaNameChild", eventData.getAreaNameChild());
-        notificationEventPublisher.publish(notificationEvent, room);
     }
 }
-
-

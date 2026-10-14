@@ -28,6 +28,8 @@ public interface RecordHistoryRepository extends CrudRepository<RecordHistory, L
 
     RecordHistory findBySplitParentId(Long parentId);
 
+    RecordHistory findFirstByRoomIdAndSplitGroupOrderByIdDesc(String roomId, String splitGroup);
+
     RecordHistory findFirstByRoomIdAndEventId(String roomId, String eventId);
 
     @Query("select h from RecordHistory h where h.splitClosedAt is null and h.publish = false and h.forceArchived = false and h.importArchived = false and (h.splitDurationSeconds > 0 or h.splitSizeBytes > 0)")

@@ -19,7 +19,6 @@ import top.sshh.bililiverecoder.entity.*;
 import top.sshh.bililiverecoder.entity.data.BiliUserCard;
 import top.sshh.bililiverecoder.repo.BiliUserRepository;
 import top.sshh.bililiverecoder.repo.RecordRoomRepository;
-import top.sshh.bililiverecoder.service.SystemConfigService;
 import top.sshh.bililiverecoder.service.StorageRootService;
 import top.sshh.bililiverecoder.service.RoomDeletionService;
 import top.sshh.bililiverecoder.service.RoomDeletionTaskService;
@@ -56,9 +55,6 @@ public class RoomController {
 
     @Autowired
     private BiliUserRepository userRepository;
-
-    @Autowired
-    private SystemConfigService systemConfigService;
 
     @Autowired
     private StorageRootService storageRootService;
@@ -419,14 +415,6 @@ public class RoomController {
         result.put("success", true);
         result.put("count", changedRooms.size());
         return result;
-    }
-
-    private void normalizeGiftReplySettings(RecordRoom room) {
-        if (room == null) {
-            return;
-        }
-        room.setSendGiftReply(Boolean.TRUE.equals(room.getSendGiftReply()));
-        room.setGiftReplyMinPriceCny(normalizeGiftReplyMinPrice(room.getGiftReplyMinPriceCny()));
     }
 
     private java.math.BigDecimal normalizeGiftReplyMinPrice(java.math.BigDecimal value) {

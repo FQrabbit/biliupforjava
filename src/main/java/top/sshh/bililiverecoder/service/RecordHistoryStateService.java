@@ -4,6 +4,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import top.sshh.bililiverecoder.entity.RecordEventData;
+import top.sshh.bililiverecoder.entity.RecordEventDTO;
 import top.sshh.bililiverecoder.entity.RecordHistory;
 import top.sshh.bililiverecoder.entity.RecordHistoryPart;
 import top.sshh.bililiverecoder.entity.RecordRoom;
@@ -17,8 +18,8 @@ import java.util.Objects;
 /**
  * 收口录制生命周期的状态归属规则
  *
- * <p>room.historyId 是“当前会话”的指针，不是历史事件的归属依据。历史事件优先按文件分P、
- * 再按 sessionId 定位；只有会话仍是当前会话时，才允许回退到 room.historyId 并改写 room 状态</p>
+ * <p>room.historyId 指向当前稿件，直播归组由本地下播间隔决定
+ * 历史事件优先按文件分P定位，再用事件时间和已登记的上游标识保护当前房间状态</p>
  */
 @Service
 public class RecordHistoryStateService {
@@ -64,18 +65,51 @@ public class RecordHistoryStateService {
     }
 
     public boolean isCurrentSession(RecordRoom room, RecordEventData eventData) {
-        return room != null && (eventData == null || StringUtils.isBlank(eventData.getSessionId())
-                || StringUtils.isBlank(room.getSessionId())
-                || Objects.equals(room.getSessionId(), eventData.getSessionId()));
+        if (room == null) return false;
+        if (eventData == null || StringUtils.isBlank(eventData.getSessionId()) || StringUtils.isBlank(room.getSessionId())
+                || Objects.equals(room.getSessionId(), eventData.getSessionId())) return true;
+        // 未见过的上游标识可能只是本场 Webhook 换了 ID，已登记的旧标识才用于挡住迟到事件
+        return historyRepository.findFirstByRoomIdAndSessionIdOrderByIdDesc(room.getRoomId(), eventData.getSessionId()) == null
+                && partRepository.findByRoomIdAndSessionIdOrderByIdDesc(room.getRoomId(), eventData.getSessionId()).isEmpty();
+    }
+
+    public boolean isCurrentEvent(RecordRoom room, RecordEventDTO event) {
+        return !LiveSessionPolicy.isOlderEvent(room, timestamp(event)) && isCurrentSession(room, event.getEventData());
+    }
+
+    @Transactional(readOnly = true)
+    public RecordHistory resolveEventHistory(RecordRoom room, RecordEventDTO event, RecordHistoryPart part) {
+        if (part != null) return resolveHistory(room, event.getEventData(), part);
+        if (isCurrentEvent(room, event)) return room.getHistoryId() == null ? null : historyRepository.findById(room.getHistoryId()).orElse(null);
+        RecordHistory history = resolveHistory(null, event.getEventData(), null);
+        boolean fileClosed = top.sshh.bililiverecoder.entity.RecordEventType.FileClosed.equals(event.getEventType())
+                || top.sshh.bililiverecoder.entity.RecordEventType.VideoFileCompletedEvent.equals(event.getEventType());
+        // 迟到的文件关闭仍要补齐原分P，文件处理入口不会用它来结束当前录制
+        if (fileClosed) return history;
+        // 同一稿件可以合并多次重连，上一段迟到的结束事件不能结束当前仍在录制的这份稿件
+        return history != null && room != null && Objects.equals(history.getId(), room.getHistoryId()) ? null : history;
+    }
+
+    private java.util.Date timestamp(RecordEventDTO event) {
+        return event.getEventTimestamp() == null ? event.getDate() : event.getEventTimestamp();
     }
 
     @Transactional
-    public void markSessionEnded(RecordHistory history, RecordEventData eventData) {
+    public void markCurrentStreamEnded(RecordRoom room, RecordEventDTO event) {
+        if (!isCurrentEvent(room, event)) return;
+        room.setStreaming(false);
+        LiveSessionPolicy.end(room, timestamp(event), LocalDateTime.now());
+        room.setWebhookLastSeenAt(LocalDateTime.now());
+        roomRepository.saveLiveState(room);
+    }
+
+    @Transactional
+    public void markSessionEnded(RecordHistory history, RecordEventData eventData, RecordRoom room) {
         if (history == null || history.isProcessingArchived() || history.isSplitClosed()) return;
         LocalDateTime now = LocalDateTime.now();
         if (StringUtils.isNotBlank(eventData.getSessionId())) history.setSessionId(eventData.getSessionId());
         history.setRecording(false);
-        history.setStreaming(false);
+        history.setStreaming(room != null && Objects.equals(room.getHistoryId(), history.getId()) && room.isStreaming());
         history.setEndTime(now);
         history.setCloseSource("SESSION_ENDED");
         history.setCloseAt(now);
@@ -95,12 +129,21 @@ public class RecordHistoryStateService {
 
     @Transactional
     public void markCurrentRoomStopped(RecordRoom room, RecordEventData eventData, RecordHistory history) {
-        if (room == null || history == null || !Objects.equals(room.getHistoryId(), history.getId())
-                || !isCurrentSession(room, eventData)) return;
+        RecordEventDTO event = new RecordEventDTO(); event.setEventData(eventData);
+        markCurrentRoomStopped(room, event, history);
+    }
+
+    @Transactional
+    public void markCurrentRoomStopped(RecordRoom room, RecordEventDTO event, RecordHistory history) {
+        if (room == null || history != null && !Objects.equals(room.getHistoryId(), history.getId())
+                || !isCurrentEvent(room, event)) return;
         room.setRecording(false);
-        room.setStreaming(false);
-        room.setSessionId(null);
+        // 录制重启时直播可能还在线，已经下播的房间也不能被旧 payload 重新打开
+        room.setStreaming(room.isStreaming() && event.getEventData().isStreaming());
+        // 保留上游标识供迟到事件定位，是否同场由本地下播时间决定
+        if (!room.isStreaming()) LiveSessionPolicy.end(room, timestamp(event), LocalDateTime.now());
         room.setUpdateTime(LocalDateTime.now());
-        roomRepository.save(room);
+        room.setWebhookLastSeenAt(room.getUpdateTime());
+        roomRepository.saveLiveState(room);
     }
 }

@@ -49,7 +49,7 @@ class BackupServiceIntegrationTest {
         history.setPublishUserId(user.getId());history.setRecording(true);history.setUpload(true);history.setEditPartsUploading(true);
         history.setPublishIssueType("TIMESTAMP_JUMP");history.setStartTime(LocalDateTime.of(2025,1,1,10,0));history.setEndTime(LocalDateTime.of(2025,1,1,11,0));persist(history);
         RecordHistoryPart part=new RecordHistoryPart();part.setHistoryId(history.getId());part.setRoomId("10");part.setFilePath("D:/old/video.flv");part.setRecording(true);part.setUpload(false);part.setDeleteFailType("FILE_MISSING");persist(part);
-        RecordRoom room=new RecordRoom();room.setRoomId("10");room.setUploadUserId(user.getId());room.setHistoryId(history.getId());room.setRecording(true);room.setSessionId("old-session");persist(room);
+        RecordRoom room=new RecordRoom();room.setRoomId("10");room.setUploadUserId(user.getId());room.setHistoryId(history.getId());room.setRecording(true);room.setSessionId("old-session");room.setLiveGroup("old-live-group");room.setLiveEventAt(LocalDateTime.now().minusHours(2));room.setLiveEndedAt(LocalDateTime.now().minusHours(1));persist(room);
         LiveMsg message=new LiveMsg();message.setPartId(part.getId());message.setContext("以前的弹幕");message.setCode(-1);message.setSend(false);persist(message);
         RoomLiveSessionStats stats=new RoomLiveSessionStats();stats.setHistoryId(history.getId());stats.setRoomId("10");stats.setMsgCount(8);stats.setLiveDate(java.time.LocalDate.of(2025,1,1));stats.setDurationSeconds(3600);persist(stats);
         RoomLiveDailyStats daily=new RoomLiveDailyStats();daily.setRoomId("10");daily.setLiveDate(stats.getLiveDate());daily.setTotalMsgCount(8);daily.setLiveCount(1);persist(daily);
@@ -85,6 +85,9 @@ class BackupServiceIntegrationTest {
         assertEquals(false,history.get("RECORDING"));assertEquals(false,history.get("UPLOAD"));assertEquals(false,history.get("PUBLISH"));
         assertTrue(history.get("ARCHIVE_ORIGINAL_STATE").toString().contains("TIMESTAMP_JUMP"));
         assertNull(jdbc.queryForObject("SELECT history_id FROM record_room",Long.class));assertNull(jdbc.queryForObject("SELECT publish_captcha_probe_task_id FROM bili_bili_user",Long.class));
+        assertNull(jdbc.queryForObject("SELECT live_group FROM record_room",String.class));
+        assertNull(jdbc.queryForObject("SELECT live_event_at FROM record_room",java.sql.Timestamp.class));
+        assertNull(jdbc.queryForObject("SELECT live_ended_at FROM record_room",java.sql.Timestamp.class));
         assertEquals(-1,jdbc.queryForObject("SELECT code FROM live_msg",Integer.class));assertEquals(false,jdbc.queryForObject("SELECT is_send FROM live_msg",Boolean.class));
         assertEquals(8L,jdbc.queryForObject("SELECT total_msg_count FROM room_live_daily_stats",Long.class));
         assertEquals(true,jdbc.queryForObject("SELECT imported_snapshot FROM room_live_session_stats",Boolean.class));
@@ -190,7 +193,9 @@ class BackupServiceIntegrationTest {
         String id=prepare(file);service.commit(id,new BackupService.CommitRequest(Map.of()));await(id,"DONE");
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM notification_rule",Integer.class));assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM backup_quarantine_record",Integer.class));
         assertTrue(service.quarantinePayload(jdbc.queryForObject("SELECT id FROM backup_quarantine_record",Long.class)).contains("999"));
-        assertFalse(((List<Map<String,Object>>)service.quarantined(0).get("records")).get(0).containsKey("payload"));
+        List<?> records=(List<?>)service.quarantined(0).get("records");
+        Map<?,?> record=(Map<?,?>)records.get(0);
+        assertFalse(record.containsKey("payload"));
     }
 
     @Test void importedPublishedPartsNeverEnterAutomaticQueues() throws Exception {

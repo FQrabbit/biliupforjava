@@ -214,8 +214,7 @@ public class RecordPartRecordingStateService {
         if (history == null || room == null || history.isProcessingArchived() || history.isPublish() || history.isSplitClosed()
                 || room.isRecording() || room.isStreaming()
                 || !history.isUpload() || !part.getHistoryId().equals(room.getHistoryId())
-                || (StringUtils.isNotBlank(part.getSessionId()) && StringUtils.isNotBlank(room.getSessionId())
-                    && !part.getSessionId().equals(room.getSessionId()))
+                || room.getLiveGroup() != null && !LiveSessionPolicy.owns(room, history)
                 || partRepository.countActuallyRecordingPartsByHistoryId(history.getId()) > 0) return;
         LocalDateTime now = LocalDateTime.now();
         history.setRecording(false);
@@ -227,15 +226,19 @@ public class RecordPartRecordingStateService {
         historyRepository.save(history);
         room.setRecording(false);
         room.setStreaming(false);
-        room.setSessionId(null);
+        LiveSessionPolicy.end(room, now);
         room.setUpdateTime(now);
-        roomRepository.save(room);
+        roomRepository.saveLiveState(room);
     }
 
     private boolean isCurrentActiveSession(RecordRoom room, RecordHistory history, RecordHistoryPart part) {
         if (room == null || history == null || !room.isRecording()
                 || !part.getHistoryId().equals(room.getHistoryId())) return false;
-        return StringUtils.isBlank(part.getSessionId()) || StringUtils.isBlank(room.getSessionId())
-                || part.getSessionId().equals(room.getSessionId());
+        if (room.getLiveGroup() != null && !LiveSessionPolicy.owns(room, history)) return false;
+        // 换上游 ID 不缩短当前文件的观察时间，已经出现后续文件的旧P按结束后的规则观察
+        RecordHistoryPart latest = partRepository.findFirstByHistoryIdOrderByStartTimeDescIdDesc(history.getId());
+        return latest == null || java.util.Objects.equals(latest.getId(), part.getId())
+                || latest.getStartTime() == null || part.getStartTime() == null
+                || latest.getStartTime().isBefore(part.getStartTime());
     }
 }

@@ -139,6 +139,10 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                 backupExistingFileDatabase(connection);
             }
             ensureMigrationTable();
+            if (h2 && tableExists(connection, "record_room")
+                    && migrationPending(connection, "20261014_01", "本地直播时间归组", "live-time-group-v1")) {
+                backupExistingFileDatabase(connection);
+            }
             if (h2 && tableExists(connection, "room_live_event")
                     && !migrationPending(connection, "20261004_02", "统计增量更新队列", "stats-incremental-update-v1")
                     && migrationPending(connection, "20261005_01", "统计礼物补价查询索引", "stats-gift-price-query-indexes-v1")) {
@@ -167,6 +171,11 @@ public class DatabaseMigrationInitializer implements InitializingBean {
                     });
             applyMigration(connection, "20261005_02", "数据继承备份与导入归档", "backup-inheritance-archive-v1",
                     () -> applyBackupInheritanceSchema(connection, h2));
+            applyMigration(connection, "20261014_01", "本地直播时间归组", "live-time-group-v1", () -> {
+                ensureColumn(connection, "record_room", "live_group", "VARCHAR(255) NULL");
+                ensureColumn(connection, "record_room", "live_event_at", "TIMESTAMP NULL");
+                ensureColumn(connection, "record_room", "live_ended_at", "TIMESTAMP NULL");
+            });
             validateRequiredSchema(connection);
             log.info("[BLR] {}", LogKvs.event("DatabaseMigration.Completed").add("databaseType", product));
         } catch (Exception e) {
@@ -560,6 +569,9 @@ public class DatabaseMigrationInitializer implements InitializingBean {
     }
 
     private void validateRequiredSchema(Connection connection) throws SQLException {
+        if (tableExists(connection, "record_room")) {
+            validateColumns(connection, "record_room", List.of("live_group", "live_event_at", "live_ended_at"));
+        }
         if (tableExists(connection, "room_live_event")) {
             validateIndexes(connection, "room_live_event", new String[]{
                     "idx_room_live_event_type_gift_id", "idx_room_live_event_type_gift_name"});

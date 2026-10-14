@@ -94,34 +94,22 @@ public class RecordEventFileOpenService implements RecordEventService {
                 room.setWebhookSource(top.sshh.bililiverecoder.entity.RecordEventType.VideoFileCreatedEvent.equals(event.getEventType()) ? "BLREC" : "BREC");
                 room.setWebhookLastSeenAt(LocalDateTime.now());
 
-                String currentSessionId = room.getSessionId();
-                RecordHistory knownSession = historyRepository.findFirstByRoomIdAndSessionIdOrderByIdDesc(roomId, incomingSessionId);
-                if (knownSession != null && !knownSession.isRecording()
-                        && incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
-                    // FileOpening 可在 SessionEnded 之后迟到。稿件已经结束时不再重新打开它，
-                    // 更不能把 room.historyId 回退到这个旧会话
-                    log.info("[BLR] {}", LogKvs.event("FileOpen.IgnoreCompletedStaleSession")
-                            .add("roomId", roomId)
-                            .add("incomingSessionId", incomingSessionId)
-                            .add("currentSessionId", currentSessionId)
-                            .add("historyId", knownSession.getId())
-                            .add("filePath", relativePath));
-                    return;
+                String filePath = partPathService.resolveWebhookPath(relativePath);
+                RecordHistoryPart knownFile = historyPartRepository.findByFilePath(filePath);
+                if (knownFile == null && room.getHistoryId() != null) {
+                    knownFile = findByCanonicalPath(historyPartRepository.findByHistoryId(room.getHistoryId()), filePath);
                 }
-                if (incomingSessionId != null && !incomingSessionId.equals(currentSessionId)) {
-                    log.debug("[BLR] {}", LogKvs.event("SessionMismatch.Detected")
-                            .add("roomId", roomId)
-                            .add("reason", "Session changed; choosing history by configured merge interval")
-                            .add("currentSessionId", currentSessionId)
-                            .add("incomingSessionId", incomingSessionId));
-
+                if (knownFile == null) {
                     LocalDateTime now = LocalDateTime.now();
+                    if (!historyMergeService.beginLive(room,
+                            eventData.getFileOpenTime() == null ? event.getEventTimestamp() : eventData.getFileOpenTime(), now)) return;
                     RecordHistory history = historyMergeService.findReusableHistory(
-                            roomId, now, incomingSessionId, "SessionMismatch");
+                            room, incomingSessionId, "SessionMismatch");
 
                     if (history == null) {
                         history = new RecordHistory();
                         if (historySplitService != null) historySplitService.initializeNew(history);
+                        history.setSplitGroup(room.getLiveGroup());
                         history.setRoomId(roomId);
                         history.setStartTime(fileOpenTimeOrNow(eventData, now));
                         history.setEndTime(history.getStartTime());
@@ -134,10 +122,12 @@ public class RecordEventFileOpenService implements RecordEventService {
                                 .add("newSessionId", incomingSessionId));
                     }
 
-                    history.setSessionId(incomingSessionId);
-                    history.setRecording(true);
-                    history.setStreaming(eventData.isStreaming());
-                    history = historyRepository.save(history);
+                    if (!history.isSplitClosed()) {
+                        history.setSessionId(incomingSessionId);
+                        history.setRecording(true);
+                        history.setStreaming(eventData.isStreaming());
+                        history = historyRepository.save(history);
+                    }
 
                     room.setHistoryId(history.getId());
                     room.setSessionId(incomingSessionId);
@@ -145,7 +135,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                     room.setStreaming(eventData.isStreaming());
                     room.setUname(eventData.getName());
                     room.setTitle(eventData.getTitle());
-                    roomRepository.save(room);
+                    roomRepository.saveLiveState(room);
 
                     log.info("[BLR] {}", LogKvs.event("SessionMismatch.Recovered")
                             .add("roomId", roomId)
@@ -153,7 +143,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                             .add("newSessionId", incomingSessionId));
                 }
 
-                roomRepository.save(room);
+                roomRepository.saveLiveState(room);
 
                 Optional<RecordHistory> historyOptional = historyRepository.findById(room.getHistoryId());
                 if (historyOptional.isEmpty()) {
@@ -172,8 +162,6 @@ public class RecordEventFileOpenService implements RecordEventService {
                             .add("limit", 100));
                     return;
                 }
-
-                String filePath = partPathService.resolveWebhookPath(relativePath);
 
                 RecordHistoryPart existingPart = historyPartRepository.findByFilePath(filePath);
                 if (existingPart != null && roomId.equals(existingPart.getRoomId())) {
@@ -203,7 +191,7 @@ public class RecordEventFileOpenService implements RecordEventService {
                         if (!history.isSplitClosed() && java.util.Objects.equals(room.getHistoryId(), history.getId())) {
                             room.setRecording(true);
                             room.setStreaming(eventData.isStreaming());
-                            roomRepository.save(room);
+                            roomRepository.saveLiveState(room);
                         }
                         log.info("[BLR] {}", LogKvs.event("FileOpen.RestoreAutoClosedPart")
                                 .add("roomId", roomId).add("historyId", history.getId()).add("partId", existingPart.getId()));

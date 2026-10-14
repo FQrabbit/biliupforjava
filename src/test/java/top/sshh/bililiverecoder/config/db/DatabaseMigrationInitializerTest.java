@@ -44,6 +44,8 @@ class DatabaseMigrationInitializerTest {
         try {
             JdbcTemplate jdbc = new JdbcTemplate(database);
             jdbc.execute("CREATE TABLE bili_bili_user (id BIGINT PRIMARY KEY, login BOOLEAN)");
+            jdbc.execute("CREATE TABLE record_room (id BIGINT PRIMARY KEY)");
+            jdbc.execute("INSERT INTO record_room(id) VALUES(1)");
             jdbc.execute("INSERT INTO bili_bili_user (id, login) VALUES (10, TRUE)");
             jdbc.execute("CREATE TABLE record_history (id BIGINT PRIMARY KEY, title VARCHAR(255))");
             jdbc.execute("INSERT INTO record_history (id, title) VALUES (20, 'existing')");
@@ -58,10 +60,14 @@ class DatabaseMigrationInitializerTest {
             jdbc.execute("CREATE TABLE room_live_event (id BIGINT PRIMARY KEY, history_id BIGINT, type VARCHAR(32), gift_id INTEGER, gift_name VARCHAR(255))");
             initializer.afterPropertiesSet();
 
-            assertEquals(10, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
+            assertEquals(11, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
             assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES WHERE INDEX_NAME IN "
                     + "('IDX_ROOM_LIVE_EVENT_TYPE_GIFT_ID','IDX_ROOM_LIVE_EVENT_TYPE_GIFT_NAME')", Integer.class));
             assertColumn(jdbc, "record_history", "force_archived");
+            assertColumn(jdbc, "record_room", "live_group");
+            assertColumn(jdbc, "record_room", "live_event_at");
+            assertColumn(jdbc, "record_room", "live_ended_at");
+            org.junit.jupiter.api.Assertions.assertNull(jdbc.queryForObject("SELECT live_group FROM record_room WHERE id=1", String.class));
             assertColumn(jdbc, "record_history", "split_size_bytes");
             assertColumn(jdbc, "record_history_part", "split_assigned");
             org.junit.jupiter.api.Assertions.assertNull(jdbc.queryForObject("SELECT split_size_bytes FROM record_history WHERE id=20", Long.class));
@@ -115,7 +121,7 @@ class DatabaseMigrationInitializerTest {
                     + "WHERE history_id=99 AND deletion_started=TRUE", Integer.class));
             assertEquals(taskId, jdbc.queryForObject("SELECT id FROM publish_task WHERE history_id=20", Long.class));
             assertEquals(historyBackupKey,jdbc.queryForObject("SELECT backup_key FROM record_history WHERE id=20",String.class));
-            assertEquals(10, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
+            assertEquals(11, jdbc.queryForObject("SELECT COUNT(*) FROM app_schema_migration WHERE success=TRUE", Integer.class));
         } finally {
             database.shutdown();
             try (var paths = Files.walk(workPath)) {

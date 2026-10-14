@@ -115,7 +115,7 @@ public class RecordEventFileClosedService implements RecordEventService {
             partByPath = findByCanonicalPath(historyPartRepository.findOpenCandidatesByRoomId(eventData.getRoomId()), filePath);
             matchedByCanonicalPath = partByPath != null;
         }
-        RecordHistory history = historyStateService.resolveHistory(room, eventData, partByPath);
+        RecordHistory history = historyStateService.resolveEventHistory(room, event, partByPath);
         if (history != null) {
             // 正常逻辑
             if (!Objects.equals(history.getRoomId(), room.getRoomId()) || history.isProcessingArchived()) {
