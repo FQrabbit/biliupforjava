@@ -82,6 +82,7 @@ public class ShutdownCoordinator implements ApplicationListener<ContextClosedEve
 
     @PreDestroy
     public void printExitOk() {
+        if (top.sshh.bililiverecoder.protection.DiskSpaceGuard.blocksBusiness()) return;
         if (!shutdownState.isShuttingDown()) {
             return;
         }

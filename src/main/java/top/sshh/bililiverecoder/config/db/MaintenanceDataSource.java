@@ -18,11 +18,13 @@ public class MaintenanceDataSource extends DelegatingDataSource implements AutoC
     private final DatabaseMaintenanceState state;
     private volatile HikariDataSource pool;
     private HikariConfig restartConfig;
+    private volatile boolean protectionShutdownFailed;
 
     public MaintenanceDataSource(HikariDataSource pool, DatabaseMaintenanceState state) {
         super(pool);
         this.pool = pool;
         this.state = state;
+        top.sshh.bililiverecoder.protection.DiskSpaceBootstrap.track(this);
     }
 
     @Override
@@ -86,7 +88,12 @@ public class MaintenanceDataSource extends DelegatingDataSource implements AutoC
 
     public synchronized void closePoolForMaintenance() throws SQLException {
         stopPoolForMaintenance();
-        try (Connection connection = openDirect(restartConfig.getJdbcUrl()); var statement = connection.createStatement()) {
+        shutdownDirectly();
+    }
+
+    private void shutdownDirectly() throws SQLException {
+        String url = restartConfig.getJdbcUrl().replaceAll("(?i);IFEXISTS=[^;]*", "") + ";IFEXISTS=TRUE";
+        try (Connection connection = openDirect(url); var statement = connection.createStatement()) {
             statement.execute("SHUTDOWN");
         }
     }
@@ -119,9 +126,43 @@ public class MaintenanceDataSource extends DelegatingDataSource implements AutoC
         return pool.getJdbcUrl();
     }
 
+    public boolean isPoolClosed() { return pool.isClosed(); }
+
+    public boolean isProtectionComplete() { return pool.isClosed() && !protectionShutdownFailed; }
+
+    public synchronized void shutdownForDiskProtection() throws SQLException {
+        protectionShutdownFailed = true;
+        if (top.sshh.bililiverecoder.protection.DiskSpaceSettings.localDatabasePath(jdbcUrl()) != null) {
+            closePoolForMaintenance();
+        } else { stopPoolForMaintenance(); }
+        protectionShutdownFailed = false;
+    }
+
     @Override
     public synchronized void close() {
+        if (!pool.isClosed() && top.sshh.bililiverecoder.protection.DiskSpaceGuard.blocksConnections()) {
+            try {
+                state.pauseForDiskProtection(0);
+                shutdownForDiskProtection();
+                state.stop();
+            } catch (Exception failure) {
+                protectionShutdownFailed = true;
+                state.retainDatabasePause();
+                throw new IllegalStateException("保护期间数据库未能确认正常关闭", failure);
+            }
+            return;
+        }
         state.stop();
         pool.close();
+    }
+
+    public synchronized void retryProtectionShutdown() throws SQLException {
+        if (state.activeConnectionCount() != 0) throw new SQLException("仍有数据库操作未归还连接");
+        if (pool.isClosed() && protectionShutdownFailed) {
+            if (restartConfig == null) throw new SQLException("缺少数据库关闭配置，不能确认关闭状态");
+            if (top.sshh.bililiverecoder.protection.DiskSpaceSettings.localDatabasePath(jdbcUrl()) != null) shutdownDirectly();
+            protectionShutdownFailed = false;
+            state.stop();
+        } else if (!pool.isClosed()) { close(); }
     }
 }

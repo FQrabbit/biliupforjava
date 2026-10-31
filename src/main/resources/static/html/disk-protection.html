@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>磁盘空间保护 · biliupforjava</title>
+<style>
+body{margin:0;background:#f3f5f8;color:#26334a;font:16px/1.7 system-ui,"Microsoft YaHei",sans-serif}main{max-width:850px;margin:6vh auto;padding:30px;background:white;border-radius:16px;box-shadow:0 8px 40px #24344a12}h1{font-size:27px;margin:0 0 12px}p{margin:12px 0}.notice{padding:16px;background:#fff5df;border-radius:10px}.error{color:#b42b26;white-space:pre-wrap}.volume{padding:14px 0;border-bottom:1px solid #e5e9ef;overflow-wrap:anywhere}.muted{color:#68768a;font-size:14px}button{border:0;background:#2167db;color:white;padding:12px 22px;border-radius:8px;font:inherit;cursor:pointer}button:disabled{background:#aeb8c8;cursor:not-allowed}a{color:#2167db}@media(max-width:600px){main{margin:16px;padding:22px}}
+</style></head><body><main>
+<div class="muted">biliupforjava · 磁盘空间保护</div><h1 id="title">正在读取保护状态</h1>
+<p id="message" role="status"></p><p id="error" class="error"></p>
+<div class="notice">外部录制器仍可能继续写入磁盘，请自行暂停录播姬或 blrec，并释放空间。保护期间新录制事件会被拒收，未被录制器重试的事件可能漏记。</div>
+<div id="volumes"></div><p id="limits"></p><p id="stable" class="muted"></p><p id="closed" class="muted"></p>
+<button id="resume" disabled>重新检查并恢复工作</button> <a id="home" hidden>返回首页</a><p id="result" role="status"></p>
+<p class="muted">程序不会自动恢复。确认空间和数据库状态后再恢复；数据库关闭失败时会保持保护并显示原因。</p>
+</main><script>
+const base='__CONTEXT_PATH__', token='__CSRF_TOKEN__';
+const el=id=>document.getElementById(id), size=bytes=>(bytes/1073741824).toFixed(2)+' GiB';
+async function refresh(){try{
+ const r=await fetch(base+'/api/system/disk-protection',{cache:'no-store'});if(!r.ok)throw Error('暂时无法读取状态，请稍后刷新');const s=await r.json();
+ const labels={RUNNING:'运行正常',QUIESCING:'正在停止业务并收尾',PAUSED:'业务已暂停',FAILED:'保护异常，需要处理',RECOVERING:'正在恢复业务核心'};
+ el('title').textContent=labels[s.phase]||s.phase;el('message').textContent=s.message;el('error').textContent=s.error||'';
+ el('closed').textContent=s.databaseClosed?'本程序数据库连接已确认关闭':'尚未确认数据库关闭完成';
+ el('limits').textContent='触发：使用率 ≥ '+s.stopPercent+'% 或剩余 ≤ '+size(s.stopBytes)+'；恢复：使用率 ≤ '+s.resumePercent+'% 且剩余 ≥ '+size(s.resumeBytes);
+ el('stable').textContent='恢复条件已连续满足 '+s.stableSeconds+' / '+s.requiredStableSeconds+' 秒';
+ el('resume').disabled=!s.canResume||!['PAUSED','FAILED'].includes(s.phase);
+ el('volumes').replaceChildren(...s.volumes.map(v=>{const d=document.createElement('div');d.className='volume';d.textContent=v.path+' · 已使用 '+v.usedPercent.toFixed(2)+'% · 可用 '+size(v.freeBytes)+' / '+size(v.totalBytes);return d}));
+ el('home').hidden=s.phase!=='RUNNING';el('home').href=base+'/';
+}catch(e){el('result').textContent=e.message+'，核心切换期间连接可能短暂中断'}}
+el('resume').onclick=async()=>{el('resume').disabled=true;try{const r=await fetch(base+'/api/system/disk-protection/resume',{method:'POST',headers:{'X-Protection-Token':token}});const s=await r.json();el('result').textContent=s.message}catch(e){el('result').textContent='正在切换核心，请稍后刷新页面'}};
+refresh();setInterval(refresh,2000);
+</script></body></html>

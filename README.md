@@ -204,6 +204,10 @@ NAS、Linux、Docker 和 WAR 的完整步骤统一放在 [部署与配置文档]
 
 </details>
 
+## 磁盘空间保护
+
+磁盘使用率达到 98% 或剩余空间不超过 2 GiB 时，程序会进入保护并暂停业务；释放空间后需要手动恢复，详情见[磁盘空间保护](docs/disk-space-protection.md)
+
 ## 交流与相关项目
 
 - QQ 群：`697605055` <a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=kBA4u6rVFe_n2XjyYGx94CgTh3-KWM5T&jump_from=webapi&authKey=nhTa8F4D31bovL/ZwEfX5Qt148AyzJKCD4cC0+6ew/Y8bJfcf6aJKxtqXPUjQpwx"><img border="0" src="https://pub.idqqimg.com/wpa/images/group.png" alt="录播姬投稿插件交流群" title="录播姬投稿插件交流群"></a>

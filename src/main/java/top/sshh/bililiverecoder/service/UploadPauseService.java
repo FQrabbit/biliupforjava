@@ -30,6 +30,9 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class UploadPauseService {
 
+    @jakarta.annotation.PreDestroy
+    public void shutdown() { resumeRetryScheduler.shutdownNow(); }
+
     private static final int MAX_RESUME_RETRY_ATTEMPTS = 8;
     private static final long RESUME_RETRY_DELAY_MS = 1500L;
 

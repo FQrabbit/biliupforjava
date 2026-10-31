@@ -103,6 +103,8 @@ public class PartPreviewService {
         }
     }
 
+    public boolean isStopped() { return executor == null || executor.isTerminated(); }
+
     public Map<String, Object> meta(Long partId) {
         PreviewFile previewFile = resolvePreviewFile(partId);
         Map<String, Object> result = previewFile.toMap();

@@ -592,4 +592,11 @@ public class BackupService {
         try {if(worker.awaitTermination(30,TimeUnit.SECONDS))for(BackupStage stage:sessions.values())stage.close();}
         catch(Exception ignored) {Thread.currentThread().interrupt();}
     }
+
+    public void stopForDiskProtection() {
+        for (BackupStage stage : sessions.values()) stage.cancelled.set(true);
+        worker.shutdownNow();
+    }
+
+    public boolean isStopped() { return worker.isTerminated(); }
 }

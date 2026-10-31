@@ -9,6 +9,9 @@ public class BiliupRuntimeHintsRegistrar implements RuntimeHintsRegistrar {
 
     @Override
     public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
+        hints.resources().registerPattern("static/html/disk-protection.html");
+        hints.reflection().registerType(top.sshh.bililiverecoder.protection.DiskProtectionLogFilter.class,
+                MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS);
         for (Class<?> type : new Class<?>[]{
                 top.sshh.bililiverecoder.entity.BackupQuarantineRecord.class,
                 top.sshh.bililiverecoder.entity.RoomLiveGiftCatalog.class,

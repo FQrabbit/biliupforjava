@@ -42,6 +42,8 @@ public class CoreRestartService implements ApplicationContextAware {
         applicationArgs = args == null ? new String[0] : args.clone();
     }
 
+    public static String[] applicationArguments() { return applicationArgs.clone(); }
+
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) {
         if (applicationContext instanceof ConfigurableApplicationContext configurable) {
@@ -103,9 +105,7 @@ public class CoreRestartService implements ApplicationContextAware {
             Throwable last = null;
             for (int attempt = 1; attempt <= 3; attempt++) {
                 try {
-                    ConfigurableApplicationContext newContext =
-                            BiliLiveRecordApplication.createSpringApplication().run(applicationArgs);
-                    context = newContext;
+                    top.sshh.bililiverecoder.protection.DiskSpaceBootstrap.run(applicationArgs);
                     log.info("[BLR] {}", LogKvs.event("CoreRestart.Completed").add("attempt", attempt));
                     restarting.set(false);
                     return;

@@ -74,6 +74,12 @@ $.ajaxPrefilter(function(options) {
     }
 });
 
+$(document).ajaxError(function(event, xhr) {
+    if (xhr.status === 503 && xhr.responseJSON && xhr.responseJSON.diskProtection) {
+        getNavigationWindow().location.href = resolveAppUrl('/disk-protection');
+    }
+});
+
 const ApiUtil = {
     resolveUrl: resolveAppUrl,
     getLoginUrl: getLoginUrl,

@@ -20,6 +20,7 @@ public class DatabaseMaintenanceState {
     // 已经借到连接的线程可以继续借连接，让已有事务正常收尾
     public synchronized Thread acquireConnection() throws SQLException {
         Thread caller = Thread.currentThread();
+        rejectNewBorrowerDuringProtection(caller);
         while (databasePaused && caller != maintenanceOwner && !borrowers.containsKey(caller)) {
             if (stopped) throw new SQLException("数据库连接池已停止");
             try {
@@ -30,8 +31,33 @@ public class DatabaseMaintenanceState {
             }
         }
         if (stopped) throw new SQLException("数据库连接池已停止");
+        rejectNewBorrowerDuringProtection(caller);
         borrowers.merge(caller, 1, Integer::sum);
         return caller;
+    }
+
+    private void rejectNewBorrowerDuringProtection(Thread caller) throws SQLException {
+        if (top.sshh.bililiverecoder.protection.DiskSpaceGuard.blocksConnections()
+                && caller != maintenanceOwner && !borrowers.containsKey(caller)) {
+            throw new java.sql.SQLNonTransientConnectionException("磁盘空间保护中，拒绝新的数据库操作");
+        }
+    }
+
+    public synchronized void pauseForDiskProtection(long timeoutMillis) throws InterruptedException {
+        maintenanceOwner = Thread.currentThread();
+        if (borrowers.containsKey(maintenanceOwner)) throw new IllegalStateException("保护线程仍持有业务连接");
+        databasePaused = true;
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(0, timeoutMillis));
+        try {
+            while (!borrowers.isEmpty()) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) throw new IllegalStateException("等待已有数据库操作收尾超时，保护继续生效");
+                TimeUnit.NANOSECONDS.timedWait(this, remaining);
+            }
+        } catch (InterruptedException | RuntimeException failure) {
+            retainDatabasePause();
+            throw failure;
+        }
     }
 
     public synchronized void releaseConnection(Thread borrower) {
@@ -96,6 +122,7 @@ public class DatabaseMaintenanceState {
     }
 
     public boolean tryBeginMaintenance() {
+        if (top.sshh.bililiverecoder.protection.DiskSpaceGuard.blocksBusiness()) return false;
         return maintenanceActive.compareAndSet(false, true);
     }
 

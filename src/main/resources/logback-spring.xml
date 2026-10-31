@@ -8,6 +8,7 @@
     <property name="FILE_LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} | %-5level | %thread | %logger{40} | %msg%n"/>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="top.sshh.bililiverecoder.protection.DiskProtectionLogFilter" />
         <encoder>
             <pattern>${FILE_LOG_PATTERN}</pattern>
             <charset>UTF-8</charset>

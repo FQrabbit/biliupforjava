@@ -34,6 +34,7 @@ public class BiliLiveRecordApplication {
     public static SpringApplication createSpringApplication() {
         SpringApplication application = new SpringApplication(BiliLiveRecordApplication.class);
         application.setMainApplicationClass(BiliLiveRecordApplication.class);
+        application.addListeners(new top.sshh.bililiverecoder.protection.DiskSpaceBootstrap());
         return application;
     }
 
@@ -49,7 +50,7 @@ public class BiliLiveRecordApplication {
 
         CoreRestartService.setApplicationArgs(args);
 
-        createSpringApplication().run(args);
+        top.sshh.bililiverecoder.protection.DiskSpaceBootstrap.run(args);
     }
 
 }

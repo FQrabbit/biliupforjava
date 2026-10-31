@@ -23,6 +23,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class UploadUserSerialScheduler {
 
+    @jakarta.annotation.PreDestroy
+    public void shutdown() { rejectFallbackScheduler.shutdownNow(); }
+
     private final Executor asyncExecutor;
     private final ObjectProvider<UploadPauseService> uploadPauseServiceProvider;
     @Autowired(required = false)

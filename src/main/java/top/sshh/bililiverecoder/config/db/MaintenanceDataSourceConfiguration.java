@@ -13,7 +13,7 @@ import top.sshh.bililiverecoder.service.DatabaseMaintenanceState;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(DataSourceProperties.class)
 public class MaintenanceDataSourceConfiguration {
-    @Bean(destroyMethod = "close")
+    @Bean(destroyMethod = "")
     @ConfigurationProperties("spring.datasource.hikari")
     public HikariDataSource maintenanceConnectionPool(DataSourceProperties properties) {
         return properties.initializeDataSourceBuilder().type(HikariDataSource.class).build();

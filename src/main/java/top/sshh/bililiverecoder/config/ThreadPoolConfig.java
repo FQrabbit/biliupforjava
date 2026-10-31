@@ -19,7 +19,7 @@ public class ThreadPoolConfig {
             @Value("${record.async.queue-capacity:2000}") int queueCapacity,
             @Value("${record.async.await-termination-seconds:15}") int awaitTerminationSeconds
     ) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        ThreadPoolTaskExecutor executor = new top.sshh.bililiverecoder.protection.ProtectionTaskExecutor();
         executor.setCorePoolSize(Math.max(1, corePoolSize));
         executor.setMaxPoolSize(Math.max(executor.getCorePoolSize(), maxPoolSize));
         executor.setQueueCapacity(Math.max(0, queueCapacity));
@@ -38,7 +38,7 @@ public class ThreadPoolConfig {
             @Value("${record.webhook.queue-capacity:2000}") int queueCapacity,
             @Value("${record.webhook.await-termination-seconds:5}") int awaitTerminationSeconds
     ) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        ThreadPoolTaskExecutor executor = new top.sshh.bililiverecoder.protection.ProtectionTaskExecutor();
         executor.setCorePoolSize(corePoolSize);
         executor.setMaxPoolSize(maxPoolSize);
         executor.setQueueCapacity(queueCapacity);
@@ -56,7 +56,7 @@ public class ThreadPoolConfig {
             @Value("${record.webhook.scheduler-pool-size:1}") int poolSize,
             @Value("${record.webhook.scheduler-await-termination-seconds:2}") int awaitTerminationSeconds
     ) {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        ThreadPoolTaskScheduler scheduler = new top.sshh.bililiverecoder.protection.ProtectionTaskScheduler();
         scheduler.setPoolSize(Math.max(1, poolSize));
         scheduler.setThreadNamePrefix("webhook-scheduler-");
         scheduler.setWaitForTasksToCompleteOnShutdown(true);
@@ -116,7 +116,7 @@ public class ThreadPoolConfig {
             @Value("${bili.dm.scheduler-pool-size:1}") int poolSize,
             @Value("${bili.dm.scheduler-await-termination-seconds:2}") int awaitTerminationSeconds
     ) {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        ThreadPoolTaskScheduler scheduler = new top.sshh.bililiverecoder.protection.ProtectionTaskScheduler();
         scheduler.setPoolSize(Math.max(1, poolSize));
         scheduler.setThreadNamePrefix("danmaku-scheduler-");
         scheduler.setWaitForTasksToCompleteOnShutdown(true);
@@ -131,7 +131,7 @@ public class ThreadPoolConfig {
                                                       int queueCapacity,
                                                       int awaitTerminationSeconds,
                                                       String threadNamePrefix) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        ThreadPoolTaskExecutor executor = new top.sshh.bililiverecoder.protection.ProtectionTaskExecutor();
         executor.setCorePoolSize(corePoolSize);
         executor.setMaxPoolSize(Math.max(corePoolSize, maxPoolSize));
         executor.setQueueCapacity(queueCapacity);
@@ -150,7 +150,7 @@ public class ThreadPoolConfig {
             @Value("${record.upload.queue-capacity:2000}") int queueCapacity,
             @Value("${record.upload.await-termination-seconds:15}") int awaitTerminationSeconds
     ) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        ThreadPoolTaskExecutor executor = new top.sshh.bililiverecoder.protection.ProtectionTaskExecutor();
         executor.setCorePoolSize(Math.max(1, corePoolSize));
         executor.setMaxPoolSize(Math.max(executor.getCorePoolSize(), maxPoolSize));
         executor.setQueueCapacity(Math.max(0, queueCapacity));
@@ -165,7 +165,7 @@ public class ThreadPoolConfig {
     @Bean("publishAccountExecutor")
     public TaskExecutor publishAccountExecutor(
             @Value("${publish.account.worker-count:8}") int workerCount) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        ThreadPoolTaskExecutor executor = new top.sshh.bililiverecoder.protection.ProtectionTaskExecutor();
         int workers = Math.max(1, workerCount);
         executor.setCorePoolSize(workers);
         executor.setMaxPoolSize(workers);
@@ -180,7 +180,7 @@ public class ThreadPoolConfig {
     @Bean("highEnergyPrepareExecutor")
     public TaskExecutor highEnergyPrepareExecutor(
             @Value("${publish.high-energy.prepare-parallelism:1}") int parallelism) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        ThreadPoolTaskExecutor executor = new top.sshh.bililiverecoder.protection.ProtectionTaskExecutor();
         int workers = Math.max(1, parallelism);
         executor.setCorePoolSize(workers);
         executor.setMaxPoolSize(workers);
