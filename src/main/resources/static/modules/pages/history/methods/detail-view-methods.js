@@ -532,6 +532,7 @@
                 this.editPartFileDialogVisible ||
                 this.batchDeleteDialogVisible ||
                 this.singleDeleteDialogVisible ||
+                this.videoCleanupDialogVisible ||
                 (this.isMobile && (
                     this.filterExpanded ||
                     (this.showMoreActions && !this.editPartsEditing) ||

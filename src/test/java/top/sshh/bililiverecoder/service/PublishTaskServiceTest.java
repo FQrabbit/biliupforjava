@@ -29,6 +29,37 @@ import static org.mockito.Mockito.when;
 
 class PublishTaskServiceTest {
     @Test
+    void cleanupPreventsBothNewTaskAdmissionAndFailedTaskRetry() {
+        PartActivityCoordinator coordinator = new PartActivityCoordinator();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "partActivityCoordinator", coordinator);
+        PublishTask failed = captchaTask(201L, 0);
+        failed.setState(PublishTaskState.FAILED);
+        try (var cleanup = coordinator.tryBeginHistoryFileOperation(1L)) {
+            assertTrue(cleanup != null);
+            assertFalse(service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null).isAccepted());
+            assertEquals(null, service.retry(failed.getId(), false));
+            assertEquals(PublishTaskState.FAILED, failed.getState());
+        }
+        assertEquals(PublishTaskState.READY, service.retry(failed.getId(), false).getState());
+    }
+
+    @Test
+    void taskAdmissionLeaseStaysUntilTransactionCompletion() {
+        PartActivityCoordinator coordinator = new PartActivityCoordinator();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "partActivityCoordinator", coordinator);
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertTrue(service.accept(1L, 10L, PublishTaskOperation.NEW_PUBLISH, PublishTaskSource.MANUAL, null).isAccepted());
+            assertEquals(null, coordinator.tryBeginHistoryFileOperation(1L));
+        } finally {
+            var synchronizations = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+            synchronizations.forEach(sync -> sync.afterCompletion(
+                    org.springframework.transaction.support.TransactionSynchronization.STATUS_COMMITTED));
+        }
+        try (var cleanup = coordinator.tryBeginHistoryFileOperation(1L)) { assertTrue(cleanup != null); }
+    }
+    @Test
     void manualRequestIsSavedDuringMergeWhileAutomaticRequestStillWaits() {
         when(readiness.check(any(RecordHistory.class))).thenReturn(
                 new PublishReadinessService.Check(false, "MERGE_INTERVAL", "等待合并", LocalDateTime.now().plusMinutes(10)));

@@ -317,6 +317,8 @@
                     </section>
                     <section>
                         <span>录制与数据</span>
+                        <button type="button" class="is-warning" @click="openVideoCleanup()" :title="getVideoCleanupDisabledReason()" :disabled="!!getVideoCleanupDisabledReason()"><i class="el-icon-delete"></i>清理视频</button>
+                        <p v-if="getVideoCleanupDisabledReason()" class="video-cleanup-mobile-hint">{{ getVideoCleanupDisabledReason() }}</p>
                         <button v-if="!(currentDetail.forceArchived || currentDetail.importArchived)" type="button" @click="updatePartStatus(currentDetail.id)" :title="getHistoryOperationDisabledReason(currentDetail, 'updatePartStatus')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'updatePartStatus')"><i class="el-icon-video-pause"></i>结束录制</button>
                         <button v-if="!(currentDetail.forceArchived || currentDetail.importArchived)" type="button" class="is-warning" @click="forceArchive(currentDetail.id)" :disabled="!!getHistoryActionDisabledReason(currentDetail)"><i class="el-icon-switch-button"></i>强制归档</button>
                         <button v-if="!(currentDetail.forceArchived || currentDetail.importArchived)" type="button" @click="reloadHistoryMsg(currentDetail.id)" :title="getHistoryOperationDisabledReason(currentDetail, 'reloadHistoryMsg')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'reloadHistoryMsg')"><i class="el-icon-chat-dot-round"></i>重载弹幕</button>

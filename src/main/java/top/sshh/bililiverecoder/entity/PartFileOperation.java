@@ -16,7 +16,7 @@ public class PartFileOperation {
 
     public enum OperationType { MOVE, COPY, DELETE }
     public enum OperationStatus { PENDING, RUNNING, SUCCEEDED, SUCCEEDED_WITH_WARNINGS, FAILED }
-    public enum OperationSource { STANDARD, SCHEDULED_CLEANUP }
+    public enum OperationSource { STANDARD, SCHEDULED_CLEANUP, MANUAL_CLEANUP }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,6 +32,8 @@ public class PartFileOperation {
     @Column(length = 32)
     private OperationSource operationSource;
     private Long sourceLocationId;
+    @Column(length = 2048)
+    private String sourcePathSnapshot;
     private Long targetRootId;
     @Column(length = 2048)
     private String targetRelativePath;

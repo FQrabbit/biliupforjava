@@ -151,6 +151,9 @@ public class PartFileOperationService {
     public PartFileOperation retry(String operationKey) {
         PartFileOperation operation = operationRepository.findByOperationKey(operationKey)
                 .orElseThrow(() -> new IllegalArgumentException("file operation missing"));
+        if (operation.getOperationSource() == PartFileOperation.OperationSource.MANUAL_CLEANUP) {
+            throw new IllegalArgumentException("手动清理不能自动重试，请重新打开清理视频并确认文件");
+        }
         if (operation.getStatus() == PartFileOperation.OperationStatus.RUNNING) return operation;
         if (operation.getStatus() == PartFileOperation.OperationStatus.PENDING) {
             return executeLocked(operation, null);
@@ -233,6 +236,10 @@ public class PartFileOperationService {
         }
         for (PartFileOperation operation : operations) {
             try {
+                if (operation.getOperationSource() == PartFileOperation.OperationSource.MANUAL_CLEANUP) {
+                    reconcileManualCleanup(operation);
+                    continue;
+                }
                 ArchiveReviewStatusService.ReviewCheckResult review =
                         groupedReviews.get(resolveHistoryId(operation));
                 executeLocked(operation, review);
@@ -241,6 +248,33 @@ public class PartFileOperationService {
                         .add("operationKey", operation.getOperationKey()).add("partId", operation.getPartId())
                         .add("err", e.getMessage()));
             }
+        }
+    }
+
+    private void reconcileManualCleanup(PartFileOperation operation) {
+        PartActivityCoordinator.OperationLease lease = partActivityCoordinator == null
+                ? null : partActivityCoordinator.tryBeginFileOperation(operation.getPartId());
+        if (partActivityCoordinator != null && lease == null) return;
+        try (lease) {
+            PartFileLocation source = locationService.findLocation(operation.getSourceLocationId()).orElse(null);
+            if (source != null && Objects.equals(source.getStorageRootId(), operation.getTargetRootId())
+                    && Objects.equals(source.getRelativePath(), operation.getTargetRelativePath())) {
+                StorageRoot root = rootService.findById(source.getStorageRootId()).orElse(null);
+                if (root != null && rootService.ensureOnline(root)) {
+                    Path path = rootService.resolve(root, source.getRelativePath());
+                    if (Objects.equals(path.toString(), operation.getSourcePathSnapshot())
+                            && !Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                        locationService.completeManualDelete(operation.getPartId(), source);
+                        succeed(operation, false, null);
+                        return;
+                    }
+                }
+            }
+            // 恢复时只核对已删除文件的元数据，不继续执行删除
+            operation.setStatus(PartFileOperation.OperationStatus.FAILED);
+            operation.setErrorMessage("手动清理已中断，未继续删除；请重新选择并确认文件");
+            operation.setFinishedAt(LocalDateTime.now());
+            operationRepository.save(operation);
         }
     }
 

@@ -188,6 +188,7 @@
                     localFileState: p.localFileState || 'UNKNOWN',
                     localFileAvailable: !!p.localFileAvailable,
                     localFileExpected: p.localFileExpected !== false,
+                    manualVideoCleaned: !!p.manualVideoCleaned,
                     storageType: p.storageType || null,
                     rootStatus: p.rootStatus || null,
                     replicaCount: Number(p.replicaCount) || 0,

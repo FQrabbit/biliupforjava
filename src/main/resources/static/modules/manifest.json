@@ -41,6 +41,9 @@
         "mobile": "/modules/pages/history/mobile.html"
       },
       "fragments": {
+        "common": {
+          "videoCleanup": "/modules/pages/history/fragments/video-cleanup.html"
+        },
         "desktop": {
           "detail": "/modules/pages/history/fragments/desktop-detail.html",
           "dialogs": "/modules/pages/history/fragments/desktop-dialogs.html"
@@ -60,6 +63,7 @@
           "/modules/pages/history/upload-progress.css",
           "/modules/pages/history/part-status.css",
           "/modules/pages/history/batch.css",
+          "/modules/pages/history/video-cleanup.css",
           "/modules/pages/history/preview.css",
           "/css/global-preview-player.css"
         ],
@@ -95,6 +99,7 @@
         "/modules/pages/history/methods/preview-methods.js",
         "/modules/pages/history/methods/upload-methods.js",
         "/modules/pages/history/methods/record-methods.js",
+        "/modules/pages/history/methods/video-cleanup-methods.js",
         "/modules/pages/history/methods/post-publish-methods.js"
       ],
       "entry": "/modules/pages/history/page.js"

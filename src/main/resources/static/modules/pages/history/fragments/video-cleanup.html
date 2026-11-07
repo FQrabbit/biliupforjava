@@ -1,0 +1,84 @@
+<el-dialog title="清理视频" :visible.sync="videoCleanupDialogVisible" width="720px" append-to-body
+           custom-class="history-page-dialog video-cleanup-dialog"
+           :close-on-click-modal="false" :close-on-press-escape="!videoCleanupRunning"
+           :show-close="!videoCleanupRunning" :before-close="closeVideoCleanup">
+    <div v-loading="videoCleanupLoading" class="video-cleanup-content">
+        <template v-if="videoCleanupPhase === 'select'">
+            <div class="video-cleanup-warning">
+                <strong><i class="el-icon-warning-outline"></i> 所选视频将被永久删除，无法恢复</strong>
+                <p>删除全部副本后，将无法本地预览或使用原文件重新上传。</p>
+            </div>
+            <p class="video-cleanup-hint">保留录制历史、分P记录、弹幕和封面；B站线上稿件不受影响。</p>
+            <p v-if="currentDetail && (!currentDetail.publish || Number(currentDetail.code) === -2)" class="video-cleanup-state-warning">
+                {{ !currentDetail.publish ? '当前稿件尚未投稿' : '当前稿件已被退回' }}，清理后如需投稿或修复，需自行补回原视频。
+            </p>
+            <el-alert v-if="videoCleanupDraft && videoCleanupDraft.disabledReason" :title="videoCleanupDraft.disabledReason" type="warning" :closable="false" show-icon></el-alert>
+            <template v-if="videoCleanupDraft">
+                <div class="video-cleanup-scopes">
+                    <el-checkbox v-model="videoCleanupWork" :disabled="!videoCleanupScopeCount('WORK')">工作目录 <span class="video-cleanup-muted">（{{ videoCleanupScopeCount('WORK') }} 个）</span></el-checkbox>
+                    <el-checkbox v-model="videoCleanupArchive" :disabled="!videoCleanupScopeCount('ARCHIVE')">包含归档副本 <span class="video-cleanup-muted">（{{ videoCleanupScopeCount('ARCHIVE') }} 个）</span></el-checkbox>
+                </div>
+                <div class="video-cleanup-list-heading">
+                    <el-checkbox v-model="videoCleanupAllSelected" :indeterminate="videoCleanupIndeterminate" :disabled="!videoCleanupScopedParts.some(videoCleanupPartSelectable)">全选可清理分P</el-checkbox>
+                    <span class="video-cleanup-muted">归档副本默认保留</span>
+                </div>
+                <el-checkbox-group v-model="videoCleanupSelectedParts" class="video-cleanup-parts">
+                    <div v-for="part in videoCleanupScopedParts" :key="part.id" class="video-cleanup-part">
+                        <div class="video-cleanup-part-heading">
+                            <el-checkbox :label="part.id" :disabled="!part.selectable"><strong>{{ part.label }}</strong><span class="video-cleanup-part-title">{{ maskText(part.title || '未命名分P') }}</span></el-checkbox>
+                        </div>
+                        <div v-for="file in part.files" :key="file.id" class="video-cleanup-file" :class="{ 'is-unavailable': !file.available }">
+                            <div class="video-cleanup-file-meta">
+                                <span>{{ file.scope === 'WORK' ? '工作目录' : '归档副本' }}<span v-if="file.partIds.length > 1"> · 多个分P共用，只计一次</span></span>
+                                <span>{{ file.available ? formatFileSize(file.size) : '本次跳过' }}</span>
+                            </div>
+                            <div class="video-cleanup-file-path" :title="maskText(file.path)">{{ maskText(file.path) }}</div>
+                            <p v-if="file.reason" class="video-cleanup-state-warning">{{ file.reason }}</p>
+                        </div>
+                    </div>
+                </el-checkbox-group>
+                <div v-if="!videoCleanupScopedParts.length" class="video-cleanup-empty">当前范围没有可清理视频，可检查文件位置或选择归档副本。</div>
+                <p v-if="videoCleanupUnavailableCount" class="video-cleanup-state-warning">{{ videoCleanupUnavailableCount }} 个文件不可清理，本次跳过；恢复条件后需手动重新确认。</p>
+            </template>
+        </template>
+        <template v-else-if="videoCleanupPhase === 'running'">
+            <div class="video-cleanup-running-label" aria-live="polite">
+                <strong>正在清理视频</strong>
+                <span>{{ videoCleanupResults.length }}/{{ videoCleanupFiles.length }}</span>
+            </div>
+            <el-progress :percentage="videoCleanupFiles.length ? Math.round(videoCleanupResults.length / videoCleanupFiles.length * 100) : 0"></el-progress>
+            <p class="video-cleanup-hint">正在逐个处理本次选中的文件，完成后显示每个文件的结果。</p>
+        </template>
+        <template v-else>
+            <div class="video-cleanup-result-summary" aria-live="polite">
+                <strong>{{ videoCleanupSummary.deleted ? '已删除 ' + videoCleanupSummary.deleted + ' 个视频' : '本次未删除视频' }}</strong>
+                <span>按文件大小估算释放 {{ formatFileSize(videoCleanupSummary.bytes) }}</span>
+                <p v-if="videoCleanupSummary.failed || videoCleanupSummary.skipped || videoCleanupSummary.unknown || videoCleanupSummary.warnings" class="video-cleanup-state-warning">
+                    失败 {{ videoCleanupSummary.failed }} 个 · 跳过 {{ videoCleanupSummary.skipped }} 个 · 结果待确认 {{ videoCleanupSummary.unknown }} 个<span v-if="videoCleanupSummary.warnings"> · 状态待检查 {{ videoCleanupSummary.warnings }} 个</span>
+                </p>
+            </div>
+            <div class="video-cleanup-result-list">
+                <div v-for="result in videoCleanupResults" :key="result.id" class="video-cleanup-result" :class="'is-' + result.status.toLowerCase()">
+                    <div class="video-cleanup-file-meta"><span>{{ result.scope === 'WORK' ? '工作目录' : '归档副本' }}</span><strong>{{ videoCleanupStatusText(result) }}</strong></div>
+                    <div class="video-cleanup-file-path">{{ maskText(result.path) }}</div>
+                    <p>{{ result.message }}</p>
+                </div>
+            </div>
+            <p class="video-cleanup-hint">历史记录、弹幕、封面及线上稿件已保留。失败或跳过的文件不会自动重试。</p>
+        </template>
+    </div>
+    <div slot="footer" class="video-cleanup-footer">
+        <template v-if="videoCleanupPhase === 'select'">
+            <div class="video-cleanup-estimate" aria-live="polite">已选 {{ videoCleanupSelectedPartCount }} 个分P · {{ videoCleanupSelectedFiles.length }} 个视频<br>预计释放 <strong>{{ formatFileSize(videoCleanupSelectedBytes) }}</strong></div>
+            <div class="video-cleanup-buttons">
+                <el-button @click="closeVideoCleanup">取消</el-button>
+                <el-button type="danger" @click="confirmVideoCleanup" :disabled="videoCleanupLoading || !videoCleanupSelectedFiles.length || !!(videoCleanupDraft && videoCleanupDraft.disabledReason)">永久删除 {{ videoCleanupSelectedFiles.length }} 个视频</el-button>
+            </div>
+        </template>
+        <el-button v-else-if="videoCleanupRunning" disabled :loading="true">正在清理</el-button>
+        <div v-else class="video-cleanup-buttons">
+            <el-button v-if="videoCleanupSummary.failed || videoCleanupSummary.skipped || videoCleanupSummary.unknown" type="primary" plain @click="retryVideoCleanup">重新选择未完成项</el-button>
+            <el-button @click="closeVideoCleanup">完成</el-button>
+        </div>
+    </div>
+</el-dialog>

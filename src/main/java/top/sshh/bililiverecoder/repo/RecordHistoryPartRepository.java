@@ -14,6 +14,7 @@ import java.util.List;
 public interface RecordHistoryPartRepository extends CrudRepository<RecordHistoryPart, Long> {
 
     RecordHistoryPart findByFilePath(String path);
+    List<RecordHistoryPart> findByFilePathEndingWithIgnoreCase(String fileName);
 
     RecordHistoryPart findFirstByHistoryIdOrderByStartTimeDescIdDesc(Long historyId);
 

@@ -5,7 +5,10 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import top.sshh.bililiverecoder.entity.BiliBiliUser;
 import top.sshh.bililiverecoder.entity.PublishTask;
 import top.sshh.bililiverecoder.entity.PublishTaskOperation;
@@ -24,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 @Slf4j
 @Service
@@ -41,6 +45,8 @@ public class PublishTaskService {
     private final BiliUserRepository users;
     private final PublishReadinessService readiness;
     private final Object[] historyLocks = new Object[128];
+    @Autowired(required = false)
+    private PartActivityCoordinator partActivityCoordinator;
 
     public PublishTaskService(PublishTaskRepository tasks, RecordHistoryRepository histories,
                               BiliUserRepository users, PublishReadinessService readiness) {
@@ -57,6 +63,28 @@ public class PublishTaskService {
         if (historyId == null || accountId == null || operation == null || source == null) {
             return Admission.rejected("缺少稿件、投稿账号或任务类型");
         }
+        return withHistoryAdmission(historyId,
+                () -> acceptWithAdmission(historyId, accountId, operation, source, requestSnapshot),
+                Admission.rejected("稿件视频正在清理，请等清理结束后再创建任务"));
+    }
+
+    private <T> T withHistoryAdmission(Long historyId, Supplier<T> action, T blocked) {
+        PartActivityCoordinator.HistoryLease admission = partActivityCoordinator == null
+                ? null : partActivityCoordinator.tryBeginHistoryAdmission(historyId);
+        if (partActivityCoordinator != null && admission == null) return blocked;
+        boolean releaseAfterCommit = admission != null
+                && TransactionSynchronizationManager.isSynchronizationActive();
+        if (releaseAfterCommit) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int status) { admission.close(); }
+            });
+        }
+        try { return action.get(); }
+        finally { if (admission != null && !releaseAfterCommit) admission.close(); }
+    }
+
+    private Admission acceptWithAdmission(Long historyId, Long accountId, PublishTaskOperation operation,
+                                          PublishTaskSource source, Object requestSnapshot) {
         Object lock = historyLocks[Math.floorMod(historyId.hashCode(), historyLocks.length)];
         synchronized (lock) {
             RecordHistory history = histories.findByIdForUpdate(historyId).orElse(null);
@@ -235,6 +263,12 @@ public class PublishTaskService {
 
     @Transactional
     public PublishTask retry(Long taskId, boolean confirmedNotSubmitted) {
+        PublishTask task = tasks.findById(taskId).orElse(null);
+        if (task == null) return null;
+        return withHistoryAdmission(task.getHistoryId(), () -> retryWithAdmission(taskId, confirmedNotSubmitted), null);
+    }
+
+    private PublishTask retryWithAdmission(Long taskId, boolean confirmedNotSubmitted) {
         PublishTask task = tasks.findById(taskId).orElse(null);
         if (task == null) return null;
         boolean unknownResult = task.getState() == PublishTaskState.VERIFYING

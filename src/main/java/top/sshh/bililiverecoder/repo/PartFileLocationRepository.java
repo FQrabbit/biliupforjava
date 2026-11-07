@@ -12,6 +12,7 @@ import java.util.Optional;
 @Repository
 public interface PartFileLocationRepository extends CrudRepository<PartFileLocation, Long> {
     List<PartFileLocation> findByPartIdOrderByIdAsc(Long partId);
+    List<PartFileLocation> findByRelativePathEndingWithIgnoreCase(String fileName);
     List<PartFileLocation> findByStorageRootIdOrderByIdAsc(Long storageRootId);
     boolean existsByPartId(Long partId);
     List<PartFileLocation> findByPartIdIn(Collection<Long> partIds);

@@ -591,6 +591,9 @@
                         <div class="action-divider"></div>
                         <div class="action-sub-group">
                             <span class="action-group-label">录制与数据</span>
+                            <el-tooltip popper-class="history-page-tooltip-popper" :disabled="!getVideoCleanupDisabledReason()" :content="getVideoCleanupDisabledReason() || '清理视频'" placement="top">
+                                <span><el-button class="modern-btn" @click="openVideoCleanup()" size="mini" type="warning" plain icon="el-icon-delete" :disabled="!!getVideoCleanupDisabledReason()">清理视频</el-button></span>
+                            </el-tooltip>
                             <el-button v-if="!(currentDetail.forceArchived || currentDetail.importArchived)" class="modern-btn" @click="updatePartStatus(currentDetail.id)" size="mini" plain icon="el-icon-video-pause" :title="getHistoryOperationDisabledReason(currentDetail, 'updatePartStatus')" :disabled="!!getHistoryOperationDisabledReason(currentDetail, 'updatePartStatus')">结束录制</el-button>
                             <el-tooltip popper-class="history-page-tooltip-popper" v-if="!(currentDetail.forceArchived || currentDetail.importArchived)" effect="dark" content="强制停止所有未完成操作并归档（适用于卡住的任务）" placement="top">
                                 <el-button class="modern-btn" @click="forceArchive(currentDetail.id)" size="mini" type="warning" plain icon="el-icon-switch-button" :disabled="!!getHistoryActionDisabledReason(currentDetail)">强制归档</el-button>

@@ -190,7 +190,7 @@
             var state = p && p.localFileState;
             if (state === 'AVAILABLE_ARCHIVE') return '归档可用';
             if (state === 'AVAILABLE_WORK') return '本地可用';
-            if (state === 'DELETED_BY_POLICY') return '已按规则清理';
+            if (state === 'DELETED_BY_POLICY') return p.manualVideoCleaned ? '已手动清理' : '已按规则清理';
             if (state === 'ROOT_OFFLINE') return '存储目录离线';
             if (state === 'MISSING_UNEXPECTED') return '素材意外丢失';
             if (state === 'PROCESSING') return '文件处理中';

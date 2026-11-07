@@ -2,6 +2,9 @@
     'use strict';
 
     window.HistoryPageWatchers = {
+        videoCleanupDialogVisible: function() {
+            this.syncPageModalState();
+        },
         'form.code': function(val) {
             // 后端筛选 code 时会强制 publish=true，这里前端直接锁定避免出现“选了但必为空”的组合
             if (val !== null && val !== undefined && val !== '') {

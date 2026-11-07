@@ -15,7 +15,7 @@ return {
     data: function () {
         return window.HistoryPageState(context);
     },
-    computed: window.HistoryPageComputed,
+    computed: Object.assign({}, window.HistoryPageComputed, window.HistoryPageVideoCleanupComputed || {}),
     watch: window.HistoryPageWatchers,
     mounted() {
         // 页面可见性变化监听，优化进度轮询
@@ -39,6 +39,7 @@ return {
         window.HistoryPagePreviewMethods || {},
         window.HistoryPageUploadMethods || {},
         window.HistoryPageRecordMethods || {},
+        window.HistoryPageVideoCleanupMethods || {},
         window.HistoryPagePostPublishMethods || {}
     ),
     created: function created() {
@@ -77,6 +78,9 @@ return {
     },
     beforeDestroy: function () {
         this.componentDestroyed = true;
+        this.videoCleanupRequestToken++;
+        this.videoCleanupRunning = false;
+        this.$emit('page-state', { kind: 'operation', source: 'history-video-cleanup', active: false });
         this.listRequestToken++;
         this.partListRequestToken++;
         this.progressRequestToken++;

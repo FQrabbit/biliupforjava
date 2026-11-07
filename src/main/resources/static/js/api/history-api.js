@@ -2,6 +2,15 @@
     'use strict';
 
     window.HistoryApi = {
+        videoCleanupPreview: function(id, callback, errorCallback) {
+            ApiUtil.get('/history/' + encodeURIComponent(id) + '/video-cleanup/preview', callback, errorCallback);
+        },
+        deleteVideoFile: function(id, data, callback, errorCallback) {
+            ApiUtil.post('/history/' + encodeURIComponent(id) + '/video-cleanup/delete', data, callback, errorCallback);
+        },
+        videoCleanupResult: function(id, data, callback, errorCallback) {
+            ApiUtil.post('/history/' + encodeURIComponent(id) + '/video-cleanup/result', data, callback, errorCallback);
+        },
         list: function(data, callback, errorCallback) {
             ApiUtil.post('/history/list', data, callback, errorCallback);
         },

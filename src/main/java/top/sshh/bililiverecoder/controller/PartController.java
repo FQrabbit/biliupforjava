@@ -224,11 +224,14 @@ public class PartController {
             m.put("localFileState", localFile.state().name());
             m.put("localFileAvailable", localFile.available());
             m.put("localFileExpected", localFile.expected());
+            m.put("manualVideoCleaned", "视频已手动清理".equals(localFile.message()));
             m.put("storageType", localFile.storageType());
             m.put("rootStatus", localFile.rootStatus());
             m.put("primaryPath", localFile.primaryPath());
             m.put("replicaCount", localFile.replicaCount());
-            var latestFileOperation = partFileOperationService.latest(p.getId()).orElse(null);
+            var latestFileOperation = partFileOperationService.latest(p.getId())
+                    .filter(operation -> operation.getOperationSource() != PartFileOperation.OperationSource.MANUAL_CLEANUP)
+                    .orElse(null);
             m.put("fileOperationKey", latestFileOperation == null ? null : latestFileOperation.getOperationKey());
             m.put("fileOperationStatus", latestFileOperation == null ? null : latestFileOperation.getStatus());
             m.put("fileOperationError", latestFileOperation == null ? null : latestFileOperation.getErrorMessage());
@@ -278,7 +281,9 @@ public class PartController {
                     || (latestFileOperation != null && latestFileOperation.getStatus() == PartFileOperation.OperationStatus.FAILED);
             if (intentionallyDeleted) {
                 issueCode = "FILE_DELETED_BY_POLICY";
-                issueMessage = historyRejected ? "素材已按规则删除，无法自动重新上传" : "本地素材已按配置规则清理";
+                issueMessage = "视频已手动清理".equals(localFile.message())
+                        ? "本地视频已手动清理，如需重新上传请补回原文件"
+                        : historyRejected ? "素材已按规则删除，无法自动重新上传" : "本地素材已按配置规则清理";
             } else if (rootOffline) {
                 issueCode = "ROOT_OFFLINE";
                 issueMessage = "存储目录当前离线，恢复挂载后会自动重新检查";

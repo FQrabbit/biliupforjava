@@ -214,7 +214,9 @@ public class PartFileLocationService {
                 .min(Comparator.comparingInt(location -> statePriority(location.getState())))
                 .orElse(primary);
         PartFileLocation.LocationState state = representative == null ? null : representative.getState();
-        return new FileResolution(mapState(state), null, representative, null, messageFor(state));
+        return new FileResolution(mapState(state), null, representative, null,
+                representative != null && "MANUAL_CLEANUP".equals(representative.getErrorMessage())
+                        ? "视频已手动清理" : messageFor(state));
     }
 
     /**
@@ -444,6 +446,13 @@ public class PartFileLocationService {
         RecordHistoryPart part = partRepository.findById(partId).orElseThrow();
         part.setFileDelete(true);
         partRepository.save(part);
+    }
+
+    @Transactional
+    public void completeManualDelete(Long partId, PartFileLocation source) {
+        completeDelete(partId, source);
+        source.setErrorMessage("MANUAL_CLEANUP");
+        locationRepository.save(source);
     }
 
     @Transactional

@@ -4,7 +4,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /** 上传准入与分P文件操作共用的稿件级互斥协调器 */
 @Service
@@ -14,8 +13,14 @@ public class PartActivityCoordinator {
         boolean fileOperationActive;
     }
 
+    private static final class HistoryState {
+        volatile int uploads;
+        int admissions;
+        boolean fileOperationActive;
+    }
+
     private final ConcurrentHashMap<Long, State> states = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Long, AtomicInteger> pendingHistoryUploads = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, HistoryState> histories = new ConcurrentHashMap<>();
     private final ThreadLocal<Long> currentUploadPart = new ThreadLocal<>();
 
     public boolean tryRegisterUpload(Long partId) {
@@ -32,16 +37,31 @@ public class PartActivityCoordinator {
     }
 
     public boolean tryRegisterUpload(Long partId, Long historyId) {
-        if (!tryRegisterUpload(partId)) return false;
-        if (historyId != null) pendingHistoryUploads.computeIfAbsent(historyId, ignored -> new AtomicInteger())
-                .incrementAndGet();
-        return true;
+        if (historyId == null) return tryRegisterUpload(partId);
+        AtomicReference<Boolean> accepted = new AtomicReference<>(false);
+        histories.compute(historyId, (id, current) -> {
+            HistoryState state = current == null ? new HistoryState() : current;
+            if (!state.fileOperationActive && tryRegisterUpload(partId)) {
+                state.uploads++;
+                accepted.set(true);
+            }
+            return historyIdle(state) ? null : state;
+        });
+        return accepted.get();
     }
 
     public boolean tryRegisterHistoryUpload(Long historyId) {
         if (historyId == null) return false;
-        pendingHistoryUploads.computeIfAbsent(historyId, ignored -> new AtomicInteger()).incrementAndGet();
-        return true;
+        AtomicReference<Boolean> accepted = new AtomicReference<>(false);
+        histories.compute(historyId, (id, current) -> {
+            HistoryState state = current == null ? new HistoryState() : current;
+            if (!state.fileOperationActive) {
+                state.uploads++;
+                accepted.set(true);
+            }
+            return historyIdle(state) ? null : state;
+        });
+        return accepted.get();
     }
 
     public void releaseUpload(Long partId) {
@@ -55,15 +75,58 @@ public class PartActivityCoordinator {
     public void releaseUpload(Long partId, Long historyId) {
         releaseUpload(partId);
         if (historyId == null) return;
-        pendingHistoryUploads.computeIfPresent(historyId, (ignored, count) -> {
-            int remaining = count.updateAndGet(value -> Math.max(0, value - 1));
-            return remaining == 0 ? null : count;
+        histories.computeIfPresent(historyId, (ignored, state) -> {
+            state.uploads = Math.max(0, state.uploads - 1);
+            return historyIdle(state) ? null : state;
         });
     }
 
     public boolean hasPendingHistory(Long historyId) {
-        AtomicInteger count = historyId == null ? null : pendingHistoryUploads.get(historyId);
-        return count != null && count.get() > 0;
+        HistoryState state = historyId == null ? null : histories.get(historyId);
+        return state != null && state.uploads > 0;
+    }
+
+    public HistoryLease tryBeginHistoryFileOperation(Long historyId) {
+        return beginHistoryActivity(historyId, true);
+    }
+
+    public HistoryLease tryBeginHistoryAdmission(Long historyId) {
+        return beginHistoryActivity(historyId, false);
+    }
+
+    private HistoryLease beginHistoryActivity(Long historyId, boolean fileOperation) {
+        if (historyId == null) return null;
+        AtomicReference<HistoryLease> result = new AtomicReference<>();
+        histories.compute(historyId, (id, current) -> {
+            HistoryState state = current == null ? new HistoryState() : current;
+            if (state.fileOperationActive || (fileOperation && (state.uploads > 0 || state.admissions > 0))) {
+                return state;
+            }
+            if (fileOperation) state.fileOperationActive = true;
+            else state.admissions++;
+            result.set(new HistoryLease(() -> histories.computeIfPresent(id, (ignored, value) -> {
+                if (fileOperation) value.fileOperationActive = false;
+                else value.admissions = Math.max(0, value.admissions - 1);
+                return historyIdle(value) ? null : value;
+            })));
+            return state;
+        });
+        return result.get();
+    }
+
+    private static boolean historyIdle(HistoryState state) {
+        return state.uploads == 0 && state.admissions == 0 && !state.fileOperationActive;
+    }
+
+    public static final class HistoryLease implements AutoCloseable {
+        private Runnable release;
+        private HistoryLease(Runnable release) { this.release = release; }
+        @Override
+        public void close() {
+            if (release == null) return;
+            release.run();
+            release = null;
+        }
     }
 
     public UploadScope enterUpload(Long partId) {

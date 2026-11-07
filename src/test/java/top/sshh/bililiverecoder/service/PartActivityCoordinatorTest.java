@@ -12,6 +12,26 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PartActivityCoordinatorTest {
     @Test
+    void manualCleanupBlocksNewHistoryUploadsAndTaskAdmissionUntilReleased() {
+        PartActivityCoordinator coordinator = new PartActivityCoordinator();
+        try (var cleanup = coordinator.tryBeginHistoryFileOperation(7L)) {
+            assertNotNull(cleanup);
+            assertFalse(coordinator.tryRegisterUpload(12L, 7L));
+            assertFalse(coordinator.tryRegisterHistoryUpload(7L));
+            assertNull(coordinator.tryBeginHistoryAdmission(7L));
+            assertNull(coordinator.tryBeginHistoryFileOperation(7L));
+        }
+        assertTrue(coordinator.tryRegisterUpload(12L, 7L));
+        assertTrue(coordinator.hasPendingHistory(7L));
+        assertNull(coordinator.tryBeginHistoryFileOperation(7L));
+        coordinator.releaseUpload(12L, 7L);
+        try (var admission = coordinator.tryBeginHistoryAdmission(7L)) {
+            assertNotNull(admission);
+            assertNull(coordinator.tryBeginHistoryFileOperation(7L));
+        }
+        try (var cleanup = coordinator.tryBeginHistoryFileOperation(7L)) { assertNotNull(cleanup); }
+    }
+    @Test
     void uploadAdmissionAndFileOperationsSharePartLease() {
         PartActivityCoordinator coordinator = new PartActivityCoordinator();
         assertTrue(coordinator.tryRegisterUpload(12L));

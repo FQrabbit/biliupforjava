@@ -1,0 +1,76 @@
+.video-cleanup-dialog {
+    width: min(720px, calc(100vw - 24px)) !important;
+    max-width: calc(100vw - 24px);
+    border-radius: var(--radius-lg);
+}
+.video-cleanup-dialog .el-dialog__body {
+    max-height: 64vh;
+    overflow-y: auto;
+    color: var(--text-primary);
+}
+.video-cleanup-content { min-height: 100px; }
+.video-cleanup-warning {
+    padding: 12px 14px;
+    color: var(--danger-color);
+    background: var(--danger-soft-bg);
+    border-radius: var(--radius-md);
+}
+.video-cleanup-warning strong { font-size: 14px; }
+.video-cleanup-warning p,
+.video-cleanup-hint,
+.video-cleanup-state-warning,
+.video-cleanup-result p { margin: 7px 0 0; font-size: 12px; line-height: 1.6; }
+.video-cleanup-hint { color: var(--text-secondary); margin-bottom: 16px; }
+.video-cleanup-state-warning { color: var(--warning-color); margin-bottom: 10px; }
+.video-cleanup-scopes,
+.video-cleanup-list-heading,
+.video-cleanup-file-meta,
+.video-cleanup-running-label,
+.video-cleanup-footer,
+.video-cleanup-buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+}
+.video-cleanup-scopes { margin: 20px 0 16px; }
+.video-cleanup-scopes .el-checkbox { margin: 0; }
+.video-cleanup-list-heading { justify-content: space-between; padding: 12px 0; }
+.video-cleanup-muted { color: var(--text-secondary); font-size: 12px; }
+.video-cleanup-part { padding: 13px 0; border-top: 1px solid var(--border-light); }
+.video-cleanup-part-heading .el-checkbox { display: flex; align-items: flex-start; margin: 0; }
+.video-cleanup-part-heading .el-checkbox__input { margin-top: 3px; }
+.video-cleanup-part-heading .el-checkbox__label { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.video-cleanup-part-title { margin-left: 12px; color: var(--text-secondary); font-weight: 400; }
+.video-cleanup-file { margin: 10px 0 0 24px; }
+.video-cleanup-file-meta { justify-content: space-between; color: var(--text-secondary); font-size: 12px; }
+.video-cleanup-file-meta > span:last-child { font-variant-numeric: tabular-nums; }
+.video-cleanup-file-path { margin-top: 5px; font-size: 12px; overflow-wrap: anywhere; color: var(--text-primary); line-height: 1.6; }
+.video-cleanup-file.is-unavailable .video-cleanup-file-path { color: var(--text-secondary); }
+.video-cleanup-empty { padding: 28px 0; color: var(--text-secondary); text-align: center; }
+.video-cleanup-running-label { justify-content: space-between; margin-bottom: 16px; }
+.video-cleanup-footer { justify-content: space-between; text-align: left; }
+.video-cleanup-estimate { color: var(--text-secondary); font-size: 12px; }
+.video-cleanup-estimate strong { color: var(--text-primary); font-size: 17px; font-variant-numeric: tabular-nums; }
+.video-cleanup-buttons { justify-content: flex-end; margin-left: auto; gap: 10px; }
+.video-cleanup-buttons .el-button + .el-button { margin-left: 0; }
+.video-cleanup-result-summary { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
+.video-cleanup-result-summary > strong { font-size: 18px; }
+.video-cleanup-result-summary > span { color: var(--text-secondary); font-size: 12px; }
+.video-cleanup-result { border-top: 1px solid var(--border-light); padding: 12px 0; }
+.video-cleanup-result.is-deleted .video-cleanup-file-meta strong { color: var(--success-color); }
+.video-cleanup-result.is-failed .video-cleanup-file-meta strong { color: var(--danger-color); }
+.video-cleanup-result.is-skipped .video-cleanup-file-meta strong,
+.video-cleanup-result.is-unknown .video-cleanup-file-meta strong { color: var(--warning-color); }
+.video-cleanup-result p { color: var(--text-secondary); }
+.video-cleanup-mobile-hint { color: var(--warning-color); font-size: 12px; padding: 0 12px; }
+@media (max-width: 600px) {
+    .video-cleanup-dialog { margin-top: 4vh !important; }
+    .video-cleanup-dialog .el-dialog__body { padding: 16px; max-height: 65vh; }
+    .video-cleanup-dialog .el-dialog__footer { padding: 14px 16px; }
+    .video-cleanup-footer { align-items: stretch; }
+    .video-cleanup-footer .video-cleanup-buttons { width: 100%; }
+    .video-cleanup-footer .video-cleanup-buttons .el-button { min-height: 42px; }
+    .video-cleanup-footer .video-cleanup-buttons .el-button--danger { flex: 1; }
+    .video-cleanup-file-meta { gap: 6px; }
+}
